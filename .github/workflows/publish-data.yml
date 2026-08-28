@@ -1,0 +1,104 @@
+name: 캠퍼스 데이터 게시
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - data-source/shuttle.csv
+      - data-pipeline/**
+      - sync-contract/**
+      - .github/workflows/publish-data.yml
+  schedule:
+    - cron: "17 0,6 * * *"
+    - cron: "43 0 * * *"
+  workflow_dispatch:
+    inputs:
+      dataset:
+        description: 게시할 데이터
+        required: true
+        default: all
+        type: choice
+        options: [all, shuttle, meal, notice]
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: dima-now-data-publish
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-24.04
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          path: source
+          fetch-depth: 0
+      - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: gradle/actions/setup-gradle@48b5f213c81028ace310571dc5ec0fbbca0b2947
+      - name: 기존 data 브랜치 준비
+        shell: bash
+        run: |
+          if git -C source fetch origin data:refs/remotes/origin/data; then
+            git -C source worktree add "$GITHUB_WORKSPACE/site" refs/remotes/origin/data
+          else
+            git -C source worktree add --detach "$GITHUB_WORKSPACE/site"
+            git -C site checkout --orphan data
+            git -C site rm -rf .
+          fi
+          touch site/.nojekyll
+      - name: 실행 데이터셋 결정
+        id: target
+        shell: bash
+        env:
+          REQUESTED: ${{ inputs.dataset }}
+          SCHEDULE_EXPRESSION: ${{ github.event.schedule }}
+        run: |
+          if [[ "${{ github.event_name }}" == "push" ]]; then value=shuttle
+          elif [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then value="$REQUESTED"
+          elif [[ "$SCHEDULE_EXPRESSION" == "43 0 * * *" ]]; then value=notice
+          else value=meal
+          fi
+          echo "value=$value" >> "$GITHUB_OUTPUT"
+      - name: Korean Tesseract 설치
+        if: steps.target.outputs.value == 'meal' || steps.target.outputs.value == 'all'
+        run: sudo apt-get update && sudo apt-get install --yes tesseract-ocr tesseract-ocr-kor
+      - name: 셔틀 게시
+        if: steps.target.outputs.value == 'shuttle' || steps.target.outputs.value == 'all'
+        working-directory: source
+        run: bash ./gradlew :data-pipeline:run --args="publish-shuttle $GITHUB_WORKSPACE/source/data-source/shuttle.csv $GITHUB_WORKSPACE/site"
+      - name: 식단 게시
+        if: steps.target.outputs.value == 'meal' || steps.target.outputs.value == 'all'
+        working-directory: source
+        run: bash ./gradlew :data-pipeline:run --args="publish-meal ignored $GITHUB_WORKSPACE/site"
+      - name: 공지 게시
+        if: steps.target.outputs.value == 'notice' || steps.target.outputs.value == 'all'
+        working-directory: source
+        run: bash ./gradlew :data-pipeline:run --args="publish-notice ignored $GITHUB_WORKSPACE/site"
+      - name: 생성 데이터 커밋
+        shell: bash
+        run: |
+          git -C site config user.name github-actions[bot]
+          git -C site config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git -C site add -- .
+          if ! git -C site diff --cached --quiet; then
+            git -C site commit -m "data: publish ${{ steps.target.outputs.value }}"
+            git -C site push origin HEAD:data
+          fi
+          rm -f site/.git
+      - uses: actions/configure-pages@983d7736d9b0ae728b81ab479565c72886d7745b
+      - uses: actions/upload-pages-artifact@56afc609e74202658d3ffba0e8f6dda462b719fa
+        with:
+          path: site
+      - name: Pages 배포
+        id: deployment
+        uses: actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e

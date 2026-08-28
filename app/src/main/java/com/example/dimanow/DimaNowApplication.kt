@@ -16,7 +16,8 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.collectLatest
 import com.example.dimanow.location.CampusGeofenceManager
-import com.example.dimanow.shuttle.OfficialShuttleSource
+import com.example.dimanow.shuttle.ShuttleSource
+import com.example.dimanow.shuttle.StaticShuttleSource
 import com.example.dimanow.work.RefreshScheduler
 import com.example.dimanow.live.GuidanceOrchestrator
 import com.example.dimanow.live.GuidanceRuntimeCoordinator
@@ -29,8 +30,12 @@ import com.example.dimanow.live.GuidanceAlarmScheduler
 import com.example.dimanow.widget.SharedWidgetMinuteCoordinator
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
-import com.example.dimanow.meal.OfficialMealSource
-import com.example.dimanow.notice.OfficialNoticeSource
+import com.example.dimanow.meal.MealSource
+import com.example.dimanow.meal.StaticMealSource
+import com.example.dimanow.notice.NoticeSource
+import com.example.dimanow.notice.StaticNoticeSource
+import com.example.dimanow.sync.UrlConnectionStaticDataTransport
+import com.example.dimanow.sync.CachingStaticDataTransport
 import com.example.dimanow.location.LocationMode
 
 class DimaNowApplication : Application() {
@@ -44,14 +49,15 @@ class DimaNowApplication : Application() {
 
     val database: DimaDatabase by lazy {
         Room.databaseBuilder(this, DimaDatabase::class.java, "dima-now.db")
-            .addMigrations(DimaDatabase.MIGRATION_1_2, DimaDatabase.MIGRATION_2_3)
+            .addMigrations(DimaDatabase.MIGRATION_1_2, DimaDatabase.MIGRATION_2_3, DimaDatabase.MIGRATION_3_4)
             .build()
     }
     val repository: RoomCampusDataRepository by lazy { RoomCampusDataRepository(database) }
     val preferences: AppPreferences by lazy { AppPreferences(this) }
-    val shuttleSource: OfficialShuttleSource by lazy { OfficialShuttleSource(database) }
-    val mealSource: OfficialMealSource by lazy { OfficialMealSource(this, database) }
-    val noticeSource: OfficialNoticeSource by lazy { OfficialNoticeSource(database) }
+    private val staticDataTransport by lazy { CachingStaticDataTransport(UrlConnectionStaticDataTransport()) }
+    val shuttleSource: ShuttleSource by lazy { StaticShuttleSource(database, staticDataTransport) }
+    val mealSource: MealSource by lazy { StaticMealSource(database, staticDataTransport) }
+    val noticeSource: NoticeSource by lazy { StaticNoticeSource(database, staticDataTransport) }
     val guidanceEngine: GuidanceEngine by lazy { GuidanceEngine() }
     val liveSurfaceController: AndroidLiveSurfaceController by lazy { AndroidLiveSurfaceController(this) }
     val guidanceAlarmScheduler: GuidanceAlarmScheduler by lazy { GuidanceAlarmScheduler(this) }

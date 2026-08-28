@@ -185,6 +185,19 @@ data class SourceStatusEntity(
     val hours: String? = null,
 )
 
+@Entity(tableName = "sync_state")
+data class SyncStateEntity(
+    @PrimaryKey val dataset: String,
+    val revision: Long,
+    val etag: String?,
+    val sha256: String?,
+    val serverPublishedEpochMillis: Long?,
+    val lastCheckedEpochMillis: Long,
+    val lastImportedEpochMillis: Long?,
+    val serverState: String?,
+    val error: String?,
+)
+
 @Entity(tableName = "meal_days")
 data class MealDayEntity(
     @PrimaryKey val epochDay: Long,
@@ -309,6 +322,15 @@ interface ScheduleDao {
     @Query("SELECT * FROM source_status WHERE source = :source")
     suspend fun sourceStatus(source: String): SourceStatusEntity?
 
+    @Query("SELECT * FROM sync_state WHERE dataset = :dataset")
+    fun observeSyncState(dataset: String): Flow<SyncStateEntity?>
+
+    @Query("SELECT * FROM sync_state WHERE dataset = :dataset")
+    suspend fun syncState(dataset: String): SyncStateEntity?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun putSyncState(state: SyncStateEntity)
+
     @Query("DELETE FROM shuttle_departures")
     suspend fun clearShuttleDepartures()
 
@@ -341,8 +363,8 @@ interface ScheduleDao {
 }
 
 @Database(
-    entities = [CourseEntity::class, TermSettingsEntity::class, NoClassDateEntity::class, GuidancePauseEntity::class, CampusZoneEntity::class, ShuttleDepartureEntity::class, SourceStatusEntity::class, MealDayEntity::class, NoticeEntity::class],
-    version = 3,
+    entities = [CourseEntity::class, TermSettingsEntity::class, NoClassDateEntity::class, GuidancePauseEntity::class, CampusZoneEntity::class, ShuttleDepartureEntity::class, SourceStatusEntity::class, SyncStateEntity::class, MealDayEntity::class, NoticeEntity::class],
+    version = 4,
     exportSchema = false,
 )
 abstract class DimaDatabase : RoomDatabase() {
@@ -365,6 +387,14 @@ abstract class DimaDatabase : RoomDatabase() {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL(
                     """CREATE TABLE IF NOT EXISTS `notices` (`id` TEXT NOT NULL, `title` TEXT NOT NULL, `url` TEXT NOT NULL, `dateEpochDay` INTEGER NOT NULL, `isPinned` INTEGER NOT NULL, `orderIndex` INTEGER NOT NULL, PRIMARY KEY(`id`))""",
+                )
+            }
+        }
+
+        val MIGRATION_3_4 = object : Migration(3, 4) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    """CREATE TABLE IF NOT EXISTS `sync_state` (`dataset` TEXT NOT NULL, `revision` INTEGER NOT NULL, `etag` TEXT, `sha256` TEXT, `serverPublishedEpochMillis` INTEGER, `lastCheckedEpochMillis` INTEGER NOT NULL, `lastImportedEpochMillis` INTEGER, `serverState` TEXT, `error` TEXT, PRIMARY KEY(`dataset`))""",
                 )
             }
         }

@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/widget_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@drawable/widget_background"
+    android:gravity="center_vertical"
+    android:orientation="vertical"
+    android:paddingLeft="14dp"
+    android:paddingTop="12dp"
+    android:paddingRight="14dp"
+    android:paddingBottom="12dp">
+
+    <!-- Header Row -->
+    <TextView
+        android:id="@+id/widget_tag"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:background="@drawable/widget_tag_bg"
+        android:paddingLeft="8dp"
+        android:paddingTop="3dp"
+        android:paddingRight="8dp"
+        android:paddingBottom="3dp"
+        android:text="DIMA 셔틀"
+        android:textColor="@color/widget_tag_text"
+        android:textSize="11sp"
+        android:textStyle="bold" />
+
+    <!-- 컴팩트(2x1) 모드: 행선지·남은 분을 한 줄로 (행선지명은 액센트 색 스팬) -->
+    <TextView
+        android:id="@+id/widget_compact_line"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="7dp"
+        android:ellipsize="end"
+        android:maxLines="2"
+        android:lineSpacingExtra="2dp"
+        android:textColor="@color/widget_text_primary"
+        android:textSize="13.5sp"
+        android:letterSpacing="-0.02"
+        android:textStyle="bold"
+        android:visibility="gone" />
+
+    <!-- 목적지별 캡슐 행 컨테이너 (RemoteViews.addView로 채움) -->
+    <LinearLayout
+        android:id="@+id/widget_rows"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="4dp"
+        android:orientation="vertical" />
+
+    <!-- 캠퍼스 외부 등 행이 없을 때의 안내 문구 -->
+    <TextView
+        android:id="@+id/widget_empty"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:ellipsize="end"
+        android:maxLines="2"
+        android:textColor="@color/widget_text_primary"
+        android:textSize="15sp"
+        android:letterSpacing="-0.02"
+        android:textStyle="bold"
+        android:visibility="gone" />
+</LinearLayout>

@@ -1,0 +1,106 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_marginTop="6dp"
+    android:gravity="center_vertical"
+    android:orientation="horizontal">
+
+    <!-- 목적지 태그 (앱 홈 캡슐 좌측 태그와 동일한 역할) -->
+    <TextView
+        android:id="@+id/shuttle_row_tag"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:background="@drawable/widget_tag_bg"
+        android:paddingLeft="8dp"
+        android:paddingTop="5dp"
+        android:paddingRight="8dp"
+        android:paddingBottom="5dp"
+        android:textColor="@color/widget_tag_text"
+        android:textSize="11sp"
+        android:textStyle="bold" />
+
+    <!-- 캡슐 1 (일반/막차 배경을 가시성으로 전환해 다크 모드 색을 XML에서 해석) -->
+    <FrameLayout
+        android:id="@+id/shuttle_row_slot1"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="6dp"
+        android:layout_weight="1">
+
+        <TextView
+            android:id="@+id/shuttle_row_capsule1"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:background="@drawable/widget_capsule_bg"
+            android:ellipsize="end"
+            android:gravity="center"
+            android:maxLines="1"
+            android:paddingLeft="5dp"
+            android:paddingTop="6dp"
+            android:paddingRight="5dp"
+            android:paddingBottom="6dp"
+            android:textColor="@color/widget_text_primary"
+            android:textSize="11sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/shuttle_row_capsule1_last"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:background="@drawable/widget_capsule_last_bg"
+            android:ellipsize="end"
+            android:gravity="center"
+            android:maxLines="1"
+            android:paddingLeft="5dp"
+            android:paddingTop="6dp"
+            android:paddingRight="5dp"
+            android:paddingBottom="6dp"
+            android:textColor="@color/widget_capsule_last_text"
+            android:textSize="11sp"
+            android:textStyle="bold"
+            android:visibility="gone" />
+    </FrameLayout>
+
+    <!-- 캡슐 2 -->
+    <FrameLayout
+        android:id="@+id/shuttle_row_slot2"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="6dp"
+        android:layout_weight="1">
+
+        <TextView
+            android:id="@+id/shuttle_row_capsule2"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:background="@drawable/widget_capsule_bg"
+            android:ellipsize="end"
+            android:gravity="center"
+            android:maxLines="1"
+            android:paddingLeft="5dp"
+            android:paddingTop="6dp"
+            android:paddingRight="5dp"
+            android:paddingBottom="6dp"
+            android:textColor="@color/widget_text_primary"
+            android:textSize="11sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/shuttle_row_capsule2_last"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:background="@drawable/widget_capsule_last_bg"
+            android:ellipsize="end"
+            android:gravity="center"
+            android:maxLines="1"
+            android:paddingLeft="5dp"
+            android:paddingTop="6dp"
+            android:paddingRight="5dp"
+            android:paddingBottom="6dp"
+            android:textColor="@color/widget_capsule_last_text"
+            android:textSize="11sp"
+            android:textStyle="bold"
+            android:visibility="gone" />
+    </FrameLayout>
+</LinearLayout>

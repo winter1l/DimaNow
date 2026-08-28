@@ -1,0 +1,255 @@
+package com.example.dimanow.ui
+
+import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.performClick
+import com.example.dimanow.domain.CampusZoneId
+import com.example.dimanow.domain.MealDay
+import com.example.dimanow.domain.MealValidationState
+import com.example.dimanow.domain.ShuttleDeparture
+import com.example.dimanow.meal.MealData
+import com.example.dimanow.meal.MealRefreshResult
+import com.example.dimanow.meal.MealSource
+import com.example.dimanow.shuttle.ShuttleData
+import com.example.dimanow.shuttle.ShuttleRefreshResult
+import com.example.dimanow.shuttle.ShuttleSource
+import java.time.DayOfWeek
+import java.time.Instant
+import java.time.LocalDate
+import java.time.LocalTime
+import java.time.ZoneId
+import java.time.ZonedDateTime
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.CompletableDeferred
+import org.junit.Rule
+import org.junit.Test
+
+class DataSourceScreenTest {
+    @get:Rule val composeRule = createComposeRule()
+
+    @Test
+    fun shuttleCacheDescribesRawWeeklyRowsAndUniqueUserDepartureSlots() {
+        val serviceDay = ZonedDateTime.now(ZoneId.of("Asia/Seoul")).dayOfWeek
+        val departures = listOf(
+            departure("A", "headquarters-a", LocalTime.of(19, 0), CampusZoneId.MAIN, CampusZoneId.YEIN, serviceDay),
+            departure("B", "headquarters-b", LocalTime.of(19, 0), CampusZoneId.MAIN, CampusZoneId.YEIN, serviceDay),
+            departure("B", "headquarters", LocalTime.of(19, 30), CampusZoneId.MAIN, CampusZoneId.YEIN, serviceDay),
+            departure("C", "one-room", LocalTime.of(19, 0), CampusZoneId.ONE_ROOM, CampusZoneId.MAIN, serviceDay),
+        )
+        composeRule.setContent {
+            DataAndSourcesCard(
+                shuttleData = FakeShuttleSource(departures).data.value,
+                mealData = FakeMealSource().data.value,
+            )
+        }
+
+        val expected = "마지막 성공: 2026년 8월 26일 21:00 KST"
+        composeRule.waitUntil(5_000) {
+            composeRule.onAllNodesWithText(expected).fetchSemanticsNodes().isNotEmpty()
+        }
+        composeRule.onNodeWithText(expected).assertExists()
+        composeRule.onNodeWithText("공식 주간 시간표 4행 · 사용자 출발 슬롯 3개").assertExists()
+        composeRule.onNodeWithText("캠퍼스 구역 CAMPUS_ZONES_V2_USER_2026_08_27 · © OpenStreetMap contributors").assertExists()
+    }
+
+    @Test
+    fun shuttleRefreshShowsDisabledLoadingControlUntilTheSingleRefreshFinishes() {
+        val source = BlockingShuttleSource()
+        composeRule.setContent {
+            ShuttleScreen(shuttleSource = source, currentZone = CampusZoneId.OUTSIDE)
+        }
+
+        composeRule.onNodeWithContentDescription("셔틀 새로고침").performClick()
+        composeRule.waitUntil(5_000) { source.started.isCompleted }
+        composeRule.onNodeWithContentDescription("셔틀 새로고침 중").assertExists()
+
+        source.release.complete(Unit)
+        composeRule.waitUntil(5_000) {
+            composeRule.onAllNodesWithText("2건 저장 완료").fetchSemanticsNodes().isNotEmpty()
+        }
+        composeRule.onNodeWithContentDescription("셔틀 새로고침").assertExists()
+    }
+
+    @Test
+    fun shuttleUsesOnlyATopRefreshActionAndMovesDataDetailsOutOfTheScreen() {
+        val serviceDay = ZonedDateTime.now(ZoneId.of("Asia/Seoul")).dayOfWeek
+        composeRule.setContent {
+            ShuttleScreen(
+                shuttleSource = FakeShuttleSource(
+                    listOf(
+                        departure("A", "headquarters", LocalTime.of(8, 10), CampusZoneId.MAIN, CampusZoneId.YEIN, serviceDay),
+                    ),
+                ),
+                currentZone = CampusZoneId.MAIN,
+            )
+        }
+
+        composeRule.onNodeWithContentDescription("셔틀 새로고침").assertExists()
+        composeRule.onNodeWithText("셔틀 데이터 상태").assertDoesNotExist()
+        composeRule.onNodeWithText("셔틀 데이터 관리").assertDoesNotExist()
+        composeRule.onNodeWithText("요일 선택").assertDoesNotExist()
+    }
+
+    @Test
+    fun userSeesEveryShuttleDayAndOriginWithoutChoosingFilters() {
+        val serviceDay = ZonedDateTime.now(ZoneId.of("Asia/Seoul")).dayOfWeek
+        val departures = listOf(
+            departure("A", "headquarters-a", LocalTime.of(8, 10), CampusZoneId.MAIN, CampusZoneId.YEIN, serviceDay),
+            departure("B", "headquarters-b", LocalTime.of(8, 10), CampusZoneId.MAIN, CampusZoneId.YEIN, serviceDay),
+            departure("B", "headquarters", LocalTime.of(8, 40), CampusZoneId.MAIN, CampusZoneId.YEIN, serviceDay),
+            departure("B", "headquarters", LocalTime.of(9, 10), CampusZoneId.MAIN, CampusZoneId.YEIN, serviceDay),
+            departure("A", "headquarters", LocalTime.of(8, 20), CampusZoneId.MAIN, CampusZoneId.ONE_ROOM, serviceDay),
+            departure("B", "headquarters", LocalTime.NOON, CampusZoneId.MAIN, CampusZoneId.YEIN, DayOfWeek.TUESDAY),
+        )
+        composeRule.setContent {
+            ShuttleScreen(
+                shuttleSource = FakeShuttleSource(departures),
+                currentZone = CampusZoneId.MAIN,
+                // 공식 저녁 운동장 운행으로 전환되기 전이면서 모든 fixture 운행이 끝난
+                // 시각을 사용해, 본관 그룹 헤더와 전체 시간표를 안정적으로 검증한다.
+                now = ZonedDateTime.now(ZoneId.of("Asia/Seoul"))
+                    .withHour(18).withMinute(0).withSecond(0).withNano(0),
+            )
+        }
+
+        composeRule.onNodeWithText("셔틀버스").assertExists()
+        composeRule.onNodeWithText("본관").assertExists()
+        composeRule.onNodeWithText("현재 위치").assertExists()
+        composeRule.onNodeWithText("엔터관행").assertExists()
+        composeRule.onNodeWithText("원룸촌행").assertExists()
+        composeRule.onNodeWithText("본관 → 엔터관").assertDoesNotExist()
+        composeRule.onNodeWithText("본관 → 원룸촌").assertDoesNotExist()
+        composeRule.onNodeWithText("총 3회 (첫차 08:10 · 막차 09:10)").assertExists()
+        composeRule.onNodeWithText("08:10 (첫차)").assertExists()
+        composeRule.onNodeWithText("08:40").assertExists()
+        composeRule.onNodeWithText("09:10 (막차)").assertExists()
+    }
+
+    @Test
+    fun mainGroupAndDepartureLabelsSwitchToStadiumForOfficialEveningService() {
+        val now = ZonedDateTime.now(ZoneId.of("Asia/Seoul"))
+            .withHour(19).withMinute(30).withSecond(0).withNano(0)
+        val departures = listOf(
+            departure("B", "university-headquarters", LocalTime.of(19, 20), CampusZoneId.MAIN, CampusZoneId.YEIN, now.dayOfWeek),
+            departure("B-evening", "stadium-stop", LocalTime.of(19, 35), CampusZoneId.MAIN, CampusZoneId.YEIN, now.dayOfWeek),
+            departure("B-evening", "stadium-stop", LocalTime.of(20, 0), CampusZoneId.MAIN, CampusZoneId.YEIN, now.dayOfWeek),
+        )
+        composeRule.setContent {
+            ShuttleScreen(
+                shuttleSource = FakeShuttleSource(departures),
+                currentZone = CampusZoneId.MAIN,
+                now = now,
+            )
+        }
+
+        composeRule.onNodeWithText("20:00 (막차) · 운동장").assertExists()
+        composeRule.onNodeWithText("5분 후 · 운동장 전환").assertExists()
+        composeRule.onNodeWithText("19:35 · 운동장 전환").assertExists()
+    }
+
+    @Test
+    fun userSeesTheWholeCurrentWeekMealWithoutChoosingADay() {
+        val meals = listOf(
+            mealDay("2026-08-21", "이전 식단"),
+            mealDay("2026-08-24", "제육볶음", "미역국"),
+            mealDay("2026-08-25", "돈가스"),
+            mealDay("2026-08-28", "김치볶음밥"),
+            mealDay("2026-08-31", "다음 식단"),
+        )
+        composeRule.setContent {
+            MealScreen(
+                mealSource = FakeMealSource(meals),
+                today = LocalDate.parse("2026-08-27"),
+            )
+        }
+
+        composeRule.onNodeWithText("이번 주 식단 (월 ~ 금)").assertDoesNotExist()
+        composeRule.onNodeWithText("8/24 (월)").assertExists()
+        composeRule.onNodeWithText("제육볶음 · 미역국").assertExists()
+        composeRule.onNodeWithText("8/28 (금)").assertExists()
+        composeRule.onAllNodesWithText("등록된 식단 없음").assertCountEquals(2)
+        composeRule.onAllNodesWithText("이전 식단").assertCountEquals(0)
+        composeRule.onAllNodesWithText("다음 식단").assertCountEquals(0)
+    }
+
+    @Test
+    fun todaysMealExplainsThatServiceHasNotOpenedYet() {
+        composeRule.setContent {
+            MealScreen(
+                mealSource = FakeMealSource(listOf(mealDay("2026-08-27", "제육볶음"))),
+                today = LocalDate.parse("2026-08-27"),
+                nowTime = LocalTime.of(11, 29),
+            )
+        }
+
+        composeRule.onNodeWithText("운영 전 · 11:30부터").assertExists()
+        composeRule.onNodeWithText("제육볶음").assertExists()
+    }
+
+    @Test
+    fun mealUsesOnlyATopRefreshActionAndMovesDataDetailsOutOfTheScreen() {
+        composeRule.setContent {
+            MealScreen(
+                mealSource = FakeMealSource(listOf(mealDay("2026-08-24", "제육볶음"))),
+                today = LocalDate.parse("2026-08-27"),
+            )
+        }
+
+        composeRule.onNodeWithContentDescription("식단 새로고침").assertExists()
+        composeRule.onNodeWithText("식단 데이터 상태").assertDoesNotExist()
+        composeRule.onNodeWithText("식단 데이터 관리").assertDoesNotExist()
+    }
+
+    private fun departure(
+        route: String,
+        stop: String,
+        time: LocalTime,
+        origin: CampusZoneId,
+        destination: CampusZoneId,
+        serviceDay: DayOfWeek = DayOfWeek.MONDAY,
+    ) = ShuttleDeparture(route, stop, "DIRECTION", serviceDay, time, origin, destination)
+
+    private fun mealDay(date: String, vararg lines: String) = MealDay(
+        date = LocalDate.parse(date),
+        menuLines = lines.toList(),
+        hours = "11:30~14:00",
+        sourceUrl = "https://www.dima.ac.kr/?p=1",
+        sourceImageUrl = "https://example.invalid/menu.jpg",
+        validationState = MealValidationState.VALID,
+    )
+
+    private class FakeShuttleSource(departures: List<ShuttleDeparture>) : ShuttleSource {
+        override val data = MutableStateFlow(
+            ShuttleData(
+                departures,
+                Instant.parse("2026-08-26T12:00:10Z"),
+                Instant.parse("2026-08-26T12:00:10Z"),
+                null,
+                "https://www.dima.ac.kr/?p=97",
+                null,
+            ),
+        )
+        override suspend fun refresh() = ShuttleRefreshResult.Success(data.value.departures.size, Instant.parse("2026-08-26T12:00:10Z"))
+    }
+
+    private class FakeMealSource(days: List<MealDay> = emptyList()) : MealSource {
+        override val data = MutableStateFlow(MealData(days, null, null, null, "https://www.dima.ac.kr/?p=1", null, "11:30~14:00"))
+        override suspend fun refresh() = MealRefreshResult.Failure("unused")
+    }
+
+    private class BlockingShuttleSource : ShuttleSource {
+        val started = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        override val data = MutableStateFlow(
+            ShuttleData(emptyList(), null, null, null, "https://www.dima.ac.kr/?p=97", null),
+        )
+        override suspend fun refresh(): ShuttleRefreshResult {
+            started.complete(Unit)
+            release.await()
+            return ShuttleRefreshResult.Success(2, Instant.parse("2026-08-26T12:00:10Z"))
+        }
+    }
+}

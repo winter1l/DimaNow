@@ -2,7 +2,7 @@
 
 DIMA Now는 동아방송예술대학교 학생의 수업, 셔틀, 본관 학생식당 정보를 한곳에서 확인하는 개인용 Android 앱입니다.
 
-시간표와 설정, 위치 구역, 셔틀·식단 캐시는 모두 기기에 저장됩니다. 별도 계정이나 백엔드 서버를 사용하지 않으며, 학교 공식 페이지와 공식 Instagram의 공개 자료만 가져옵니다.
+시간표와 설정, 위치 구역, 셔틀·식단·공지 캐시는 모두 기기에 저장됩니다. 앱은 계정이나 전용 백엔드 없이 GitHub Pages에 게시된 검증 JSON만 동기화합니다. 공식 페이지 수집과 식단 OCR은 GitHub Actions에서 수행됩니다.
 
 > 이 프로젝트는 개인용으로 개발된 비공식 앱이며 동아방송예술대학교가 배포하거나 보증하는 공식 앱이 아닙니다.
 
@@ -33,13 +33,13 @@ DIMA Now는 동아방송예술대학교 학생의 수업, 셔틀, 본관 학생�
 
 ## 설치
 
-비공개 저장소에 접근할 수 있는 계정은 [DIMA Now v1.0 릴리스](https://github.com/winter1l/DimaNow/releases/tag/v1.0)에서 APK를 받을 수 있습니다.
+[GitHub Releases](https://github.com/winter1l/DimaNow/releases)에서 APK를 받을 수 있습니다.
 
 ADB로 기존 데이터를 유지하며 설치하려면 다음 명령을 사용합니다.
 
 ```powershell
 adb devices
-adb -s <device-serial> install -r DIMA-Now-v1.0-optimized-20260828.apk
+adb -s <device-serial> install -r DIMA-Now-v1.1-optimized.apk
 ```
 
 릴리스 APK는 개인 직접 설치를 위해 Android 디버그 인증서로 서명되어 있습니다. Google Play 배포용 서명이 아니며, 기존 설치본과 서명 인증서가 다르면 `-r` 업데이트가 거부될 수 있습니다.
@@ -102,18 +102,36 @@ adb devices
 
 `benchmark` 모듈은 API 36 테스트 기기에서 앱 시작, 다섯 탭 이동, 셔틀 시간표 스크롤과 Baseline Profile을 측정합니다. 성능 경로에서는 네트워크 새로고침과 식단 OCR을 실행하지 않습니다.
 
-2026년 8월 28일 기준 확인된 자동 검증 결과는 JVM 테스트 88개 통과, `lintDebug` 통과, `assembleOptimized` 통과입니다. Samsung Now Bar, 실제 세 구역 geofence, 잠금화면·AOD, 하루 배터리는 실제 기기 관찰이 필요한 별도 검수 항목입니다.
+각 변경은 GitHub Actions의 JVM·파이프라인·계측 컴파일·lint·optimized 빌드를 모두 통과해야 합니다. Samsung Now Bar, 실제 세 구역 geofence, 잠금화면·AOD, 하루 배터리는 실제 기기 관찰이 필요한 별도 검수 항목입니다.
 
-## 데이터 출처와 캐시 정책
+## 정적 데이터 동기화
+
+앱의 동기화 endpoint는 [`manifest.json`](https://winter1l.github.io/DimaNow/data/v1/manifest.json)입니다. manifest에는 데이터셋별 revision, 게시 시각, 상태, SHA-256과 content-addressed JSON 경로가 들어갑니다. 앱은 HTTPS, 허용된 상대 경로, schema version과 SHA-256을 모두 검증한 뒤 Room 캐시를 한 트랜잭션으로 교체합니다. 네트워크·파싱·무결성 오류가 나면 마지막 정상 캐시를 보존합니다.
+
+- 셔틀: 관리자가 [`data-source/shuttle.csv`](data-source/shuttle.csv)를 수정하면 `main` 반영 후 자동 게시합니다.
+- 식단: GitHub Actions가 DIMA 공식 공개 게시물과 공개 Instagram embed를 확인하고, Tesseract Korean OCR과 주차·메뉴 검증을 통과한 데이터만 게시합니다.
+- 공지: GitHub Actions가 DIMA 공식 공지 목록을 읽어 최대 10개를 게시합니다.
+- 앱: 실행 시와 12시간마다 작은 manifest를 확인합니다. 수동 새로고침도 같은 endpoint만 사용합니다.
+
+식단 후보가 아직 게시되지 않았거나 검증에 실패하면 manifest를 `WAITING` 또는 `NEEDS_REVIEW`로 갱신하고 기존 정상 식단 JSON은 유지합니다. GitHub Actions의 예약 실행은 지연될 수 있으므로 실시간 보장 서비스가 아닙니다.
+
+### 셔틀 수정 방법
+
+1. `data-source/shuttle.csv`에서 행을 추가·수정합니다.
+2. `운행요일,노선ID,출발구역,승차정류장,목적구역,출발시각,도착시각` 7개 열을 유지합니다.
+3. Pull Request의 `검증 / test`가 통과한 뒤 `main`에 반영합니다.
+4. `캠퍼스 데이터 게시` workflow가 `data` 브랜치와 GitHub Pages를 갱신합니다.
+
+CSV는 정확히 같은 물리 운행 행의 중복, 잘못된 요일·구역·시각을 게시 전에 거부합니다. 공식 605행 캐시는 그대로 보존하며 앱 표시 단계에서만 route 변형 중복을 합칩니다.
+
+## 데이터 출처와 라이선스
 
 - 셔틀: [DIMA 공식 셔틀버스 안내](https://www.dima.ac.kr/?p=97)의 A/B/C 표
-- 식단 발견: [DIMA 공식 홈페이지](https://www.dima.ac.kr/?p=1)와 학생식당 공식 공개 Instagram 게시물
+- 식단 발견: [DIMA 공식 홈페이지](https://www.dima.ac.kr/?p=1)와 학생식당 공식 공개 Instagram embed
 - 학교 공지: [DIMA 공식 공지사항](https://www.dima.ac.kr/?p=111)
 - 위치 경계: 사용자 승인 GeoJSON과 © OpenStreetMap contributors
 
-셔틀 원본 표는 주간 행으로 보존하고, 사용자 화면에서만 서비스일·출발지·목적지·시각 기준으로 노선 변형 중복을 합칩니다. 식단은 기기 내 Korean ML Kit OCR로 인식하며, 날짜와 메뉴 유효성 검증을 통과하지 못한 새 후보가 마지막 정상 주간 캐시를 덮어쓰지 못합니다.
-
-셔틀은 KST 기준 새 주가 시작되어 기존 성공 캐시가 이전 주일 때 자동 갱신합니다. 식단은 검증된 주간 식단의 마지막 날짜가 지난 뒤 새 주 식단을 받을 때까지 재시도 간격을 늘려 가며 다시 확인합니다.
+앱 소스는 [Apache License 2.0](LICENSE)으로 공개합니다. 학교와 Instagram의 원문·이미지는 각 권리자에게 있으며 이 저장소의 소프트웨어 라이선스가 적용되지 않습니다. 위치 데이터 attribution과 제3자 구성요소는 [NOTICE](NOTICE)를 확인하세요.
 
 ## 위치 판정
 
@@ -127,10 +145,14 @@ Android 원형 geofence는 앱을 깨우는 용도로만 사용하며 최종 판
 
 ```text
 app/
-  src/main/          앱, 위젯, 알림, Room/DataStore, 데이터 소스
-  src/test/          JVM 단위 테스트와 파서 고정 자료 테스트
+  src/main/          앱, 위젯, 알림, Room/DataStore, 정적 데이터 동기화
+  src/test/          JVM 단위 테스트
   src/androidTest/   API 36 Compose·Room·Live Update 계측 테스트
 benchmark/           Macrobenchmark와 Baseline Profile 생성
+sync-contract/       앱과 게시 파이프라인이 공유하는 JSON 계약
+data-pipeline/       셔틀 CSV 검증, 식단 OCR, 공지 수집, 정적 사이트 게시
+data-source/         관리자가 수정하는 셔틀 CSV
+.github/workflows/   검증과 GitHub Pages 데이터 게시
 artifacts/           승인된 구역 경계와 검증 보고서 일부
 memory/              제품 결정과 검증 근거
 ```
@@ -141,6 +163,10 @@ memory/              제품 결정과 검증 근거
 
 - Everytime 기숙사 식단 자동화
 - 로그인 자동화
-- 백엔드·서버 운영
+- 별도 상시 백엔드·개인 PC 서버 운영
 - 다중 사용자 배포
 - Google Play Store 출시
+
+## 개인정보와 보안
+
+개인정보 처리 범위는 [PRIVACY.md](PRIVACY.md), 취약점 제보는 [SECURITY.md](SECURITY.md)를 확인하세요. 공개 Issue에는 위치 좌표, 시간표, 기기 로그 등 개인 데이터를 올리지 마세요.

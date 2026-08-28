@@ -32,3 +32,5 @@ plugins {
 rootProject.name = "DIMA Now"
 include(":app")
 include(":benchmark")
+include(":sync-contract")
+include(":data-pipeline")

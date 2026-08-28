@@ -6,7 +6,6 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.lifecycle.Lifecycle
-import androidx.test.espresso.Espresso.pressBack
 import com.example.dimanow.DimaNowApplication
 import com.example.dimanow.MainActivity
 import com.example.dimanow.guidance.HomeBase
@@ -50,13 +49,20 @@ class AppBackNavigationTest {
         composeRule.onNodeWithText("수업 추가").performClick()
         composeRule.onNodeWithText("수업명").assertExists()
 
-        pressBack()
+        systemBack()
 
         composeRule.onNodeWithText("수업명").assertDoesNotExist()
         composeRule.onNodeWithTag("nav_TIMETABLE").assertIsSelected()
 
-        pressBack()
+        systemBack()
         composeRule.onNodeWithTag("nav_DASHBOARD").assertIsSelected()
+    }
+
+    private fun systemBack() {
+        composeRule.activityRule.scenario.onActivity {
+            it.onBackPressedDispatcher.onBackPressed()
+        }
+        composeRule.waitForIdle()
     }
 
     private fun prepareCompletedOnboarding() {

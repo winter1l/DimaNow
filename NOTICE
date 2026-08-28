@@ -1,0 +1,17 @@
+DIMA Now
+Copyright 2026 winter1l
+
+DIMA Now is an unofficial personal project. It is not distributed, endorsed,
+or operated by Dong-Ah Institute of Media and Arts. University names and links
+are used only to identify public information sources. No university trademark
+license is granted.
+
+Campus boundary data includes information derived from OpenStreetMap data.
+© OpenStreetMap contributors. OpenStreetMap data is available under the Open
+Database License: https://www.openstreetmap.org/copyright
+
+The GitHub Actions meal pipeline invokes Tesseract OCR, licensed separately
+under the Apache License 2.0. Tesseract is not embedded in the Android APK.
+
+Official DIMA pages, Instagram posts, images, menus, and shuttle schedule data
+remain subject to the rights and terms of their respective owners and sources.

@@ -192,3 +192,9 @@ Convert the existing non-Git project into a local Git repository and publish the
 ## D-037 - Korean GitHub README - 2026-08-28 (user-requested documentation)
 
 The repository README is written primarily in Korean for the intended user and maintainer. It must keep build, signing, Samsung system-control, device-evidence, data-source, privacy, and current large-screen limitations explicit rather than presenting unverified capabilities as complete.
+
+## D-038 - Public GitHub static-data synchronization - 2026-08-28 (user-approved implementation; supersedes D-003/D-030 direct client collection and D-036 private visibility)
+
+The source repository becomes public under Apache License 2.0. The Android app no longer downloads or parses official DIMA HTML, Instagram embed data, or meal images, and no longer embeds Korean ML Kit OCR. It synchronizes only versioned static JSON from `https://winter1l.github.io/DimaNow/data/v1/manifest.json`, validates schema, a restricted relative content path, and SHA-256, then atomically imports it into Room while preserving the last valid cache on every failure.
+
+The manually maintained `data-source/shuttle.csv` is the shuttle source of truth. GitHub Actions validates and publishes it after `main` changes. Scheduled Actions collect official public DIMA notices and the public cafeteria Instagram embed, run Tesseract Korean OCR for meals, validate week/menu plausibility, and publish only accepted payloads to the `data` branch and GitHub Pages. Failed meal candidates set a review state without replacing the last valid week. The solution uses GitHub-hosted Actions and Pages only: no personal PC or always-on custom backend. Existing timetable, location, display settings, raw 605-row behavior, widgets, and Live Update presentation remain unchanged.

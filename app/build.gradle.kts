@@ -12,8 +12,8 @@ android {
         applicationId = "com.example.dimanow"
         minSdk = 31
         targetSdk = 36
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = 2
+        versionName = "1.1"
     }
 
     buildTypes {
@@ -69,6 +69,7 @@ composeCompiler {
 }
 
 dependencies {
+  implementation(project(":sync-contract"))
   val composeBom = platform(libs.androidx.compose.bom)
   implementation(composeBom)
   androidTestImplementation(composeBom)
@@ -107,11 +108,9 @@ dependencies {
   ksp(libs.androidx.room.compiler)
   implementation(libs.androidx.datastore.preferences)
 
-  // Background refresh, location, source parsing, and on-device OCR
+  // Background static-data sync and location
   implementation(libs.androidx.work.runtime.ktx)
   implementation(libs.play.services.location)
-  implementation(libs.jsoup)
-  implementation(libs.mlkit.text.recognition.korean)
   implementation(libs.kotlinx.coroutines.android)
   implementation(libs.kotlinx.coroutines.play.services)
   implementation(libs.androidx.lifecycle.service)

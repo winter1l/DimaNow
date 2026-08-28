@@ -188,4 +188,3 @@ Bottom tabs do not form an action history. Android Back first dismisses the curr
 ## D-036 - Private GitHub source repository and direct-install release - 2026-08-28 (user-approved publication)
 
 Convert the existing non-Git project into a local Git repository and publish the curated source to a private GitHub repository owned by the authenticated user. Exclude local toolchains, SDK paths, build/cache directories, device-derived databases and UI dumps, and APKs from source history. Publish the verified optimized APK only as a GitHub Release asset with its SHA-256 and direct-install signing limitation documented. Preserve all excluded local files in place.
-

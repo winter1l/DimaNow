@@ -86,6 +86,10 @@ An exact-serial `adb install -r` on SM-S918N/API 36 succeeded using the same sig
 
 Evidence: API 36 tests navigate Shuttle -> Meal -> Settings and require one Back to select Dashboard, then one Back to destroy `MainActivity`; another case requires Back to dismiss the course editor while Timetable remains selected, followed by Back to Dashboard. The full API 36 suite has 46 passes and three intentional Samsung/network skips. After `adb install -r` on SM-S918N, ADB/UI-hierarchy observation proved Settings -> Back selected Home and a second Back resumed One UI Home; Timetable -> course editor -> Back dismissed only the dialog, then Back selected Home. No DIMA Now FATAL/ANR appeared. The current optimized APK SHA-256 is `693CD96CE71BCDEE341254CC530691B9FECA11533D7915B96FF97A4D20F8C816`.
 
+### Private GitHub source and v1.0 direct-install release - published and verified - 2026-08-28
+
+Evidence: the authenticated GitHub account `winter1l` owns `winter1l/DimaNow`; the GitHub connector returned `visibility=private`, full admin/push permission, default branch `main`, and the published `README.md` content. Local caches, toolchains, SDK paths, device-derived databases/UI dumps, and APK build folders are ignored and were not included in source history. A fresh `testDebugUnitTest lintDebug assembleOptimized` run passed with 88/88 JVM tests. GitHub Release `v1.0` is published (not draft or prerelease) with `DIMA-Now-v1.0-optimized-20260828.apk`, 48,676,281 bytes, and GitHub's asset digest `sha256:78d39e715dcd42d6c322d5938dc07d78b399423fa94536eb00c7a8b91474a9ca`. `apksigner` verified APK Signature Scheme v2; the signer remains the Android debug certificate, so this is a personal direct-install artifact rather than Play Store production signing.
+
 ## Permanently excluded
 
 - Dorm-meal automation, login automation, multi-user distribution, backend/server operation, and store release (D-001).

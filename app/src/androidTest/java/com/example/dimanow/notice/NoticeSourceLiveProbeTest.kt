@@ -9,12 +9,12 @@ import org.junit.Assume.assumeTrue
 import org.junit.Test
 
 /**
- * 실제 공식 공지 페이지를 내려받는 네트워크 프로브. 평상시 러너에서는 건너뛰고
+ * 실제 GitHub Pages 정적 endpoint를 내려받는 네트워크 프로브. 평상시 러너에서는 건너뛰고
  * `-e runNoticeNetworkProbe true`를 명시한 실행에서만 동작한다 (Samsung 프로브 패턴).
  */
 class NoticeSourceLiveProbeTest {
     @Test
-    fun officialNoticeBoardYieldsAtLeastThreeCachedNotices() {
+    fun publishedStaticNoticesYieldAtLeastThreeCachedRows() {
         val arguments = InstrumentationRegistry.getArguments()
         assumeTrue(arguments.getString("runNoticeNetworkProbe") == "true")
 

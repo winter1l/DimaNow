@@ -46,11 +46,12 @@ class DataSourceScreenTest {
             )
         }
 
-        val expected = "마지막 성공: 2026년 8월 26일 21:00 KST"
+        val expected = "기기 동기화: 2026년 8월 26일 21:00 KST"
         composeRule.waitUntil(5_000) {
             composeRule.onAllNodesWithText(expected).fetchSemanticsNodes().isNotEmpty()
         }
         composeRule.onNodeWithText(expected).assertExists()
+        composeRule.onNodeWithText("서버 게시: 2026년 8월 26일 20:30 KST").assertExists()
         composeRule.onNodeWithText("공식 주간 시간표 4행 · 사용자 출발 슬롯 3개").assertExists()
         composeRule.onNodeWithText("캠퍼스 구역 CAMPUS_ZONES_V2_USER_2026_08_27 · © OpenStreetMap contributors").assertExists()
     }
@@ -230,6 +231,7 @@ class DataSourceScreenTest {
                 null,
                 "https://www.dima.ac.kr/?p=97",
                 null,
+                Instant.parse("2026-08-26T11:30:00Z"),
             ),
         )
         override suspend fun refresh() = ShuttleRefreshResult.Success(data.value.departures.size, Instant.parse("2026-08-26T12:00:10Z"))

@@ -5,7 +5,9 @@ import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import com.example.dimanow.data.DimaDatabase
 import java.time.Instant
-import java.time.LocalDate
+import com.example.dimanow.sync.StaticDataTransport
+import java.time.Clock
+import java.time.ZoneOffset
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
@@ -17,24 +19,33 @@ class MealCacheProtectionTest {
         val context = ApplicationProvider.getApplicationContext<Context>()
         val database = Room.inMemoryDatabaseBuilder(context, DimaDatabase::class.java).allowMainThreadQueries().build()
         try {
-            val source = OfficialMealSource(context, database)
-            val weekStart = LocalDate.of(2026, 8, 24)
-            val valid = MealValidationResult.Valid(
-                weekStart,
-                (0L..4L).associate { day -> weekStart.plusDays(day) to listOf("밥", "국") },
+            val payload = """{"schemaVersion":1,"weekStart":"2026-08-24","weekEnd":"2026-08-30","days":[{"date":"2026-08-24","menuLines":["밥","국"],"hours":"11:30 ~ 14:00","sourceUrl":"https://www.instagram.com/p/current/","sourceImageUrl":"https://scontent.example/valid.jpg"}]}"""
+            val hash = java.security.MessageDigest.getInstance("SHA-256")
+                .digest(payload.toByteArray())
+                .joinToString("") { "%02x".format(it) }
+            val validManifest = """{"schemaVersion":1,"generatedAt":"2026-08-24T01:00:00Z","datasets":{"meal":{"revision":1,"state":"READY","publishedAt":"2026-08-24T01:00:00Z","lastAttemptAt":"2026-08-24T01:00:00Z","url":"meal/$hash.json","sha256":"$hash","sourceUrl":"https://www.dima.ac.kr/?p=1"}}}"""
+            val source = StaticMealSource(
+                database = database,
+                transport = StaticDataTransport { url -> if (url.endsWith("manifest.json")) validManifest.toByteArray() else payload.toByteArray() },
+                clock = Clock.fixed(Instant.parse("2026-08-24T01:00:00Z"), ZoneOffset.UTC),
             )
-            val post = MealPost("[DIMA 학생식당] 8월 4주차", "https://www.instagram.com/p/current/", "11:00 ~ 14:00")
             val firstSuccess = Instant.parse("2026-08-24T01:00:00Z")
-            source.acceptValid(valid, post, "https://example.invalid/valid.jpg", firstSuccess)
+            source.refresh()
 
-            source.recordFailure("메뉴 확인 필요: 날짜 헤더 오류", post, "https://example.invalid/candidate.jpg", Instant.parse("2026-08-24T03:00:00Z"))
+            val failedManifest = """{"schemaVersion":1,"generatedAt":"2026-08-24T03:00:00Z","datasets":{"meal":{"revision":2,"state":"NEEDS_REVIEW","publishedAt":"2026-08-24T01:00:00Z","lastAttemptAt":"2026-08-24T03:00:00Z","url":"meal/$hash.json","sha256":"$hash","sourceUrl":"https://www.dima.ac.kr/?p=1","message":"메뉴 확인 필요: 날짜 헤더 오류"}}}"""
+            val failingSource = StaticMealSource(
+                database = database,
+                transport = StaticDataTransport { failedManifest.toByteArray() },
+                clock = Clock.fixed(Instant.parse("2026-08-24T03:00:00Z"), ZoneOffset.UTC),
+            )
+            failingSource.refresh()
 
-            val data = source.data.first()
-            assertEquals(5, data.days.size)
+            val data = failingSource.data.first()
+            assertEquals(1, data.days.size)
             assertEquals(listOf("밥", "국"), data.days.first().menuLines)
             assertEquals(firstSuccess, data.lastSuccess)
             assertEquals("메뉴 확인 필요: 날짜 헤더 오류", data.error)
-            assertEquals("https://example.invalid/candidate.jpg", data.sourceImageUrl)
+            assertEquals("https://scontent.example/valid.jpg", data.sourceImageUrl)
         } finally {
             database.close()
         }

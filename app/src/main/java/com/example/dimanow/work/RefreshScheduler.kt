@@ -32,53 +32,49 @@ object RefreshScheduler {
             workManager.cancelUniqueWork("shuttle-daily-refresh")
             workManager.cancelUniqueWork("meal-launch-refresh")
             workManager.cancelUniqueWork("meal-twice-daily-refresh")
+            workManager.cancelUniqueWork("shuttle-weekly-launch-check")
+            workManager.cancelUniqueWork("shuttle-weekly-policy")
+            workManager.cancelUniqueWork("meal-expiry-launch-check")
+            workManager.cancelUniqueWork("meal-expiry-policy")
+            workManager.cancelUniqueWork("notice-daily-launch-check")
+            workManager.cancelUniqueWork("notice-daily-policy")
             preferences.setBackgroundWorkPolicyVersion(CURRENT_POLICY_VERSION)
         }
 
-        val shuttleConstraints = Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build()
-        val immediate = OneTimeWorkRequestBuilder<ShuttleRefreshWorker>()
-            .setConstraints(shuttleConstraints)
-            .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 6, TimeUnit.HOURS)
+        val syncConstraints = Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build()
+        val immediate = OneTimeWorkRequestBuilder<CampusSyncWorker>()
+            .setConstraints(syncConstraints)
+            .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 30, TimeUnit.MINUTES)
             .build()
-        workManager.enqueueUniqueWork("shuttle-weekly-launch-check", ExistingWorkPolicy.KEEP, immediate)
-        val daily = PeriodicWorkRequestBuilder<ShuttleRefreshWorker>(24, TimeUnit.HOURS)
-            .setConstraints(shuttleConstraints)
-            .setInitialDelay(24, TimeUnit.HOURS)
-            .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 6, TimeUnit.HOURS)
+        workManager.enqueueUniqueWork("campus-static-sync-launch", ExistingWorkPolicy.KEEP, immediate)
+        val periodic = PeriodicWorkRequestBuilder<CampusSyncWorker>(12, TimeUnit.HOURS)
+            .setConstraints(syncConstraints)
+            .setInitialDelay(12, TimeUnit.HOURS)
+            .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 30, TimeUnit.MINUTES)
             .build()
-        workManager.enqueueUniquePeriodicWork("shuttle-weekly-policy", ExistingPeriodicWorkPolicy.UPDATE, daily)
-
-        val mealConstraints = Constraints.Builder()
-            .setRequiredNetworkType(NetworkType.CONNECTED)
-            .setRequiresBatteryNotLow(true)
-            .build()
-        val mealImmediate = OneTimeWorkRequestBuilder<MealRefreshWorker>()
-            .setConstraints(mealConstraints)
-            .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 6, TimeUnit.HOURS)
-            .build()
-        workManager.enqueueUniqueWork("meal-expiry-launch-check", ExistingWorkPolicy.KEEP, mealImmediate)
-        val mealDaily = PeriodicWorkRequestBuilder<MealRefreshWorker>(24, TimeUnit.HOURS)
-            .setConstraints(mealConstraints)
-            .setInitialDelay(24, TimeUnit.HOURS)
-            .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 6, TimeUnit.HOURS)
-            .build()
-        workManager.enqueueUniquePeriodicWork("meal-expiry-policy", ExistingPeriodicWorkPolicy.UPDATE, mealDaily)
-
-        val noticeConstraints = Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build()
-        val noticeImmediate = OneTimeWorkRequestBuilder<NoticeRefreshWorker>()
-            .setConstraints(noticeConstraints)
-            .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 6, TimeUnit.HOURS)
-            .build()
-        workManager.enqueueUniqueWork("notice-daily-launch-check", ExistingWorkPolicy.KEEP, noticeImmediate)
-        val noticeDaily = PeriodicWorkRequestBuilder<NoticeRefreshWorker>(24, TimeUnit.HOURS)
-            .setConstraints(noticeConstraints)
-            .setInitialDelay(24, TimeUnit.HOURS)
-            .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 6, TimeUnit.HOURS)
-            .build()
-        workManager.enqueueUniquePeriodicWork("notice-daily-policy", ExistingPeriodicWorkPolicy.UPDATE, noticeDaily)
+        workManager.enqueueUniquePeriodicWork("campus-static-sync-periodic", ExistingPeriodicWorkPolicy.UPDATE, periodic)
     }
 
-    private const val CURRENT_POLICY_VERSION = 1
+    private const val CURRENT_POLICY_VERSION = 2
+}
+
+class CampusSyncWorker(context: Context, parameters: WorkerParameters) : CoroutineWorker(context, parameters) {
+    override suspend fun doWork(): Result {
+        val app = applicationContext as DimaNowApplication
+        val shuttle = app.shuttleSource.refresh()
+        val meal = app.mealSource.refresh()
+        val notice = app.noticeSource.refresh()
+        if (shuttle is ShuttleRefreshResult.Success) ShuttleWidgetProvider.updateAll(applicationContext)
+        if (meal is MealRefreshResult.Success) MealWidgetProvider.updateAll(applicationContext)
+        if (shuttle is ShuttleRefreshResult.Success || meal is MealRefreshResult.Success) {
+            CampusSummaryWidgetProvider.updateAll(applicationContext)
+        }
+        return if (
+            shuttle is ShuttleRefreshResult.Failure &&
+            meal is MealRefreshResult.Failure &&
+            notice is NoticeRefreshResult.Failure
+        ) Result.retry() else Result.success()
+    }
 }
 
 class NoticeRefreshWorker(context: Context, parameters: WorkerParameters) : CoroutineWorker(context, parameters) {

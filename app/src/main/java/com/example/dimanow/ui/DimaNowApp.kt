@@ -162,7 +162,9 @@ import com.example.dimanow.meal.MealSource
 import com.example.dimanow.meal.mealServiceStatus
 import com.example.dimanow.notice.NoticeData
 import com.example.dimanow.notice.NoticeSource
-import com.example.dimanow.notice.OfficialNoticeSource
+import com.example.dimanow.notice.OFFICIAL_NOTICE_SOURCE_URL
+import com.example.dimanow.meal.OFFICIAL_MEAL_SOURCE_URL
+import com.example.dimanow.shuttle.OFFICIAL_SHUTTLE_SOURCE_URL
 import com.example.dimanow.shuttle.ShuttleData
 import com.example.dimanow.shuttle.ShuttleSource
 import com.example.dimanow.theme.SuccessGreen
@@ -370,13 +372,13 @@ private fun DashboardRoute(
     val resolvedZone by preferences.effectiveZone.collectAsStateWithLifecycle(initialValue = CampusZoneId.OUTSIDE)
     val locationMode by preferences.locationMode.collectAsStateWithLifecycle(initialValue = LocationMode.GPS)
     val shuttle by shuttleSource.data.collectAsStateWithLifecycle(
-        initialValue = ShuttleData(emptyList(), null, null, null, com.example.dimanow.shuttle.OfficialShuttleSource.SOURCE_URL, null),
+        initialValue = ShuttleData(emptyList(), null, null, null, OFFICIAL_SHUTTLE_SOURCE_URL, null),
     )
     val meal by mealSource.data.collectAsStateWithLifecycle(
-        initialValue = MealData(emptyList(), null, null, null, com.example.dimanow.meal.OfficialMealSource.DISCOVERY_URL, null, null),
+        initialValue = MealData(emptyList(), null, null, null, OFFICIAL_MEAL_SOURCE_URL, null, null),
     )
     val homeBase by preferences.homeBase.collectAsStateWithLifecycle(initialValue = HomeBase.YEIN)
-    val emptyNotices = remember { NoticeData(emptyList(), null, null, null, OfficialNoticeSource.SOURCE_URL) }
+    val emptyNotices = remember { NoticeData(emptyList(), null, null, null, OFFICIAL_NOTICE_SOURCE_URL) }
     val notices by (noticeSource?.data ?: remember { kotlinx.coroutines.flow.flowOf(emptyNotices) })
         .collectAsStateWithLifecycle(initialValue = emptyNotices)
 
@@ -429,10 +431,10 @@ private fun SettingsRoute(
     val displayOptions by preferences.liveDisplayOptions.collectAsStateWithLifecycle(initialValue = LiveDisplayOptions())
     val homeBase by preferences.homeBase.collectAsStateWithLifecycle(initialValue = HomeBase.YEIN)
     val shuttle by shuttleSource.data.collectAsStateWithLifecycle(
-        initialValue = ShuttleData(emptyList(), null, null, null, com.example.dimanow.shuttle.OfficialShuttleSource.SOURCE_URL, null),
+        initialValue = ShuttleData(emptyList(), null, null, null, OFFICIAL_SHUTTLE_SOURCE_URL, null),
     )
     val meal by mealSource.data.collectAsStateWithLifecycle(
-        initialValue = MealData(emptyList(), null, null, null, com.example.dimanow.meal.OfficialMealSource.DISCOVERY_URL, null, null),
+        initialValue = MealData(emptyList(), null, null, null, OFFICIAL_MEAL_SOURCE_URL, null, null),
     )
 
     SettingsScreen(
@@ -468,7 +470,7 @@ internal fun DashboardScreen(
     shuttle: ShuttleData,
     meal: MealData,
     homeBase: HomeBase = HomeBase.YEIN,
-    notices: NoticeData = NoticeData(emptyList(), null, null, null, OfficialNoticeSource.SOURCE_URL),
+    notices: NoticeData = NoticeData(emptyList(), null, null, null, OFFICIAL_NOTICE_SOURCE_URL),
     onNavigateToPage: (AppPage) -> Unit = {},
     modifier: Modifier = Modifier,
     now: ZonedDateTime = ZonedDateTime.now(),
@@ -1111,6 +1113,18 @@ private fun TimetableScreen(repository: CampusDataRepository, schedule: TermSche
     var pendingDelete by remember { mutableStateOf<Course?>(null) }
     val today = LocalDate.now(MinuteTicker.CAMPUS_ZONE)
 
+    BackHandler(
+        enabled = showEditor || showTermEditor || showPauseChoice || pausePickerMode != null || pendingDelete != null,
+    ) {
+        when {
+            pendingDelete != null -> pendingDelete = null
+            pausePickerMode != null -> pausePickerMode = null
+            showPauseChoice -> showPauseChoice = false
+            showTermEditor -> showTermEditor = false
+            showEditor -> showEditor = false
+        }
+    }
+
     ScreenColumn(title = "시간표", modifier = modifier) {
         ElevatedCard(
             modifier = Modifier
@@ -1594,7 +1608,7 @@ fun ShuttleScreen(
     val scope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
     val shuttle by shuttleSource.data.collectAsStateWithLifecycle(
-        initialValue = ShuttleData(emptyList(), null, null, null, com.example.dimanow.shuttle.OfficialShuttleSource.SOURCE_URL, null),
+        initialValue = ShuttleData(emptyList(), null, null, null, OFFICIAL_SHUTTLE_SOURCE_URL, null),
     )
     var refreshing by remember { mutableStateOf(false) }
     var refreshMessage by remember { mutableStateOf<String?>(null) }
@@ -2063,7 +2077,7 @@ fun MealScreen(
     val scope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
     val meal by mealSource.data.collectAsStateWithLifecycle(
-        initialValue = MealData(emptyList(), null, null, null, com.example.dimanow.meal.OfficialMealSource.DISCOVERY_URL, null, null),
+        initialValue = MealData(emptyList(), null, null, null, OFFICIAL_MEAL_SOURCE_URL, null, null),
     )
     var refreshing by remember { mutableStateOf(false) }
     var refreshMessage by remember { mutableStateOf<String?>(null) }
@@ -2448,13 +2462,15 @@ internal fun DataAndSourcesCard(
         Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Text("데이터 및 원문", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
             Text("셔틀", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
-            Text("마지막 성공: ${shuttleData.lastSuccess?.let(::formatSourceSuccessTime) ?: "기록 없음"}", style = MaterialTheme.typography.bodySmall)
+            Text("기기 동기화: ${shuttleData.lastSuccess?.let(::formatSourceSuccessTime) ?: "기록 없음"}", style = MaterialTheme.typography.bodySmall)
+            shuttleData.serverPublishedAt?.let { Text("서버 게시: ${formatSourceSuccessTime(it)}", style = MaterialTheme.typography.bodySmall) }
             Text("공식 주간 시간표 ${shuttleData.departures.size}행 · 사용자 출발 슬롯 ${shuttleSlots}개", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             shuttleData.error?.let { Text("마지막 오류: $it", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error) }
             OutlinedButton(onClick = { openUrl(context, shuttleData.sourceUrl) }) { Text("셔틀 원문") }
             HorizontalDivider()
             Text("식단", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
-            Text("마지막 성공: ${mealData.lastSuccess?.let(::formatSourceSuccessTime) ?: "기록 없음"}", style = MaterialTheme.typography.bodySmall)
+            Text("기기 동기화: ${mealData.lastSuccess?.let(::formatSourceSuccessTime) ?: "기록 없음"}", style = MaterialTheme.typography.bodySmall)
+            mealData.serverPublishedAt?.let { Text("서버 게시: ${formatSourceSuccessTime(it)}", style = MaterialTheme.typography.bodySmall) }
             Text(mealWeeks, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             mealData.error?.let { Text("마지막 오류: $it", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error) }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {

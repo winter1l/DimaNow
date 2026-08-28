@@ -1,7 +1,10 @@
-package com.example.dimanow.meal
+package com.example.dimanow.pipeline
 
+import com.example.dimanow.sync.MealDayPayload
+import com.example.dimanow.sync.MealPayload
 import java.time.DayOfWeek
 import java.time.LocalDate
+import java.time.temporal.TemporalAdjusters
 import kotlin.math.abs
 
 data class OcrLine(
@@ -19,7 +22,27 @@ sealed interface MealValidationResult {
     data class Invalid(val reason: String) : MealValidationResult
 }
 
-class MealWeekValidator(private val minimumMenuLinesPerDay: Int = 2) {
+class MealPayloadBuilder(private val minimumMenuLinesPerDay: Int = 2) {
+    fun build(
+        lines: List<OcrLine>,
+        referenceDate: LocalDate,
+        hours: String,
+        sourceUrl: String,
+        sourceImageUrl: String,
+    ): MealPayload {
+        val validation = validate(lines, referenceDate)
+        require(validation is MealValidationResult.Valid) {
+            (validation as MealValidationResult.Invalid).reason
+        }
+        return MealPayload(
+            weekStart = validation.weekStart.toString(),
+            weekEnd = validation.weekStart.plusDays(6).toString(),
+            days = validation.days.map { (date, menuLines) ->
+                MealDayPayload(date.toString(), menuLines, hours, sourceUrl, sourceImageUrl)
+            },
+        )
+    }
+
     fun validate(lines: List<OcrLine>, referenceDate: LocalDate): MealValidationResult {
         val headers = lines.mapNotNull { line ->
             val match = DATE_HEADER.find(line.text) ?: return@mapNotNull null
@@ -34,10 +57,11 @@ class MealWeekValidator(private val minimumMenuLinesPerDay: Int = 2) {
         if (weekStart.dayOfWeek != DayOfWeek.MONDAY || headers.map { it.date } != (0L..4L).map(weekStart::plusDays)) {
             return MealValidationResult.Invalid("월요일부터 금요일까지 연속된 날짜가 아닙니다.")
         }
-        if (referenceDate !in weekStart..weekStart.plusDays(6)) {
+        val nextWeekAllowed = referenceDate.dayOfWeek in setOf(DayOfWeek.SATURDAY, DayOfWeek.SUNDAY) &&
+            weekStart == referenceDate.with(TemporalAdjusters.next(DayOfWeek.MONDAY))
+        if (referenceDate !in weekStart..weekStart.plusDays(6) && !nextWeekAllowed) {
             return MealValidationResult.Invalid("현재 기준 주와 식단 날짜가 일치하지 않습니다.")
         }
-
         val headerBottom = headers.maxOf { it.line.bottom }
         val menu = headers.associate { it.date to mutableListOf<String>() }
         lines.asSequence()

@@ -16,7 +16,6 @@ datastore = "1.2.1"
 work = "2.11.2"
 playServicesLocation = "21.3.0"
 jsoup = "1.22.1"
-mlkitTextRecognitionKorean = "16.0.1"
 ksp = "2.3.9"
 serializationJson = "1.9.0"
 benchmark = "1.5.0-rc02"
@@ -48,7 +47,6 @@ androidx-datastore-preferences = { module = "androidx.datastore:datastore-prefer
 androidx-work-runtime-ktx = { module = "androidx.work:work-runtime-ktx", version.ref = "work" }
 play-services-location = { module = "com.google.android.gms:play-services-location", version.ref = "playServicesLocation" }
 jsoup = { module = "org.jsoup:jsoup", version.ref = "jsoup" }
-mlkit-text-recognition-korean = { module = "com.google.mlkit:text-recognition-korean", version.ref = "mlkitTextRecognitionKorean" }
 kotlinx-coroutines-android = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-android", version.ref = "coroutines" }
 kotlinx-coroutines-play-services = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-play-services", version.ref = "coroutines" }
 androidx-lifecycle-service = { module = "androidx.lifecycle:lifecycle-service", version.ref = "androidxLifecycle" }
@@ -64,3 +62,5 @@ android-test = { id = "com.android.test", version.ref = "androidGradlePlugin" }
 baselineprofile = { id = "androidx.baselineprofile", version.ref = "benchmark" }
 compose-compiler = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
 ksp = { id = "com.google.devtools.ksp", version.ref = "ksp" }
+kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }
+kotlin-serialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }

@@ -1,23 +1,16 @@
 package com.example.dimanow.meal
 
-import android.content.Context
-import android.graphics.Rect
-import androidx.core.net.toUri
 import androidx.room.withTransaction
 import com.example.dimanow.data.DimaDatabase
 import com.example.dimanow.data.MealDayEntity
 import com.example.dimanow.data.SourceStatusEntity
+import com.example.dimanow.data.SyncStateEntity
 import com.example.dimanow.domain.MealDay
 import com.example.dimanow.domain.MealValidationState
 import com.example.dimanow.time.MinuteTicker
-import com.google.mlkit.vision.common.InputImage
-import com.google.mlkit.vision.text.Text
-import com.google.mlkit.vision.text.TextRecognition
-import com.google.mlkit.vision.text.korean.KoreanTextRecognizerOptions
-import java.io.File
-import java.net.URL
 import java.time.DayOfWeek
 import java.time.Clock
+import java.security.MessageDigest
 import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalTime
@@ -27,11 +20,14 @@ import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
-import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
-import org.jsoup.Jsoup
+import com.example.dimanow.sync.CampusDataManifest
+import com.example.dimanow.sync.MealPayload
+import com.example.dimanow.sync.StaticDataTransport
+import kotlinx.serialization.json.Json
 
 data class MealData(
     val days: List<MealDay>,
@@ -41,6 +37,8 @@ data class MealData(
     val sourceUrl: String,
     val sourceImageUrl: String?,
     val hours: String?,
+    val serverPublishedAt: Instant? = null,
+    val serverState: String? = null,
 ) {
     fun serviceStatusAt(now: ZonedDateTime): MealServiceStatus = mealServiceStatus(
         day = days.firstOrNull { it.date == now.toLocalDate() && it.validationState == MealValidationState.VALID },
@@ -112,132 +110,153 @@ interface MealSource {
     suspend fun refresh(): MealRefreshResult
 }
 
-class OfficialMealSource(
-    private val context: Context,
+const val OFFICIAL_MEAL_SOURCE_URL = "https://www.dima.ac.kr/?p=1"
+
+class StaticMealSource(
     private val database: DimaDatabase,
+    private val transport: StaticDataTransport,
+    private val clock: Clock = Clock.systemUTC(),
     private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
-    private val clock: Clock = Clock.system(MinuteTicker.CAMPUS_ZONE),
 ) : MealSource {
     private val dao = database.scheduleDao()
     private val refreshMutex = Mutex()
+    private val json = Json { ignoreUnknownKeys = false }
 
     override val data: Flow<MealData> = combine(
         dao.observeMealDays(),
         dao.observeSourceStatus(SOURCE_KEY),
-    ) { days, status ->
+        dao.observeSyncState(SOURCE_KEY),
+    ) { days, status, sync ->
         MealData(
             days = days.map { it.toDomain() },
             lastSuccess = status?.lastSuccessEpochMillis?.let(Instant::ofEpochMilli),
             lastAttempt = status?.lastAttemptEpochMillis?.let(Instant::ofEpochMilli),
             error = status?.error,
-            sourceUrl = status?.sourceUrl ?: DISCOVERY_URL,
+            sourceUrl = status?.sourceUrl ?: OFFICIAL_MEAL_SOURCE_URL,
             sourceImageUrl = status?.candidateImageUrl,
             hours = status?.hours,
+            serverPublishedAt = sync?.serverPublishedEpochMillis?.let(Instant::ofEpochMilli),
+            serverState = sync?.serverState,
         )
     }
 
     override suspend fun refresh(): MealRefreshResult = refreshMutex.withLock { withContext(ioDispatcher) {
-        val attempt = Instant.now()
-        var post: MealPost? = null
-        var imageUrl: String? = null
+        val attempt = clock.instant()
         try {
-            val discoveryHtml = Jsoup.connect(DISCOVERY_URL).userAgent(USER_AGENT).get().outerHtml()
-            post = MealDiscoveryParser().parse(discoveryHtml) ?: discoverFromOfficialProfile()
-                ?: error("[DIMA 학생식당] 게시물을 찾지 못했습니다.")
-            val embedHtml = Jsoup.connect(post.embedUrl).userAgent(USER_AGENT).get().outerHtml()
-            imageUrl = InstagramCarouselParser().parse(embedHtml).mealTableImageUrl
-                ?: error("식단표 캐러셀 이미지를 찾지 못했습니다.")
-            val imageFile = downloadCandidate(imageUrl)
-            val recognized = recognize(imageFile)
-            val validation = MealWeekValidator().validate(recognized, MealRefreshClock.today(clock))
-            when (validation) {
-                is MealValidationResult.Valid -> {
-                    acceptValid(validation, post, imageUrl, attempt)
-                    MealRefreshResult.Success(validation.weekStart, attempt)
+            val manifest = json.decodeFromString<CampusDataManifest>(transport.get(MANIFEST_URL).decodeToString())
+            require(manifest.schemaVersion == 1) { "지원하지 않는 동기화 스키마입니다." }
+            val descriptor = manifest.datasets.getValue(SOURCE_KEY)
+            require(descriptor.state == "READY") { descriptor.message ?: "식단 데이터가 준비되지 않았습니다." }
+            require(descriptor.sourceUrl == OFFICIAL_MEAL_SOURCE_URL) { "허용되지 않은 식단 원문 주소입니다." }
+            val previousSync = dao.syncState(SOURCE_KEY)
+            if (previousSync?.revision == descriptor.revision && previousSync.sha256 == descriptor.sha256) {
+                val previousStatus = dao.sourceStatus(SOURCE_KEY)
+                val cachedDays = dao.observeMealDays().first()
+                val week = cachedDays.firstOrNull()?.epochDay?.let(LocalDate::ofEpochDay)
+                    ?: throw IllegalStateException("식단 캐시가 비어 있습니다.")
+                database.withTransaction {
+                    dao.putSyncState(previousSync.copy(lastCheckedEpochMillis = attempt.toEpochMilli(), serverState = descriptor.state, error = null))
+                    dao.putSourceStatus(
+                        SourceStatusEntity(
+                            source = SOURCE_KEY,
+                            lastSuccessEpochMillis = attempt.toEpochMilli(),
+                            lastAttemptEpochMillis = attempt.toEpochMilli(),
+                            error = null,
+                            sourceUrl = descriptor.sourceUrl,
+                            candidateImageUrl = previousStatus?.candidateImageUrl,
+                            hours = previousStatus?.hours,
+                        ),
+                    )
                 }
-                is MealValidationResult.Invalid -> {
-                    recordFailure("메뉴 확인 필요: ${validation.reason}", post, imageUrl, attempt)
-                    MealRefreshResult.NeedsReview(validation.reason, imageUrl)
-                }
+                return@withContext MealRefreshResult.Success(week.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY)), attempt)
             }
+            val relativeUrl = descriptor.url
+            require(relativeUrl.matches(Regex("meal/[0-9a-f]{64}\\.json"))) { "잘못된 식단 데이터 경로입니다." }
+            val payloadBytes = transport.get("$DATA_ROOT/$relativeUrl")
+            require(payloadBytes.sha256() == descriptor.sha256) { "식단 데이터 무결성 검사에 실패했습니다." }
+            val payload = json.decodeFromString<MealPayload>(payloadBytes.decodeToString())
+            require(payload.schemaVersion == 1) { "지원하지 않는 식단 스키마입니다." }
+            val weekStart = LocalDate.parse(payload.weekStart)
+            val weekEnd = LocalDate.parse(payload.weekEnd)
+            require(weekEnd == weekStart.plusDays(6) && payload.days.isNotEmpty() && payload.days.size <= 7) { "식단 주차가 올바르지 않습니다." }
+            require(payload.days.distinctBy { it.date }.size == payload.days.size) { "식단 날짜가 중복되었습니다." }
+            val entities = payload.days.map { row ->
+                val date = LocalDate.parse(row.date)
+                require(date in weekStart..weekEnd) { "식단 날짜가 주차 범위를 벗어났습니다." }
+                require(row.menuLines.size >= 2 && row.menuLines.all { it.isNotBlank() }) { "식단 메뉴 줄 수가 부족합니다." }
+                require(row.sourceUrl.startsWith("https://www.instagram.com/") || row.sourceUrl.startsWith("https://www.dima.ac.kr/")) {
+                    "허용되지 않은 식단 원문 주소입니다."
+                }
+                com.example.dimanow.data.MealDayEntity(
+                    epochDay = date.toEpochDay(),
+                    menuText = row.menuLines.joinToString("\n"),
+                    hours = row.hours,
+                    sourceUrl = row.sourceUrl,
+                    sourceImageUrl = row.sourceImageUrl,
+                    validationState = MealValidationState.VALID.name,
+                )
+            }
+            val first = payload.days.first()
+            database.withTransaction {
+                dao.deleteMealWeek(weekStart.toEpochDay(), weekEnd.toEpochDay())
+                dao.putMealDays(entities)
+                dao.putSourceStatus(
+                    SourceStatusEntity(
+                        source = SOURCE_KEY,
+                        lastSuccessEpochMillis = attempt.toEpochMilli(),
+                        lastAttemptEpochMillis = attempt.toEpochMilli(),
+                        error = null,
+                        sourceUrl = descriptor.sourceUrl,
+                        candidateImageUrl = first.sourceImageUrl,
+                        hours = first.hours,
+                    ),
+                )
+                dao.putSyncState(
+                    SyncStateEntity(
+                        dataset = SOURCE_KEY,
+                        revision = descriptor.revision,
+                        etag = null,
+                        sha256 = descriptor.sha256,
+                        serverPublishedEpochMillis = Instant.parse(descriptor.publishedAt).toEpochMilli(),
+                        lastCheckedEpochMillis = attempt.toEpochMilli(),
+                        lastImportedEpochMillis = attempt.toEpochMilli(),
+                        serverState = descriptor.state,
+                        error = null,
+                    ),
+                )
+            }
+            MealRefreshResult.Success(weekStart, attempt)
         } catch (error: Exception) {
-            recordFailure(error.message ?: error.javaClass.simpleName, post, imageUrl, attempt)
-            MealRefreshResult.Failure(error.message ?: "식단 새로고침 실패")
+            val previous = dao.sourceStatus(SOURCE_KEY)
+            val previousSync = dao.syncState(SOURCE_KEY)
+            dao.putSourceStatus(
+                SourceStatusEntity(
+                    source = SOURCE_KEY,
+                    lastSuccessEpochMillis = previous?.lastSuccessEpochMillis,
+                    lastAttemptEpochMillis = attempt.toEpochMilli(),
+                    error = error.message ?: error.javaClass.simpleName,
+                    sourceUrl = previous?.sourceUrl ?: OFFICIAL_MEAL_SOURCE_URL,
+                    candidateImageUrl = previous?.candidateImageUrl,
+                    hours = previous?.hours,
+                ),
+            )
+            dao.putSyncState(
+                (previousSync ?: SyncStateEntity(SOURCE_KEY, 0, null, null, null, attempt.toEpochMilli(), null, null, null)).copy(
+                    lastCheckedEpochMillis = attempt.toEpochMilli(),
+                    error = error.message ?: error.javaClass.simpleName,
+                ),
+            )
+            MealRefreshResult.Failure(error.message ?: "식단 동기화 실패")
         }
     } }
 
-    internal suspend fun acceptValid(validation: MealValidationResult.Valid, post: MealPost, imageUrl: String, attempt: Instant) {
-        val entities = validation.days.map { (date, lines) ->
-            MealDayEntity(
-                epochDay = date.toEpochDay(),
-                menuText = lines.joinToString("\n"),
-                hours = post.hours,
-                sourceUrl = post.sourceUrl,
-                sourceImageUrl = imageUrl,
-                validationState = MealValidationState.VALID.name,
-            )
-        }
-        database.withTransaction {
-            dao.deleteMealWeek(validation.weekStart.toEpochDay(), validation.weekStart.plusDays(6).toEpochDay())
-            dao.putMealDays(entities)
-            dao.putSourceStatus(
-                SourceStatusEntity(SOURCE_KEY, attempt.toEpochMilli(), attempt.toEpochMilli(), null, post.sourceUrl, candidateImageUrl = imageUrl, hours = post.hours),
-            )
-        }
-    }
+    private fun ByteArray.sha256(): String = MessageDigest.getInstance("SHA-256")
+        .digest(this)
+        .joinToString("") { "%02x".format(it) }
 
-    internal suspend fun recordFailure(message: String, post: MealPost?, imageUrl: String?, attempt: Instant) {
-        val previous = dao.sourceStatus(SOURCE_KEY)
-        dao.putSourceStatus(
-            SourceStatusEntity(
-                source = SOURCE_KEY,
-                lastSuccessEpochMillis = previous?.lastSuccessEpochMillis,
-                lastAttemptEpochMillis = attempt.toEpochMilli(),
-                error = message,
-                sourceUrl = post?.sourceUrl ?: previous?.sourceUrl ?: DISCOVERY_URL,
-                candidateImageUrl = imageUrl ?: previous?.candidateImageUrl,
-                hours = post?.hours ?: previous?.hours,
-            ),
-        )
-    }
-
-    private fun downloadCandidate(imageUrl: String): File {
-        val file = File(context.cacheDir, "meal-candidate.jpg")
-        URL(imageUrl).openConnection().apply {
-            connectTimeout = 15_000
-            readTimeout = 20_000
-            setRequestProperty("User-Agent", USER_AGENT)
-        }.getInputStream().use { input -> file.outputStream().use(input::copyTo) }
-        return file
-    }
-
-    private fun discoverFromOfficialProfile(): MealPost? {
-        val payload = Jsoup.connect(PROFILE_FEED_URL)
-            .ignoreContentType(true)
-            .userAgent(USER_AGENT)
-            .header("X-IG-App-ID", INSTAGRAM_PUBLIC_APP_ID)
-            .execute()
-            .body()
-        return MealProfileFeedParser().parse(payload)
-    }
-
-    private suspend fun recognize(file: File): List<OcrLine> {
-        val recognizer = TextRecognition.getClient(KoreanTextRecognizerOptions.Builder().build())
-        return try {
-            val text = recognizer.process(InputImage.fromFilePath(context, file.toUri())).await()
-            text.textBlocks.flatMap(Text.TextBlock::getLines).mapNotNull { line ->
-                line.boundingBox?.let { box -> OcrLine(line.text, box.left, box.top, box.right, box.bottom) }
-            }
-        } finally {
-            recognizer.close()
-        }
-    }
-
-    companion object {
-        const val DISCOVERY_URL = "https://www.dima.ac.kr/?p=1"
-        const val PROFILE_FEED_URL = "https://www.instagram.com/api/v1/feed/user/30891067635/?count=12"
-        private const val SOURCE_KEY = "meal"
-        private const val USER_AGENT = "DIMA-Now/1.0 personal Android app"
-        private const val INSTAGRAM_PUBLIC_APP_ID = "936619743392459"
+    private companion object {
+        const val DATA_ROOT = "https://winter1l.github.io/DimaNow/data/v1"
+        const val MANIFEST_URL = "$DATA_ROOT/manifest.json"
+        const val SOURCE_KEY = "meal"
     }
 }

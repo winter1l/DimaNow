@@ -1,0 +1,6054 @@
+{
+    "departures": [
+        {
+            "serviceDay": "MONDAY",
+            "routeId": "A",
+            "stopId": "one-room",
+            "direction": "TO_MAIN",
+            "originZone": "ONE_ROOM",
+            "destinationZone": "MAIN",
+            "departureTime": "08:20",
+            "arrivalTime": "08:25"
+        },
+        {
+            "serviceDay": "MONDAY",
+            "routeId": "B",
+            "stopId": "university-headquarters",
+            "direction": "TO_YEIN",
+            "originZone": "MAIN",
+            "destinationZone": "YEIN",
+            "departureTime": "08:25",
+            "arrivalTime": "08:30"
+        },
+        {
+            "serviceDay": "MONDAY",
+            "routeId": "B",
+            "stopId": "yein",
+            "direction": "TO_MAIN",
+            "originZone": "YEIN",
+            "destinationZone": "MAIN",
+            "departureTime": "08:30",
+            "arrivalTime": "08:35"
+        },
+        {
+            "serviceDay": "MONDAY",
+            "routeId": "B",
+            "stopId": "university-headquarters",
+            "direction": "TO_YEIN",
+            "originZone": "MAIN",
+            "destinationZone": "YEIN",
+            "departureTime": "08:35",
+            "arrivalTime": "08:40"
+        },
+        {
+            "serviceDay": "MONDAY",
+            "routeId": "A",
+            "stopId": "one-room",
+            "direction": "TO_MAIN",
+            "originZone": "ONE_ROOM",
+            "destinationZone": "MAIN",
+            "departureTime": "08:40",
+            "arrivalTime": "08:45"
+        },
+        {
+            "serviceDay": "MONDAY",
+            "routeId": "B",
+            "stopId": "yein",
+            "direction": "TO_MAIN",
+            "originZone": "YEIN",
+            "destinationZone": "MAIN",
+            "departureTime": "08:40",
+            "arrivalTime": "08:45"
+        },
+        {
+            "serviceDay": "MONDAY",
+            "routeId": "A",
+            "stopId": "university-headquarters",
+            "direction": "TO_ONE_ROOM",
+            "originZone": "MAIN",
+            "destinationZone": "ONE_ROOM",
+            "departureTime": "08:45",
+            "arrivalTime": "08:50"
+        },
+        {
+            "serviceDay": "MONDAY",
+            "routeId": "B",
+            "stopId": "university-headquarters",
+            "direction": "TO_YEIN",
+            "originZone": "MAIN",
+            "destinationZone": "YEIN",
+            "departureTime": "08:45",
+            "arrivalTime": "08:50"
+        },
+        {
+            "serviceDay": "MONDAY",
+            "routeId": "A",
+            "stopId": "one-room",
+            "direction": "TO_MAIN",
+            "originZone": "ONE_ROOM",
+            "destinationZone": "MAIN",
+            "departureTime": "08:50",
+            "arrivalTime": "08:55"
+        },
+        {
+            "serviceDay": "MONDAY",
+            "routeId": "B",
+            "stopId": "yein",
+            "direction": "TO_MAIN",
+            "originZone": "YEIN",
+            "destinationZone": "MAIN",
+            "departureTime": "08:50",
+            "arrivalTime": "08:55"
+        },
+        {
+            "serviceDay": "MONDAY",
+            "routeId": "A",
+            "stopId": "one-room",
+            "direction": "TO_MAIN",
+            "originZone": "ONE_ROOM",
+            "destinationZone": "MAIN",
+            "departureTime": "08:55",
+            "arrivalTime": "09:00"
+        },
+        {
+            "serviceDay": "MONDAY",
+            "routeId": "B",
+            "stopId": "university-headquarters",
+            "direction": "TO_YEIN",
+            "originZone": "MAIN",
+            "destinationZone": "YEIN",
+            "departureTime": "08:55",
+            "arrivalTime": "09:00"
+        },
+        {
+            "serviceDay": "MONDAY",
+            "routeId": "B",
+            "stopId": "yein",
+            "direction": "TO_MAIN",
+            "originZone": "YEIN",
+            "destinationZone": "MAIN",
+            "departureTime": "09:00",
+            "arrivalTime": "09:05"
+        },
+        {
+            "serviceDay": "MONDAY",
+            "routeId": "A",
+            "stopId": "one-room",
+            "direction": "TO_MAIN",
+            "originZone": "ONE_ROOM",
+            "destinationZone": "MAIN",
+            "departureTime": "09:30",
+            "arrivalTime": "09:35"
+        },
+        {
+            "serviceDay": "MONDAY",
+            "routeId": "A",
+            "stopId": "university-headquarters",
+            "direction": "TO_ONE_ROOM",
+            "originZone": "MAIN",
+            "destinationZone": "ONE_ROOM",
+            "departureTime": "09:35",
+            "arrivalTime": "09:40"
+        },
+        {
+            "serviceDay": "MONDAY",
+            "routeId": "B",
+            "stopId": "university-headquarters",
+            "direction": "TO_YEIN",
+            "originZone": "MAIN",
+            "destinationZone": "YEIN",
+            "departureTime": "09:35",
+            "arrivalTime": "09:40"
+        },
+        {
+            "serviceDay": "MONDAY",
+            "routeId": "A",
+            "stopId": "one-room",
+            "direction": "TO_MAIN",
+            "originZone": "ONE_ROOM",
+            "destinationZone": "MAIN",
+            "departureTime": "09:40",
+            "arrivalTime": "09:45"
+        },
+        {
+            "serviceDay": "MONDAY",
+            "routeId": "B",
+            "stopId": "yein",
+            "direction": "TO_MAIN",
+            "originZone": "YEIN",
+            "destinationZone": "MAIN",
+            "departureTime": "09:40",
+            "arrivalTime": "09:45"
+        },
+        {
+            "serviceDay": "MONDAY",
+            "routeId": "A",
+            "stopId": "university-headquarters",
+            "direction": "TO_ONE_ROOM",
+            "originZone": "MAIN",
+            "destinationZone": "ONE_ROOM",
+            "departureTime": "09:45",
+            "arrivalTime": "09:50"
+        },
+        {
+            "serviceDay": "MONDAY",
+            "routeId": "B",
+            "stopId": "university-headquarters",
+            "direction": "TO_YEIN",
+            "originZone": "MAIN",
+            "destinationZone": "YEIN",
+            "departureTime": "09:45",
+            "arrivalTime": "09:50"
+        },
+        {
+            "serviceDay": "MONDAY",
+            "routeId": "A",
+            "stopId": "one-room",
+            "direction": "TO_MAIN",
+            "originZone": "ONE_ROOM",
+            "destinationZone": "MAIN",
+            "departureTime": "09:50",
+            "arrivalTime": "09:55"
+        },
+        {
+            "serviceDay": "MONDAY",
+            "routeId": "B",
+            "stopId": "yein",
+            "direction": "TO_MAIN",
+            "originZone": "YEIN",
+            "destinationZone": "MAIN",
+            "departureTime": "09:50",
+            "arrivalTime": "09:55"
+        },
+        {
+            "serviceDay": "MONDAY",
+            "routeId": "A",
+            "stopId": "one-room",
+            "direction": "TO_MAIN",
+            "originZone": "ONE_ROOM",
+            "destinationZone": "MAIN",
+            "departureTime": "09:55",
+            "arrivalTime": "10:00"
+        },
+        {
+            "serviceDay": "MONDAY",
+            "routeId": "B",
+            "stopId": "university-headquarters",
+            "direction": "TO_YEIN",
+            "originZone": "MAIN",
+            "destinationZone": "YEIN",
+            "departureTime": "09:55",
+            "arrivalTime": "10:00"
+        },
+        {
+            "serviceDay": "MONDAY",
+            "routeId": "B",
+            "stopId": "yein",
+            "direction": "TO_MAIN",
+            "originZone": "YEIN",
+            "destinationZone": "MAIN",
+            "departureTime": "10:00",
+            "arrivalTime": "10:05"
+        },
+        {
+            "serviceDay": "MONDAY",
+            "routeId": "A",
+            "stopId": "one-room",
+            "direction": "TO_MAIN",
+            "originZone": "ONE_ROOM",
+            "destinationZone": "MAIN",
+            "departureTime": "10:30",
+            "arrivalTime": "10:35"
+        },
+        {
+            "serviceDay": "MONDAY",
+            "routeId": "A",
+            "stopId": "university-headquarters",
+            "direction": "TO_ONE_ROOM",
+            "originZone": "MAIN",
+            "destinationZone": "ONE_ROOM",
+            "departureTime": "10:35",
+            "arrivalTime": "10:40"
+        },
+        {
+            "serviceDay": "MONDAY",
+            "routeId": "B",
+            "stopId": "university-headquarters",
+            "direction": "TO_YEIN",
+            "originZone": "MAIN",
+            "destinationZone": "YEIN",
+            "departureTime": "10:35",
+            "arrivalTime": "10:40"
+        },
+        {
+            "serviceDay": "MONDAY",
+            "routeId": "A",
+            "stopId": "one-room",
+            "direction": "TO_MAIN",
+            "originZone": "ONE_ROOM",
+            "destinationZone": "MAIN",
+            "departureTime": "10:40",
+            "arrivalTime": "10:45"
+        },
+        {
+            "serviceDay": "MONDAY",
+            "routeId": "B",
+            "stopId": "yein",
+            "direction": "TO_MAIN",
+            "originZone": "YEIN",
+            "destinationZone": "MAIN",
+            "departureTime": "10:40",
+            "arrivalTime": "10:45"
+        },
+        {
+            "serviceDay": "MONDAY",
+            "routeId": "A",
+            "stopId": "university-headquarters",
+            "direction": "TO_ONE_ROOM",
+            "originZone": "MAIN",
+            "destinationZone": "ONE_ROOM",
+            "departureTime": "10:45",
+            "arrivalTime": "10:50"
+        },
+        {
+            "serviceDay": "MONDAY",
+            "routeId": "B",
+            "stopId": "university-headquarters",
+            "direction": "TO_YEIN",
+            "originZone": "MAIN",
+            "destinationZone": "YEIN",
+            "departureTime": "10:45",
+            "arrivalTime": "10:50"
+        },
+        {
+            "serviceDay": "MONDAY",
+            "routeId": "A",
+            "stopId": "one-room",
+            "direction": "TO_MAIN",
+            "originZone": "ONE_ROOM",
+            "destinationZone": "MAIN",
+            "departureTime": "10:50",
+            "arrivalTime": "10:55"
+        },
+        {
+            "serviceDay": "MONDAY",
+            "routeId": "B",
+            "stopId": "yein",
+            "direction": "TO_MAIN",
+            "originZone": "YEIN",
+            "destinationZone": "MAIN",
+            "departureTime": "10:50",
+            "arrivalTime": "10:55"
+        },
+        {
+            "serviceDay": "MONDAY",
+            "routeId": "B",
+            "stopId": "university-headquarters",
+            "direction": "TO_YEIN",
+            "originZone": "MAIN",
+            "destinationZone": "YEIN",
+            "departureTime": "10:55",
+            "arrivalTime": "11:00"
+        },
+        {
+            "serviceDay": "MONDAY",
+            "routeId": "B",
+            "stopId": "yein",
+            "direction": "TO_MAIN",
+            "originZone": "YEIN",
+            "destinationZone": "MAIN",
+            "departureTime": "11:00",
+            "arrivalTime": "11:05"
+        },
+        {
+            "serviceDay": "MONDAY",
+            "routeId": "A",
+            "stopId": "one-room",
+            "direction": "TO_MAIN",
+            "originZone": "ONE_ROOM",
+            "destinationZone": "MAIN",
+            "departureTime": "11:30",
+            "arrivalTime": "11:35"
+        },
+        {
+            "serviceDay": "MONDAY",
+            "routeId": "A",
+            "stopId": "university-headquarters",
+            "direction": "TO_ONE_ROOM",
+            "originZone": "MAIN",
+            "destinationZone": "ONE_ROOM",
+            "departureTime": "11:35",
+            "arrivalTime": "11:40"
+        },
+        {
+            "serviceDay": "MONDAY",
+            "routeId": "B",
+            "stopId": "university-headquarters",
+            "direction": "TO_YEIN",
+            "originZone": "MAIN",
+            "destinationZone": "YEIN",
+            "departureTime": "11:35",
+            "arrivalTime": "11:40"
+        },
+        {
+            "serviceDay": "MONDAY",
+            "routeId": "A",
+            "stopId": "one-room",
+            "direction": "TO_MAIN",
+            "originZone": "ONE_ROOM",
+            "destinationZone": "MAIN",
+            "departureTime": "11:40",
+            "arrivalTime": "11:45"
+        },
+        {
+            "serviceDay": "MONDAY",
+            "routeId": "B",
+            "stopId": "yein",
+            "direction": "TO_MAIN",
+            "originZone": "YEIN",
+            "destinationZone": "MAIN",
+            "departureTime": "11:40",
+            "arrivalTime": "11:45"
+        },
+        {
+            "serviceDay": "MONDAY",
+            "routeId": "A",
+            "stopId": "university-headquarters",
+            "direction": "TO_ONE_ROOM",
+            "originZone": "MAIN",
+            "destinationZone": "ONE_ROOM",
+            "departureTime": "11:45",
+            "arrivalTime": "11:50"
+        },
+        {
+            "serviceDay": "MONDAY",
+            "routeId": "B",
+            "stopId": "university-headquarters",
+            "direction": "TO_YEIN",
+            "originZone": "MAIN",
+            "destinationZone": "YEIN",
+            "departureTime": "11:45",
+            "arrivalTime": "11:50"
+        },
+        {
+            "serviceDay": "MONDAY",
+            "routeId": "A",
+            "stopId": "one-room",
+            "direction": "TO_MAIN",
+            "originZone": "ONE_ROOM",
+            "destinationZone": "MAIN",
+            "departureTime": "11:50",
+            "arrivalTime": "11:55"
+        },
+        {
+            "serviceDay": "MONDAY",
+            "routeId": "B",
+            "stopId": "yein",
+            "direction": "TO_MAIN",
+            "originZone": "YEIN",
+            "destinationZone": "MAIN",
+            "departureTime": "11:50",
+            "arrivalTime": "11:55"
+        },
+        {
+            "serviceDay": "MONDAY",
+            "routeId": "B",
+            "stopId": "university-headquarters",
+            "direction": "TO_YEIN",
+            "originZone": "MAIN",
+            "destinationZone": "YEIN",
+            "departureTime": "11:55",
+            "arrivalTime": "12:00"
+        },
+        {
+            "serviceDay": "MONDAY",
+            "routeId": "B",
+            "stopId": "yein",
+            "direction": "TO_MAIN",
+            "originZone": "YEIN",
+            "destinationZone": "MAIN",
+            "departureTime": "12:00",
+            "arrivalTime": "12:05"
+        },
+        {
+            "serviceDay": "MONDAY",
+            "routeId": "A",
+            "stopId": "one-room",
+            "direction": "TO_MAIN",
+            "originZone": "ONE_ROOM",
+            "destinationZone": "MAIN",
+            "departureTime": "12:30",
+            "arrivalTime": "12:35"
+        },
+        {
+            "serviceDay": "MONDAY",
+            "routeId": "A",
+            "stopId": "university-headquarters",
+            "direction": "TO_ONE_ROOM",
+            "originZone": "MAIN",
+            "destinationZone": "ONE_ROOM",
+            "departureTime": "12:35",
+            "arrivalTime": "12:40"
+        },
+        {
+            "serviceDay": "MONDAY",
+            "routeId": "B",
+            "stopId": "university-headquarters",
+            "direction": "TO_YEIN",
+            "originZone": "MAIN",
+            "destinationZone": "YEIN",
+            "departureTime": "12:35",
+            "arrivalTime": "12:40"
+        },
+        {
+            "serviceDay": "MONDAY",
+            "routeId": "A",
+            "stopId": "one-room",
+            "direction": "TO_MAIN",
+            "originZone": "ONE_ROOM",
+            "destinationZone": "MAIN",
+            "departureTime": "12:40",
+            "arrivalTime": "12:45"
+        },
+        {
+            "serviceDay": "MONDAY",
+            "routeId": "B",
+            "stopId": "yein",
+            "direction": "TO_MAIN",
+            "originZone": "YEIN",
+            "destinationZone": "MAIN",
+            "departureTime": "12:40",
+            "arrivalTime": "12:45"
+        },
+        {
+            "serviceDay": "MONDAY",
+            "routeId": "A",
+            "stopId": "university-headquarters",
+            "direction": "TO_ONE_ROOM",
+            "originZone": "MAIN",
+            "destinationZone": "ONE_ROOM",
+            "departureTime": "12:45",
+            "arrivalTime": "12:50"
+        },
+        {
+            "serviceDay": "MONDAY",
+            "routeId": "B",
+            "stopId": "university-headquarters",
+            "direction": "TO_YEIN",
+            "originZone": "MAIN",
+            "destinationZone": "YEIN",
+            "departureTime": "12:45",
+            "arrivalTime": "12:50"
+        },
+        {
+            "serviceDay": "MONDAY",
+            "routeId": "A",
+            "stopId": "one-room",
+            "direction": "TO_MAIN",
+            "originZone": "ONE_ROOM",
+            "destinationZone": "MAIN",
+            "departureTime": "12:50",
+            "arrivalTime": "12:55"
+        },
+        {
+            "serviceDay": "MONDAY",
+            "routeId": "B",
+            "stopId": "yein",
+            "direction": "TO_MAIN",
+            "originZone": "YEIN",
+            "destinationZone": "MAIN",
+            "departureTime": "12:50",
+            "arrivalTime": "12:55"
+        },
+        {
+            "serviceDay": "MONDAY",
+            "routeId": "B",
+            "stopId": "university-headquarters",
+            "direction": "TO_YEIN",
+            "originZone": "MAIN",
+            "destinationZone": "YEIN",
+            "departureTime": "12:55",
+            "arrivalTime": "13:00"
+        },
+        {
+            "serviceDay": "MONDAY",
+            "routeId": "B",
+            "stopId": "yein",
+            "direction": "TO_MAIN",
+            "originZone": "YEIN",
+            "destinationZone": "MAIN",
+            "departureTime": "13:00",
+            "arrivalTime": "13:05"
+        },
+        {
+            "serviceDay": "MONDAY",
+            "routeId": "A",
+            "stopId": "one-room",
+            "direction": "TO_MAIN",
+            "originZone": "ONE_ROOM",
+            "destinationZone": "MAIN",
+            "departureTime": "13:40",
+            "arrivalTime": "13:45"
+        },
+        {
+            "serviceDay": "MONDAY",
+            "routeId": "A",
+            "stopId": "university-headquarters",
+            "direction": "TO_ONE_ROOM",
+            "originZone": "MAIN",
+            "destinationZone": "ONE_ROOM",
+            "departureTime": "13:45",
+            "arrivalTime": "13:50"
+        },
+        {
+            "serviceDay": "MONDAY",
+            "routeId": "B",
+            "stopId": "university-headquarters",
+            "direction": "TO_YEIN",
+            "originZone": "MAIN",
+            "destinationZone": "YEIN",
+            "departureTime": "13:45",
+            "arrivalTime": "13:50"
+        },
+        {
+            "serviceDay": "MONDAY",
+            "routeId": "A",
+            "stopId": "one-room",
+            "direction": "TO_MAIN",
+            "originZone": "ONE_ROOM",
+            "destinationZone": "MAIN",
+            "departureTime": "13:50",
+            "arrivalTime": "13:55"
+        },
+        {
+            "serviceDay": "MONDAY",
+            "routeId": "B",
+            "stopId": "yein",
+            "direction": "TO_MAIN",
+            "originZone": "YEIN",
+            "destinationZone": "MAIN",
+            "departureTime": "13:50",
+            "arrivalTime": "13:55"
+        },
+        {
+            "serviceDay": "MONDAY",
+            "routeId": "B",
+            "stopId": "university-headquarters",
+            "direction": "TO_YEIN",
+            "originZone": "MAIN",
+            "destinationZone": "YEIN",
+            "departureTime": "13:55",
+            "arrivalTime": "14:00"
+        },
+        {
+            "serviceDay": "MONDAY",
+            "routeId": "B",
+            "stopId": "yein",
+            "direction": "TO_MAIN",
+            "originZone": "YEIN",
+            "destinationZone": "MAIN",
+            "departureTime": "14:00",
+            "arrivalTime": "14:05"
+        },
+        {
+            "serviceDay": "MONDAY",
+            "routeId": "A",
+            "stopId": "one-room",
+            "direction": "TO_MAIN",
+            "originZone": "ONE_ROOM",
+            "destinationZone": "MAIN",
+            "departureTime": "14:40",
+            "arrivalTime": "14:45"
+        },
+        {
+            "serviceDay": "MONDAY",
+            "routeId": "A",
+            "stopId": "university-headquarters",
+            "direction": "TO_ONE_ROOM",
+            "originZone": "MAIN",
+            "destinationZone": "ONE_ROOM",
+            "departureTime": "14:45",
+            "arrivalTime": "14:50"
+        },
+        {
+            "serviceDay": "MONDAY",
+            "routeId": "B",
+            "stopId": "university-headquarters",
+            "direction": "TO_YEIN",
+            "originZone": "MAIN",
+            "destinationZone": "YEIN",
+            "departureTime": "14:45",
+            "arrivalTime": "14:50"
+        },
+        {
+            "serviceDay": "MONDAY",
+            "routeId": "A",
+            "stopId": "one-room",
+            "direction": "TO_MAIN",
+            "originZone": "ONE_ROOM",
+            "destinationZone": "MAIN",
+            "departureTime": "14:50",
+            "arrivalTime": "14:55"
+        },
+        {
+            "serviceDay": "MONDAY",
+            "routeId": "B",
+            "stopId": "yein",
+            "direction": "TO_MAIN",
+            "originZone": "YEIN",
+            "destinationZone": "MAIN",
+            "departureTime": "14:50",
+            "arrivalTime": "14:55"
+        },
+        {
+            "serviceDay": "MONDAY",
+            "routeId": "B",
+            "stopId": "university-headquarters",
+            "direction": "TO_YEIN",
+            "originZone": "MAIN",
+            "destinationZone": "YEIN",
+            "departureTime": "14:55",
+            "arrivalTime": "15:00"
+        },
+        {
+            "serviceDay": "MONDAY",
+            "routeId": "B",
+            "stopId": "yein",
+            "direction": "TO_MAIN",
+            "originZone": "YEIN",
+            "destinationZone": "MAIN",
+            "departureTime": "15:00",
+            "arrivalTime": "15:05"
+        },
+        {
+            "serviceDay": "MONDAY",
+            "routeId": "A",
+            "stopId": "one-room",
+            "direction": "TO_MAIN",
+            "originZone": "ONE_ROOM",
+            "destinationZone": "MAIN",
+            "departureTime": "15:40",
+            "arrivalTime": "15:45"
+        },
+        {
+            "serviceDay": "MONDAY",
+            "routeId": "A",
+            "stopId": "university-headquarters",
+            "direction": "TO_ONE_ROOM",
+            "originZone": "MAIN",
+            "destinationZone": "ONE_ROOM",
+            "departureTime": "15:45",
+            "arrivalTime": "15:50"
+        },
+        {
+            "serviceDay": "MONDAY",
+            "routeId": "B",
+            "stopId": "university-headquarters",
+            "direction": "TO_YEIN",
+            "originZone": "MAIN",
+            "destinationZone": "YEIN",
+            "departureTime": "15:45",
+            "arrivalTime": "15:50"
+        },
+        {
+            "serviceDay": "MONDAY",
+            "routeId": "A",
+            "stopId": "one-room",
+            "direction": "TO_MAIN",
+            "originZone": "ONE_ROOM",
+            "destinationZone": "MAIN",
+            "departureTime": "15:50",
+            "arrivalTime": "15:55"
+        },
+        {
+            "serviceDay": "MONDAY",
+            "routeId": "B",
+            "stopId": "yein",
+            "direction": "TO_MAIN",
+            "originZone": "YEIN",
+            "destinationZone": "MAIN",
+            "departureTime": "15:50",
+            "arrivalTime": "15:55"
+        },
+        {
+            "serviceDay": "MONDAY",
+            "routeId": "B",
+            "stopId": "university-headquarters",
+            "direction": "TO_YEIN",
+            "originZone": "MAIN",
+            "destinationZone": "YEIN",
+            "departureTime": "15:55",
+            "arrivalTime": "16:00"
+        },
+        {
+            "serviceDay": "MONDAY",
+            "routeId": "B",
+            "stopId": "yein",
+            "direction": "TO_MAIN",
+            "originZone": "YEIN",
+            "destinationZone": "MAIN",
+            "departureTime": "16:00",
+            "arrivalTime": "16:05"
+        },
+        {
+            "serviceDay": "MONDAY",
+            "routeId": "A",
+            "stopId": "one-room",
+            "direction": "TO_MAIN",
+            "originZone": "ONE_ROOM",
+            "destinationZone": "MAIN",
+            "departureTime": "16:40",
+            "arrivalTime": "16:45"
+        },
+        {
+            "serviceDay": "MONDAY",
+            "routeId": "A",
+            "stopId": "university-headquarters",
+            "direction": "TO_ONE_ROOM",
+            "originZone": "MAIN",
+            "destinationZone": "ONE_ROOM",
+            "departureTime": "16:45",
+            "arrivalTime": "16:50"
+        },
+        {
+            "serviceDay": "MONDAY",
+            "routeId": "B",
+            "stopId": "university-headquarters",
+            "direction": "TO_YEIN",
+            "originZone": "MAIN",
+            "destinationZone": "YEIN",
+            "departureTime": "16:45",
+            "arrivalTime": "16:50"
+        },
+        {
+            "serviceDay": "MONDAY",
+            "routeId": "A",
+            "stopId": "one-room",
+            "direction": "TO_MAIN",
+            "originZone": "ONE_ROOM",
+            "destinationZone": "MAIN",
+            "departureTime": "16:50",
+            "arrivalTime": "16:55"
+        },
+        {
+            "serviceDay": "MONDAY",
+            "routeId": "B",
+            "stopId": "yein",
+            "direction": "TO_MAIN",
+            "originZone": "YEIN",
+            "destinationZone": "MAIN",
+            "departureTime": "16:50",
+            "arrivalTime": "16:55"
+        },
+        {
+            "serviceDay": "MONDAY",
+            "routeId": "B",
+            "stopId": "university-headquarters",
+            "direction": "TO_YEIN",
+            "originZone": "MAIN",
+            "destinationZone": "YEIN",
+            "departureTime": "16:55",
+            "arrivalTime": "17:00"
+        },
+        {
+            "serviceDay": "MONDAY",
+            "routeId": "B",
+            "stopId": "yein",
+            "direction": "TO_MAIN",
+            "originZone": "YEIN",
+            "destinationZone": "MAIN",
+            "departureTime": "17:00",
+            "arrivalTime": "17:05"
+        },
+        {
+            "serviceDay": "MONDAY",
+            "routeId": "A",
+            "stopId": "one-room",
+            "direction": "TO_MAIN",
+            "originZone": "ONE_ROOM",
+            "destinationZone": "MAIN",
+            "departureTime": "17:40",
+            "arrivalTime": "17:45"
+        },
+        {
+            "serviceDay": "MONDAY",
+            "routeId": "A",
+            "stopId": "university-headquarters",
+            "direction": "TO_ONE_ROOM",
+            "originZone": "MAIN",
+            "destinationZone": "ONE_ROOM",
+            "departureTime": "17:45",
+            "arrivalTime": "17:50"
+        },
+        {
+            "serviceDay": "MONDAY",
+            "routeId": "B",
+            "stopId": "university-headquarters",
+            "direction": "TO_YEIN",
+            "originZone": "MAIN",
+            "destinationZone": "YEIN",
+            "departureTime": "17:45",
+            "arrivalTime": "17:50"
+        },
+        {
+            "serviceDay": "MONDAY",
+            "routeId": "A",
+            "stopId": "one-room",
+            "direction": "TO_MAIN",
+            "originZone": "ONE_ROOM",
+            "destinationZone": "MAIN",
+            "departureTime": "17:50",
+            "arrivalTime": "17:55"
+        },
+        {
+            "serviceDay": "MONDAY",
+            "routeId": "B",
+            "stopId": "yein",
+            "direction": "TO_MAIN",
+            "originZone": "YEIN",
+            "destinationZone": "MAIN",
+            "departureTime": "17:50",
+            "arrivalTime": "17:55"
+        },
+        {
+            "serviceDay": "MONDAY",
+            "routeId": "B",
+            "stopId": "university-headquarters",
+            "direction": "TO_YEIN",
+            "originZone": "MAIN",
+            "destinationZone": "YEIN",
+            "departureTime": "17:55",
+            "arrivalTime": "18:00"
+        },
+        {
+            "serviceDay": "MONDAY",
+            "routeId": "A",
+            "stopId": "one-room",
+            "direction": "TO_MAIN",
+            "originZone": "ONE_ROOM",
+            "destinationZone": "MAIN",
+            "departureTime": "18:00",
+            "arrivalTime": "18:05"
+        },
+        {
+            "serviceDay": "MONDAY",
+            "routeId": "B",
+            "stopId": "yein",
+            "direction": "TO_MAIN",
+            "originZone": "YEIN",
+            "destinationZone": "MAIN",
+            "departureTime": "18:10",
+            "arrivalTime": "18:15"
+        },
+        {
+            "serviceDay": "MONDAY",
+            "routeId": "B-evening",
+            "stopId": "yein",
+            "direction": "TO_MAIN",
+            "originZone": "YEIN",
+            "destinationZone": "MAIN",
+            "departureTime": "18:40",
+            "arrivalTime": "18:45"
+        },
+        {
+            "serviceDay": "MONDAY",
+            "routeId": "A-evening",
+            "stopId": "one-room",
+            "direction": "TO_MAIN",
+            "originZone": "ONE_ROOM",
+            "destinationZone": "MAIN",
+            "departureTime": "18:50",
+            "arrivalTime": "18:55"
+        },
+        {
+            "serviceDay": "MONDAY",
+            "routeId": "A-evening",
+            "stopId": "stadium-stop",
+            "direction": "TO_YEIN",
+            "originZone": "MAIN",
+            "destinationZone": "YEIN",
+            "departureTime": "18:55",
+            "arrivalTime": "19:00"
+        },
+        {
+            "serviceDay": "MONDAY",
+            "routeId": "B-evening",
+            "stopId": "stadium-stop",
+            "direction": "TO_YEIN",
+            "originZone": "MAIN",
+            "destinationZone": "YEIN",
+            "departureTime": "18:55",
+            "arrivalTime": "19:00"
+        },
+        {
+            "serviceDay": "MONDAY",
+            "routeId": "B-evening",
+            "stopId": "yein",
+            "direction": "TO_MAIN",
+            "originZone": "YEIN",
+            "destinationZone": "MAIN",
+            "departureTime": "19:00",
+            "arrivalTime": "19:05"
+        },
+        {
+            "serviceDay": "MONDAY",
+            "routeId": "A-evening",
+            "stopId": "one-room",
+            "direction": "TO_MAIN",
+            "originZone": "ONE_ROOM",
+            "destinationZone": "MAIN",
+            "departureTime": "19:20",
+            "arrivalTime": "19:25"
+        },
+        {
+            "serviceDay": "MONDAY",
+            "routeId": "A-evening",
+            "stopId": "stadium-stop",
+            "direction": "TO_YEIN",
+            "originZone": "MAIN",
+            "destinationZone": "YEIN",
+            "departureTime": "19:25",
+            "arrivalTime": "19:30"
+        },
+        {
+            "serviceDay": "MONDAY",
+            "routeId": "B-evening",
+            "stopId": "stadium-stop",
+            "direction": "TO_YEIN",
+            "originZone": "MAIN",
+            "destinationZone": "YEIN",
+            "departureTime": "19:25",
+            "arrivalTime": "19:30"
+        },
+        {
+            "serviceDay": "MONDAY",
+            "routeId": "B-evening",
+            "stopId": "yein",
+            "direction": "TO_MAIN",
+            "originZone": "YEIN",
+            "destinationZone": "MAIN",
+            "departureTime": "19:30",
+            "arrivalTime": "19:35"
+        },
+        {
+            "serviceDay": "MONDAY",
+            "routeId": "A-evening",
+            "stopId": "one-room",
+            "direction": "TO_MAIN",
+            "originZone": "ONE_ROOM",
+            "destinationZone": "MAIN",
+            "departureTime": "19:45",
+            "arrivalTime": "19:50"
+        },
+        {
+            "serviceDay": "MONDAY",
+            "routeId": "A-evening",
+            "stopId": "stadium-stop",
+            "direction": "TO_YEIN",
+            "originZone": "MAIN",
+            "destinationZone": "YEIN",
+            "departureTime": "19:50",
+            "arrivalTime": "19:55"
+        },
+        {
+            "serviceDay": "MONDAY",
+            "routeId": "B-evening",
+            "stopId": "stadium-stop",
+            "direction": "TO_YEIN",
+            "originZone": "MAIN",
+            "destinationZone": "YEIN",
+            "departureTime": "19:50",
+            "arrivalTime": "19:55"
+        },
+        {
+            "serviceDay": "MONDAY",
+            "routeId": "B-evening",
+            "stopId": "yein",
+            "direction": "TO_MAIN",
+            "originZone": "YEIN",
+            "destinationZone": "MAIN",
+            "departureTime": "19:55",
+            "arrivalTime": "20:00"
+        },
+        {
+            "serviceDay": "MONDAY",
+            "routeId": "A-evening",
+            "stopId": "one-room",
+            "direction": "TO_MAIN",
+            "originZone": "ONE_ROOM",
+            "destinationZone": "MAIN",
+            "departureTime": "20:45",
+            "arrivalTime": "20:50"
+        },
+        {
+            "serviceDay": "MONDAY",
+            "routeId": "A-evening",
+            "stopId": "stadium-stop",
+            "direction": "TO_YEIN",
+            "originZone": "MAIN",
+            "destinationZone": "YEIN",
+            "departureTime": "20:50",
+            "arrivalTime": "20:55"
+        },
+        {
+            "serviceDay": "MONDAY",
+            "routeId": "B-evening",
+            "stopId": "stadium-stop",
+            "direction": "TO_YEIN",
+            "originZone": "MAIN",
+            "destinationZone": "YEIN",
+            "departureTime": "20:50",
+            "arrivalTime": "20:55"
+        },
+        {
+            "serviceDay": "MONDAY",
+            "routeId": "B-evening",
+            "stopId": "yein",
+            "direction": "TO_MAIN",
+            "originZone": "YEIN",
+            "destinationZone": "MAIN",
+            "departureTime": "20:55",
+            "arrivalTime": "21:00"
+        },
+        {
+            "serviceDay": "MONDAY",
+            "routeId": "A-evening",
+            "stopId": "one-room",
+            "direction": "TO_MAIN",
+            "originZone": "ONE_ROOM",
+            "destinationZone": "MAIN",
+            "departureTime": "21:25",
+            "arrivalTime": "21:30"
+        },
+        {
+            "serviceDay": "MONDAY",
+            "routeId": "A-evening",
+            "stopId": "stadium-stop",
+            "direction": "TO_YEIN",
+            "originZone": "MAIN",
+            "destinationZone": "YEIN",
+            "departureTime": "21:30",
+            "arrivalTime": "21:35"
+        },
+        {
+            "serviceDay": "MONDAY",
+            "routeId": "B-evening",
+            "stopId": "stadium-stop",
+            "direction": "TO_YEIN",
+            "originZone": "MAIN",
+            "destinationZone": "YEIN",
+            "departureTime": "21:30",
+            "arrivalTime": "21:35"
+        },
+        {
+            "serviceDay": "MONDAY",
+            "routeId": "B-evening",
+            "stopId": "yein",
+            "direction": "TO_MAIN",
+            "originZone": "YEIN",
+            "destinationZone": "MAIN",
+            "departureTime": "21:35",
+            "arrivalTime": "21:40"
+        },
+        {
+            "serviceDay": "MONDAY",
+            "routeId": "A-evening",
+            "stopId": "one-room",
+            "direction": "TO_MAIN",
+            "originZone": "ONE_ROOM",
+            "destinationZone": "MAIN",
+            "departureTime": "21:45",
+            "arrivalTime": "21:50"
+        },
+        {
+            "serviceDay": "MONDAY",
+            "routeId": "A-evening",
+            "stopId": "stadium-stop",
+            "direction": "TO_YEIN",
+            "originZone": "MAIN",
+            "destinationZone": "YEIN",
+            "departureTime": "21:50",
+            "arrivalTime": "21:55"
+        },
+        {
+            "serviceDay": "MONDAY",
+            "routeId": "B-evening",
+            "stopId": "stadium-stop",
+            "direction": "TO_YEIN",
+            "originZone": "MAIN",
+            "destinationZone": "YEIN",
+            "departureTime": "21:50",
+            "arrivalTime": "21:55"
+        },
+        {
+            "serviceDay": "MONDAY",
+            "routeId": "B-evening",
+            "stopId": "yein",
+            "direction": "TO_MAIN",
+            "originZone": "YEIN",
+            "destinationZone": "MAIN",
+            "departureTime": "21:55",
+            "arrivalTime": "22:00"
+        },
+        {
+            "serviceDay": "TUESDAY",
+            "routeId": "A",
+            "stopId": "one-room",
+            "direction": "TO_MAIN",
+            "originZone": "ONE_ROOM",
+            "destinationZone": "MAIN",
+            "departureTime": "08:20",
+            "arrivalTime": "08:25"
+        },
+        {
+            "serviceDay": "TUESDAY",
+            "routeId": "B",
+            "stopId": "university-headquarters",
+            "direction": "TO_YEIN",
+            "originZone": "MAIN",
+            "destinationZone": "YEIN",
+            "departureTime": "08:25",
+            "arrivalTime": "08:30"
+        },
+        {
+            "serviceDay": "TUESDAY",
+            "routeId": "B",
+            "stopId": "yein",
+            "direction": "TO_MAIN",
+            "originZone": "YEIN",
+            "destinationZone": "MAIN",
+            "departureTime": "08:30",
+            "arrivalTime": "08:35"
+        },
+        {
+            "serviceDay": "TUESDAY",
+            "routeId": "B",
+            "stopId": "university-headquarters",
+            "direction": "TO_YEIN",
+            "originZone": "MAIN",
+            "destinationZone": "YEIN",
+            "departureTime": "08:35",
+            "arrivalTime": "08:40"
+        },
+        {
+            "serviceDay": "TUESDAY",
+            "routeId": "A",
+            "stopId": "one-room",
+            "direction": "TO_MAIN",
+            "originZone": "ONE_ROOM",
+            "destinationZone": "MAIN",
+            "departureTime": "08:40",
+            "arrivalTime": "08:45"
+        },
+        {
+            "serviceDay": "TUESDAY",
+            "routeId": "B",
+            "stopId": "yein",
+            "direction": "TO_MAIN",
+            "originZone": "YEIN",
+            "destinationZone": "MAIN",
+            "departureTime": "08:40",
+            "arrivalTime": "08:45"
+        },
+        {
+            "serviceDay": "TUESDAY",
+            "routeId": "A",
+            "stopId": "university-headquarters",
+            "direction": "TO_ONE_ROOM",
+            "originZone": "MAIN",
+            "destinationZone": "ONE_ROOM",
+            "departureTime": "08:45",
+            "arrivalTime": "08:50"
+        },
+        {
+            "serviceDay": "TUESDAY",
+            "routeId": "B",
+            "stopId": "university-headquarters",
+            "direction": "TO_YEIN",
+            "originZone": "MAIN",
+            "destinationZone": "YEIN",
+            "departureTime": "08:45",
+            "arrivalTime": "08:50"
+        },
+        {
+            "serviceDay": "TUESDAY",
+            "routeId": "A",
+            "stopId": "one-room",
+            "direction": "TO_MAIN",
+            "originZone": "ONE_ROOM",
+            "destinationZone": "MAIN",
+            "departureTime": "08:50",
+            "arrivalTime": "08:55"
+        },
+        {
+            "serviceDay": "TUESDAY",
+            "routeId": "B",
+            "stopId": "yein",
+            "direction": "TO_MAIN",
+            "originZone": "YEIN",
+            "destinationZone": "MAIN",
+            "departureTime": "08:50",
+            "arrivalTime": "08:55"
+        },
+        {
+            "serviceDay": "TUESDAY",
+            "routeId": "A",
+            "stopId": "one-room",
+            "direction": "TO_MAIN",
+            "originZone": "ONE_ROOM",
+            "destinationZone": "MAIN",
+            "departureTime": "08:55",
+            "arrivalTime": "09:00"
+        },
+        {
+            "serviceDay": "TUESDAY",
+            "routeId": "B",
+            "stopId": "university-headquarters",
+            "direction": "TO_YEIN",
+            "originZone": "MAIN",
+            "destinationZone": "YEIN",
+            "departureTime": "08:55",
+            "arrivalTime": "09:00"
+        },
+        {
+            "serviceDay": "TUESDAY",
+            "routeId": "B",
+            "stopId": "yein",
+            "direction": "TO_MAIN",
+            "originZone": "YEIN",
+            "destinationZone": "MAIN",
+            "departureTime": "09:00",
+            "arrivalTime": "09:05"
+        },
+        {
+            "serviceDay": "TUESDAY",
+            "routeId": "A",
+            "stopId": "one-room",
+            "direction": "TO_MAIN",
+            "originZone": "ONE_ROOM",
+            "destinationZone": "MAIN",
+            "departureTime": "09:30",
+            "arrivalTime": "09:35"
+        },
+        {
+            "serviceDay": "TUESDAY",
+            "routeId": "A",
+            "stopId": "university-headquarters",
+            "direction": "TO_ONE_ROOM",
+            "originZone": "MAIN",
+            "destinationZone": "ONE_ROOM",
+            "departureTime": "09:35",
+            "arrivalTime": "09:40"
+        },
+        {
+            "serviceDay": "TUESDAY",
+            "routeId": "B",
+            "stopId": "university-headquarters",
+            "direction": "TO_YEIN",
+            "originZone": "MAIN",
+            "destinationZone": "YEIN",
+            "departureTime": "09:35",
+            "arrivalTime": "09:40"
+        },
+        {
+            "serviceDay": "TUESDAY",
+            "routeId": "A",
+            "stopId": "one-room",
+            "direction": "TO_MAIN",
+            "originZone": "ONE_ROOM",
+            "destinationZone": "MAIN",
+            "departureTime": "09:40",
+            "arrivalTime": "09:45"
+        },
+        {
+            "serviceDay": "TUESDAY",
+            "routeId": "B",
+            "stopId": "yein",
+            "direction": "TO_MAIN",
+            "originZone": "YEIN",
+            "destinationZone": "MAIN",
+            "departureTime": "09:40",
+            "arrivalTime": "09:45"
+        },
+        {
+            "serviceDay": "TUESDAY",
+            "routeId": "A",
+            "stopId": "university-headquarters",
+            "direction": "TO_ONE_ROOM",
+            "originZone": "MAIN",
+            "destinationZone": "ONE_ROOM",
+            "departureTime": "09:45",
+            "arrivalTime": "09:50"
+        },
+        {
+            "serviceDay": "TUESDAY",
+            "routeId": "B",
+            "stopId": "university-headquarters",
+            "direction": "TO_YEIN",
+            "originZone": "MAIN",
+            "destinationZone": "YEIN",
+            "departureTime": "09:45",
+            "arrivalTime": "09:50"
+        },
+        {
+            "serviceDay": "TUESDAY",
+            "routeId": "A",
+            "stopId": "one-room",
+            "direction": "TO_MAIN",
+            "originZone": "ONE_ROOM",
+            "destinationZone": "MAIN",
+            "departureTime": "09:50",
+            "arrivalTime": "09:55"
+        },
+        {
+            "serviceDay": "TUESDAY",
+            "routeId": "B",
+            "stopId": "yein",
+            "direction": "TO_MAIN",
+            "originZone": "YEIN",
+            "destinationZone": "MAIN",
+            "departureTime": "09:50",
+            "arrivalTime": "09:55"
+        },
+        {
+            "serviceDay": "TUESDAY",
+            "routeId": "A",
+            "stopId": "one-room",
+            "direction": "TO_MAIN",
+            "originZone": "ONE_ROOM",
+            "destinationZone": "MAIN",
+            "departureTime": "09:55",
+            "arrivalTime": "10:00"
+        },
+        {
+            "serviceDay": "TUESDAY",
+            "routeId": "B",
+            "stopId": "university-headquarters",
+            "direction": "TO_YEIN",
+            "originZone": "MAIN",
+            "destinationZone": "YEIN",
+            "departureTime": "09:55",
+            "arrivalTime": "10:00"
+        },
+        {
+            "serviceDay": "TUESDAY",
+            "routeId": "B",
+            "stopId": "yein",
+            "direction": "TO_MAIN",
+            "originZone": "YEIN",
+            "destinationZone": "MAIN",
+            "departureTime": "10:00",
+            "arrivalTime": "10:05"
+        },
+        {
+            "serviceDay": "TUESDAY",
+            "routeId": "A",
+            "stopId": "one-room",
+            "direction": "TO_MAIN",
+            "originZone": "ONE_ROOM",
+            "destinationZone": "MAIN",
+            "departureTime": "10:30",
+            "arrivalTime": "10:35"
+        },
+        {
+            "serviceDay": "TUESDAY",
+            "routeId": "A",
+            "stopId": "university-headquarters",
+            "direction": "TO_ONE_ROOM",
+            "originZone": "MAIN",
+            "destinationZone": "ONE_ROOM",
+            "departureTime": "10:35",
+            "arrivalTime": "10:40"
+        },
+        {
+            "serviceDay": "TUESDAY",
+            "routeId": "B",
+            "stopId": "university-headquarters",
+            "direction": "TO_YEIN",
+            "originZone": "MAIN",
+            "destinationZone": "YEIN",
+            "departureTime": "10:35",
+            "arrivalTime": "10:40"
+        },
+        {
+            "serviceDay": "TUESDAY",
+            "routeId": "A",
+            "stopId": "one-room",
+            "direction": "TO_MAIN",
+            "originZone": "ONE_ROOM",
+            "destinationZone": "MAIN",
+            "departureTime": "10:40",
+            "arrivalTime": "10:45"
+        },
+        {
+            "serviceDay": "TUESDAY",
+            "routeId": "B",
+            "stopId": "yein",
+            "direction": "TO_MAIN",
+            "originZone": "YEIN",
+            "destinationZone": "MAIN",
+            "departureTime": "10:40",
+            "arrivalTime": "10:45"
+        },
+        {
+            "serviceDay": "TUESDAY",
+            "routeId": "A",
+            "stopId": "university-headquarters",
+            "direction": "TO_ONE_ROOM",
+            "originZone": "MAIN",
+            "destinationZone": "ONE_ROOM",
+            "departureTime": "10:45",
+            "arrivalTime": "10:50"
+        },
+        {
+            "serviceDay": "TUESDAY",
+            "routeId": "B",
+            "stopId": "university-headquarters",
+            "direction": "TO_YEIN",
+            "originZone": "MAIN",
+            "destinationZone": "YEIN",
+            "departureTime": "10:45",
+            "arrivalTime": "10:50"
+        },
+        {
+            "serviceDay": "TUESDAY",
+            "routeId": "A",
+            "stopId": "one-room",
+            "direction": "TO_MAIN",
+            "originZone": "ONE_ROOM",
+            "destinationZone": "MAIN",
+            "departureTime": "10:50",
+            "arrivalTime": "10:55"
+        },
+        {
+            "serviceDay": "TUESDAY",
+            "routeId": "B",
+            "stopId": "yein",
+            "direction": "TO_MAIN",
+            "originZone": "YEIN",
+            "destinationZone": "MAIN",
+            "departureTime": "10:50",
+            "arrivalTime": "10:55"
+        },
+        {
+            "serviceDay": "TUESDAY",
+            "routeId": "B",
+            "stopId": "university-headquarters",
+            "direction": "TO_YEIN",
+            "originZone": "MAIN",
+            "destinationZone": "YEIN",
+            "departureTime": "10:55",
+            "arrivalTime": "11:00"
+        },
+        {
+            "serviceDay": "TUESDAY",
+            "routeId": "B",
+            "stopId": "yein",
+            "direction": "TO_MAIN",
+            "originZone": "YEIN",
+            "destinationZone": "MAIN",
+            "departureTime": "11:00",
+            "arrivalTime": "11:05"
+        },
+        {
+            "serviceDay": "TUESDAY",
+            "routeId": "A",
+            "stopId": "one-room",
+            "direction": "TO_MAIN",
+            "originZone": "ONE_ROOM",
+            "destinationZone": "MAIN",
+            "departureTime": "11:30",
+            "arrivalTime": "11:35"
+        },
+        {
+            "serviceDay": "TUESDAY",
+            "routeId": "A",
+            "stopId": "university-headquarters",
+            "direction": "TO_ONE_ROOM",
+            "originZone": "MAIN",
+            "destinationZone": "ONE_ROOM",
+            "departureTime": "11:35",
+            "arrivalTime": "11:40"
+        },
+        {
+            "serviceDay": "TUESDAY",
+            "routeId": "B",
+            "stopId": "university-headquarters",
+            "direction": "TO_YEIN",
+            "originZone": "MAIN",
+            "destinationZone": "YEIN",
+            "departureTime": "11:35",
+            "arrivalTime": "11:40"
+        },
+        {
+            "serviceDay": "TUESDAY",
+            "routeId": "A",
+            "stopId": "one-room",
+            "direction": "TO_MAIN",
+            "originZone": "ONE_ROOM",
+            "destinationZone": "MAIN",
+            "departureTime": "11:40",
+            "arrivalTime": "11:45"
+        },
+        {
+            "serviceDay": "TUESDAY",
+            "routeId": "B",
+            "stopId": "yein",
+            "direction": "TO_MAIN",
+            "originZone": "YEIN",
+            "destinationZone": "MAIN",
+            "departureTime": "11:40",
+            "arrivalTime": "11:45"
+        },
+        {
+            "serviceDay": "TUESDAY",
+            "routeId": "A",
+            "stopId": "university-headquarters",
+            "direction": "TO_ONE_ROOM",
+            "originZone": "MAIN",
+            "destinationZone": "ONE_ROOM",
+            "departureTime": "11:45",
+            "arrivalTime": "11:50"
+        },
+        {
+            "serviceDay": "TUESDAY",
+            "routeId": "B",
+            "stopId": "university-headquarters",
+            "direction": "TO_YEIN",
+            "originZone": "MAIN",
+            "destinationZone": "YEIN",
+            "departureTime": "11:45",
+            "arrivalTime": "11:50"
+        },
+        {
+            "serviceDay": "TUESDAY",
+            "routeId": "A",
+            "stopId": "one-room",
+            "direction": "TO_MAIN",
+            "originZone": "ONE_ROOM",
+            "destinationZone": "MAIN",
+            "departureTime": "11:50",
+            "arrivalTime": "11:55"
+        },
+        {
+            "serviceDay": "TUESDAY",
+            "routeId": "B",
+            "stopId": "yein",
+            "direction": "TO_MAIN",
+            "originZone": "YEIN",
+            "destinationZone": "MAIN",
+            "departureTime": "11:50",
+            "arrivalTime": "11:55"
+        },
+        {
+            "serviceDay": "TUESDAY",
+            "routeId": "B",
+            "stopId": "university-headquarters",
+            "direction": "TO_YEIN",
+            "originZone": "MAIN",
+            "destinationZone": "YEIN",
+            "departureTime": "11:55",
+            "arrivalTime": "12:00"
+        },
+        {
+            "serviceDay": "TUESDAY",
+            "routeId": "B",
+            "stopId": "yein",
+            "direction": "TO_MAIN",
+            "originZone": "YEIN",
+            "destinationZone": "MAIN",
+            "departureTime": "12:00",
+            "arrivalTime": "12:05"
+        },
+        {
+            "serviceDay": "TUESDAY",
+            "routeId": "A",
+            "stopId": "one-room",
+            "direction": "TO_MAIN",
+            "originZone": "ONE_ROOM",
+            "destinationZone": "MAIN",
+            "departureTime": "12:30",
+            "arrivalTime": "12:35"
+        },
+        {
+            "serviceDay": "TUESDAY",
+            "routeId": "A",
+            "stopId": "university-headquarters",
+            "direction": "TO_ONE_ROOM",
+            "originZone": "MAIN",
+            "destinationZone": "ONE_ROOM",
+            "departureTime": "12:35",
+            "arrivalTime": "12:40"
+        },
+        {
+            "serviceDay": "TUESDAY",
+            "routeId": "B",
+            "stopId": "university-headquarters",
+            "direction": "TO_YEIN",
+            "originZone": "MAIN",
+            "destinationZone": "YEIN",
+            "departureTime": "12:35",
+            "arrivalTime": "12:40"
+        },
+        {
+            "serviceDay": "TUESDAY",
+            "routeId": "A",
+            "stopId": "one-room",
+            "direction": "TO_MAIN",
+            "originZone": "ONE_ROOM",
+            "destinationZone": "MAIN",
+            "departureTime": "12:40",
+            "arrivalTime": "12:45"
+        },
+        {
+            "serviceDay": "TUESDAY",
+            "routeId": "B",
+            "stopId": "yein",
+            "direction": "TO_MAIN",
+            "originZone": "YEIN",
+            "destinationZone": "MAIN",
+            "departureTime": "12:40",
+            "arrivalTime": "12:45"
+        },
+        {
+            "serviceDay": "TUESDAY",
+            "routeId": "A",
+            "stopId": "university-headquarters",
+            "direction": "TO_ONE_ROOM",
+            "originZone": "MAIN",
+            "destinationZone": "ONE_ROOM",
+            "departureTime": "12:45",
+            "arrivalTime": "12:50"
+        },
+        {
+            "serviceDay": "TUESDAY",
+            "routeId": "B",
+            "stopId": "university-headquarters",
+            "direction": "TO_YEIN",
+            "originZone": "MAIN",
+            "destinationZone": "YEIN",
+            "departureTime": "12:45",
+            "arrivalTime": "12:50"
+        },
+        {
+            "serviceDay": "TUESDAY",
+            "routeId": "A",
+            "stopId": "one-room",
+            "direction": "TO_MAIN",
+            "originZone": "ONE_ROOM",
+            "destinationZone": "MAIN",
+            "departureTime": "12:50",
+            "arrivalTime": "12:55"
+        },
+        {
+            "serviceDay": "TUESDAY",
+            "routeId": "B",
+            "stopId": "yein",
+            "direction": "TO_MAIN",
+            "originZone": "YEIN",
+            "destinationZone": "MAIN",
+            "departureTime": "12:50",
+            "arrivalTime": "12:55"
+        },
+        {
+            "serviceDay": "TUESDAY",
+            "routeId": "B",
+            "stopId": "university-headquarters",
+            "direction": "TO_YEIN",
+            "originZone": "MAIN",
+            "destinationZone": "YEIN",
+            "departureTime": "12:55",
+            "arrivalTime": "13:00"
+        },
+        {
+            "serviceDay": "TUESDAY",
+            "routeId": "B",
+            "stopId": "yein",
+            "direction": "TO_MAIN",
+            "originZone": "YEIN",
+            "destinationZone": "MAIN",
+            "departureTime": "13:00",
+            "arrivalTime": "13:05"
+        },
+        {
+            "serviceDay": "TUESDAY",
+            "routeId": "A",
+            "stopId": "one-room",
+            "direction": "TO_MAIN",
+            "originZone": "ONE_ROOM",
+            "destinationZone": "MAIN",
+            "departureTime": "13:40",
+            "arrivalTime": "13:45"
+        },
+        {
+            "serviceDay": "TUESDAY",
+            "routeId": "A",
+            "stopId": "university-headquarters",
+            "direction": "TO_ONE_ROOM",
+            "originZone": "MAIN",
+            "destinationZone": "ONE_ROOM",
+            "departureTime": "13:45",
+            "arrivalTime": "13:50"
+        },
+        {
+            "serviceDay": "TUESDAY",
+            "routeId": "B",
+            "stopId": "university-headquarters",
+            "direction": "TO_YEIN",
+            "originZone": "MAIN",
+            "destinationZone": "YEIN",
+            "departureTime": "13:45",
+            "arrivalTime": "13:50"
+        },
+        {
+            "serviceDay": "TUESDAY",
+            "routeId": "A",
+            "stopId": "one-room",
+            "direction": "TO_MAIN",
+            "originZone": "ONE_ROOM",
+            "destinationZone": "MAIN",
+            "departureTime": "13:50",
+            "arrivalTime": "13:55"
+        },
+        {
+            "serviceDay": "TUESDAY",
+            "routeId": "B",
+            "stopId": "yein",
+            "direction": "TO_MAIN",
+            "originZone": "YEIN",
+            "destinationZone": "MAIN",
+            "departureTime": "13:50",
+            "arrivalTime": "13:55"
+        },
+        {
+            "serviceDay": "TUESDAY",
+            "routeId": "B",
+            "stopId": "university-headquarters",
+            "direction": "TO_YEIN",
+            "originZone": "MAIN",
+            "destinationZone": "YEIN",
+            "departureTime": "13:55",
+            "arrivalTime": "14:00"
+        },
+        {
+            "serviceDay": "TUESDAY",
+            "routeId": "B",
+            "stopId": "yein",
+            "direction": "TO_MAIN",
+            "originZone": "YEIN",
+            "destinationZone": "MAIN",
+            "departureTime": "14:00",
+            "arrivalTime": "14:05"
+        },
+        {
+            "serviceDay": "TUESDAY",
+            "routeId": "A",
+            "stopId": "one-room",
+            "direction": "TO_MAIN",
+            "originZone": "ONE_ROOM",
+            "destinationZone": "MAIN",
+            "departureTime": "14:40",
+            "arrivalTime": "14:45"
+        },
+        {
+            "serviceDay": "TUESDAY",
+            "routeId": "A",
+            "stopId": "university-headquarters",
+            "direction": "TO_ONE_ROOM",
+            "originZone": "MAIN",
+            "destinationZone": "ONE_ROOM",
+            "departureTime": "14:45",
+            "arrivalTime": "14:50"
+        },
+        {
+            "serviceDay": "TUESDAY",
+            "routeId": "B",
+            "stopId": "university-headquarters",
+            "direction": "TO_YEIN",
+            "originZone": "MAIN",
+            "destinationZone": "YEIN",
+            "departureTime": "14:45",
+            "arrivalTime": "14:50"
+        },
+        {
+            "serviceDay": "TUESDAY",
+            "routeId": "A",
+            "stopId": "one-room",
+            "direction": "TO_MAIN",
+            "originZone": "ONE_ROOM",
+            "destinationZone": "MAIN",
+            "departureTime": "14:50",
+            "arrivalTime": "14:55"
+        },
+        {
+            "serviceDay": "TUESDAY",
+            "routeId": "B",
+            "stopId": "yein",
+            "direction": "TO_MAIN",
+            "originZone": "YEIN",
+            "destinationZone": "MAIN",
+            "departureTime": "14:50",
+            "arrivalTime": "14:55"
+        },
+        {
+            "serviceDay": "TUESDAY",
+            "routeId": "B",
+            "stopId": "university-headquarters",
+            "direction": "TO_YEIN",
+            "originZone": "MAIN",
+            "destinationZone": "YEIN",
+            "departureTime": "14:55",
+            "arrivalTime": "15:00"
+        },
+        {
+            "serviceDay": "TUESDAY",
+            "routeId": "B",
+            "stopId": "yein",
+            "direction": "TO_MAIN",
+            "originZone": "YEIN",
+            "destinationZone": "MAIN",
+            "departureTime": "15:00",
+            "arrivalTime": "15:05"
+        },
+        {
+            "serviceDay": "TUESDAY",
+            "routeId": "A",
+            "stopId": "one-room",
+            "direction": "TO_MAIN",
+            "originZone": "ONE_ROOM",
+            "destinationZone": "MAIN",
+            "departureTime": "15:40",
+            "arrivalTime": "15:45"
+        },
+        {
+            "serviceDay": "TUESDAY",
+            "routeId": "A",
+            "stopId": "university-headquarters",
+            "direction": "TO_ONE_ROOM",
+            "originZone": "MAIN",
+            "destinationZone": "ONE_ROOM",
+            "departureTime": "15:45",
+            "arrivalTime": "15:50"
+        },
+        {
+            "serviceDay": "TUESDAY",
+            "routeId": "B",
+            "stopId": "university-headquarters",
+            "direction": "TO_YEIN",
+            "originZone": "MAIN",
+            "destinationZone": "YEIN",
+            "departureTime": "15:45",
+            "arrivalTime": "15:50"
+        },
+        {
+            "serviceDay": "TUESDAY",
+            "routeId": "A",
+            "stopId": "one-room",
+            "direction": "TO_MAIN",
+            "originZone": "ONE_ROOM",
+            "destinationZone": "MAIN",
+            "departureTime": "15:50",
+            "arrivalTime": "15:55"
+        },
+        {
+            "serviceDay": "TUESDAY",
+            "routeId": "B",
+            "stopId": "yein",
+            "direction": "TO_MAIN",
+            "originZone": "YEIN",
+            "destinationZone": "MAIN",
+            "departureTime": "15:50",
+            "arrivalTime": "15:55"
+        },
+        {
+            "serviceDay": "TUESDAY",
+            "routeId": "B",
+            "stopId": "university-headquarters",
+            "direction": "TO_YEIN",
+            "originZone": "MAIN",
+            "destinationZone": "YEIN",
+            "departureTime": "15:55",
+            "arrivalTime": "16:00"
+        },
+        {
+            "serviceDay": "TUESDAY",
+            "routeId": "B",
+            "stopId": "yein",
+            "direction": "TO_MAIN",
+            "originZone": "YEIN",
+            "destinationZone": "MAIN",
+            "departureTime": "16:00",
+            "arrivalTime": "16:05"
+        },
+        {
+            "serviceDay": "TUESDAY",
+            "routeId": "A",
+            "stopId": "one-room",
+            "direction": "TO_MAIN",
+            "originZone": "ONE_ROOM",
+            "destinationZone": "MAIN",
+            "departureTime": "16:40",
+            "arrivalTime": "16:45"
+        },
+        {
+            "serviceDay": "TUESDAY",
+            "routeId": "A",
+            "stopId": "university-headquarters",
+            "direction": "TO_ONE_ROOM",
+            "originZone": "MAIN",
+            "destinationZone": "ONE_ROOM",
+            "departureTime": "16:45",
+            "arrivalTime": "16:50"
+        },
+        {
+            "serviceDay": "TUESDAY",
+            "routeId": "B",
+            "stopId": "university-headquarters",
+            "direction": "TO_YEIN",
+            "originZone": "MAIN",
+            "destinationZone": "YEIN",
+            "departureTime": "16:45",
+            "arrivalTime": "16:50"
+        },
+        {
+            "serviceDay": "TUESDAY",
+            "routeId": "A",
+            "stopId": "one-room",
+            "direction": "TO_MAIN",
+            "originZone": "ONE_ROOM",
+            "destinationZone": "MAIN",
+            "departureTime": "16:50",
+            "arrivalTime": "16:55"
+        },
+        {
+            "serviceDay": "TUESDAY",
+            "routeId": "B",
+            "stopId": "yein",
+            "direction": "TO_MAIN",
+            "originZone": "YEIN",
+            "destinationZone": "MAIN",
+            "departureTime": "16:50",
+            "arrivalTime": "16:55"
+        },
+        {
+            "serviceDay": "TUESDAY",
+            "routeId": "B",
+            "stopId": "university-headquarters",
+            "direction": "TO_YEIN",
+            "originZone": "MAIN",
+            "destinationZone": "YEIN",
+            "departureTime": "16:55",
+            "arrivalTime": "17:00"
+        },
+        {
+            "serviceDay": "TUESDAY",
+            "routeId": "B",
+            "stopId": "yein",
+            "direction": "TO_MAIN",
+            "originZone": "YEIN",
+            "destinationZone": "MAIN",
+            "departureTime": "17:00",
+            "arrivalTime": "17:05"
+        },
+        {
+            "serviceDay": "TUESDAY",
+            "routeId": "A",
+            "stopId": "one-room",
+            "direction": "TO_MAIN",
+            "originZone": "ONE_ROOM",
+            "destinationZone": "MAIN",
+            "departureTime": "17:40",
+            "arrivalTime": "17:45"
+        },
+        {
+            "serviceDay": "TUESDAY",
+            "routeId": "A",
+            "stopId": "university-headquarters",
+            "direction": "TO_ONE_ROOM",
+            "originZone": "MAIN",
+            "destinationZone": "ONE_ROOM",
+            "departureTime": "17:45",
+            "arrivalTime": "17:50"
+        },
+        {
+            "serviceDay": "TUESDAY",
+            "routeId": "B",
+            "stopId": "university-headquarters",
+            "direction": "TO_YEIN",
+            "originZone": "MAIN",
+            "destinationZone": "YEIN",
+            "departureTime": "17:45",
+            "arrivalTime": "17:50"
+        },
+        {
+            "serviceDay": "TUESDAY",
+            "routeId": "A",
+            "stopId": "one-room",
+            "direction": "TO_MAIN",
+            "originZone": "ONE_ROOM",
+            "destinationZone": "MAIN",
+            "departureTime": "17:50",
+            "arrivalTime": "17:55"
+        },
+        {
+            "serviceDay": "TUESDAY",
+            "routeId": "B",
+            "stopId": "yein",
+            "direction": "TO_MAIN",
+            "originZone": "YEIN",
+            "destinationZone": "MAIN",
+            "departureTime": "17:50",
+            "arrivalTime": "17:55"
+        },
+        {
+            "serviceDay": "TUESDAY",
+            "routeId": "B",
+            "stopId": "university-headquarters",
+            "direction": "TO_YEIN",
+            "originZone": "MAIN",
+            "destinationZone": "YEIN",
+            "departureTime": "17:55",
+            "arrivalTime": "18:00"
+        },
+        {
+            "serviceDay": "TUESDAY",
+            "routeId": "A",
+            "stopId": "one-room",
+            "direction": "TO_MAIN",
+            "originZone": "ONE_ROOM",
+            "destinationZone": "MAIN",
+            "departureTime": "18:00",
+            "arrivalTime": "18:05"
+        },
+        {
+            "serviceDay": "TUESDAY",
+            "routeId": "B",
+            "stopId": "yein",
+            "direction": "TO_MAIN",
+            "originZone": "YEIN",
+            "destinationZone": "MAIN",
+            "departureTime": "18:10",
+            "arrivalTime": "18:15"
+        },
+        {
+            "serviceDay": "TUESDAY",
+            "routeId": "B-evening",
+            "stopId": "yein",
+            "direction": "TO_MAIN",
+            "originZone": "YEIN",
+            "destinationZone": "MAIN",
+            "departureTime": "18:40",
+            "arrivalTime": "18:45"
+        },
+        {
+            "serviceDay": "TUESDAY",
+            "routeId": "A-evening",
+            "stopId": "one-room",
+            "direction": "TO_MAIN",
+            "originZone": "ONE_ROOM",
+            "destinationZone": "MAIN",
+            "departureTime": "18:50",
+            "arrivalTime": "18:55"
+        },
+        {
+            "serviceDay": "TUESDAY",
+            "routeId": "A-evening",
+            "stopId": "stadium-stop",
+            "direction": "TO_YEIN",
+            "originZone": "MAIN",
+            "destinationZone": "YEIN",
+            "departureTime": "18:55",
+            "arrivalTime": "19:00"
+        },
+        {
+            "serviceDay": "TUESDAY",
+            "routeId": "B-evening",
+            "stopId": "stadium-stop",
+            "direction": "TO_YEIN",
+            "originZone": "MAIN",
+            "destinationZone": "YEIN",
+            "departureTime": "18:55",
+            "arrivalTime": "19:00"
+        },
+        {
+            "serviceDay": "TUESDAY",
+            "routeId": "B-evening",
+            "stopId": "yein",
+            "direction": "TO_MAIN",
+            "originZone": "YEIN",
+            "destinationZone": "MAIN",
+            "departureTime": "19:00",
+            "arrivalTime": "19:05"
+        },
+        {
+            "serviceDay": "TUESDAY",
+            "routeId": "A-evening",
+            "stopId": "one-room",
+            "direction": "TO_MAIN",
+            "originZone": "ONE_ROOM",
+            "destinationZone": "MAIN",
+            "departureTime": "19:20",
+            "arrivalTime": "19:25"
+        },
+        {
+            "serviceDay": "TUESDAY",
+            "routeId": "A-evening",
+            "stopId": "stadium-stop",
+            "direction": "TO_YEIN",
+            "originZone": "MAIN",
+            "destinationZone": "YEIN",
+            "departureTime": "19:25",
+            "arrivalTime": "19:30"
+        },
+        {
+            "serviceDay": "TUESDAY",
+            "routeId": "B-evening",
+            "stopId": "stadium-stop",
+            "direction": "TO_YEIN",
+            "originZone": "MAIN",
+            "destinationZone": "YEIN",
+            "departureTime": "19:25",
+            "arrivalTime": "19:30"
+        },
+        {
+            "serviceDay": "TUESDAY",
+            "routeId": "B-evening",
+            "stopId": "yein",
+            "direction": "TO_MAIN",
+            "originZone": "YEIN",
+            "destinationZone": "MAIN",
+            "departureTime": "19:30",
+            "arrivalTime": "19:35"
+        },
+        {
+            "serviceDay": "TUESDAY",
+            "routeId": "A-evening",
+            "stopId": "one-room",
+            "direction": "TO_MAIN",
+            "originZone": "ONE_ROOM",
+            "destinationZone": "MAIN",
+            "departureTime": "19:45",
+            "arrivalTime": "19:50"
+        },
+        {
+            "serviceDay": "TUESDAY",
+            "routeId": "A-evening",
+            "stopId": "stadium-stop",
+            "direction": "TO_YEIN",
+            "originZone": "MAIN",
+            "destinationZone": "YEIN",
+            "departureTime": "19:50",
+            "arrivalTime": "19:55"
+        },
+        {
+            "serviceDay": "TUESDAY",
+            "routeId": "B-evening",
+            "stopId": "stadium-stop",
+            "direction": "TO_YEIN",
+            "originZone": "MAIN",
+            "destinationZone": "YEIN",
+            "departureTime": "19:50",
+            "arrivalTime": "19:55"
+        },
+        {
+            "serviceDay": "TUESDAY",
+            "routeId": "B-evening",
+            "stopId": "yein",
+            "direction": "TO_MAIN",
+            "originZone": "YEIN",
+            "destinationZone": "MAIN",
+            "departureTime": "19:55",
+            "arrivalTime": "20:00"
+        },
+        {
+            "serviceDay": "TUESDAY",
+            "routeId": "A-evening",
+            "stopId": "one-room",
+            "direction": "TO_MAIN",
+            "originZone": "ONE_ROOM",
+            "destinationZone": "MAIN",
+            "departureTime": "20:45",
+            "arrivalTime": "20:50"
+        },
+        {
+            "serviceDay": "TUESDAY",
+            "routeId": "A-evening",
+            "stopId": "stadium-stop",
+            "direction": "TO_YEIN",
+            "originZone": "MAIN",
+            "destinationZone": "YEIN",
+            "departureTime": "20:50",
+            "arrivalTime": "20:55"
+        },
+        {
+            "serviceDay": "TUESDAY",
+            "routeId": "B-evening",
+            "stopId": "stadium-stop",
+            "direction": "TO_YEIN",
+            "originZone": "MAIN",
+            "destinationZone": "YEIN",
+            "departureTime": "20:50",
+            "arrivalTime": "20:55"
+        },
+        {
+            "serviceDay": "TUESDAY",
+            "routeId": "B-evening",
+            "stopId": "yein",
+            "direction": "TO_MAIN",
+            "originZone": "YEIN",
+            "destinationZone": "MAIN",
+            "departureTime": "20:55",
+            "arrivalTime": "21:00"
+        },
+        {
+            "serviceDay": "TUESDAY",
+            "routeId": "A-evening",
+            "stopId": "one-room",
+            "direction": "TO_MAIN",
+            "originZone": "ONE_ROOM",
+            "destinationZone": "MAIN",
+            "departureTime": "21:25",
+            "arrivalTime": "21:30"
+        },
+        {
+            "serviceDay": "TUESDAY",
+            "routeId": "A-evening",
+            "stopId": "stadium-stop",
+            "direction": "TO_YEIN",
+            "originZone": "MAIN",
+            "destinationZone": "YEIN",
+            "departureTime": "21:30",
+            "arrivalTime": "21:35"
+        },
+        {
+            "serviceDay": "TUESDAY",
+            "routeId": "B-evening",
+            "stopId": "stadium-stop",
+            "direction": "TO_YEIN",
+            "originZone": "MAIN",
+            "destinationZone": "YEIN",
+            "departureTime": "21:30",
+            "arrivalTime": "21:35"
+        },
+        {
+            "serviceDay": "TUESDAY",
+            "routeId": "B-evening",
+            "stopId": "yein",
+            "direction": "TO_MAIN",
+            "originZone": "YEIN",
+            "destinationZone": "MAIN",
+            "departureTime": "21:35",
+            "arrivalTime": "21:40"
+        },
+        {
+            "serviceDay": "TUESDAY",
+            "routeId": "A-evening",
+            "stopId": "one-room",
+            "direction": "TO_MAIN",
+            "originZone": "ONE_ROOM",
+            "destinationZone": "MAIN",
+            "departureTime": "21:45",
+            "arrivalTime": "21:50"
+        },
+        {
+            "serviceDay": "TUESDAY",
+            "routeId": "A-evening",
+            "stopId": "stadium-stop",
+            "direction": "TO_YEIN",
+            "originZone": "MAIN",
+            "destinationZone": "YEIN",
+            "departureTime": "21:50",
+            "arrivalTime": "21:55"
+        },
+        {
+            "serviceDay": "TUESDAY",
+            "routeId": "B-evening",
+            "stopId": "stadium-stop",
+            "direction": "TO_YEIN",
+            "originZone": "MAIN",
+            "destinationZone": "YEIN",
+            "departureTime": "21:50",
+            "arrivalTime": "21:55"
+        },
+        {
+            "serviceDay": "TUESDAY",
+            "routeId": "B-evening",
+            "stopId": "yein",
+            "direction": "TO_MAIN",
+            "originZone": "YEIN",
+            "destinationZone": "MAIN",
+            "departureTime": "21:55",
+            "arrivalTime": "22:00"
+        },
+        {
+            "serviceDay": "WEDNESDAY",
+            "routeId": "A",
+            "stopId": "one-room",
+            "direction": "TO_MAIN",
+            "originZone": "ONE_ROOM",
+            "destinationZone": "MAIN",
+            "departureTime": "08:20",
+            "arrivalTime": "08:25"
+        },
+        {
+            "serviceDay": "WEDNESDAY",
+            "routeId": "B",
+            "stopId": "university-headquarters",
+            "direction": "TO_YEIN",
+            "originZone": "MAIN",
+            "destinationZone": "YEIN",
+            "departureTime": "08:25",
+            "arrivalTime": "08:30"
+        },
+        {
+            "serviceDay": "WEDNESDAY",
+            "routeId": "B",
+            "stopId": "yein",
+            "direction": "TO_MAIN",
+            "originZone": "YEIN",
+            "destinationZone": "MAIN",
+            "departureTime": "08:30",
+            "arrivalTime": "08:35"
+        },
+        {
+            "serviceDay": "WEDNESDAY",
+            "routeId": "B",
+            "stopId": "university-headquarters",
+            "direction": "TO_YEIN",
+            "originZone": "MAIN",
+            "destinationZone": "YEIN",
+            "departureTime": "08:35",
+            "arrivalTime": "08:40"
+        },
+        {
+            "serviceDay": "WEDNESDAY",
+            "routeId": "A",
+            "stopId": "one-room",
+            "direction": "TO_MAIN",
+            "originZone": "ONE_ROOM",
+            "destinationZone": "MAIN",
+            "departureTime": "08:40",
+            "arrivalTime": "08:45"
+        },
+        {
+            "serviceDay": "WEDNESDAY",
+            "routeId": "B",
+            "stopId": "yein",
+            "direction": "TO_MAIN",
+            "originZone": "YEIN",
+            "destinationZone": "MAIN",
+            "departureTime": "08:40",
+            "arrivalTime": "08:45"
+        },
+        {
+            "serviceDay": "WEDNESDAY",
+            "routeId": "A",
+            "stopId": "university-headquarters",
+            "direction": "TO_ONE_ROOM",
+            "originZone": "MAIN",
+            "destinationZone": "ONE_ROOM",
+            "departureTime": "08:45",
+            "arrivalTime": "08:50"
+        },
+        {
+            "serviceDay": "WEDNESDAY",
+            "routeId": "B",
+            "stopId": "university-headquarters",
+            "direction": "TO_YEIN",
+            "originZone": "MAIN",
+            "destinationZone": "YEIN",
+            "departureTime": "08:45",
+            "arrivalTime": "08:50"
+        },
+        {
+            "serviceDay": "WEDNESDAY",
+            "routeId": "A",
+            "stopId": "one-room",
+            "direction": "TO_MAIN",
+            "originZone": "ONE_ROOM",
+            "destinationZone": "MAIN",
+            "departureTime": "08:50",
+            "arrivalTime": "08:55"
+        },
+        {
+            "serviceDay": "WEDNESDAY",
+            "routeId": "B",
+            "stopId": "yein",
+            "direction": "TO_MAIN",
+            "originZone": "YEIN",
+            "destinationZone": "MAIN",
+            "departureTime": "08:50",
+            "arrivalTime": "08:55"
+        },
+        {
+            "serviceDay": "WEDNESDAY",
+            "routeId": "A",
+            "stopId": "one-room",
+            "direction": "TO_MAIN",
+            "originZone": "ONE_ROOM",
+            "destinationZone": "MAIN",
+            "departureTime": "08:55",
+            "arrivalTime": "09:00"
+        },
+        {
+            "serviceDay": "WEDNESDAY",
+            "routeId": "B",
+            "stopId": "university-headquarters",
+            "direction": "TO_YEIN",
+            "originZone": "MAIN",
+            "destinationZone": "YEIN",
+            "departureTime": "08:55",
+            "arrivalTime": "09:00"
+        },
+        {
+            "serviceDay": "WEDNESDAY",
+            "routeId": "B",
+            "stopId": "yein",
+            "direction": "TO_MAIN",
+            "originZone": "YEIN",
+            "destinationZone": "MAIN",
+            "departureTime": "09:00",
+            "arrivalTime": "09:05"
+        },
+        {
+            "serviceDay": "WEDNESDAY",
+            "routeId": "A",
+            "stopId": "one-room",
+            "direction": "TO_MAIN",
+            "originZone": "ONE_ROOM",
+            "destinationZone": "MAIN",
+            "departureTime": "09:30",
+            "arrivalTime": "09:35"
+        },
+        {
+            "serviceDay": "WEDNESDAY",
+            "routeId": "A",
+            "stopId": "university-headquarters",
+            "direction": "TO_ONE_ROOM",
+            "originZone": "MAIN",
+            "destinationZone": "ONE_ROOM",
+            "departureTime": "09:35",
+            "arrivalTime": "09:40"
+        },
+        {
+            "serviceDay": "WEDNESDAY",
+            "routeId": "B",
+            "stopId": "university-headquarters",
+            "direction": "TO_YEIN",
+            "originZone": "MAIN",
+            "destinationZone": "YEIN",
+            "departureTime": "09:35",
+            "arrivalTime": "09:40"
+        },
+        {
+            "serviceDay": "WEDNESDAY",
+            "routeId": "A",
+            "stopId": "one-room",
+            "direction": "TO_MAIN",
+            "originZone": "ONE_ROOM",
+            "destinationZone": "MAIN",
+            "departureTime": "09:40",
+            "arrivalTime": "09:45"
+        },
+        {
+            "serviceDay": "WEDNESDAY",
+            "routeId": "B",
+            "stopId": "yein",
+            "direction": "TO_MAIN",
+            "originZone": "YEIN",
+            "destinationZone": "MAIN",
+            "departureTime": "09:40",
+            "arrivalTime": "09:45"
+        },
+        {
+            "serviceDay": "WEDNESDAY",
+            "routeId": "A",
+            "stopId": "university-headquarters",
+            "direction": "TO_ONE_ROOM",
+            "originZone": "MAIN",
+            "destinationZone": "ONE_ROOM",
+            "departureTime": "09:45",
+            "arrivalTime": "09:50"
+        },
+        {
+            "serviceDay": "WEDNESDAY",
+            "routeId": "B",
+            "stopId": "university-headquarters",
+            "direction": "TO_YEIN",
+            "originZone": "MAIN",
+            "destinationZone": "YEIN",
+            "departureTime": "09:45",
+            "arrivalTime": "09:50"
+        },
+        {
+            "serviceDay": "WEDNESDAY",
+            "routeId": "A",
+            "stopId": "one-room",
+            "direction": "TO_MAIN",
+            "originZone": "ONE_ROOM",
+            "destinationZone": "MAIN",
+            "departureTime": "09:50",
+            "arrivalTime": "09:55"
+        },
+        {
+            "serviceDay": "WEDNESDAY",
+            "routeId": "B",
+            "stopId": "yein",
+            "direction": "TO_MAIN",
+            "originZone": "YEIN",
+            "destinationZone": "MAIN",
+            "departureTime": "09:50",
+            "arrivalTime": "09:55"
+        },
+        {
+            "serviceDay": "WEDNESDAY",
+            "routeId": "A",
+            "stopId": "one-room",
+            "direction": "TO_MAIN",
+            "originZone": "ONE_ROOM",
+            "destinationZone": "MAIN",
+            "departureTime": "09:55",
+            "arrivalTime": "10:00"
+        },
+        {
+            "serviceDay": "WEDNESDAY",
+            "routeId": "B",
+            "stopId": "university-headquarters",
+            "direction": "TO_YEIN",
+            "originZone": "MAIN",
+            "destinationZone": "YEIN",
+            "departureTime": "09:55",
+            "arrivalTime": "10:00"
+        },
+        {
+            "serviceDay": "WEDNESDAY",
+            "routeId": "B",
+            "stopId": "yein",
+            "direction": "TO_MAIN",
+            "originZone": "YEIN",
+            "destinationZone": "MAIN",
+            "departureTime": "10:00",
+            "arrivalTime": "10:05"
+        },
+        {
+            "serviceDay": "WEDNESDAY",
+            "routeId": "A",
+            "stopId": "one-room",
+            "direction": "TO_MAIN",
+            "originZone": "ONE_ROOM",
+            "destinationZone": "MAIN",
+            "departureTime": "10:30",
+            "arrivalTime": "10:35"
+        },
+        {
+            "serviceDay": "WEDNESDAY",
+            "routeId": "A",
+            "stopId": "university-headquarters",
+            "direction": "TO_ONE_ROOM",
+            "originZone": "MAIN",
+            "destinationZone": "ONE_ROOM",
+            "departureTime": "10:35",
+            "arrivalTime": "10:40"
+        },
+        {
+            "serviceDay": "WEDNESDAY",
+            "routeId": "B",
+            "stopId": "university-headquarters",
+            "direction": "TO_YEIN",
+            "originZone": "MAIN",
+            "destinationZone": "YEIN",
+            "departureTime": "10:35",
+            "arrivalTime": "10:40"
+        },
+        {
+            "serviceDay": "WEDNESDAY",
+            "routeId": "A",
+            "stopId": "one-room",
+            "direction": "TO_MAIN",
+            "originZone": "ONE_ROOM",
+            "destinationZone": "MAIN",
+            "departureTime": "10:40",
+            "arrivalTime": "10:45"
+        },
+        {
+            "serviceDay": "WEDNESDAY",
+            "routeId": "B",
+            "stopId": "yein",
+            "direction": "TO_MAIN",
+            "originZone": "YEIN",
+            "destinationZone": "MAIN",
+            "departureTime": "10:40",
+            "arrivalTime": "10:45"
+        },
+        {
+            "serviceDay": "WEDNESDAY",
+            "routeId": "A",
+            "stopId": "university-headquarters",
+            "direction": "TO_ONE_ROOM",
+            "originZone": "MAIN",
+            "destinationZone": "ONE_ROOM",
+            "departureTime": "10:45",
+            "arrivalTime": "10:50"
+        },
+        {
+            "serviceDay": "WEDNESDAY",
+            "routeId": "B",
+            "stopId": "university-headquarters",
+            "direction": "TO_YEIN",
+            "originZone": "MAIN",
+            "destinationZone": "YEIN",
+            "departureTime": "10:45",
+            "arrivalTime": "10:50"
+        },
+        {
+            "serviceDay": "WEDNESDAY",
+            "routeId": "A",
+            "stopId": "one-room",
+            "direction": "TO_MAIN",
+            "originZone": "ONE_ROOM",
+            "destinationZone": "MAIN",
+            "departureTime": "10:50",
+            "arrivalTime": "10:55"
+        },
+        {
+            "serviceDay": "WEDNESDAY",
+            "routeId": "B",
+            "stopId": "yein",
+            "direction": "TO_MAIN",
+            "originZone": "YEIN",
+            "destinationZone": "MAIN",
+            "departureTime": "10:50",
+            "arrivalTime": "10:55"
+        },
+        {
+            "serviceDay": "WEDNESDAY",
+            "routeId": "B",
+            "stopId": "university-headquarters",
+            "direction": "TO_YEIN",
+            "originZone": "MAIN",
+            "destinationZone": "YEIN",
+            "departureTime": "10:55",
+            "arrivalTime": "11:00"
+        },
+        {
+            "serviceDay": "WEDNESDAY",
+            "routeId": "B",
+            "stopId": "yein",
+            "direction": "TO_MAIN",
+            "originZone": "YEIN",
+            "destinationZone": "MAIN",
+            "departureTime": "11:00",
+            "arrivalTime": "11:05"
+        },
+        {
+            "serviceDay": "WEDNESDAY",
+            "routeId": "A",
+            "stopId": "one-room",
+            "direction": "TO_MAIN",
+            "originZone": "ONE_ROOM",
+            "destinationZone": "MAIN",
+            "departureTime": "11:30",
+            "arrivalTime": "11:35"
+        },
+        {
+            "serviceDay": "WEDNESDAY",
+            "routeId": "A",
+            "stopId": "university-headquarters",
+            "direction": "TO_ONE_ROOM",
+            "originZone": "MAIN",
+            "destinationZone": "ONE_ROOM",
+            "departureTime": "11:35",
+            "arrivalTime": "11:40"
+        },
+        {
+            "serviceDay": "WEDNESDAY",
+            "routeId": "B",
+            "stopId": "university-headquarters",
+            "direction": "TO_YEIN",
+            "originZone": "MAIN",
+            "destinationZone": "YEIN",
+            "departureTime": "11:35",
+            "arrivalTime": "11:40"
+        },
+        {
+            "serviceDay": "WEDNESDAY",
+            "routeId": "A",
+            "stopId": "one-room",
+            "direction": "TO_MAIN",
+            "originZone": "ONE_ROOM",
+            "destinationZone": "MAIN",
+            "departureTime": "11:40",
+            "arrivalTime": "11:45"
+        },
+        {
+            "serviceDay": "WEDNESDAY",
+            "routeId": "B",
+            "stopId": "yein",
+            "direction": "TO_MAIN",
+            "originZone": "YEIN",
+            "destinationZone": "MAIN",
+            "departureTime": "11:40",
+            "arrivalTime": "11:45"
+        },
+        {
+            "serviceDay": "WEDNESDAY",
+            "routeId": "A",
+            "stopId": "university-headquarters",
+            "direction": "TO_ONE_ROOM",
+            "originZone": "MAIN",
+            "destinationZone": "ONE_ROOM",
+            "departureTime": "11:45",
+            "arrivalTime": "11:50"
+        },
+        {
+            "serviceDay": "WEDNESDAY",
+            "routeId": "B",
+            "stopId": "university-headquarters",
+            "direction": "TO_YEIN",
+            "originZone": "MAIN",
+            "destinationZone": "YEIN",
+            "departureTime": "11:45",
+            "arrivalTime": "11:50"
+        },
+        {
+            "serviceDay": "WEDNESDAY",
+            "routeId": "A",
+            "stopId": "one-room",
+            "direction": "TO_MAIN",
+            "originZone": "ONE_ROOM",
+            "destinationZone": "MAIN",
+            "departureTime": "11:50",
+            "arrivalTime": "11:55"
+        },
+        {
+            "serviceDay": "WEDNESDAY",
+            "routeId": "B",
+            "stopId": "yein",
+            "direction": "TO_MAIN",
+            "originZone": "YEIN",
+            "destinationZone": "MAIN",
+            "departureTime": "11:50",
+            "arrivalTime": "11:55"
+        },
+        {
+            "serviceDay": "WEDNESDAY",
+            "routeId": "B",
+            "stopId": "university-headquarters",
+            "direction": "TO_YEIN",
+            "originZone": "MAIN",
+            "destinationZone": "YEIN",
+            "departureTime": "11:55",
+            "arrivalTime": "12:00"
+        },
+        {
+            "serviceDay": "WEDNESDAY",
+            "routeId": "B",
+            "stopId": "yein",
+            "direction": "TO_MAIN",
+            "originZone": "YEIN",
+            "destinationZone": "MAIN",
+            "departureTime": "12:00",
+            "arrivalTime": "12:05"
+        },
+        {
+            "serviceDay": "WEDNESDAY",
+            "routeId": "A",
+            "stopId": "one-room",
+            "direction": "TO_MAIN",
+            "originZone": "ONE_ROOM",
+            "destinationZone": "MAIN",
+            "departureTime": "12:30",
+            "arrivalTime": "12:35"
+        },
+        {
+            "serviceDay": "WEDNESDAY",
+            "routeId": "A",
+            "stopId": "university-headquarters",
+            "direction": "TO_ONE_ROOM",
+            "originZone": "MAIN",
+            "destinationZone": "ONE_ROOM",
+            "departureTime": "12:35",
+            "arrivalTime": "12:40"
+        },
+        {
+            "serviceDay": "WEDNESDAY",
+            "routeId": "B",
+            "stopId": "university-headquarters",
+            "direction": "TO_YEIN",
+            "originZone": "MAIN",
+            "destinationZone": "YEIN",
+            "departureTime": "12:35",
+            "arrivalTime": "12:40"
+        },
+        {
+            "serviceDay": "WEDNESDAY",
+            "routeId": "A",
+            "stopId": "one-room",
+            "direction": "TO_MAIN",
+            "originZone": "ONE_ROOM",
+            "destinationZone": "MAIN",
+            "departureTime": "12:40",
+            "arrivalTime": "12:45"
+        },
+        {
+            "serviceDay": "WEDNESDAY",
+            "routeId": "B",
+            "stopId": "yein",
+            "direction": "TO_MAIN",
+            "originZone": "YEIN",
+            "destinationZone": "MAIN",
+            "departureTime": "12:40",
+            "arrivalTime": "12:45"
+        },
+        {
+            "serviceDay": "WEDNESDAY",
+            "routeId": "A",
+            "stopId": "university-headquarters",
+            "direction": "TO_ONE_ROOM",
+            "originZone": "MAIN",
+            "destinationZone": "ONE_ROOM",
+            "departureTime": "12:45",
+            "arrivalTime": "12:50"
+        },
+        {
+            "serviceDay": "WEDNESDAY",
+            "routeId": "B",
+            "stopId": "university-headquarters",
+            "direction": "TO_YEIN",
+            "originZone": "MAIN",
+            "destinationZone": "YEIN",
+            "departureTime": "12:45",
+            "arrivalTime": "12:50"
+        },
+        {
+            "serviceDay": "WEDNESDAY",
+            "routeId": "A",
+            "stopId": "one-room",
+            "direction": "TO_MAIN",
+            "originZone": "ONE_ROOM",
+            "destinationZone": "MAIN",
+            "departureTime": "12:50",
+            "arrivalTime": "12:55"
+        },
+        {
+            "serviceDay": "WEDNESDAY",
+            "routeId": "B",
+            "stopId": "yein",
+            "direction": "TO_MAIN",
+            "originZone": "YEIN",
+            "destinationZone": "MAIN",
+            "departureTime": "12:50",
+            "arrivalTime": "12:55"
+        },
+        {
+            "serviceDay": "WEDNESDAY",
+            "routeId": "B",
+            "stopId": "university-headquarters",
+            "direction": "TO_YEIN",
+            "originZone": "MAIN",
+            "destinationZone": "YEIN",
+            "departureTime": "12:55",
+            "arrivalTime": "13:00"
+        },
+        {
+            "serviceDay": "WEDNESDAY",
+            "routeId": "B",
+            "stopId": "yein",
+            "direction": "TO_MAIN",
+            "originZone": "YEIN",
+            "destinationZone": "MAIN",
+            "departureTime": "13:00",
+            "arrivalTime": "13:05"
+        },
+        {
+            "serviceDay": "WEDNESDAY",
+            "routeId": "A",
+            "stopId": "one-room",
+            "direction": "TO_MAIN",
+            "originZone": "ONE_ROOM",
+            "destinationZone": "MAIN",
+            "departureTime": "13:40",
+            "arrivalTime": "13:45"
+        },
+        {
+            "serviceDay": "WEDNESDAY",
+            "routeId": "A",
+            "stopId": "university-headquarters",
+            "direction": "TO_ONE_ROOM",
+            "originZone": "MAIN",
+            "destinationZone": "ONE_ROOM",
+            "departureTime": "13:45",
+            "arrivalTime": "13:50"
+        },
+        {
+            "serviceDay": "WEDNESDAY",
+            "routeId": "B",
+            "stopId": "university-headquarters",
+            "direction": "TO_YEIN",
+            "originZone": "MAIN",
+            "destinationZone": "YEIN",
+            "departureTime": "13:45",
+            "arrivalTime": "13:50"
+        },
+        {
+            "serviceDay": "WEDNESDAY",
+            "routeId": "A",
+            "stopId": "one-room",
+            "direction": "TO_MAIN",
+            "originZone": "ONE_ROOM",
+            "destinationZone": "MAIN",
+            "departureTime": "13:50",
+            "arrivalTime": "13:55"
+        },
+        {
+            "serviceDay": "WEDNESDAY",
+            "routeId": "B",
+            "stopId": "yein",
+            "direction": "TO_MAIN",
+            "originZone": "YEIN",
+            "destinationZone": "MAIN",
+            "departureTime": "13:50",
+            "arrivalTime": "13:55"
+        },
+        {
+            "serviceDay": "WEDNESDAY",
+            "routeId": "B",
+            "stopId": "university-headquarters",
+            "direction": "TO_YEIN",
+            "originZone": "MAIN",
+            "destinationZone": "YEIN",
+            "departureTime": "13:55",
+            "arrivalTime": "14:00"
+        },
+        {
+            "serviceDay": "WEDNESDAY",
+            "routeId": "B",
+            "stopId": "yein",
+            "direction": "TO_MAIN",
+            "originZone": "YEIN",
+            "destinationZone": "MAIN",
+            "departureTime": "14:00",
+            "arrivalTime": "14:05"
+        },
+        {
+            "serviceDay": "WEDNESDAY",
+            "routeId": "A",
+            "stopId": "one-room",
+            "direction": "TO_MAIN",
+            "originZone": "ONE_ROOM",
+            "destinationZone": "MAIN",
+            "departureTime": "14:40",
+            "arrivalTime": "14:45"
+        },
+        {
+            "serviceDay": "WEDNESDAY",
+            "routeId": "A",
+            "stopId": "university-headquarters",
+            "direction": "TO_ONE_ROOM",
+            "originZone": "MAIN",
+            "destinationZone": "ONE_ROOM",
+            "departureTime": "14:45",
+            "arrivalTime": "14:50"
+        },
+        {
+            "serviceDay": "WEDNESDAY",
+            "routeId": "B",
+            "stopId": "university-headquarters",
+            "direction": "TO_YEIN",
+            "originZone": "MAIN",
+            "destinationZone": "YEIN",
+            "departureTime": "14:45",
+            "arrivalTime": "14:50"
+        },
+        {
+            "serviceDay": "WEDNESDAY",
+            "routeId": "A",
+            "stopId": "one-room",
+            "direction": "TO_MAIN",
+            "originZone": "ONE_ROOM",
+            "destinationZone": "MAIN",
+            "departureTime": "14:50",
+            "arrivalTime": "14:55"
+        },
+        {
+            "serviceDay": "WEDNESDAY",
+            "routeId": "B",
+            "stopId": "yein",
+            "direction": "TO_MAIN",
+            "originZone": "YEIN",
+            "destinationZone": "MAIN",
+            "departureTime": "14:50",
+            "arrivalTime": "14:55"
+        },
+        {
+            "serviceDay": "WEDNESDAY",
+            "routeId": "B",
+            "stopId": "university-headquarters",
+            "direction": "TO_YEIN",
+            "originZone": "MAIN",
+            "destinationZone": "YEIN",
+            "departureTime": "14:55",
+            "arrivalTime": "15:00"
+        },
+        {
+            "serviceDay": "WEDNESDAY",
+            "routeId": "B",
+            "stopId": "yein",
+            "direction": "TO_MAIN",
+            "originZone": "YEIN",
+            "destinationZone": "MAIN",
+            "departureTime": "15:00",
+            "arrivalTime": "15:05"
+        },
+        {
+            "serviceDay": "WEDNESDAY",
+            "routeId": "A",
+            "stopId": "one-room",
+            "direction": "TO_MAIN",
+            "originZone": "ONE_ROOM",
+            "destinationZone": "MAIN",
+            "departureTime": "15:40",
+            "arrivalTime": "15:45"
+        },
+        {
+            "serviceDay": "WEDNESDAY",
+            "routeId": "A",
+            "stopId": "university-headquarters",
+            "direction": "TO_ONE_ROOM",
+            "originZone": "MAIN",
+            "destinationZone": "ONE_ROOM",
+            "departureTime": "15:45",
+            "arrivalTime": "15:50"
+        },
+        {
+            "serviceDay": "WEDNESDAY",
+            "routeId": "B",
+            "stopId": "university-headquarters",
+            "direction": "TO_YEIN",
+            "originZone": "MAIN",
+            "destinationZone": "YEIN",
+            "departureTime": "15:45",
+            "arrivalTime": "15:50"
+        },
+        {
+            "serviceDay": "WEDNESDAY",
+            "routeId": "A",
+            "stopId": "one-room",
+            "direction": "TO_MAIN",
+            "originZone": "ONE_ROOM",
+            "destinationZone": "MAIN",
+            "departureTime": "15:50",
+            "arrivalTime": "15:55"
+        },
+        {
+            "serviceDay": "WEDNESDAY",
+            "routeId": "B",
+            "stopId": "yein",
+            "direction": "TO_MAIN",
+            "originZone": "YEIN",
+            "destinationZone": "MAIN",
+            "departureTime": "15:50",
+            "arrivalTime": "15:55"
+        },
+        {
+            "serviceDay": "WEDNESDAY",
+            "routeId": "B",
+            "stopId": "university-headquarters",
+            "direction": "TO_YEIN",
+            "originZone": "MAIN",
+            "destinationZone": "YEIN",
+            "departureTime": "15:55",
+            "arrivalTime": "16:00"
+        },
+        {
+            "serviceDay": "WEDNESDAY",
+            "routeId": "B",
+            "stopId": "yein",
+            "direction": "TO_MAIN",
+            "originZone": "YEIN",
+            "destinationZone": "MAIN",
+            "departureTime": "16:00",
+            "arrivalTime": "16:05"
+        },
+        {
+            "serviceDay": "WEDNESDAY",
+            "routeId": "A",
+            "stopId": "one-room",
+            "direction": "TO_MAIN",
+            "originZone": "ONE_ROOM",
+            "destinationZone": "MAIN",
+            "departureTime": "16:40",
+            "arrivalTime": "16:45"
+        },
+        {
+            "serviceDay": "WEDNESDAY",
+            "routeId": "A",
+            "stopId": "university-headquarters",
+            "direction": "TO_ONE_ROOM",
+            "originZone": "MAIN",
+            "destinationZone": "ONE_ROOM",
+            "departureTime": "16:45",
+            "arrivalTime": "16:50"
+        },
+        {
+            "serviceDay": "WEDNESDAY",
+            "routeId": "B",
+            "stopId": "university-headquarters",
+            "direction": "TO_YEIN",
+            "originZone": "MAIN",
+            "destinationZone": "YEIN",
+            "departureTime": "16:45",
+            "arrivalTime": "16:50"
+        },
+        {
+            "serviceDay": "WEDNESDAY",
+            "routeId": "A",
+            "stopId": "one-room",
+            "direction": "TO_MAIN",
+            "originZone": "ONE_ROOM",
+            "destinationZone": "MAIN",
+            "departureTime": "16:50",
+            "arrivalTime": "16:55"
+        },
+        {
+            "serviceDay": "WEDNESDAY",
+            "routeId": "B",
+            "stopId": "yein",
+            "direction": "TO_MAIN",
+            "originZone": "YEIN",
+            "destinationZone": "MAIN",
+            "departureTime": "16:50",
+            "arrivalTime": "16:55"
+        },
+        {
+            "serviceDay": "WEDNESDAY",
+            "routeId": "B",
+            "stopId": "university-headquarters",
+            "direction": "TO_YEIN",
+            "originZone": "MAIN",
+            "destinationZone": "YEIN",
+            "departureTime": "16:55",
+            "arrivalTime": "17:00"
+        },
+        {
+            "serviceDay": "WEDNESDAY",
+            "routeId": "B",
+            "stopId": "yein",
+            "direction": "TO_MAIN",
+            "originZone": "YEIN",
+            "destinationZone": "MAIN",
+            "departureTime": "17:00",
+            "arrivalTime": "17:05"
+        },
+        {
+            "serviceDay": "WEDNESDAY",
+            "routeId": "A",
+            "stopId": "one-room",
+            "direction": "TO_MAIN",
+            "originZone": "ONE_ROOM",
+            "destinationZone": "MAIN",
+            "departureTime": "17:40",
+            "arrivalTime": "17:45"
+        },
+        {
+            "serviceDay": "WEDNESDAY",
+            "routeId": "A",
+            "stopId": "university-headquarters",
+            "direction": "TO_ONE_ROOM",
+            "originZone": "MAIN",
+            "destinationZone": "ONE_ROOM",
+            "departureTime": "17:45",
+            "arrivalTime": "17:50"
+        },
+        {
+            "serviceDay": "WEDNESDAY",
+            "routeId": "B",
+            "stopId": "university-headquarters",
+            "direction": "TO_YEIN",
+            "originZone": "MAIN",
+            "destinationZone": "YEIN",
+            "departureTime": "17:45",
+            "arrivalTime": "17:50"
+        },
+        {
+            "serviceDay": "WEDNESDAY",
+            "routeId": "A",
+            "stopId": "one-room",
+            "direction": "TO_MAIN",
+            "originZone": "ONE_ROOM",
+            "destinationZone": "MAIN",
+            "departureTime": "17:50",
+            "arrivalTime": "17:55"
+        },
+        {
+            "serviceDay": "WEDNESDAY",
+            "routeId": "B",
+            "stopId": "yein",
+            "direction": "TO_MAIN",
+            "originZone": "YEIN",
+            "destinationZone": "MAIN",
+            "departureTime": "17:50",
+            "arrivalTime": "17:55"
+        },
+        {
+            "serviceDay": "WEDNESDAY",
+            "routeId": "B",
+            "stopId": "university-headquarters",
+            "direction": "TO_YEIN",
+            "originZone": "MAIN",
+            "destinationZone": "YEIN",
+            "departureTime": "17:55",
+            "arrivalTime": "18:00"
+        },
+        {
+            "serviceDay": "WEDNESDAY",
+            "routeId": "A",
+            "stopId": "one-room",
+            "direction": "TO_MAIN",
+            "originZone": "ONE_ROOM",
+            "destinationZone": "MAIN",
+            "departureTime": "18:00",
+            "arrivalTime": "18:05"
+        },
+        {
+            "serviceDay": "WEDNESDAY",
+            "routeId": "B",
+            "stopId": "yein",
+            "direction": "TO_MAIN",
+            "originZone": "YEIN",
+            "destinationZone": "MAIN",
+            "departureTime": "18:10",
+            "arrivalTime": "18:15"
+        },
+        {
+            "serviceDay": "WEDNESDAY",
+            "routeId": "B-evening",
+            "stopId": "yein",
+            "direction": "TO_MAIN",
+            "originZone": "YEIN",
+            "destinationZone": "MAIN",
+            "departureTime": "18:40",
+            "arrivalTime": "18:45"
+        },
+        {
+            "serviceDay": "WEDNESDAY",
+            "routeId": "A-evening",
+            "stopId": "one-room",
+            "direction": "TO_MAIN",
+            "originZone": "ONE_ROOM",
+            "destinationZone": "MAIN",
+            "departureTime": "18:50",
+            "arrivalTime": "18:55"
+        },
+        {
+            "serviceDay": "WEDNESDAY",
+            "routeId": "A-evening",
+            "stopId": "stadium-stop",
+            "direction": "TO_YEIN",
+            "originZone": "MAIN",
+            "destinationZone": "YEIN",
+            "departureTime": "18:55",
+            "arrivalTime": "19:00"
+        },
+        {
+            "serviceDay": "WEDNESDAY",
+            "routeId": "B-evening",
+            "stopId": "stadium-stop",
+            "direction": "TO_YEIN",
+            "originZone": "MAIN",
+            "destinationZone": "YEIN",
+            "departureTime": "18:55",
+            "arrivalTime": "19:00"
+        },
+        {
+            "serviceDay": "WEDNESDAY",
+            "routeId": "B-evening",
+            "stopId": "yein",
+            "direction": "TO_MAIN",
+            "originZone": "YEIN",
+            "destinationZone": "MAIN",
+            "departureTime": "19:00",
+            "arrivalTime": "19:05"
+        },
+        {
+            "serviceDay": "WEDNESDAY",
+            "routeId": "A-evening",
+            "stopId": "one-room",
+            "direction": "TO_MAIN",
+            "originZone": "ONE_ROOM",
+            "destinationZone": "MAIN",
+            "departureTime": "19:20",
+            "arrivalTime": "19:25"
+        },
+        {
+            "serviceDay": "WEDNESDAY",
+            "routeId": "A-evening",
+            "stopId": "stadium-stop",
+            "direction": "TO_YEIN",
+            "originZone": "MAIN",
+            "destinationZone": "YEIN",
+            "departureTime": "19:25",
+            "arrivalTime": "19:30"
+        },
+        {
+            "serviceDay": "WEDNESDAY",
+            "routeId": "B-evening",
+            "stopId": "stadium-stop",
+            "direction": "TO_YEIN",
+            "originZone": "MAIN",
+            "destinationZone": "YEIN",
+            "departureTime": "19:25",
+            "arrivalTime": "19:30"
+        },
+        {
+            "serviceDay": "WEDNESDAY",
+            "routeId": "B-evening",
+            "stopId": "yein",
+            "direction": "TO_MAIN",
+            "originZone": "YEIN",
+            "destinationZone": "MAIN",
+            "departureTime": "19:30",
+            "arrivalTime": "19:35"
+        },
+        {
+            "serviceDay": "WEDNESDAY",
+            "routeId": "A-evening",
+            "stopId": "one-room",
+            "direction": "TO_MAIN",
+            "originZone": "ONE_ROOM",
+            "destinationZone": "MAIN",
+            "departureTime": "19:45",
+            "arrivalTime": "19:50"
+        },
+        {
+            "serviceDay": "WEDNESDAY",
+            "routeId": "A-evening",
+            "stopId": "stadium-stop",
+            "direction": "TO_YEIN",
+            "originZone": "MAIN",
+            "destinationZone": "YEIN",
+            "departureTime": "19:50",
+            "arrivalTime": "19:55"
+        },
+        {
+            "serviceDay": "WEDNESDAY",
+            "routeId": "B-evening",
+            "stopId": "stadium-stop",
+            "direction": "TO_YEIN",
+            "originZone": "MAIN",
+            "destinationZone": "YEIN",
+            "departureTime": "19:50",
+            "arrivalTime": "19:55"
+        },
+        {
+            "serviceDay": "WEDNESDAY",
+            "routeId": "B-evening",
+            "stopId": "yein",
+            "direction": "TO_MAIN",
+            "originZone": "YEIN",
+            "destinationZone": "MAIN",
+            "departureTime": "19:55",
+            "arrivalTime": "20:00"
+        },
+        {
+            "serviceDay": "WEDNESDAY",
+            "routeId": "A-evening",
+            "stopId": "one-room",
+            "direction": "TO_MAIN",
+            "originZone": "ONE_ROOM",
+            "destinationZone": "MAIN",
+            "departureTime": "20:45",
+            "arrivalTime": "20:50"
+        },
+        {
+            "serviceDay": "WEDNESDAY",
+            "routeId": "A-evening",
+            "stopId": "stadium-stop",
+            "direction": "TO_YEIN",
+            "originZone": "MAIN",
+            "destinationZone": "YEIN",
+            "departureTime": "20:50",
+            "arrivalTime": "20:55"
+        },
+        {
+            "serviceDay": "WEDNESDAY",
+            "routeId": "B-evening",
+            "stopId": "stadium-stop",
+            "direction": "TO_YEIN",
+            "originZone": "MAIN",
+            "destinationZone": "YEIN",
+            "departureTime": "20:50",
+            "arrivalTime": "20:55"
+        },
+        {
+            "serviceDay": "WEDNESDAY",
+            "routeId": "B-evening",
+            "stopId": "yein",
+            "direction": "TO_MAIN",
+            "originZone": "YEIN",
+            "destinationZone": "MAIN",
+            "departureTime": "20:55",
+            "arrivalTime": "21:00"
+        },
+        {
+            "serviceDay": "WEDNESDAY",
+            "routeId": "A-evening",
+            "stopId": "one-room",
+            "direction": "TO_MAIN",
+            "originZone": "ONE_ROOM",
+            "destinationZone": "MAIN",
+            "departureTime": "21:25",
+            "arrivalTime": "21:30"
+        },
+        {
+            "serviceDay": "WEDNESDAY",
+            "routeId": "A-evening",
+            "stopId": "stadium-stop",
+            "direction": "TO_YEIN",
+            "originZone": "MAIN",
+            "destinationZone": "YEIN",
+            "departureTime": "21:30",
+            "arrivalTime": "21:35"
+        },
+        {
+            "serviceDay": "WEDNESDAY",
+            "routeId": "B-evening",
+            "stopId": "stadium-stop",
+            "direction": "TO_YEIN",
+            "originZone": "MAIN",
+            "destinationZone": "YEIN",
+            "departureTime": "21:30",
+            "arrivalTime": "21:35"
+        },
+        {
+            "serviceDay": "WEDNESDAY",
+            "routeId": "B-evening",
+            "stopId": "yein",
+            "direction": "TO_MAIN",
+            "originZone": "YEIN",
+            "destinationZone": "MAIN",
+            "departureTime": "21:35",
+            "arrivalTime": "21:40"
+        },
+        {
+            "serviceDay": "WEDNESDAY",
+            "routeId": "A-evening",
+            "stopId": "one-room",
+            "direction": "TO_MAIN",
+            "originZone": "ONE_ROOM",
+            "destinationZone": "MAIN",
+            "departureTime": "21:45",
+            "arrivalTime": "21:50"
+        },
+        {
+            "serviceDay": "WEDNESDAY",
+            "routeId": "A-evening",
+            "stopId": "stadium-stop",
+            "direction": "TO_YEIN",
+            "originZone": "MAIN",
+            "destinationZone": "YEIN",
+            "departureTime": "21:50",
+            "arrivalTime": "21:55"
+        },
+        {
+            "serviceDay": "WEDNESDAY",
+            "routeId": "B-evening",
+            "stopId": "stadium-stop",
+            "direction": "TO_YEIN",
+            "originZone": "MAIN",
+            "destinationZone": "YEIN",
+            "departureTime": "21:50",
+            "arrivalTime": "21:55"
+        },
+        {
+            "serviceDay": "WEDNESDAY",
+            "routeId": "B-evening",
+            "stopId": "yein",
+            "direction": "TO_MAIN",
+            "originZone": "YEIN",
+            "destinationZone": "MAIN",
+            "departureTime": "21:55",
+            "arrivalTime": "22:00"
+        },
+        {
+            "serviceDay": "THURSDAY",
+            "routeId": "A",
+            "stopId": "one-room",
+            "direction": "TO_MAIN",
+            "originZone": "ONE_ROOM",
+            "destinationZone": "MAIN",
+            "departureTime": "08:20",
+            "arrivalTime": "08:25"
+        },
+        {
+            "serviceDay": "THURSDAY",
+            "routeId": "B",
+            "stopId": "university-headquarters",
+            "direction": "TO_YEIN",
+            "originZone": "MAIN",
+            "destinationZone": "YEIN",
+            "departureTime": "08:25",
+            "arrivalTime": "08:30"
+        },
+        {
+            "serviceDay": "THURSDAY",
+            "routeId": "B",
+            "stopId": "yein",
+            "direction": "TO_MAIN",
+            "originZone": "YEIN",
+            "destinationZone": "MAIN",
+            "departureTime": "08:30",
+            "arrivalTime": "08:35"
+        },
+        {
+            "serviceDay": "THURSDAY",
+            "routeId": "B",
+            "stopId": "university-headquarters",
+            "direction": "TO_YEIN",
+            "originZone": "MAIN",
+            "destinationZone": "YEIN",
+            "departureTime": "08:35",
+            "arrivalTime": "08:40"
+        },
+        {
+            "serviceDay": "THURSDAY",
+            "routeId": "A",
+            "stopId": "one-room",
+            "direction": "TO_MAIN",
+            "originZone": "ONE_ROOM",
+            "destinationZone": "MAIN",
+            "departureTime": "08:40",
+            "arrivalTime": "08:45"
+        },
+        {
+            "serviceDay": "THURSDAY",
+            "routeId": "B",
+            "stopId": "yein",
+            "direction": "TO_MAIN",
+            "originZone": "YEIN",
+            "destinationZone": "MAIN",
+            "departureTime": "08:40",
+            "arrivalTime": "08:45"
+        },
+        {
+            "serviceDay": "THURSDAY",
+            "routeId": "A",
+            "stopId": "university-headquarters",
+            "direction": "TO_ONE_ROOM",
+            "originZone": "MAIN",
+            "destinationZone": "ONE_ROOM",
+            "departureTime": "08:45",
+            "arrivalTime": "08:50"
+        },
+        {
+            "serviceDay": "THURSDAY",
+            "routeId": "B",
+            "stopId": "university-headquarters",
+            "direction": "TO_YEIN",
+            "originZone": "MAIN",
+            "destinationZone": "YEIN",
+            "departureTime": "08:45",
+            "arrivalTime": "08:50"
+        },
+        {
+            "serviceDay": "THURSDAY",
+            "routeId": "A",
+            "stopId": "one-room",
+            "direction": "TO_MAIN",
+            "originZone": "ONE_ROOM",
+            "destinationZone": "MAIN",
+            "departureTime": "08:50",
+            "arrivalTime": "08:55"
+        },
+        {
+            "serviceDay": "THURSDAY",
+            "routeId": "B",
+            "stopId": "yein",
+            "direction": "TO_MAIN",
+            "originZone": "YEIN",
+            "destinationZone": "MAIN",
+            "departureTime": "08:50",
+            "arrivalTime": "08:55"
+        },
+        {
+            "serviceDay": "THURSDAY",
+            "routeId": "A",
+            "stopId": "one-room",
+            "direction": "TO_MAIN",
+            "originZone": "ONE_ROOM",
+            "destinationZone": "MAIN",
+            "departureTime": "08:55",
+            "arrivalTime": "09:00"
+        },
+        {
+            "serviceDay": "THURSDAY",
+            "routeId": "B",
+            "stopId": "university-headquarters",
+            "direction": "TO_YEIN",
+            "originZone": "MAIN",
+            "destinationZone": "YEIN",
+            "departureTime": "08:55",
+            "arrivalTime": "09:00"
+        },
+        {
+            "serviceDay": "THURSDAY",
+            "routeId": "B",
+            "stopId": "yein",
+            "direction": "TO_MAIN",
+            "originZone": "YEIN",
+            "destinationZone": "MAIN",
+            "departureTime": "09:00",
+            "arrivalTime": "09:05"
+        },
+        {
+            "serviceDay": "THURSDAY",
+            "routeId": "A",
+            "stopId": "one-room",
+            "direction": "TO_MAIN",
+            "originZone": "ONE_ROOM",
+            "destinationZone": "MAIN",
+            "departureTime": "09:30",
+            "arrivalTime": "09:35"
+        },
+        {
+            "serviceDay": "THURSDAY",
+            "routeId": "A",
+            "stopId": "university-headquarters",
+            "direction": "TO_ONE_ROOM",
+            "originZone": "MAIN",
+            "destinationZone": "ONE_ROOM",
+            "departureTime": "09:35",
+            "arrivalTime": "09:40"
+        },
+        {
+            "serviceDay": "THURSDAY",
+            "routeId": "B",
+            "stopId": "university-headquarters",
+            "direction": "TO_YEIN",
+            "originZone": "MAIN",
+            "destinationZone": "YEIN",
+            "departureTime": "09:35",
+            "arrivalTime": "09:40"
+        },
+        {
+            "serviceDay": "THURSDAY",
+            "routeId": "A",
+            "stopId": "one-room",
+            "direction": "TO_MAIN",
+            "originZone": "ONE_ROOM",
+            "destinationZone": "MAIN",
+            "departureTime": "09:40",
+            "arrivalTime": "09:45"
+        },
+        {
+            "serviceDay": "THURSDAY",
+            "routeId": "B",
+            "stopId": "yein",
+            "direction": "TO_MAIN",
+            "originZone": "YEIN",
+            "destinationZone": "MAIN",
+            "departureTime": "09:40",
+            "arrivalTime": "09:45"
+        },
+        {
+            "serviceDay": "THURSDAY",
+            "routeId": "A",
+            "stopId": "university-headquarters",
+            "direction": "TO_ONE_ROOM",
+            "originZone": "MAIN",
+            "destinationZone": "ONE_ROOM",
+            "departureTime": "09:45",
+            "arrivalTime": "09:50"
+        },
+        {
+            "serviceDay": "THURSDAY",
+            "routeId": "B",
+            "stopId": "university-headquarters",
+            "direction": "TO_YEIN",
+            "originZone": "MAIN",
+            "destinationZone": "YEIN",
+            "departureTime": "09:45",
+            "arrivalTime": "09:50"
+        },
+        {
+            "serviceDay": "THURSDAY",
+            "routeId": "A",
+            "stopId": "one-room",
+            "direction": "TO_MAIN",
+            "originZone": "ONE_ROOM",
+            "destinationZone": "MAIN",
+            "departureTime": "09:50",
+            "arrivalTime": "09:55"
+        },
+        {
+            "serviceDay": "THURSDAY",
+            "routeId": "B",
+            "stopId": "yein",
+            "direction": "TO_MAIN",
+            "originZone": "YEIN",
+            "destinationZone": "MAIN",
+            "departureTime": "09:50",
+            "arrivalTime": "09:55"
+        },
+        {
+            "serviceDay": "THURSDAY",
+            "routeId": "A",
+            "stopId": "one-room",
+            "direction": "TO_MAIN",
+            "originZone": "ONE_ROOM",
+            "destinationZone": "MAIN",
+            "departureTime": "09:55",
+            "arrivalTime": "10:00"
+        },
+        {
+            "serviceDay": "THURSDAY",
+            "routeId": "B",
+            "stopId": "university-headquarters",
+            "direction": "TO_YEIN",
+            "originZone": "MAIN",
+            "destinationZone": "YEIN",
+            "departureTime": "09:55",
+            "arrivalTime": "10:00"
+        },
+        {
+            "serviceDay": "THURSDAY",
+            "routeId": "B",
+            "stopId": "yein",
+            "direction": "TO_MAIN",
+            "originZone": "YEIN",
+            "destinationZone": "MAIN",
+            "departureTime": "10:00",
+            "arrivalTime": "10:05"
+        },
+        {
+            "serviceDay": "THURSDAY",
+            "routeId": "A",
+            "stopId": "one-room",
+            "direction": "TO_MAIN",
+            "originZone": "ONE_ROOM",
+            "destinationZone": "MAIN",
+            "departureTime": "10:30",
+            "arrivalTime": "10:35"
+        },
+        {
+            "serviceDay": "THURSDAY",
+            "routeId": "A",
+            "stopId": "university-headquarters",
+            "direction": "TO_ONE_ROOM",
+            "originZone": "MAIN",
+            "destinationZone": "ONE_ROOM",
+            "departureTime": "10:35",
+            "arrivalTime": "10:40"
+        },
+        {
+            "serviceDay": "THURSDAY",
+            "routeId": "B",
+            "stopId": "university-headquarters",
+            "direction": "TO_YEIN",
+            "originZone": "MAIN",
+            "destinationZone": "YEIN",
+            "departureTime": "10:35",
+            "arrivalTime": "10:40"
+        },
+        {
+            "serviceDay": "THURSDAY",
+            "routeId": "A",
+            "stopId": "one-room",
+            "direction": "TO_MAIN",
+            "originZone": "ONE_ROOM",
+            "destinationZone": "MAIN",
+            "departureTime": "10:40",
+            "arrivalTime": "10:45"
+        },
+        {
+            "serviceDay": "THURSDAY",
+            "routeId": "B",
+            "stopId": "yein",
+            "direction": "TO_MAIN",
+            "originZone": "YEIN",
+            "destinationZone": "MAIN",
+            "departureTime": "10:40",
+            "arrivalTime": "10:45"
+        },
+        {
+            "serviceDay": "THURSDAY",
+            "routeId": "A",
+            "stopId": "university-headquarters",
+            "direction": "TO_ONE_ROOM",
+            "originZone": "MAIN",
+            "destinationZone": "ONE_ROOM",
+            "departureTime": "10:45",
+            "arrivalTime": "10:50"
+        },
+        {
+            "serviceDay": "THURSDAY",
+            "routeId": "B",
+            "stopId": "university-headquarters",
+            "direction": "TO_YEIN",
+            "originZone": "MAIN",
+            "destinationZone": "YEIN",
+            "departureTime": "10:45",
+            "arrivalTime": "10:50"
+        },
+        {
+            "serviceDay": "THURSDAY",
+            "routeId": "A",
+            "stopId": "one-room",
+            "direction": "TO_MAIN",
+            "originZone": "ONE_ROOM",
+            "destinationZone": "MAIN",
+            "departureTime": "10:50",
+            "arrivalTime": "10:55"
+        },
+        {
+            "serviceDay": "THURSDAY",
+            "routeId": "B",
+            "stopId": "yein",
+            "direction": "TO_MAIN",
+            "originZone": "YEIN",
+            "destinationZone": "MAIN",
+            "departureTime": "10:50",
+            "arrivalTime": "10:55"
+        },
+        {
+            "serviceDay": "THURSDAY",
+            "routeId": "B",
+            "stopId": "university-headquarters",
+            "direction": "TO_YEIN",
+            "originZone": "MAIN",
+            "destinationZone": "YEIN",
+            "departureTime": "10:55",
+            "arrivalTime": "11:00"
+        },
+        {
+            "serviceDay": "THURSDAY",
+            "routeId": "B",
+            "stopId": "yein",
+            "direction": "TO_MAIN",
+            "originZone": "YEIN",
+            "destinationZone": "MAIN",
+            "departureTime": "11:00",
+            "arrivalTime": "11:05"
+        },
+        {
+            "serviceDay": "THURSDAY",
+            "routeId": "A",
+            "stopId": "one-room",
+            "direction": "TO_MAIN",
+            "originZone": "ONE_ROOM",
+            "destinationZone": "MAIN",
+            "departureTime": "11:30",
+            "arrivalTime": "11:35"
+        },
+        {
+            "serviceDay": "THURSDAY",
+            "routeId": "A",
+            "stopId": "university-headquarters",
+            "direction": "TO_ONE_ROOM",
+            "originZone": "MAIN",
+            "destinationZone": "ONE_ROOM",
+            "departureTime": "11:35",
+            "arrivalTime": "11:40"
+        },
+        {
+            "serviceDay": "THURSDAY",
+            "routeId": "B",
+            "stopId": "university-headquarters",
+            "direction": "TO_YEIN",
+            "originZone": "MAIN",
+            "destinationZone": "YEIN",
+            "departureTime": "11:35",
+            "arrivalTime": "11:40"
+        },
+        {
+            "serviceDay": "THURSDAY",
+            "routeId": "A",
+            "stopId": "one-room",
+            "direction": "TO_MAIN",
+            "originZone": "ONE_ROOM",
+            "destinationZone": "MAIN",
+            "departureTime": "11:40",
+            "arrivalTime": "11:45"
+        },
+        {
+            "serviceDay": "THURSDAY",
+            "routeId": "B",
+            "stopId": "yein",
+            "direction": "TO_MAIN",
+            "originZone": "YEIN",
+            "destinationZone": "MAIN",
+            "departureTime": "11:40",
+            "arrivalTime": "11:45"
+        },
+        {
+            "serviceDay": "THURSDAY",
+            "routeId": "A",
+            "stopId": "university-headquarters",
+            "direction": "TO_ONE_ROOM",
+            "originZone": "MAIN",
+            "destinationZone": "ONE_ROOM",
+            "departureTime": "11:45",
+            "arrivalTime": "11:50"
+        },
+        {
+            "serviceDay": "THURSDAY",
+            "routeId": "B",
+            "stopId": "university-headquarters",
+            "direction": "TO_YEIN",
+            "originZone": "MAIN",
+            "destinationZone": "YEIN",
+            "departureTime": "11:45",
+            "arrivalTime": "11:50"
+        },
+        {
+            "serviceDay": "THURSDAY",
+            "routeId": "A",
+            "stopId": "one-room",
+            "direction": "TO_MAIN",
+            "originZone": "ONE_ROOM",
+            "destinationZone": "MAIN",
+            "departureTime": "11:50",
+            "arrivalTime": "11:55"
+        },
+        {
+            "serviceDay": "THURSDAY",
+            "routeId": "B",
+            "stopId": "yein",
+            "direction": "TO_MAIN",
+            "originZone": "YEIN",
+            "destinationZone": "MAIN",
+            "departureTime": "11:50",
+            "arrivalTime": "11:55"
+        },
+        {
+            "serviceDay": "THURSDAY",
+            "routeId": "B",
+            "stopId": "university-headquarters",
+            "direction": "TO_YEIN",
+            "originZone": "MAIN",
+            "destinationZone": "YEIN",
+            "departureTime": "11:55",
+            "arrivalTime": "12:00"
+        },
+        {
+            "serviceDay": "THURSDAY",
+            "routeId": "B",
+            "stopId": "yein",
+            "direction": "TO_MAIN",
+            "originZone": "YEIN",
+            "destinationZone": "MAIN",
+            "departureTime": "12:00",
+            "arrivalTime": "12:05"
+        },
+        {
+            "serviceDay": "THURSDAY",
+            "routeId": "A",
+            "stopId": "one-room",
+            "direction": "TO_MAIN",
+            "originZone": "ONE_ROOM",
+            "destinationZone": "MAIN",
+            "departureTime": "12:30",
+            "arrivalTime": "12:35"
+        },
+        {
+            "serviceDay": "THURSDAY",
+            "routeId": "A",
+            "stopId": "university-headquarters",
+            "direction": "TO_ONE_ROOM",
+            "originZone": "MAIN",
+            "destinationZone": "ONE_ROOM",
+            "departureTime": "12:35",
+            "arrivalTime": "12:40"
+        },
+        {
+            "serviceDay": "THURSDAY",
+            "routeId": "B",
+            "stopId": "university-headquarters",
+            "direction": "TO_YEIN",
+            "originZone": "MAIN",
+            "destinationZone": "YEIN",
+            "departureTime": "12:35",
+            "arrivalTime": "12:40"
+        },
+        {
+            "serviceDay": "THURSDAY",
+            "routeId": "A",
+            "stopId": "one-room",
+            "direction": "TO_MAIN",
+            "originZone": "ONE_ROOM",
+            "destinationZone": "MAIN",
+            "departureTime": "12:40",
+            "arrivalTime": "12:45"
+        },
+        {
+            "serviceDay": "THURSDAY",
+            "routeId": "B",
+            "stopId": "yein",
+            "direction": "TO_MAIN",
+            "originZone": "YEIN",
+            "destinationZone": "MAIN",
+            "departureTime": "12:40",
+            "arrivalTime": "12:45"
+        },
+        {
+            "serviceDay": "THURSDAY",
+            "routeId": "A",
+            "stopId": "university-headquarters",
+            "direction": "TO_ONE_ROOM",
+            "originZone": "MAIN",
+            "destinationZone": "ONE_ROOM",
+            "departureTime": "12:45",
+            "arrivalTime": "12:50"
+        },
+        {
+            "serviceDay": "THURSDAY",
+            "routeId": "B",
+            "stopId": "university-headquarters",
+            "direction": "TO_YEIN",
+            "originZone": "MAIN",
+            "destinationZone": "YEIN",
+            "departureTime": "12:45",
+            "arrivalTime": "12:50"
+        },
+        {
+            "serviceDay": "THURSDAY",
+            "routeId": "A",
+            "stopId": "one-room",
+            "direction": "TO_MAIN",
+            "originZone": "ONE_ROOM",
+            "destinationZone": "MAIN",
+            "departureTime": "12:50",
+            "arrivalTime": "12:55"
+        },
+        {
+            "serviceDay": "THURSDAY",
+            "routeId": "B",
+            "stopId": "yein",
+            "direction": "TO_MAIN",
+            "originZone": "YEIN",
+            "destinationZone": "MAIN",
+            "departureTime": "12:50",
+            "arrivalTime": "12:55"
+        },
+        {
+            "serviceDay": "THURSDAY",
+            "routeId": "B",
+            "stopId": "university-headquarters",
+            "direction": "TO_YEIN",
+            "originZone": "MAIN",
+            "destinationZone": "YEIN",
+            "departureTime": "12:55",
+            "arrivalTime": "13:00"
+        },
+        {
+            "serviceDay": "THURSDAY",
+            "routeId": "B",
+            "stopId": "yein",
+            "direction": "TO_MAIN",
+            "originZone": "YEIN",
+            "destinationZone": "MAIN",
+            "departureTime": "13:00",
+            "arrivalTime": "13:05"
+        },
+        {
+            "serviceDay": "THURSDAY",
+            "routeId": "A",
+            "stopId": "one-room",
+            "direction": "TO_MAIN",
+            "originZone": "ONE_ROOM",
+            "destinationZone": "MAIN",
+            "departureTime": "13:40",
+            "arrivalTime": "13:45"
+        },
+        {
+            "serviceDay": "THURSDAY",
+            "routeId": "A",
+            "stopId": "university-headquarters",
+            "direction": "TO_ONE_ROOM",
+            "originZone": "MAIN",
+            "destinationZone": "ONE_ROOM",
+            "departureTime": "13:45",
+            "arrivalTime": "13:50"
+        },
+        {
+            "serviceDay": "THURSDAY",
+            "routeId": "B",
+            "stopId": "university-headquarters",
+            "direction": "TO_YEIN",
+            "originZone": "MAIN",
+            "destinationZone": "YEIN",
+            "departureTime": "13:45",
+            "arrivalTime": "13:50"
+        },
+        {
+            "serviceDay": "THURSDAY",
+            "routeId": "A",
+            "stopId": "one-room",
+            "direction": "TO_MAIN",
+            "originZone": "ONE_ROOM",
+            "destinationZone": "MAIN",
+            "departureTime": "13:50",
+            "arrivalTime": "13:55"
+        },
+        {
+            "serviceDay": "THURSDAY",
+            "routeId": "B",
+            "stopId": "yein",
+            "direction": "TO_MAIN",
+            "originZone": "YEIN",
+            "destinationZone": "MAIN",
+            "departureTime": "13:50",
+            "arrivalTime": "13:55"
+        },
+        {
+            "serviceDay": "THURSDAY",
+            "routeId": "B",
+            "stopId": "university-headquarters",
+            "direction": "TO_YEIN",
+            "originZone": "MAIN",
+            "destinationZone": "YEIN",
+            "departureTime": "13:55",
+            "arrivalTime": "14:00"
+        },
+        {
+            "serviceDay": "THURSDAY",
+            "routeId": "B",
+            "stopId": "yein",
+            "direction": "TO_MAIN",
+            "originZone": "YEIN",
+            "destinationZone": "MAIN",
+            "departureTime": "14:00",
+            "arrivalTime": "14:05"
+        },
+        {
+            "serviceDay": "THURSDAY",
+            "routeId": "A",
+            "stopId": "one-room",
+            "direction": "TO_MAIN",
+            "originZone": "ONE_ROOM",
+            "destinationZone": "MAIN",
+            "departureTime": "14:40",
+            "arrivalTime": "14:45"
+        },
+        {
+            "serviceDay": "THURSDAY",
+            "routeId": "A",
+            "stopId": "university-headquarters",
+            "direction": "TO_ONE_ROOM",
+            "originZone": "MAIN",
+            "destinationZone": "ONE_ROOM",
+            "departureTime": "14:45",
+            "arrivalTime": "14:50"
+        },
+        {
+            "serviceDay": "THURSDAY",
+            "routeId": "B",
+            "stopId": "university-headquarters",
+            "direction": "TO_YEIN",
+            "originZone": "MAIN",
+            "destinationZone": "YEIN",
+            "departureTime": "14:45",
+            "arrivalTime": "14:50"
+        },
+        {
+            "serviceDay": "THURSDAY",
+            "routeId": "A",
+            "stopId": "one-room",
+            "direction": "TO_MAIN",
+            "originZone": "ONE_ROOM",
+            "destinationZone": "MAIN",
+            "departureTime": "14:50",
+            "arrivalTime": "14:55"
+        },
+        {
+            "serviceDay": "THURSDAY",
+            "routeId": "B",
+            "stopId": "yein",
+            "direction": "TO_MAIN",
+            "originZone": "YEIN",
+            "destinationZone": "MAIN",
+            "departureTime": "14:50",
+            "arrivalTime": "14:55"
+        },
+        {
+            "serviceDay": "THURSDAY",
+            "routeId": "B",
+            "stopId": "university-headquarters",
+            "direction": "TO_YEIN",
+            "originZone": "MAIN",
+            "destinationZone": "YEIN",
+            "departureTime": "14:55",
+            "arrivalTime": "15:00"
+        },
+        {
+            "serviceDay": "THURSDAY",
+            "routeId": "B",
+            "stopId": "yein",
+            "direction": "TO_MAIN",
+            "originZone": "YEIN",
+            "destinationZone": "MAIN",
+            "departureTime": "15:00",
+            "arrivalTime": "15:05"
+        },
+        {
+            "serviceDay": "THURSDAY",
+            "routeId": "A",
+            "stopId": "one-room",
+            "direction": "TO_MAIN",
+            "originZone": "ONE_ROOM",
+            "destinationZone": "MAIN",
+            "departureTime": "15:40",
+            "arrivalTime": "15:45"
+        },
+        {
+            "serviceDay": "THURSDAY",
+            "routeId": "A",
+            "stopId": "university-headquarters",
+            "direction": "TO_ONE_ROOM",
+            "originZone": "MAIN",
+            "destinationZone": "ONE_ROOM",
+            "departureTime": "15:45",
+            "arrivalTime": "15:50"
+        },
+        {
+            "serviceDay": "THURSDAY",
+            "routeId": "B",
+            "stopId": "university-headquarters",
+            "direction": "TO_YEIN",
+            "originZone": "MAIN",
+            "destinationZone": "YEIN",
+            "departureTime": "15:45",
+            "arrivalTime": "15:50"
+        },
+        {
+            "serviceDay": "THURSDAY",
+            "routeId": "A",
+            "stopId": "one-room",
+            "direction": "TO_MAIN",
+            "originZone": "ONE_ROOM",
+            "destinationZone": "MAIN",
+            "departureTime": "15:50",
+            "arrivalTime": "15:55"
+        },
+        {
+            "serviceDay": "THURSDAY",
+            "routeId": "B",
+            "stopId": "yein",
+            "direction": "TO_MAIN",
+            "originZone": "YEIN",
+            "destinationZone": "MAIN",
+            "departureTime": "15:50",
+            "arrivalTime": "15:55"
+        },
+        {
+            "serviceDay": "THURSDAY",
+            "routeId": "B",
+            "stopId": "university-headquarters",
+            "direction": "TO_YEIN",
+            "originZone": "MAIN",
+            "destinationZone": "YEIN",
+            "departureTime": "15:55",
+            "arrivalTime": "16:00"
+        },
+        {
+            "serviceDay": "THURSDAY",
+            "routeId": "B",
+            "stopId": "yein",
+            "direction": "TO_MAIN",
+            "originZone": "YEIN",
+            "destinationZone": "MAIN",
+            "departureTime": "16:00",
+            "arrivalTime": "16:05"
+        },
+        {
+            "serviceDay": "THURSDAY",
+            "routeId": "A",
+            "stopId": "one-room",
+            "direction": "TO_MAIN",
+            "originZone": "ONE_ROOM",
+            "destinationZone": "MAIN",
+            "departureTime": "16:40",
+            "arrivalTime": "16:45"
+        },
+        {
+            "serviceDay": "THURSDAY",
+            "routeId": "A",
+            "stopId": "university-headquarters",
+            "direction": "TO_ONE_ROOM",
+            "originZone": "MAIN",
+            "destinationZone": "ONE_ROOM",
+            "departureTime": "16:45",
+            "arrivalTime": "16:50"
+        },
+        {
+            "serviceDay": "THURSDAY",
+            "routeId": "B",
+            "stopId": "university-headquarters",
+            "direction": "TO_YEIN",
+            "originZone": "MAIN",
+            "destinationZone": "YEIN",
+            "departureTime": "16:45",
+            "arrivalTime": "16:50"
+        },
+        {
+            "serviceDay": "THURSDAY",
+            "routeId": "A",
+            "stopId": "one-room",
+            "direction": "TO_MAIN",
+            "originZone": "ONE_ROOM",
+            "destinationZone": "MAIN",
+            "departureTime": "16:50",
+            "arrivalTime": "16:55"
+        },
+        {
+            "serviceDay": "THURSDAY",
+            "routeId": "B",
+            "stopId": "yein",
+            "direction": "TO_MAIN",
+            "originZone": "YEIN",
+            "destinationZone": "MAIN",
+            "departureTime": "16:50",
+            "arrivalTime": "16:55"
+        },
+        {
+            "serviceDay": "THURSDAY",
+            "routeId": "B",
+            "stopId": "university-headquarters",
+            "direction": "TO_YEIN",
+            "originZone": "MAIN",
+            "destinationZone": "YEIN",
+            "departureTime": "16:55",
+            "arrivalTime": "17:00"
+        },
+        {
+            "serviceDay": "THURSDAY",
+            "routeId": "B",
+            "stopId": "yein",
+            "direction": "TO_MAIN",
+            "originZone": "YEIN",
+            "destinationZone": "MAIN",
+            "departureTime": "17:00",
+            "arrivalTime": "17:05"
+        },
+        {
+            "serviceDay": "THURSDAY",
+            "routeId": "A",
+            "stopId": "one-room",
+            "direction": "TO_MAIN",
+            "originZone": "ONE_ROOM",
+            "destinationZone": "MAIN",
+            "departureTime": "17:40",
+            "arrivalTime": "17:45"
+        },
+        {
+            "serviceDay": "THURSDAY",
+            "routeId": "A",
+            "stopId": "university-headquarters",
+            "direction": "TO_ONE_ROOM",
+            "originZone": "MAIN",
+            "destinationZone": "ONE_ROOM",
+            "departureTime": "17:45",
+            "arrivalTime": "17:50"
+        },
+        {
+            "serviceDay": "THURSDAY",
+            "routeId": "B",
+            "stopId": "university-headquarters",
+            "direction": "TO_YEIN",
+            "originZone": "MAIN",
+            "destinationZone": "YEIN",
+            "departureTime": "17:45",
+            "arrivalTime": "17:50"
+        },
+        {
+            "serviceDay": "THURSDAY",
+            "routeId": "A",
+            "stopId": "one-room",
+            "direction": "TO_MAIN",
+            "originZone": "ONE_ROOM",
+            "destinationZone": "MAIN",
+            "departureTime": "17:50",
+            "arrivalTime": "17:55"
+        },
+        {
+            "serviceDay": "THURSDAY",
+            "routeId": "B",
+            "stopId": "yein",
+            "direction": "TO_MAIN",
+            "originZone": "YEIN",
+            "destinationZone": "MAIN",
+            "departureTime": "17:50",
+            "arrivalTime": "17:55"
+        },
+        {
+            "serviceDay": "THURSDAY",
+            "routeId": "B",
+            "stopId": "university-headquarters",
+            "direction": "TO_YEIN",
+            "originZone": "MAIN",
+            "destinationZone": "YEIN",
+            "departureTime": "17:55",
+            "arrivalTime": "18:00"
+        },
+        {
+            "serviceDay": "THURSDAY",
+            "routeId": "A",
+            "stopId": "one-room",
+            "direction": "TO_MAIN",
+            "originZone": "ONE_ROOM",
+            "destinationZone": "MAIN",
+            "departureTime": "18:00",
+            "arrivalTime": "18:05"
+        },
+        {
+            "serviceDay": "THURSDAY",
+            "routeId": "B",
+            "stopId": "yein",
+            "direction": "TO_MAIN",
+            "originZone": "YEIN",
+            "destinationZone": "MAIN",
+            "departureTime": "18:10",
+            "arrivalTime": "18:15"
+        },
+        {
+            "serviceDay": "THURSDAY",
+            "routeId": "B-evening",
+            "stopId": "yein",
+            "direction": "TO_MAIN",
+            "originZone": "YEIN",
+            "destinationZone": "MAIN",
+            "departureTime": "18:40",
+            "arrivalTime": "18:45"
+        },
+        {
+            "serviceDay": "THURSDAY",
+            "routeId": "A-evening",
+            "stopId": "one-room",
+            "direction": "TO_MAIN",
+            "originZone": "ONE_ROOM",
+            "destinationZone": "MAIN",
+            "departureTime": "18:50",
+            "arrivalTime": "18:55"
+        },
+        {
+            "serviceDay": "THURSDAY",
+            "routeId": "A-evening",
+            "stopId": "stadium-stop",
+            "direction": "TO_YEIN",
+            "originZone": "MAIN",
+            "destinationZone": "YEIN",
+            "departureTime": "18:55",
+            "arrivalTime": "19:00"
+        },
+        {
+            "serviceDay": "THURSDAY",
+            "routeId": "B-evening",
+            "stopId": "stadium-stop",
+            "direction": "TO_YEIN",
+            "originZone": "MAIN",
+            "destinationZone": "YEIN",
+            "departureTime": "18:55",
+            "arrivalTime": "19:00"
+        },
+        {
+            "serviceDay": "THURSDAY",
+            "routeId": "B-evening",
+            "stopId": "yein",
+            "direction": "TO_MAIN",
+            "originZone": "YEIN",
+            "destinationZone": "MAIN",
+            "departureTime": "19:00",
+            "arrivalTime": "19:05"
+        },
+        {
+            "serviceDay": "THURSDAY",
+            "routeId": "A-evening",
+            "stopId": "one-room",
+            "direction": "TO_MAIN",
+            "originZone": "ONE_ROOM",
+            "destinationZone": "MAIN",
+            "departureTime": "19:20",
+            "arrivalTime": "19:25"
+        },
+        {
+            "serviceDay": "THURSDAY",
+            "routeId": "A-evening",
+            "stopId": "stadium-stop",
+            "direction": "TO_YEIN",
+            "originZone": "MAIN",
+            "destinationZone": "YEIN",
+            "departureTime": "19:25",
+            "arrivalTime": "19:30"
+        },
+        {
+            "serviceDay": "THURSDAY",
+            "routeId": "B-evening",
+            "stopId": "stadium-stop",
+            "direction": "TO_YEIN",
+            "originZone": "MAIN",
+            "destinationZone": "YEIN",
+            "departureTime": "19:25",
+            "arrivalTime": "19:30"
+        },
+        {
+            "serviceDay": "THURSDAY",
+            "routeId": "B-evening",
+            "stopId": "yein",
+            "direction": "TO_MAIN",
+            "originZone": "YEIN",
+            "destinationZone": "MAIN",
+            "departureTime": "19:30",
+            "arrivalTime": "19:35"
+        },
+        {
+            "serviceDay": "THURSDAY",
+            "routeId": "A-evening",
+            "stopId": "one-room",
+            "direction": "TO_MAIN",
+            "originZone": "ONE_ROOM",
+            "destinationZone": "MAIN",
+            "departureTime": "19:45",
+            "arrivalTime": "19:50"
+        },
+        {
+            "serviceDay": "THURSDAY",
+            "routeId": "A-evening",
+            "stopId": "stadium-stop",
+            "direction": "TO_YEIN",
+            "originZone": "MAIN",
+            "destinationZone": "YEIN",
+            "departureTime": "19:50",
+            "arrivalTime": "19:55"
+        },
+        {
+            "serviceDay": "THURSDAY",
+            "routeId": "B-evening",
+            "stopId": "stadium-stop",
+            "direction": "TO_YEIN",
+            "originZone": "MAIN",
+            "destinationZone": "YEIN",
+            "departureTime": "19:50",
+            "arrivalTime": "19:55"
+        },
+        {
+            "serviceDay": "THURSDAY",
+            "routeId": "B-evening",
+            "stopId": "yein",
+            "direction": "TO_MAIN",
+            "originZone": "YEIN",
+            "destinationZone": "MAIN",
+            "departureTime": "19:55",
+            "arrivalTime": "20:00"
+        },
+        {
+            "serviceDay": "THURSDAY",
+            "routeId": "A-evening",
+            "stopId": "one-room",
+            "direction": "TO_MAIN",
+            "originZone": "ONE_ROOM",
+            "destinationZone": "MAIN",
+            "departureTime": "20:45",
+            "arrivalTime": "20:50"
+        },
+        {
+            "serviceDay": "THURSDAY",
+            "routeId": "A-evening",
+            "stopId": "stadium-stop",
+            "direction": "TO_YEIN",
+            "originZone": "MAIN",
+            "destinationZone": "YEIN",
+            "departureTime": "20:50",
+            "arrivalTime": "20:55"
+        },
+        {
+            "serviceDay": "THURSDAY",
+            "routeId": "B-evening",
+            "stopId": "stadium-stop",
+            "direction": "TO_YEIN",
+            "originZone": "MAIN",
+            "destinationZone": "YEIN",
+            "departureTime": "20:50",
+            "arrivalTime": "20:55"
+        },
+        {
+            "serviceDay": "THURSDAY",
+            "routeId": "B-evening",
+            "stopId": "yein",
+            "direction": "TO_MAIN",
+            "originZone": "YEIN",
+            "destinationZone": "MAIN",
+            "departureTime": "20:55",
+            "arrivalTime": "21:00"
+        },
+        {
+            "serviceDay": "THURSDAY",
+            "routeId": "A-evening",
+            "stopId": "one-room",
+            "direction": "TO_MAIN",
+            "originZone": "ONE_ROOM",
+            "destinationZone": "MAIN",
+            "departureTime": "21:25",
+            "arrivalTime": "21:30"
+        },
+        {
+            "serviceDay": "THURSDAY",
+            "routeId": "A-evening",
+            "stopId": "stadium-stop",
+            "direction": "TO_YEIN",
+            "originZone": "MAIN",
+            "destinationZone": "YEIN",
+            "departureTime": "21:30",
+            "arrivalTime": "21:35"
+        },
+        {
+            "serviceDay": "THURSDAY",
+            "routeId": "B-evening",
+            "stopId": "stadium-stop",
+            "direction": "TO_YEIN",
+            "originZone": "MAIN",
+            "destinationZone": "YEIN",
+            "departureTime": "21:30",
+            "arrivalTime": "21:35"
+        },
+        {
+            "serviceDay": "THURSDAY",
+            "routeId": "B-evening",
+            "stopId": "yein",
+            "direction": "TO_MAIN",
+            "originZone": "YEIN",
+            "destinationZone": "MAIN",
+            "departureTime": "21:35",
+            "arrivalTime": "21:40"
+        },
+        {
+            "serviceDay": "THURSDAY",
+            "routeId": "A-evening",
+            "stopId": "one-room",
+            "direction": "TO_MAIN",
+            "originZone": "ONE_ROOM",
+            "destinationZone": "MAIN",
+            "departureTime": "21:45",
+            "arrivalTime": "21:50"
+        },
+        {
+            "serviceDay": "THURSDAY",
+            "routeId": "A-evening",
+            "stopId": "stadium-stop",
+            "direction": "TO_YEIN",
+            "originZone": "MAIN",
+            "destinationZone": "YEIN",
+            "departureTime": "21:50",
+            "arrivalTime": "21:55"
+        },
+        {
+            "serviceDay": "THURSDAY",
+            "routeId": "B-evening",
+            "stopId": "stadium-stop",
+            "direction": "TO_YEIN",
+            "originZone": "MAIN",
+            "destinationZone": "YEIN",
+            "departureTime": "21:50",
+            "arrivalTime": "21:55"
+        },
+        {
+            "serviceDay": "THURSDAY",
+            "routeId": "B-evening",
+            "stopId": "yein",
+            "direction": "TO_MAIN",
+            "originZone": "YEIN",
+            "destinationZone": "MAIN",
+            "departureTime": "21:55",
+            "arrivalTime": "22:00"
+        },
+        {
+            "serviceDay": "FRIDAY",
+            "routeId": "A",
+            "stopId": "one-room",
+            "direction": "TO_MAIN",
+            "originZone": "ONE_ROOM",
+            "destinationZone": "MAIN",
+            "departureTime": "08:20",
+            "arrivalTime": "08:25"
+        },
+        {
+            "serviceDay": "FRIDAY",
+            "routeId": "B",
+            "stopId": "university-headquarters",
+            "direction": "TO_YEIN",
+            "originZone": "MAIN",
+            "destinationZone": "YEIN",
+            "departureTime": "08:25",
+            "arrivalTime": "08:30"
+        },
+        {
+            "serviceDay": "FRIDAY",
+            "routeId": "B",
+            "stopId": "yein",
+            "direction": "TO_MAIN",
+            "originZone": "YEIN",
+            "destinationZone": "MAIN",
+            "departureTime": "08:30",
+            "arrivalTime": "08:35"
+        },
+        {
+            "serviceDay": "FRIDAY",
+            "routeId": "B",
+            "stopId": "university-headquarters",
+            "direction": "TO_YEIN",
+            "originZone": "MAIN",
+            "destinationZone": "YEIN",
+            "departureTime": "08:35",
+            "arrivalTime": "08:40"
+        },
+        {
+            "serviceDay": "FRIDAY",
+            "routeId": "A",
+            "stopId": "one-room",
+            "direction": "TO_MAIN",
+            "originZone": "ONE_ROOM",
+            "destinationZone": "MAIN",
+            "departureTime": "08:40",
+            "arrivalTime": "08:45"
+        },
+        {
+            "serviceDay": "FRIDAY",
+            "routeId": "B",
+            "stopId": "yein",
+            "direction": "TO_MAIN",
+            "originZone": "YEIN",
+            "destinationZone": "MAIN",
+            "departureTime": "08:40",
+            "arrivalTime": "08:45"
+        },
+        {
+            "serviceDay": "FRIDAY",
+            "routeId": "A",
+            "stopId": "university-headquarters",
+            "direction": "TO_ONE_ROOM",
+            "originZone": "MAIN",
+            "destinationZone": "ONE_ROOM",
+            "departureTime": "08:45",
+            "arrivalTime": "08:50"
+        },
+        {
+            "serviceDay": "FRIDAY",
+            "routeId": "B",
+            "stopId": "university-headquarters",
+            "direction": "TO_YEIN",
+            "originZone": "MAIN",
+            "destinationZone": "YEIN",
+            "departureTime": "08:45",
+            "arrivalTime": "08:50"
+        },
+        {
+            "serviceDay": "FRIDAY",
+            "routeId": "A",
+            "stopId": "one-room",
+            "direction": "TO_MAIN",
+            "originZone": "ONE_ROOM",
+            "destinationZone": "MAIN",
+            "departureTime": "08:50",
+            "arrivalTime": "08:55"
+        },
+        {
+            "serviceDay": "FRIDAY",
+            "routeId": "B",
+            "stopId": "yein",
+            "direction": "TO_MAIN",
+            "originZone": "YEIN",
+            "destinationZone": "MAIN",
+            "departureTime": "08:50",
+            "arrivalTime": "08:55"
+        },
+        {
+            "serviceDay": "FRIDAY",
+            "routeId": "A",
+            "stopId": "one-room",
+            "direction": "TO_MAIN",
+            "originZone": "ONE_ROOM",
+            "destinationZone": "MAIN",
+            "departureTime": "08:55",
+            "arrivalTime": "09:00"
+        },
+        {
+            "serviceDay": "FRIDAY",
+            "routeId": "B",
+            "stopId": "university-headquarters",
+            "direction": "TO_YEIN",
+            "originZone": "MAIN",
+            "destinationZone": "YEIN",
+            "departureTime": "08:55",
+            "arrivalTime": "09:00"
+        },
+        {
+            "serviceDay": "FRIDAY",
+            "routeId": "B",
+            "stopId": "yein",
+            "direction": "TO_MAIN",
+            "originZone": "YEIN",
+            "destinationZone": "MAIN",
+            "departureTime": "09:00",
+            "arrivalTime": "09:05"
+        },
+        {
+            "serviceDay": "FRIDAY",
+            "routeId": "A",
+            "stopId": "one-room",
+            "direction": "TO_MAIN",
+            "originZone": "ONE_ROOM",
+            "destinationZone": "MAIN",
+            "departureTime": "09:30",
+            "arrivalTime": "09:35"
+        },
+        {
+            "serviceDay": "FRIDAY",
+            "routeId": "A",
+            "stopId": "university-headquarters",
+            "direction": "TO_ONE_ROOM",
+            "originZone": "MAIN",
+            "destinationZone": "ONE_ROOM",
+            "departureTime": "09:35",
+            "arrivalTime": "09:40"
+        },
+        {
+            "serviceDay": "FRIDAY",
+            "routeId": "B",
+            "stopId": "university-headquarters",
+            "direction": "TO_YEIN",
+            "originZone": "MAIN",
+            "destinationZone": "YEIN",
+            "departureTime": "09:35",
+            "arrivalTime": "09:40"
+        },
+        {
+            "serviceDay": "FRIDAY",
+            "routeId": "A",
+            "stopId": "one-room",
+            "direction": "TO_MAIN",
+            "originZone": "ONE_ROOM",
+            "destinationZone": "MAIN",
+            "departureTime": "09:40",
+            "arrivalTime": "09:45"
+        },
+        {
+            "serviceDay": "FRIDAY",
+            "routeId": "B",
+            "stopId": "yein",
+            "direction": "TO_MAIN",
+            "originZone": "YEIN",
+            "destinationZone": "MAIN",
+            "departureTime": "09:40",
+            "arrivalTime": "09:45"
+        },
+        {
+            "serviceDay": "FRIDAY",
+            "routeId": "A",
+            "stopId": "university-headquarters",
+            "direction": "TO_ONE_ROOM",
+            "originZone": "MAIN",
+            "destinationZone": "ONE_ROOM",
+            "departureTime": "09:45",
+            "arrivalTime": "09:50"
+        },
+        {
+            "serviceDay": "FRIDAY",
+            "routeId": "B",
+            "stopId": "university-headquarters",
+            "direction": "TO_YEIN",
+            "originZone": "MAIN",
+            "destinationZone": "YEIN",
+            "departureTime": "09:45",
+            "arrivalTime": "09:50"
+        },
+        {
+            "serviceDay": "FRIDAY",
+            "routeId": "A",
+            "stopId": "one-room",
+            "direction": "TO_MAIN",
+            "originZone": "ONE_ROOM",
+            "destinationZone": "MAIN",
+            "departureTime": "09:50",
+            "arrivalTime": "09:55"
+        },
+        {
+            "serviceDay": "FRIDAY",
+            "routeId": "B",
+            "stopId": "yein",
+            "direction": "TO_MAIN",
+            "originZone": "YEIN",
+            "destinationZone": "MAIN",
+            "departureTime": "09:50",
+            "arrivalTime": "09:55"
+        },
+        {
+            "serviceDay": "FRIDAY",
+            "routeId": "A",
+            "stopId": "one-room",
+            "direction": "TO_MAIN",
+            "originZone": "ONE_ROOM",
+            "destinationZone": "MAIN",
+            "departureTime": "09:55",
+            "arrivalTime": "10:00"
+        },
+        {
+            "serviceDay": "FRIDAY",
+            "routeId": "B",
+            "stopId": "university-headquarters",
+            "direction": "TO_YEIN",
+            "originZone": "MAIN",
+            "destinationZone": "YEIN",
+            "departureTime": "09:55",
+            "arrivalTime": "10:00"
+        },
+        {
+            "serviceDay": "FRIDAY",
+            "routeId": "B",
+            "stopId": "yein",
+            "direction": "TO_MAIN",
+            "originZone": "YEIN",
+            "destinationZone": "MAIN",
+            "departureTime": "10:00",
+            "arrivalTime": "10:05"
+        },
+        {
+            "serviceDay": "FRIDAY",
+            "routeId": "A",
+            "stopId": "one-room",
+            "direction": "TO_MAIN",
+            "originZone": "ONE_ROOM",
+            "destinationZone": "MAIN",
+            "departureTime": "10:30",
+            "arrivalTime": "10:35"
+        },
+        {
+            "serviceDay": "FRIDAY",
+            "routeId": "A",
+            "stopId": "university-headquarters",
+            "direction": "TO_ONE_ROOM",
+            "originZone": "MAIN",
+            "destinationZone": "ONE_ROOM",
+            "departureTime": "10:35",
+            "arrivalTime": "10:40"
+        },
+        {
+            "serviceDay": "FRIDAY",
+            "routeId": "B",
+            "stopId": "university-headquarters",
+            "direction": "TO_YEIN",
+            "originZone": "MAIN",
+            "destinationZone": "YEIN",
+            "departureTime": "10:35",
+            "arrivalTime": "10:40"
+        },
+        {
+            "serviceDay": "FRIDAY",
+            "routeId": "A",
+            "stopId": "one-room",
+            "direction": "TO_MAIN",
+            "originZone": "ONE_ROOM",
+            "destinationZone": "MAIN",
+            "departureTime": "10:40",
+            "arrivalTime": "10:45"
+        },
+        {
+            "serviceDay": "FRIDAY",
+            "routeId": "B",
+            "stopId": "yein",
+            "direction": "TO_MAIN",
+            "originZone": "YEIN",
+            "destinationZone": "MAIN",
+            "departureTime": "10:40",
+            "arrivalTime": "10:45"
+        },
+        {
+            "serviceDay": "FRIDAY",
+            "routeId": "A",
+            "stopId": "university-headquarters",
+            "direction": "TO_ONE_ROOM",
+            "originZone": "MAIN",
+            "destinationZone": "ONE_ROOM",
+            "departureTime": "10:45",
+            "arrivalTime": "10:50"
+        },
+        {
+            "serviceDay": "FRIDAY",
+            "routeId": "B",
+            "stopId": "university-headquarters",
+            "direction": "TO_YEIN",
+            "originZone": "MAIN",
+            "destinationZone": "YEIN",
+            "departureTime": "10:45",
+            "arrivalTime": "10:50"
+        },
+        {
+            "serviceDay": "FRIDAY",
+            "routeId": "A",
+            "stopId": "one-room",
+            "direction": "TO_MAIN",
+            "originZone": "ONE_ROOM",
+            "destinationZone": "MAIN",
+            "departureTime": "10:50",
+            "arrivalTime": "10:55"
+        },
+        {
+            "serviceDay": "FRIDAY",
+            "routeId": "B",
+            "stopId": "yein",
+            "direction": "TO_MAIN",
+            "originZone": "YEIN",
+            "destinationZone": "MAIN",
+            "departureTime": "10:50",
+            "arrivalTime": "10:55"
+        },
+        {
+            "serviceDay": "FRIDAY",
+            "routeId": "B",
+            "stopId": "university-headquarters",
+            "direction": "TO_YEIN",
+            "originZone": "MAIN",
+            "destinationZone": "YEIN",
+            "departureTime": "10:55",
+            "arrivalTime": "11:00"
+        },
+        {
+            "serviceDay": "FRIDAY",
+            "routeId": "B",
+            "stopId": "yein",
+            "direction": "TO_MAIN",
+            "originZone": "YEIN",
+            "destinationZone": "MAIN",
+            "departureTime": "11:00",
+            "arrivalTime": "11:05"
+        },
+        {
+            "serviceDay": "FRIDAY",
+            "routeId": "A",
+            "stopId": "one-room",
+            "direction": "TO_MAIN",
+            "originZone": "ONE_ROOM",
+            "destinationZone": "MAIN",
+            "departureTime": "11:30",
+            "arrivalTime": "11:35"
+        },
+        {
+            "serviceDay": "FRIDAY",
+            "routeId": "A",
+            "stopId": "university-headquarters",
+            "direction": "TO_ONE_ROOM",
+            "originZone": "MAIN",
+            "destinationZone": "ONE_ROOM",
+            "departureTime": "11:35",
+            "arrivalTime": "11:40"
+        },
+        {
+            "serviceDay": "FRIDAY",
+            "routeId": "B",
+            "stopId": "university-headquarters",
+            "direction": "TO_YEIN",
+            "originZone": "MAIN",
+            "destinationZone": "YEIN",
+            "departureTime": "11:35",
+            "arrivalTime": "11:40"
+        },
+        {
+            "serviceDay": "FRIDAY",
+            "routeId": "A",
+            "stopId": "one-room",
+            "direction": "TO_MAIN",
+            "originZone": "ONE_ROOM",
+            "destinationZone": "MAIN",
+            "departureTime": "11:40",
+            "arrivalTime": "11:45"
+        },
+        {
+            "serviceDay": "FRIDAY",
+            "routeId": "B",
+            "stopId": "yein",
+            "direction": "TO_MAIN",
+            "originZone": "YEIN",
+            "destinationZone": "MAIN",
+            "departureTime": "11:40",
+            "arrivalTime": "11:45"
+        },
+        {
+            "serviceDay": "FRIDAY",
+            "routeId": "A",
+            "stopId": "university-headquarters",
+            "direction": "TO_ONE_ROOM",
+            "originZone": "MAIN",
+            "destinationZone": "ONE_ROOM",
+            "departureTime": "11:45",
+            "arrivalTime": "11:50"
+        },
+        {
+            "serviceDay": "FRIDAY",
+            "routeId": "B",
+            "stopId": "university-headquarters",
+            "direction": "TO_YEIN",
+            "originZone": "MAIN",
+            "destinationZone": "YEIN",
+            "departureTime": "11:45",
+            "arrivalTime": "11:50"
+        },
+        {
+            "serviceDay": "FRIDAY",
+            "routeId": "A",
+            "stopId": "one-room",
+            "direction": "TO_MAIN",
+            "originZone": "ONE_ROOM",
+            "destinationZone": "MAIN",
+            "departureTime": "11:50",
+            "arrivalTime": "11:55"
+        },
+        {
+            "serviceDay": "FRIDAY",
+            "routeId": "B",
+            "stopId": "yein",
+            "direction": "TO_MAIN",
+            "originZone": "YEIN",
+            "destinationZone": "MAIN",
+            "departureTime": "11:50",
+            "arrivalTime": "11:55"
+        },
+        {
+            "serviceDay": "FRIDAY",
+            "routeId": "B",
+            "stopId": "university-headquarters",
+            "direction": "TO_YEIN",
+            "originZone": "MAIN",
+            "destinationZone": "YEIN",
+            "departureTime": "11:55",
+            "arrivalTime": "12:00"
+        },
+        {
+            "serviceDay": "FRIDAY",
+            "routeId": "B",
+            "stopId": "yein",
+            "direction": "TO_MAIN",
+            "originZone": "YEIN",
+            "destinationZone": "MAIN",
+            "departureTime": "12:00",
+            "arrivalTime": "12:05"
+        },
+        {
+            "serviceDay": "FRIDAY",
+            "routeId": "A",
+            "stopId": "one-room",
+            "direction": "TO_MAIN",
+            "originZone": "ONE_ROOM",
+            "destinationZone": "MAIN",
+            "departureTime": "12:30",
+            "arrivalTime": "12:35"
+        },
+        {
+            "serviceDay": "FRIDAY",
+            "routeId": "A",
+            "stopId": "university-headquarters",
+            "direction": "TO_ONE_ROOM",
+            "originZone": "MAIN",
+            "destinationZone": "ONE_ROOM",
+            "departureTime": "12:35",
+            "arrivalTime": "12:40"
+        },
+        {
+            "serviceDay": "FRIDAY",
+            "routeId": "B",
+            "stopId": "university-headquarters",
+            "direction": "TO_YEIN",
+            "originZone": "MAIN",
+            "destinationZone": "YEIN",
+            "departureTime": "12:35",
+            "arrivalTime": "12:40"
+        },
+        {
+            "serviceDay": "FRIDAY",
+            "routeId": "A",
+            "stopId": "one-room",
+            "direction": "TO_MAIN",
+            "originZone": "ONE_ROOM",
+            "destinationZone": "MAIN",
+            "departureTime": "12:40",
+            "arrivalTime": "12:45"
+        },
+        {
+            "serviceDay": "FRIDAY",
+            "routeId": "B",
+            "stopId": "yein",
+            "direction": "TO_MAIN",
+            "originZone": "YEIN",
+            "destinationZone": "MAIN",
+            "departureTime": "12:40",
+            "arrivalTime": "12:45"
+        },
+        {
+            "serviceDay": "FRIDAY",
+            "routeId": "A",
+            "stopId": "university-headquarters",
+            "direction": "TO_ONE_ROOM",
+            "originZone": "MAIN",
+            "destinationZone": "ONE_ROOM",
+            "departureTime": "12:45",
+            "arrivalTime": "12:50"
+        },
+        {
+            "serviceDay": "FRIDAY",
+            "routeId": "B",
+            "stopId": "university-headquarters",
+            "direction": "TO_YEIN",
+            "originZone": "MAIN",
+            "destinationZone": "YEIN",
+            "departureTime": "12:45",
+            "arrivalTime": "12:50"
+        },
+        {
+            "serviceDay": "FRIDAY",
+            "routeId": "A",
+            "stopId": "one-room",
+            "direction": "TO_MAIN",
+            "originZone": "ONE_ROOM",
+            "destinationZone": "MAIN",
+            "departureTime": "12:50",
+            "arrivalTime": "12:55"
+        },
+        {
+            "serviceDay": "FRIDAY",
+            "routeId": "B",
+            "stopId": "yein",
+            "direction": "TO_MAIN",
+            "originZone": "YEIN",
+            "destinationZone": "MAIN",
+            "departureTime": "12:50",
+            "arrivalTime": "12:55"
+        },
+        {
+            "serviceDay": "FRIDAY",
+            "routeId": "B",
+            "stopId": "university-headquarters",
+            "direction": "TO_YEIN",
+            "originZone": "MAIN",
+            "destinationZone": "YEIN",
+            "departureTime": "12:55",
+            "arrivalTime": "13:00"
+        },
+        {
+            "serviceDay": "FRIDAY",
+            "routeId": "B",
+            "stopId": "yein",
+            "direction": "TO_MAIN",
+            "originZone": "YEIN",
+            "destinationZone": "MAIN",
+            "departureTime": "13:00",
+            "arrivalTime": "13:05"
+        },
+        {
+            "serviceDay": "FRIDAY",
+            "routeId": "A",
+            "stopId": "one-room",
+            "direction": "TO_MAIN",
+            "originZone": "ONE_ROOM",
+            "destinationZone": "MAIN",
+            "departureTime": "13:40",
+            "arrivalTime": "13:45"
+        },
+        {
+            "serviceDay": "FRIDAY",
+            "routeId": "A",
+            "stopId": "university-headquarters",
+            "direction": "TO_ONE_ROOM",
+            "originZone": "MAIN",
+            "destinationZone": "ONE_ROOM",
+            "departureTime": "13:45",
+            "arrivalTime": "13:50"
+        },
+        {
+            "serviceDay": "FRIDAY",
+            "routeId": "B",
+            "stopId": "university-headquarters",
+            "direction": "TO_YEIN",
+            "originZone": "MAIN",
+            "destinationZone": "YEIN",
+            "departureTime": "13:45",
+            "arrivalTime": "13:50"
+        },
+        {
+            "serviceDay": "FRIDAY",
+            "routeId": "A",
+            "stopId": "one-room",
+            "direction": "TO_MAIN",
+            "originZone": "ONE_ROOM",
+            "destinationZone": "MAIN",
+            "departureTime": "13:50",
+            "arrivalTime": "13:55"
+        },
+        {
+            "serviceDay": "FRIDAY",
+            "routeId": "B",
+            "stopId": "yein",
+            "direction": "TO_MAIN",
+            "originZone": "YEIN",
+            "destinationZone": "MAIN",
+            "departureTime": "13:50",
+            "arrivalTime": "13:55"
+        },
+        {
+            "serviceDay": "FRIDAY",
+            "routeId": "B",
+            "stopId": "university-headquarters",
+            "direction": "TO_YEIN",
+            "originZone": "MAIN",
+            "destinationZone": "YEIN",
+            "departureTime": "13:55",
+            "arrivalTime": "14:00"
+        },
+        {
+            "serviceDay": "FRIDAY",
+            "routeId": "B",
+            "stopId": "yein",
+            "direction": "TO_MAIN",
+            "originZone": "YEIN",
+            "destinationZone": "MAIN",
+            "departureTime": "14:00",
+            "arrivalTime": "14:05"
+        },
+        {
+            "serviceDay": "FRIDAY",
+            "routeId": "A",
+            "stopId": "one-room",
+            "direction": "TO_MAIN",
+            "originZone": "ONE_ROOM",
+            "destinationZone": "MAIN",
+            "departureTime": "14:40",
+            "arrivalTime": "14:45"
+        },
+        {
+            "serviceDay": "FRIDAY",
+            "routeId": "A",
+            "stopId": "university-headquarters",
+            "direction": "TO_ONE_ROOM",
+            "originZone": "MAIN",
+            "destinationZone": "ONE_ROOM",
+            "departureTime": "14:45",
+            "arrivalTime": "14:50"
+        },
+        {
+            "serviceDay": "FRIDAY",
+            "routeId": "B",
+            "stopId": "university-headquarters",
+            "direction": "TO_YEIN",
+            "originZone": "MAIN",
+            "destinationZone": "YEIN",
+            "departureTime": "14:45",
+            "arrivalTime": "14:50"
+        },
+        {
+            "serviceDay": "FRIDAY",
+            "routeId": "A",
+            "stopId": "one-room",
+            "direction": "TO_MAIN",
+            "originZone": "ONE_ROOM",
+            "destinationZone": "MAIN",
+            "departureTime": "14:50",
+            "arrivalTime": "14:55"
+        },
+        {
+            "serviceDay": "FRIDAY",
+            "routeId": "B",
+            "stopId": "yein",
+            "direction": "TO_MAIN",
+            "originZone": "YEIN",
+            "destinationZone": "MAIN",
+            "departureTime": "14:50",
+            "arrivalTime": "14:55"
+        },
+        {
+            "serviceDay": "FRIDAY",
+            "routeId": "B",
+            "stopId": "university-headquarters",
+            "direction": "TO_YEIN",
+            "originZone": "MAIN",
+            "destinationZone": "YEIN",
+            "departureTime": "14:55",
+            "arrivalTime": "15:00"
+        },
+        {
+            "serviceDay": "FRIDAY",
+            "routeId": "B",
+            "stopId": "yein",
+            "direction": "TO_MAIN",
+            "originZone": "YEIN",
+            "destinationZone": "MAIN",
+            "departureTime": "15:00",
+            "arrivalTime": "15:05"
+        },
+        {
+            "serviceDay": "FRIDAY",
+            "routeId": "A",
+            "stopId": "one-room",
+            "direction": "TO_MAIN",
+            "originZone": "ONE_ROOM",
+            "destinationZone": "MAIN",
+            "departureTime": "15:40",
+            "arrivalTime": "15:45"
+        },
+        {
+            "serviceDay": "FRIDAY",
+            "routeId": "A",
+            "stopId": "university-headquarters",
+            "direction": "TO_ONE_ROOM",
+            "originZone": "MAIN",
+            "destinationZone": "ONE_ROOM",
+            "departureTime": "15:45",
+            "arrivalTime": "15:50"
+        },
+        {
+            "serviceDay": "FRIDAY",
+            "routeId": "B",
+            "stopId": "university-headquarters",
+            "direction": "TO_YEIN",
+            "originZone": "MAIN",
+            "destinationZone": "YEIN",
+            "departureTime": "15:45",
+            "arrivalTime": "15:50"
+        },
+        {
+            "serviceDay": "FRIDAY",
+            "routeId": "A",
+            "stopId": "one-room",
+            "direction": "TO_MAIN",
+            "originZone": "ONE_ROOM",
+            "destinationZone": "MAIN",
+            "departureTime": "15:50",
+            "arrivalTime": "15:55"
+        },
+        {
+            "serviceDay": "FRIDAY",
+            "routeId": "B",
+            "stopId": "yein",
+            "direction": "TO_MAIN",
+            "originZone": "YEIN",
+            "destinationZone": "MAIN",
+            "departureTime": "15:50",
+            "arrivalTime": "15:55"
+        },
+        {
+            "serviceDay": "FRIDAY",
+            "routeId": "B",
+            "stopId": "university-headquarters",
+            "direction": "TO_YEIN",
+            "originZone": "MAIN",
+            "destinationZone": "YEIN",
+            "departureTime": "15:55",
+            "arrivalTime": "16:00"
+        },
+        {
+            "serviceDay": "FRIDAY",
+            "routeId": "B",
+            "stopId": "yein",
+            "direction": "TO_MAIN",
+            "originZone": "YEIN",
+            "destinationZone": "MAIN",
+            "departureTime": "16:00",
+            "arrivalTime": "16:05"
+        },
+        {
+            "serviceDay": "FRIDAY",
+            "routeId": "A",
+            "stopId": "one-room",
+            "direction": "TO_MAIN",
+            "originZone": "ONE_ROOM",
+            "destinationZone": "MAIN",
+            "departureTime": "16:40",
+            "arrivalTime": "16:45"
+        },
+        {
+            "serviceDay": "FRIDAY",
+            "routeId": "A",
+            "stopId": "university-headquarters",
+            "direction": "TO_ONE_ROOM",
+            "originZone": "MAIN",
+            "destinationZone": "ONE_ROOM",
+            "departureTime": "16:45",
+            "arrivalTime": "16:50"
+        },
+        {
+            "serviceDay": "FRIDAY",
+            "routeId": "B",
+            "stopId": "university-headquarters",
+            "direction": "TO_YEIN",
+            "originZone": "MAIN",
+            "destinationZone": "YEIN",
+            "departureTime": "16:45",
+            "arrivalTime": "16:50"
+        },
+        {
+            "serviceDay": "FRIDAY",
+            "routeId": "A",
+            "stopId": "one-room",
+            "direction": "TO_MAIN",
+            "originZone": "ONE_ROOM",
+            "destinationZone": "MAIN",
+            "departureTime": "16:50",
+            "arrivalTime": "16:55"
+        },
+        {
+            "serviceDay": "FRIDAY",
+            "routeId": "B",
+            "stopId": "yein",
+            "direction": "TO_MAIN",
+            "originZone": "YEIN",
+            "destinationZone": "MAIN",
+            "departureTime": "16:50",
+            "arrivalTime": "16:55"
+        },
+        {
+            "serviceDay": "FRIDAY",
+            "routeId": "B",
+            "stopId": "university-headquarters",
+            "direction": "TO_YEIN",
+            "originZone": "MAIN",
+            "destinationZone": "YEIN",
+            "departureTime": "16:55",
+            "arrivalTime": "17:00"
+        },
+        {
+            "serviceDay": "FRIDAY",
+            "routeId": "B",
+            "stopId": "yein",
+            "direction": "TO_MAIN",
+            "originZone": "YEIN",
+            "destinationZone": "MAIN",
+            "departureTime": "17:00",
+            "arrivalTime": "17:05"
+        },
+        {
+            "serviceDay": "FRIDAY",
+            "routeId": "A",
+            "stopId": "one-room",
+            "direction": "TO_MAIN",
+            "originZone": "ONE_ROOM",
+            "destinationZone": "MAIN",
+            "departureTime": "17:40",
+            "arrivalTime": "17:45"
+        },
+        {
+            "serviceDay": "FRIDAY",
+            "routeId": "A",
+            "stopId": "university-headquarters",
+            "direction": "TO_ONE_ROOM",
+            "originZone": "MAIN",
+            "destinationZone": "ONE_ROOM",
+            "departureTime": "17:45",
+            "arrivalTime": "17:50"
+        },
+        {
+            "serviceDay": "FRIDAY",
+            "routeId": "B",
+            "stopId": "university-headquarters",
+            "direction": "TO_YEIN",
+            "originZone": "MAIN",
+            "destinationZone": "YEIN",
+            "departureTime": "17:45",
+            "arrivalTime": "17:50"
+        },
+        {
+            "serviceDay": "FRIDAY",
+            "routeId": "A",
+            "stopId": "one-room",
+            "direction": "TO_MAIN",
+            "originZone": "ONE_ROOM",
+            "destinationZone": "MAIN",
+            "departureTime": "17:50",
+            "arrivalTime": "17:55"
+        },
+        {
+            "serviceDay": "FRIDAY",
+            "routeId": "B",
+            "stopId": "yein",
+            "direction": "TO_MAIN",
+            "originZone": "YEIN",
+            "destinationZone": "MAIN",
+            "departureTime": "17:50",
+            "arrivalTime": "17:55"
+        },
+        {
+            "serviceDay": "FRIDAY",
+            "routeId": "B",
+            "stopId": "university-headquarters",
+            "direction": "TO_YEIN",
+            "originZone": "MAIN",
+            "destinationZone": "YEIN",
+            "departureTime": "17:55",
+            "arrivalTime": "18:00"
+        },
+        {
+            "serviceDay": "FRIDAY",
+            "routeId": "A",
+            "stopId": "one-room",
+            "direction": "TO_MAIN",
+            "originZone": "ONE_ROOM",
+            "destinationZone": "MAIN",
+            "departureTime": "18:00",
+            "arrivalTime": "18:05"
+        },
+        {
+            "serviceDay": "FRIDAY",
+            "routeId": "B",
+            "stopId": "yein",
+            "direction": "TO_MAIN",
+            "originZone": "YEIN",
+            "destinationZone": "MAIN",
+            "departureTime": "18:10",
+            "arrivalTime": "18:15"
+        },
+        {
+            "serviceDay": "FRIDAY",
+            "routeId": "B-evening",
+            "stopId": "yein",
+            "direction": "TO_MAIN",
+            "originZone": "YEIN",
+            "destinationZone": "MAIN",
+            "departureTime": "18:40",
+            "arrivalTime": "18:45"
+        },
+        {
+            "serviceDay": "FRIDAY",
+            "routeId": "A-evening",
+            "stopId": "one-room",
+            "direction": "TO_MAIN",
+            "originZone": "ONE_ROOM",
+            "destinationZone": "MAIN",
+            "departureTime": "18:50",
+            "arrivalTime": "18:55"
+        },
+        {
+            "serviceDay": "FRIDAY",
+            "routeId": "A-evening",
+            "stopId": "stadium-stop",
+            "direction": "TO_YEIN",
+            "originZone": "MAIN",
+            "destinationZone": "YEIN",
+            "departureTime": "18:55",
+            "arrivalTime": "19:00"
+        },
+        {
+            "serviceDay": "FRIDAY",
+            "routeId": "B-evening",
+            "stopId": "stadium-stop",
+            "direction": "TO_YEIN",
+            "originZone": "MAIN",
+            "destinationZone": "YEIN",
+            "departureTime": "18:55",
+            "arrivalTime": "19:00"
+        },
+        {
+            "serviceDay": "FRIDAY",
+            "routeId": "B-evening",
+            "stopId": "yein",
+            "direction": "TO_MAIN",
+            "originZone": "YEIN",
+            "destinationZone": "MAIN",
+            "departureTime": "19:00",
+            "arrivalTime": "19:05"
+        },
+        {
+            "serviceDay": "FRIDAY",
+            "routeId": "A-evening",
+            "stopId": "one-room",
+            "direction": "TO_MAIN",
+            "originZone": "ONE_ROOM",
+            "destinationZone": "MAIN",
+            "departureTime": "19:20",
+            "arrivalTime": "19:25"
+        },
+        {
+            "serviceDay": "FRIDAY",
+            "routeId": "A-evening",
+            "stopId": "stadium-stop",
+            "direction": "TO_YEIN",
+            "originZone": "MAIN",
+            "destinationZone": "YEIN",
+            "departureTime": "19:25",
+            "arrivalTime": "19:30"
+        },
+        {
+            "serviceDay": "FRIDAY",
+            "routeId": "B-evening",
+            "stopId": "stadium-stop",
+            "direction": "TO_YEIN",
+            "originZone": "MAIN",
+            "destinationZone": "YEIN",
+            "departureTime": "19:25",
+            "arrivalTime": "19:30"
+        },
+        {
+            "serviceDay": "FRIDAY",
+            "routeId": "B-evening",
+            "stopId": "yein",
+            "direction": "TO_MAIN",
+            "originZone": "YEIN",
+            "destinationZone": "MAIN",
+            "departureTime": "19:30",
+            "arrivalTime": "19:35"
+        },
+        {
+            "serviceDay": "FRIDAY",
+            "routeId": "A-evening",
+            "stopId": "one-room",
+            "direction": "TO_MAIN",
+            "originZone": "ONE_ROOM",
+            "destinationZone": "MAIN",
+            "departureTime": "19:45",
+            "arrivalTime": "19:50"
+        },
+        {
+            "serviceDay": "FRIDAY",
+            "routeId": "A-evening",
+            "stopId": "stadium-stop",
+            "direction": "TO_YEIN",
+            "originZone": "MAIN",
+            "destinationZone": "YEIN",
+            "departureTime": "19:50",
+            "arrivalTime": "19:55"
+        },
+        {
+            "serviceDay": "FRIDAY",
+            "routeId": "B-evening",
+            "stopId": "stadium-stop",
+            "direction": "TO_YEIN",
+            "originZone": "MAIN",
+            "destinationZone": "YEIN",
+            "departureTime": "19:50",
+            "arrivalTime": "19:55"
+        },
+        {
+            "serviceDay": "FRIDAY",
+            "routeId": "B-evening",
+            "stopId": "yein",
+            "direction": "TO_MAIN",
+            "originZone": "YEIN",
+            "destinationZone": "MAIN",
+            "departureTime": "19:55",
+            "arrivalTime": "20:00"
+        },
+        {
+            "serviceDay": "FRIDAY",
+            "routeId": "A-evening",
+            "stopId": "one-room",
+            "direction": "TO_MAIN",
+            "originZone": "ONE_ROOM",
+            "destinationZone": "MAIN",
+            "departureTime": "20:45",
+            "arrivalTime": "20:50"
+        },
+        {
+            "serviceDay": "FRIDAY",
+            "routeId": "A-evening",
+            "stopId": "stadium-stop",
+            "direction": "TO_YEIN",
+            "originZone": "MAIN",
+            "destinationZone": "YEIN",
+            "departureTime": "20:50",
+            "arrivalTime": "20:55"
+        },
+        {
+            "serviceDay": "FRIDAY",
+            "routeId": "B-evening",
+            "stopId": "stadium-stop",
+            "direction": "TO_YEIN",
+            "originZone": "MAIN",
+            "destinationZone": "YEIN",
+            "departureTime": "20:50",
+            "arrivalTime": "20:55"
+        },
+        {
+            "serviceDay": "FRIDAY",
+            "routeId": "B-evening",
+            "stopId": "yein",
+            "direction": "TO_MAIN",
+            "originZone": "YEIN",
+            "destinationZone": "MAIN",
+            "departureTime": "20:55",
+            "arrivalTime": "21:00"
+        },
+        {
+            "serviceDay": "FRIDAY",
+            "routeId": "A-evening",
+            "stopId": "one-room",
+            "direction": "TO_MAIN",
+            "originZone": "ONE_ROOM",
+            "destinationZone": "MAIN",
+            "departureTime": "21:25",
+            "arrivalTime": "21:30"
+        },
+        {
+            "serviceDay": "FRIDAY",
+            "routeId": "A-evening",
+            "stopId": "stadium-stop",
+            "direction": "TO_YEIN",
+            "originZone": "MAIN",
+            "destinationZone": "YEIN",
+            "departureTime": "21:30",
+            "arrivalTime": "21:35"
+        },
+        {
+            "serviceDay": "FRIDAY",
+            "routeId": "B-evening",
+            "stopId": "stadium-stop",
+            "direction": "TO_YEIN",
+            "originZone": "MAIN",
+            "destinationZone": "YEIN",
+            "departureTime": "21:30",
+            "arrivalTime": "21:35"
+        },
+        {
+            "serviceDay": "FRIDAY",
+            "routeId": "B-evening",
+            "stopId": "yein",
+            "direction": "TO_MAIN",
+            "originZone": "YEIN",
+            "destinationZone": "MAIN",
+            "departureTime": "21:35",
+            "arrivalTime": "21:40"
+        },
+        {
+            "serviceDay": "FRIDAY",
+            "routeId": "A-evening",
+            "stopId": "one-room",
+            "direction": "TO_MAIN",
+            "originZone": "ONE_ROOM",
+            "destinationZone": "MAIN",
+            "departureTime": "21:45",
+            "arrivalTime": "21:50"
+        },
+        {
+            "serviceDay": "FRIDAY",
+            "routeId": "A-evening",
+            "stopId": "stadium-stop",
+            "direction": "TO_YEIN",
+            "originZone": "MAIN",
+            "destinationZone": "YEIN",
+            "departureTime": "21:50",
+            "arrivalTime": "21:55"
+        },
+        {
+            "serviceDay": "FRIDAY",
+            "routeId": "B-evening",
+            "stopId": "stadium-stop",
+            "direction": "TO_YEIN",
+            "originZone": "MAIN",
+            "destinationZone": "YEIN",
+            "departureTime": "21:50",
+            "arrivalTime": "21:55"
+        },
+        {
+            "serviceDay": "FRIDAY",
+            "routeId": "B-evening",
+            "stopId": "yein",
+            "direction": "TO_MAIN",
+            "originZone": "YEIN",
+            "destinationZone": "MAIN",
+            "departureTime": "21:55",
+            "arrivalTime": "22:00"
+        },
+        {
+            "serviceDay": "SUNDAY",
+            "routeId": "C",
+            "stopId": "one-room",
+            "direction": "TO_YEIN",
+            "originZone": "ONE_ROOM",
+            "destinationZone": "YEIN",
+            "departureTime": "17:00",
+            "arrivalTime": "17:10"
+        },
+        {
+            "serviceDay": "SUNDAY",
+            "routeId": "C",
+            "stopId": "yein",
+            "direction": "TO_ONE_ROOM",
+            "originZone": "YEIN",
+            "destinationZone": "ONE_ROOM",
+            "departureTime": "17:10",
+            "arrivalTime": "17:20"
+        },
+        {
+            "serviceDay": "SUNDAY",
+            "routeId": "C",
+            "stopId": "one-room",
+            "direction": "TO_YEIN",
+            "originZone": "ONE_ROOM",
+            "destinationZone": "YEIN",
+            "departureTime": "18:00",
+            "arrivalTime": "18:10"
+        },
+        {
+            "serviceDay": "SUNDAY",
+            "routeId": "C",
+            "stopId": "yein",
+            "direction": "TO_ONE_ROOM",
+            "originZone": "YEIN",
+            "destinationZone": "ONE_ROOM",
+            "departureTime": "18:10",
+            "arrivalTime": "18:20"
+        },
+        {
+            "serviceDay": "SUNDAY",
+            "routeId": "C",
+            "stopId": "one-room",
+            "direction": "TO_YEIN",
+            "originZone": "ONE_ROOM",
+            "destinationZone": "YEIN",
+            "departureTime": "19:00",
+            "arrivalTime": "19:10"
+        },
+        {
+            "serviceDay": "SUNDAY",
+            "routeId": "C",
+            "stopId": "yein",
+            "direction": "TO_ONE_ROOM",
+            "originZone": "YEIN",
+            "destinationZone": "ONE_ROOM",
+            "departureTime": "19:10",
+            "arrivalTime": "19:20"
+        },
+        {
+            "serviceDay": "SUNDAY",
+            "routeId": "C",
+            "stopId": "one-room",
+            "direction": "TO_YEIN",
+            "originZone": "ONE_ROOM",
+            "destinationZone": "YEIN",
+            "departureTime": "20:00",
+            "arrivalTime": "20:10"
+        },
+        {
+            "serviceDay": "SUNDAY",
+            "routeId": "C",
+            "stopId": "yein",
+            "direction": "TO_ONE_ROOM",
+            "originZone": "YEIN",
+            "destinationZone": "ONE_ROOM",
+            "departureTime": "20:10",
+            "arrivalTime": "20:20"
+        },
+        {
+            "serviceDay": "SUNDAY",
+            "routeId": "C",
+            "stopId": "one-room",
+            "direction": "TO_YEIN",
+            "originZone": "ONE_ROOM",
+            "destinationZone": "YEIN",
+            "departureTime": "21:00",
+            "arrivalTime": "21:10"
+        },
+        {
+            "serviceDay": "SUNDAY",
+            "routeId": "C",
+            "stopId": "yein",
+            "direction": "TO_ONE_ROOM",
+            "originZone": "YEIN",
+            "destinationZone": "ONE_ROOM",
+            "departureTime": "21:10",
+            "arrivalTime": "21:20"
+        }
+    ]
+}

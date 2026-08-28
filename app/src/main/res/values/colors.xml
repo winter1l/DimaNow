@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- M3 Expressive Widget Palette (Light) — DIMA 브랜드 #EC268F 시드 -->
+    <color name="widget_bg">#FFFFFF</color>
+    <color name="widget_surface">#FFF0F3</color>
+    <color name="widget_subcard_bg">#FAEAED</color>
+    <color name="widget_text_primary">#22191C</color>
+    <color name="widget_text_secondary">#6B5C60</color>
+    <color name="widget_text_tertiary">#84767A</color>
+    <color name="widget_tag_bg">#FFD9E4</color>
+    <color name="widget_tag_text">#3E001F</color>
+    <color name="widget_accent">#B31169</color>
+    <color name="widget_error">#BA1A1A</color>
+    <color name="widget_capsule">#FAEAED</color>
+    <color name="widget_capsule_last">#FFDAD6</color>
+    <color name="widget_capsule_last_text">#410002</color>
+</resources>

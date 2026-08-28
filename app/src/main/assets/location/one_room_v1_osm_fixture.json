@@ -1,0 +1,18 @@
+{
+  "id": "ONE_ROOM_V1_OSM_2026_08_27",
+  "source": "OpenStreetMap node 13069429205 and nearby building footprints",
+  "license": "Open Database License (ODbL)",
+  "extractedAt": "2026-08-27",
+  "busStop": [37.0565970, 127.3630672],
+  "polygon": [
+    [37.0537800, 127.3621000],
+    [37.0538500, 127.3626500],
+    [37.0566500, 127.3652500],
+    [37.0572500, 127.3651000],
+    [37.0573500, 127.3625000],
+    [37.0555500, 127.3613500],
+    [37.0543000, 127.3615000]
+  ],
+  "wakeRadiusMeters": 450,
+  "attribution": "© OpenStreetMap contributors"
+}

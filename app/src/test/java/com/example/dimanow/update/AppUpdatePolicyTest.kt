@@ -32,4 +32,13 @@ class AppUpdatePolicyTest {
         assertFalse(policy.shouldKeepPrepared("1.2", currentVersion = "1.2"))
         assertFalse(policy.shouldKeepPrepared("1.2", currentVersion = "1.3"))
     }
+
+    @Test fun `prepared APK is reused only for the unchanged release asset`() {
+        val oldRelease = AppUpdateRelease("1.2", "https://github.com/winter1l/DimaNow/releases/tag/v1.2", "https://github.com/winter1l/DimaNow/releases/download/v1.2/DIMA-Now-v1.2-optimized.apk", 10, "a".repeat(64))
+        val replacedAsset = oldRelease.copy(sha256 = "b".repeat(64))
+        val policy = AppUpdatePolicy()
+
+        assertTrue(policy.shouldReusePrepared("1.2", oldRelease, oldRelease))
+        assertFalse(policy.shouldReusePrepared("1.2", oldRelease, replacedAsset))
+    }
 }

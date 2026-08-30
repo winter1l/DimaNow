@@ -91,7 +91,12 @@ class AppUpdateCoordinator(
                 preferences.recordAppUpdateCheck(now.toEpochMilli(), release)
                 val newer = AppVersion(release.versionName) > AppVersion(currentVersion)
                 mutableState.value = if (newer) {
-                    val prepared = release.takeIf { it.versionName == saved.preparedVersion }
+                    val reusePrepared = policy.shouldReusePrepared(saved.preparedVersion, saved.cachedRelease, release)
+                    if (!reusePrepared && saved.preparedPath != null) {
+                        File(saved.preparedPath).delete()
+                        preferences.clearPreparedAppUpdate()
+                    }
+                    val prepared = release.takeIf { reusePrepared }
                         ?.let { saved.preparedPath?.takeIf { path -> File(path).isFile }?.let { path -> PreparedUpdate(it, path) } }
                     AppUpdateUiState(
                         currentVersion = currentVersion,

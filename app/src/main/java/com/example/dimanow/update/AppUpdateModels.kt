@@ -59,6 +59,12 @@ class AppUpdatePolicy {
 
     fun shouldKeepPrepared(preparedVersion: String, currentVersion: String): Boolean =
         AppVersion(preparedVersion) > AppVersion(currentVersion)
+
+    fun shouldReusePrepared(
+        preparedVersion: String?,
+        cachedRelease: AppUpdateRelease?,
+        latestRelease: AppUpdateRelease,
+    ): Boolean = preparedVersion == latestRelease.versionName && cachedRelease == latestRelease
 }
 
 data class InstalledAppIdentity(

@@ -29,7 +29,7 @@ class GitHubReleaseJsonTransport(
             connection.instanceFollowRedirects = false
             connection.setRequestProperty("Accept", "application/vnd.github+json")
             connection.setRequestProperty("X-GitHub-Api-Version", "2022-11-28")
-            connection.setRequestProperty("User-Agent", "DIMA-Now/1.2")
+            connection.setRequestProperty("User-Agent", "DIMA-Now/1.3")
             require(connection.responseCode == HttpURLConnection.HTTP_OK) { "GitHub 릴리스 응답 ${connection.responseCode}" }
             val length = connection.contentLengthLong
             require(length == -1L || length in 1..MAX_JSON_BYTES) { "GitHub 릴리스 응답이 너무 큽니다." }

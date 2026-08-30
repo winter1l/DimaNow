@@ -35,6 +35,9 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import com.example.dimanow.meal.MealSource
 import com.example.dimanow.meal.StaticMealSource
+import com.example.dimanow.meal.AndroidDormitoryMealTokenStore
+import com.example.dimanow.meal.DormitoryMealSubmissionService
+import com.example.dimanow.meal.GitHubDormitoryMealApi
 import com.example.dimanow.notice.NoticeSource
 import com.example.dimanow.notice.StaticNoticeSource
 import com.example.dimanow.sync.UrlConnectionStaticDataTransport
@@ -55,14 +58,27 @@ class DimaNowApplication : Application() {
 
     val database: DimaDatabase by lazy {
         Room.databaseBuilder(this, DimaDatabase::class.java, "dima-now.db")
-            .addMigrations(DimaDatabase.MIGRATION_1_2, DimaDatabase.MIGRATION_2_3, DimaDatabase.MIGRATION_3_4)
+            .addMigrations(DimaDatabase.MIGRATION_1_2, DimaDatabase.MIGRATION_2_3, DimaDatabase.MIGRATION_3_4, DimaDatabase.MIGRATION_4_5)
             .build()
     }
     val repository: RoomCampusDataRepository by lazy { RoomCampusDataRepository(database) }
     val preferences: AppPreferences by lazy { AppPreferences(this) }
     private val staticDataTransport by lazy { CachingStaticDataTransport(UrlConnectionStaticDataTransport()) }
     val shuttleSource: ShuttleSource by lazy { StaticShuttleSource(database, staticDataTransport) }
-    val mealSource: MealSource by lazy { StaticMealSource(database, staticDataTransport) }
+    private val dormitoryMealSubmissionService by lazy {
+        DormitoryMealSubmissionService(
+            clientId = getString(R.string.github_dormitory_meal_client_id),
+            gateway = GitHubDormitoryMealApi(),
+            tokenStore = AndroidDormitoryMealTokenStore(this),
+        )
+    }
+    val mealSource: MealSource by lazy {
+        StaticMealSource(
+            database = database,
+            transport = staticDataTransport,
+            dormitorySubmissionService = dormitoryMealSubmissionService,
+        )
+    }
     val noticeSource: NoticeSource by lazy { StaticNoticeSource(database, staticDataTransport) }
     val guidanceEngine: GuidanceEngine by lazy { GuidanceEngine() }
     val liveSurfaceController: AndroidLiveSurfaceController by lazy { AndroidLiveSurfaceController(this) }

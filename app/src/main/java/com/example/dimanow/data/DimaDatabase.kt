@@ -217,6 +217,14 @@ data class MealDayEntity(
     )
 }
 
+@Entity(tableName = "dormitory_meal_days")
+data class DormitoryMealDayEntity(
+    @PrimaryKey val epochDay: Long,
+    val sectionsJson: String,
+    val sourceImageUrl: String,
+    val validationState: String,
+)
+
 @Entity(tableName = "notices")
 data class NoticeEntity(
     @PrimaryKey val id: String,
@@ -360,11 +368,20 @@ interface ScheduleDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun putMealDays(days: List<MealDayEntity>)
+
+    @Query("SELECT * FROM dormitory_meal_days ORDER BY epochDay")
+    fun observeDormitoryMealDays(): Flow<List<DormitoryMealDayEntity>>
+
+    @Query("DELETE FROM dormitory_meal_days WHERE epochDay BETWEEN :startEpochDay AND :endEpochDay")
+    suspend fun deleteDormitoryMealWeek(startEpochDay: Long, endEpochDay: Long)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun putDormitoryMealDays(days: List<DormitoryMealDayEntity>)
 }
 
 @Database(
-    entities = [CourseEntity::class, TermSettingsEntity::class, NoClassDateEntity::class, GuidancePauseEntity::class, CampusZoneEntity::class, ShuttleDepartureEntity::class, SourceStatusEntity::class, SyncStateEntity::class, MealDayEntity::class, NoticeEntity::class],
-    version = 4,
+    entities = [CourseEntity::class, TermSettingsEntity::class, NoClassDateEntity::class, GuidancePauseEntity::class, CampusZoneEntity::class, ShuttleDepartureEntity::class, SourceStatusEntity::class, SyncStateEntity::class, MealDayEntity::class, DormitoryMealDayEntity::class, NoticeEntity::class],
+    version = 5,
     exportSchema = false,
 )
 abstract class DimaDatabase : RoomDatabase() {
@@ -395,6 +412,14 @@ abstract class DimaDatabase : RoomDatabase() {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL(
                     """CREATE TABLE IF NOT EXISTS `sync_state` (`dataset` TEXT NOT NULL, `revision` INTEGER NOT NULL, `etag` TEXT, `sha256` TEXT, `serverPublishedEpochMillis` INTEGER, `lastCheckedEpochMillis` INTEGER NOT NULL, `lastImportedEpochMillis` INTEGER, `serverState` TEXT, `error` TEXT, PRIMARY KEY(`dataset`))""",
+                )
+            }
+        }
+
+        val MIGRATION_4_5 = object : Migration(4, 5) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    """CREATE TABLE IF NOT EXISTS `dormitory_meal_days` (`epochDay` INTEGER NOT NULL, `sectionsJson` TEXT NOT NULL, `sourceImageUrl` TEXT NOT NULL, `validationState` TEXT NOT NULL, PRIMARY KEY(`epochDay`))""",
                 )
             }
         }

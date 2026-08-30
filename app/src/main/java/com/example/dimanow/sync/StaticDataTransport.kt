@@ -32,6 +32,11 @@ class CachingStaticDataTransport(
                 }
         }
     }
+
+    suspend fun invalidateManifest() = mutex.withLock {
+        cachedManifest = null
+        cachedAtMillis = Long.MIN_VALUE
+    }
 }
 
 class UrlConnectionStaticDataTransport : StaticDataTransport {
@@ -42,7 +47,7 @@ class UrlConnectionStaticDataTransport : StaticDataTransport {
             connection.readTimeout = 20_000
             connection.instanceFollowRedirects = false
             connection.setRequestProperty("Accept", "application/json")
-            connection.setRequestProperty("User-Agent", "DIMA-Now/1.2")
+            connection.setRequestProperty("User-Agent", "DIMA-Now/1.3")
             require(connection.responseCode == HttpURLConnection.HTTP_OK) {
                 "동기화 서버 응답 ${connection.responseCode}"
             }

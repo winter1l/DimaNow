@@ -47,6 +47,48 @@ class StaticMealSourceTest {
     }
 
     @Test
+    fun validDormitoryPayloadKeepsEveryMealSectionForTheWeek() = runTest {
+        val payload = """{"schemaVersion":1,"weekStart":"2026-08-24","weekEnd":"2026-08-30","sourceImageUrl":"https://raw.githubusercontent.com/winter1l/DimaNow/example.jpg","days":[{"date":"2026-08-24","sections":[{"name":"조식","hours":"08:00~09:30","menuLines":["떡국","완자전&소스"]},{"name":"중식","hours":"12:00~14:00","menuLines":["유채된장국","계란마파두부"]}]}]}"""
+        val hash = MessageDigest.getInstance("SHA-256").digest(payload.toByteArray()).joinToString("") { "%02x".format(it) }
+        val manifest = """{"schemaVersion":1,"generatedAt":"2026-08-27T03:00:00Z","datasets":{"dorm_meal":{"revision":1,"state":"READY","publishedAt":"2026-08-27T03:00:00Z","lastAttemptAt":"2026-08-27T03:00:00Z","url":"dorm-meal/$hash.json","sha256":"$hash","sourceUrl":"https://github.com/winter1l/DimaNow/tree/dorm-submissions/dorm-submissions"}}}"""
+        val source: MealSource = StaticMealSource(
+            database = database,
+            transport = StaticDataTransport { url -> if (url.contains("manifest.json")) manifest.toByteArray() else payload.toByteArray() },
+            clock = Clock.fixed(Instant.parse("2026-08-27T04:00:00Z"), ZoneOffset.UTC),
+        )
+
+        assertEquals(MealRefreshResult.Success(LocalDate.of(2026, 8, 24), Instant.parse("2026-08-27T04:00:00Z")), source.refreshDormitory())
+        val day = source.dormitoryData.first().days.single()
+        assertEquals(LocalDate.of(2026, 8, 24), day.date)
+        assertEquals(listOf("조식", "중식"), day.sections.map { it.name })
+        assertEquals(listOf("유채된장국", "계란마파두부"), day.sections[1].menuLines)
+    }
+
+    @Test
+    fun sameDormitoryRevisionAfterItsWeekExpiresReportsNotPublishedAndKeepsTheLastGoodWeek() = runTest {
+        val payload = """{"schemaVersion":1,"weekStart":"2026-08-24","weekEnd":"2026-08-30","sourceImageUrl":"https://raw.githubusercontent.com/winter1l/DimaNow/example.jpg","days":[{"date":"2026-08-24","sections":[{"name":"중식","hours":"12:00~14:00","menuLines":["유채된장국"]}]}]}"""
+        val hash = MessageDigest.getInstance("SHA-256").digest(payload.toByteArray()).joinToString("") { "%02x".format(it) }
+        val manifest = """{"schemaVersion":1,"generatedAt":"2026-08-27T03:00:00Z","datasets":{"dorm_meal":{"revision":1,"state":"READY","publishedAt":"2026-08-27T03:00:00Z","lastAttemptAt":"2026-08-27T03:00:00Z","url":"dorm-meal/$hash.json","sha256":"$hash","sourceUrl":"https://github.com/winter1l/DimaNow/tree/dorm-submissions/dorm-submissions"}}}"""
+        val firstSuccess = Instant.parse("2026-08-27T04:00:00Z")
+        StaticMealSource(
+            database,
+            StaticDataTransport { url -> if (url.endsWith("manifest.json")) manifest.toByteArray() else payload.toByteArray() },
+            Clock.fixed(firstSuccess, ZoneOffset.UTC),
+        ).refreshDormitory()
+
+        val source = StaticMealSource(
+            database,
+            StaticDataTransport { manifest.toByteArray() },
+            Clock.fixed(Instant.parse("2026-08-31T02:00:00Z"), ZoneOffset.UTC),
+        )
+
+        assertEquals(MealRefreshResult.NotPublishedYet, source.refreshDormitory())
+        val data = source.dormitoryData.first()
+        assertEquals(firstSuccess, data.lastSuccess)
+        assertEquals(listOf("유채된장국"), data.days.single().sections.single().menuLines)
+    }
+
+    @Test
     fun sameRevisionAfterCachedWeekExpiresReportsNotPublishedAndPreservesSuccess() = runTest {
         val fixture = mealFixture()
         val firstSuccess = Instant.parse("2026-08-28T02:00:00Z")

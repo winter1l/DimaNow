@@ -94,6 +94,10 @@ Evidence: the authenticated GitHub account `winter1l` owns `winter1l/DimaNow`; t
 
 Evidence: commit `71a9478` replaced the GitHub-hosted Tesseract meal step with one schema-constrained `gemini-3.5-flash-lite` image request while retaining the published `MealPayload` v1 contract and last-good cache protection. The local `.env` is ignored, `.env.example` contains only the variable name, and the repository Actions secret list confirms `GEMINI_API_KEY` exists. Local verification passed 79 app JVM tests, 17 pipeline tests, Android-test compilation, `lintDebug`, `assembleDebug`, and `assembleOptimized`. GitHub validation run `33316317176` and the manually dispatched meal publish run `33316410514` completed successfully; its log contained no Google API-key-shaped value. The deployed Pages manifest reports meal revision 6 and `READY`, published at `2026-08-30T14:17:03.363106625Z`. Its content-addressed payload SHA-256 `6c8584781f16ce42562d27c319e6c8c6e51982e4fcc75ef9bcfd5ea15e5ffb1c` matches the downloaded bytes and contains five weekday menus for `2026-08-24` through `2026-08-28`, with week range `2026-08-24` through `2026-08-30`.
 
+### Outgoing-only tab fade - API 36 emulator verified - 2026-08-31
+
+Evidence: commit `23b0296` restores a 180 ms fade only to the outgoing tab while keeping the incoming tab fully opaque and above it. Card-level staggered entrance remains translation-only, so its elevation surface is not faded. On the API 36 `medium_phone` emulator, the focused `CardShadowTransitionTest` and `AppBackNavigationTest` run completed 3/3 cases with zero failures.
+
 ## Permanently excluded
 
 - Dorm-meal automation, login automation, multi-user distribution, backend/server operation, and store release (D-001).

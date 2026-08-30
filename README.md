@@ -109,11 +109,13 @@ adb devices
 앱의 동기화 endpoint는 [`manifest.json`](https://winter1l.github.io/DimaNow/data/v1/manifest.json)입니다. manifest에는 데이터셋별 revision, 게시 시각, 상태, SHA-256과 content-addressed JSON 경로가 들어갑니다. 앱은 HTTPS, 허용된 상대 경로, schema version과 SHA-256을 모두 검증한 뒤 Room 캐시를 한 트랜잭션으로 교체합니다. 네트워크·파싱·무결성 오류가 나면 마지막 정상 캐시를 보존합니다.
 
 - 셔틀: 관리자가 [`data-source/shuttle.csv`](data-source/shuttle.csv)를 수정하면 `main` 반영 후 자동 게시합니다.
-- 식단: GitHub Actions가 DIMA 공식 공개 게시물과 공개 Instagram embed를 확인하고, Tesseract Korean OCR과 주차·메뉴 검증을 통과한 데이터만 게시합니다.
+- 식단: GitHub Actions가 DIMA 공식 공개 게시물과 공개 Instagram embed를 확인하고, Gemini 3.5 Flash-Lite의 구조화 JSON 출력으로 식단 이미지를 전사합니다. 월~금 날짜와 빈 메뉴 여부만 최소 검증한 뒤 게시합니다.
 - 공지: GitHub Actions가 DIMA 공식 공지 목록을 읽어 최대 10개를 게시합니다.
 - 앱: 실행 시와 12시간마다 작은 manifest를 확인합니다. 수동 새로고침도 같은 endpoint만 사용합니다.
 
 식단 후보가 아직 게시되지 않았거나 검증에 실패하면 manifest를 `WAITING` 또는 `NEEDS_REVIEW`로 갱신하고 기존 정상 식단 JSON은 유지합니다. GitHub Actions의 예약 실행은 지연될 수 있으므로 실시간 보장 서비스가 아닙니다.
+
+식단 게시 workflow에는 저장소 Actions Secret `GEMINI_API_KEY`가 필요합니다. 로컬 개발에서는 `.env.example`을 참고하되 실제 `.env`와 API 키를 커밋하지 않습니다. Gemini에는 공식 공개 식단표 이미지만 전송하며 앱의 사용자 데이터는 전송하지 않습니다.
 
 ### 셔틀 수정 방법
 

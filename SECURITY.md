@@ -16,3 +16,4 @@
 - payload 상대 경로, schema version, SHA-256, 허용된 공식 원문 URL을 검증합니다.
 - 검증 실패 시 마지막 정상 Room 캐시를 유지합니다.
 - GitHub Actions workflow는 고정 commit SHA의 Actions를 사용하며 최소 권한을 선언합니다.
+- 식단 OCR용 `GEMINI_API_KEY`는 GitHub Actions Secret으로만 주입하고 요청 본문·로그·아티팩트에 기록하지 않습니다.

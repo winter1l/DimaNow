@@ -69,9 +69,6 @@ jobs:
           else value=meal
           fi
           echo "value=$value" >> "$GITHUB_OUTPUT"
-      - name: Korean Tesseract 설치
-        if: steps.target.outputs.value == 'meal' || steps.target.outputs.value == 'all'
-        run: sudo apt-get update && sudo apt-get install --yes tesseract-ocr tesseract-ocr-kor
       - name: 셔틀 게시
         if: steps.target.outputs.value == 'shuttle' || steps.target.outputs.value == 'all'
         working-directory: source
@@ -79,6 +76,8 @@ jobs:
       - name: 식단 게시
         if: steps.target.outputs.value == 'meal' || steps.target.outputs.value == 'all'
         working-directory: source
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: bash ./gradlew :data-pipeline:run --args="publish-meal ignored $GITHUB_WORKSPACE/site"
       - name: 공지 게시
         if: steps.target.outputs.value == 'notice' || steps.target.outputs.value == 'all'

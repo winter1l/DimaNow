@@ -19,27 +19,51 @@ data class MealPost(val title: String, val sourceUrl: String, val hours: String)
     val embedUrl: String get() = sourceUrl.substringBefore('?').trimEnd('/') + "/embed/captioned/"
 }
 
+enum class MealPublicationDecision { PUBLISH, WAITING }
+
+class MealPublicationPolicy {
+    fun decide(postFound: Boolean, payload: MealPayload?, today: LocalDate): MealPublicationDecision {
+        if (!postFound) return MealPublicationDecision.WAITING
+        val lastDate = payload?.days?.maxOfOrNull { LocalDate.parse(it.date) } ?: return MealPublicationDecision.WAITING
+        return if (lastDate.isBefore(today)) MealPublicationDecision.WAITING else MealPublicationDecision.PUBLISH
+    }
+}
+
+sealed interface MealPublicationResult {
+    data class Published(val payload: MealPayload) : MealPublicationResult
+    data object Waiting : MealPublicationResult
+}
+
 class MealRemotePipeline(
     private val clock: Clock = Clock.system(ZoneId.of("Asia/Seoul")),
     private val geminiClient: GeminiMealOcrClient = GeminiMealOcrClient(System.getenv("GEMINI_API_KEY").orEmpty()),
 ) {
-    fun fetch(): MealPayload {
+    fun fetch(): MealPayload = when (val result = fetchPublication()) {
+        is MealPublicationResult.Published -> result.payload
+        MealPublicationResult.Waiting -> error(NOT_PUBLISHED_MESSAGE)
+    }
+
+    fun fetchPublication(): MealPublicationResult {
         val discoveryHtml = Jsoup.connect(DISCOVERY_URL).userAgent(USER_AGENT).get().outerHtml()
         val post = MealDiscoveryParser().parse(discoveryHtml)
             ?: profilePost()
-            ?: error("최신 학생식당 게시물을 찾지 못했습니다.")
+            ?: return MealPublicationResult.Waiting
         val embedHtml = Jsoup.connect(post.embedUrl).userAgent(USER_AGENT).get().outerHtml()
         val imageUrl = InstagramCarouselParser().parse(embedHtml).imageUrls.getOrNull(1)
             ?: error("식단표 carousel 이미지를 찾지 못했습니다.")
         val image = download(imageUrl)
         val responseJson = geminiClient.extract(image.bytes, image.mimeType)
-        return GeminiMealPayloadBuilder().build(
+        val payload = GeminiMealPayloadBuilder().build(
             responseJson,
             LocalDate.now(clock),
             post.hours,
             post.sourceUrl,
             imageUrl,
         )
+        return when (MealPublicationPolicy().decide(true, payload, LocalDate.now(clock))) {
+            MealPublicationDecision.PUBLISH -> MealPublicationResult.Published(payload)
+            MealPublicationDecision.WAITING -> MealPublicationResult.Waiting
+        }
     }
 
     private fun profilePost(): MealPost? {
@@ -78,8 +102,9 @@ class MealRemotePipeline(
         const val DISCOVERY_URL = "https://www.dima.ac.kr/?p=1"
         const val PROFILE_FEED_URL = "https://www.instagram.com/api/v1/feed/user/30891067635/?count=12"
         const val INSTAGRAM_PUBLIC_APP_ID = "936619743392459"
-        const val USER_AGENT = "DIMA-Now/1.1 GitHub data pipeline"
+        const val USER_AGENT = "DIMA-Now/1.2 GitHub data pipeline"
         const val MAX_IMAGE_BYTES = 15L * 1024 * 1024
+        const val NOT_PUBLISHED_MESSAGE = "아직 새 식단이 올라오지 않았어요"
     }
 
     private data class DownloadedImage(val bytes: ByteArray, val mimeType: String)

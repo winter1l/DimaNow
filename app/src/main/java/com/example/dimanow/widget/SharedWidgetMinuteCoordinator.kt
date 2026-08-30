@@ -7,12 +7,17 @@ import android.content.BroadcastReceiver
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import com.example.dimanow.domain.CampusZoneId
 import java.time.ZonedDateTime
 import java.util.EnumMap
 
 enum class WidgetMinuteKind {
     SHUTTLE,
     SUMMARY,
+}
+
+class RuntimeWidgetRefreshPlanner {
+    fun shouldRefresh(previous: CampusZoneId?, current: CampusZoneId): Boolean = previous == null || previous != current
 }
 
 class SharedWidgetMinuteCoordinator(private val context: Context) {

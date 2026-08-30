@@ -28,6 +28,9 @@ import com.example.dimanow.domain.ShuttleDeparture
 import com.example.dimanow.live.AndroidLiveSurfaceController
 import com.example.dimanow.live.GuidanceAlarmScheduler
 import com.example.dimanow.widget.SharedWidgetMinuteCoordinator
+import com.example.dimanow.widget.RuntimeWidgetRefreshPlanner
+import com.example.dimanow.widget.ShuttleWidgetProvider
+import com.example.dimanow.widget.CampusSummaryWidgetProvider
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import com.example.dimanow.meal.MealSource
@@ -37,6 +40,9 @@ import com.example.dimanow.notice.StaticNoticeSource
 import com.example.dimanow.sync.UrlConnectionStaticDataTransport
 import com.example.dimanow.sync.CachingStaticDataTransport
 import com.example.dimanow.location.LocationMode
+import com.example.dimanow.update.AndroidAppUpdateInstaller
+import com.example.dimanow.update.AppUpdateCoordinator
+import com.example.dimanow.update.GitHubAppUpdateSource
 
 class DimaNowApplication : Application() {
     private val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -69,10 +75,21 @@ class DimaNowApplication : Application() {
     val guidanceRuntimeCoordinator: GuidanceRuntimeCoordinator<GuidanceRuntimeSnapshot> by lazy {
         GuidanceRuntimeCoordinator(applicationScope) { guidanceOrchestrator.refresh(it) }
     }
+    val appUpdateCoordinator: AppUpdateCoordinator by lazy {
+        val packageInfo = packageManager.getPackageInfo(packageName, 0)
+        AppUpdateCoordinator(
+            scope = applicationScope,
+            preferences = preferences,
+            source = GitHubAppUpdateSource(),
+            installer = AndroidAppUpdateInstaller(this),
+            currentVersion = packageInfo.versionName.orEmpty(),
+        )
+    }
     private val geofenceManager: CampusGeofenceManager by lazy { CampusGeofenceManager(this) }
 
     override fun onCreate() {
         super.onCreate()
+        appUpdateCoordinator.initialize()
         val lockStateFilter = IntentFilter().apply {
             addAction(Intent.ACTION_SCREEN_ON)
             addAction(Intent.ACTION_USER_PRESENT)
@@ -98,6 +115,8 @@ class DimaNowApplication : Application() {
         }
         applicationScope.launch { RefreshScheduler.schedule(this@DimaNowApplication, preferences) }
         applicationScope.launch {
+            val widgetRefreshPlanner = RuntimeWidgetRefreshPlanner()
+            var previousWidgetZone: com.example.dimanow.domain.CampusZoneId? = null
             combine(
                 repository.schedule,
                 shuttleSource.data,
@@ -116,6 +135,11 @@ class DimaNowApplication : Application() {
             }
                 .collectLatest { snapshot ->
                     guidanceRuntimeCoordinator.update(snapshot)
+                    if (widgetRefreshPlanner.shouldRefresh(previousWidgetZone, snapshot.resolvedZone)) {
+                        previousWidgetZone = snapshot.resolvedZone
+                        ShuttleWidgetProvider.updateAll(this@DimaNowApplication)
+                        CampusSummaryWidgetProvider.updateAll(this@DimaNowApplication)
+                    }
                 }
             }
     }

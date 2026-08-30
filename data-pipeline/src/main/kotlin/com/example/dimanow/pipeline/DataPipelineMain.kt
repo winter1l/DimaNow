@@ -15,14 +15,17 @@ fun main(args: Array<String>) {
     when (command) {
         "publish-shuttle" -> publisher.publishShuttle(Files.readString(Path.of(args[1])), publisher.nextRevision("shuttle"), now)
         "publish-notice" -> runCatching {
-            val html = Jsoup.connect("https://www.dima.ac.kr/?p=111").userAgent("DIMA-Now/1.1 GitHub data pipeline").get().outerHtml()
+            val html = Jsoup.connect("https://www.dima.ac.kr/?p=111").userAgent("DIMA-Now/1.2 GitHub data pipeline").get().outerHtml()
             publisher.publishNotices(NoticePayloadBuilder().build(html), publisher.nextRevision("notice"), now)
         }.getOrElse { error ->
             publisher.recordFailure("notice", "ERROR", error.message ?: error.javaClass.simpleName, now)
             System.err.println("공지 게시 실패: ${error.message}")
         }
         "publish-meal" -> runCatching {
-            publisher.publishMeal(MealRemotePipeline().fetch(), publisher.nextRevision("meal"), now)
+            when (val result = MealRemotePipeline().fetchPublication()) {
+                is MealPublicationResult.Published -> publisher.publishMeal(result.payload, publisher.nextRevision("meal"), now)
+                MealPublicationResult.Waiting -> publisher.recordFailure("meal", "WAITING", "아직 새 식단이 올라오지 않았어요", now)
+            }
         }.getOrElse { error ->
             publisher.recordFailure("meal", "NEEDS_REVIEW", error.message ?: error.javaClass.simpleName, now)
             System.err.println("식단 게시 확인 필요: ${error.message}")

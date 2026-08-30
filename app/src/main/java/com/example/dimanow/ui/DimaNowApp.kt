@@ -85,6 +85,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.activity.compose.BackHandler
@@ -171,6 +172,9 @@ import com.example.dimanow.theme.SuccessGreen
 import com.example.dimanow.theme.WarningAmber
 import com.example.dimanow.time.MinuteTicker
 import com.example.dimanow.location.LocationMode
+import com.example.dimanow.update.AppUpdateCoordinator
+import com.example.dimanow.update.AppUpdatePhase
+import com.example.dimanow.update.AppUpdateUiState
 import java.time.DayOfWeek
 import java.time.LocalDate
 import java.time.LocalTime
@@ -211,6 +215,7 @@ fun DimaNowApp(
     shuttleSource: ShuttleSource,
     mealSource: MealSource,
     liveSurfaceController: LiveSurfaceController,
+    appUpdateCoordinator: AppUpdateCoordinator? = null,
     noticeSource: NoticeSource? = null,
     initialTargetPage: String? = null,
 ) {
@@ -220,6 +225,9 @@ fun DimaNowApp(
     var showNowBarSetup by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     val appContext = LocalContext.current.applicationContext
+    val initialUpdateState = remember { AppUpdateUiState(currentVersion = "") }
+    val updateState by (appUpdateCoordinator?.state ?: remember { kotlinx.coroutines.flow.flowOf(initialUpdateState) })
+        .collectAsStateWithLifecycle(initialValue = initialUpdateState)
     LaunchedEffect(initialTargetPage) {
         when (initialTargetPage) {
             "SHUTTLE" -> page = AppPage.SHUTTLE
@@ -275,19 +283,15 @@ fun DimaNowApp(
             transitionSpec = {
                 val forward = targetState.ordinal > initialState.ordinal
                 val slideOffset = { width: Int -> if (forward) width / 4 else -width / 4 }
-                (slideInHorizontally(
+                slideInHorizontally(
                     animationSpec = spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessMediumLow),
                     initialOffsetX = slideOffset,
-                ) + fadeIn(
-                    animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
-                )).togetherWith(
+                ).togetherWith(
                     slideOutHorizontally(
                         animationSpec = spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessMediumLow),
                         targetOffsetX = { width -> -slideOffset(width) },
-                    ) + fadeOut(
-                        animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
                     )
-                )
+                ).apply { targetContentZIndex = 1f }
             },
             label = "tab_transition",
         ) { targetPage ->
@@ -322,6 +326,11 @@ fun DimaNowApp(
                     mealSource = mealSource,
                     liveSurfaceController = liveSurfaceController,
                     onShowNowBarSetup = { showNowBarSetup = true },
+                    updateState = updateState,
+                    onCheckUpdate = { appUpdateCoordinator?.checkManually() },
+                    onDownloadUpdate = { appUpdateCoordinator?.downloadAndInstall() },
+                    onContinueInstall = { appUpdateCoordinator?.continueInstall() },
+                    onCancelDownload = { appUpdateCoordinator?.cancelDownload() },
                     modifier = Modifier.padding(padding),
                 )
             }
@@ -341,6 +350,19 @@ fun DimaNowApp(
             },
             dismissButton = {
                 OutlinedButton(onClick = { scope.launch { preferences.setHomeBase(HomeBase.ONE_ROOM) } }) { Text("원룸촌") }
+            },
+        )
+    }
+    if (updateState.promptVersion != null) {
+        AlertDialog(
+            onDismissRequest = { appUpdateCoordinator?.dismissPrompt() },
+            title = { Text("업데이트 가능") },
+            text = { Text("DIMA Now ${updateState.promptVersion} 버전을 설치할 수 있습니다.") },
+            confirmButton = {
+                Button(onClick = { appUpdateCoordinator?.downloadAndInstall() }) { Text("다운로드 및 설치") }
+            },
+            dismissButton = {
+                TextButton(onClick = { appUpdateCoordinator?.dismissPrompt() }) { Text("나중에") }
             },
         )
     }
@@ -422,6 +444,11 @@ private fun SettingsRoute(
     mealSource: MealSource,
     liveSurfaceController: LiveSurfaceController,
     onShowNowBarSetup: () -> Unit,
+    updateState: AppUpdateUiState,
+    onCheckUpdate: () -> Unit,
+    onDownloadUpdate: () -> Unit,
+    onContinueInstall: () -> Unit,
+    onCancelDownload: () -> Unit,
     modifier: Modifier,
 ) {
     val scope = rememberCoroutineScope()
@@ -453,6 +480,11 @@ private fun SettingsRoute(
         shuttleData = shuttle,
         mealData = meal,
         onShowNowBarSetup = onShowNowBarSetup,
+        updateState = updateState,
+        onCheckUpdate = onCheckUpdate,
+        onDownloadUpdate = onDownloadUpdate,
+        onContinueInstall = onContinueInstall,
+        onCancelDownload = onCancelDownload,
         modifier = modifier,
     )
 }
@@ -1902,11 +1934,14 @@ fun ShuttleScreen(
                                             Surface(
                                                 shape = RoundedCornerShape(10.dp),
                                                 color = when {
+                                                    isFirst && isLastService -> MaterialTheme.colorScheme.error
                                                     isLastService -> MaterialTheme.colorScheme.errorContainer
-                                                    isFirst -> MaterialTheme.colorScheme.primaryContainer
+                                                    isFirst -> MaterialTheme.colorScheme.primary
                                                     else -> MaterialTheme.colorScheme.secondaryContainer
                                                 },
-                                                modifier = Modifier.weight(1f),
+                                                modifier = Modifier
+                                                    .weight(1f)
+                                                    .testTag("next_departure_$index"),
                                             ) {
                                                 Row(
                                                     modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
@@ -1922,8 +1957,9 @@ fun ShuttleScreen(
                                                         style = MaterialTheme.typography.titleSmall,
                                                         fontWeight = FontWeight.Bold,
                                                         color = when {
+                                                            isFirst && isLastService -> MaterialTheme.colorScheme.onError
                                                             isLastService -> MaterialTheme.colorScheme.onErrorContainer
-                                                            isFirst -> MaterialTheme.colorScheme.onPrimaryContainer
+                                                            isFirst -> MaterialTheme.colorScheme.onPrimary
                                                             else -> MaterialTheme.colorScheme.onSecondaryContainer
                                                         },
                                                     )
@@ -1932,8 +1968,9 @@ fun ShuttleScreen(
                                                         style = MaterialTheme.typography.bodySmall,
                                                         fontWeight = FontWeight.SemiBold,
                                                         color = when {
+                                                            isFirst && isLastService -> MaterialTheme.colorScheme.onError.copy(alpha = 0.9f)
                                                             isLastService -> MaterialTheme.colorScheme.onErrorContainer.copy(alpha = 0.8f)
-                                                            isFirst -> MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f)
+                                                            isFirst -> MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.9f)
                                                             else -> MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.8f)
                                                         },
                                                     )
@@ -2023,6 +2060,7 @@ private fun FlowTimeChips(
             val isSecondUpcoming = isToday && upcomingTimes.getOrNull(1) == time
 
             val bgColor = when {
+                isFirstUpcoming && item.isLast -> MaterialTheme.colorScheme.error
                 item.isLast -> MaterialTheme.colorScheme.errorContainer
                 isFirstUpcoming -> MaterialTheme.colorScheme.primary
                 isSecondUpcoming -> MaterialTheme.colorScheme.secondaryContainer
@@ -2032,6 +2070,7 @@ private fun FlowTimeChips(
             }
 
             val textColor = when {
+                isFirstUpcoming && item.isLast -> MaterialTheme.colorScheme.onError
                 item.isLast -> MaterialTheme.colorScheme.onErrorContainer
                 isFirstUpcoming -> MaterialTheme.colorScheme.onPrimary
                 isSecondUpcoming -> MaterialTheme.colorScheme.onSecondaryContainer
@@ -2103,6 +2142,7 @@ fun MealScreen(
                         try {
                             refreshMessage = when (val result = mealSource.refresh()) {
                                 is com.example.dimanow.meal.MealRefreshResult.Success -> "${result.weekStart} 주간 식단 저장 완료"
+                                com.example.dimanow.meal.MealRefreshResult.NotPublishedYet -> "아직 새 식단이 올라오지 않았어요"
                                 is com.example.dimanow.meal.MealRefreshResult.NeedsReview -> "확인 필요: ${result.reason}"
                                 is com.example.dimanow.meal.MealRefreshResult.Failure -> "실패: ${result.message}"
                             }
@@ -2243,6 +2283,11 @@ private fun SettingsScreen(
     shuttleData: ShuttleData,
     mealData: MealData,
     onShowNowBarSetup: () -> Unit,
+    updateState: AppUpdateUiState,
+    onCheckUpdate: () -> Unit,
+    onDownloadUpdate: () -> Unit,
+    onContinueInstall: () -> Unit,
+    onCancelDownload: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
@@ -2410,7 +2455,15 @@ private fun SettingsScreen(
             }
         }
 
-        DataAndSourcesCard(shuttleData, mealData, modifier = Modifier.staggeredEntrance(4))
+        AppUpdateCard(
+            state = updateState,
+            onCheck = onCheckUpdate,
+            onDownload = onDownloadUpdate,
+            onContinueInstall = onContinueInstall,
+            onCancelDownload = onCancelDownload,
+            modifier = Modifier.staggeredEntrance(4),
+        )
+        DataAndSourcesCard(shuttleData, mealData, modifier = Modifier.staggeredEntrance(5))
     }
 }
 
@@ -2439,6 +2492,65 @@ internal fun NowBarSetupDialog(
             Button(onClick = onComplete, modifier = Modifier.testTag("nowbar_setup_complete")) { Text("완료") }
         },
     )
+}
+
+@Composable
+internal fun AppUpdateCard(
+    state: AppUpdateUiState,
+    onCheck: () -> Unit,
+    onDownload: () -> Unit,
+    onContinueInstall: () -> Unit,
+    onCancelDownload: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val context = LocalContext.current
+    ElevatedCard(
+        modifier = modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+    ) {
+        Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Text("앱 업데이트", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            Text("현재 버전 ${state.currentVersion.ifBlank { "확인 중" }}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            val statusText = when (state.phase) {
+                AppUpdatePhase.IDLE -> "업데이트를 확인하지 않았습니다"
+                AppUpdatePhase.CHECKING -> "업데이트 확인 중"
+                AppUpdatePhase.UP_TO_DATE -> "최신 버전입니다"
+                AppUpdatePhase.AVAILABLE -> "새 버전 ${state.latestRelease?.versionName}"
+                AppUpdatePhase.DOWNLOADING -> "다운로드 중 ${state.downloadProgress ?: 0}%"
+                AppUpdatePhase.READY_TO_INSTALL -> "설치 준비 완료"
+                AppUpdatePhase.PERMISSION_REQUIRED -> "설치 권한이 필요합니다"
+                AppUpdatePhase.INSTALLER_OPENED -> "Android 설치 화면을 확인하세요"
+                AppUpdatePhase.ERROR -> state.message ?: "업데이트 오류"
+            }
+            Text(
+                statusText,
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = if (state.phase == AppUpdatePhase.ERROR) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
+            )
+            state.message?.takeIf { it != statusText }?.let {
+                Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            if (state.phase == AppUpdatePhase.DOWNLOADING) {
+                LinearProgressIndicator(
+                    progress = { (state.downloadProgress ?: 0) / 100f },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                when (state.phase) {
+                    AppUpdatePhase.AVAILABLE -> Button(onClick = onDownload) { Text("다운로드 및 설치") }
+                    AppUpdatePhase.DOWNLOADING -> OutlinedButton(onClick = onCancelDownload) { Text("취소") }
+                    AppUpdatePhase.READY_TO_INSTALL, AppUpdatePhase.PERMISSION_REQUIRED -> Button(onClick = onContinueInstall) { Text("설치 계속") }
+                    else -> OutlinedButton(enabled = state.phase != AppUpdatePhase.CHECKING, onClick = onCheck) { Text("업데이트 확인") }
+                }
+                state.latestRelease?.let { release ->
+                    OutlinedButton(onClick = { openUrl(context, release.releasePageUrl) }) { Text("릴리스 보기") }
+                }
+            }
+        }
+    }
 }
 
 @Composable

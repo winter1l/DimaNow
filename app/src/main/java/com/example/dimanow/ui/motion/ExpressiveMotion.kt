@@ -141,18 +141,12 @@ fun Modifier.staggeredEntrance(index: Int): Modifier {
     LaunchedEffect(Unit) { entered = true }
     // 리스트가 길어도 마지막 항목이 과도하게 늦게 나타나지 않도록 지연을 상한 처리한다
     val delayMillis = (index.coerceAtMost(8) * ExpressiveMotion.STAGGER_DELAY_MILLIS).toInt()
-    val alpha by animateFloatAsState(
-        targetValue = if (entered) 1f else 0f,
-        animationSpec = tween(durationMillis = 350, delayMillis = delayMillis, easing = EmphasizedDecelerate),
-        label = "entrance_alpha_$index",
-    )
     val translationY by animateFloatAsState(
         targetValue = if (entered) 0f else 36f,
         animationSpec = tween(durationMillis = 420, delayMillis = delayMillis, easing = EmphasizedDecelerate),
         label = "entrance_translation_$index",
     )
     return this.graphicsLayer {
-        this.alpha = alpha
         this.translationY = translationY
     }
 }

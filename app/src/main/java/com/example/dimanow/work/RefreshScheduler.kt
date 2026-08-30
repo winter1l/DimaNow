@@ -100,6 +100,7 @@ class MealRefreshWorker(context: Context, parameters: WorkerParameters) : Corout
                 CampusSummaryWidgetProvider.updateAll(applicationContext)
                 if (result.weekStart.plusDays(4).isBefore(now.toLocalDate())) Result.retry() else Result.success()
             }
+            MealRefreshResult.NotPublishedYet -> Result.retry()
             is MealRefreshResult.NeedsReview -> Result.retry()
             is MealRefreshResult.Failure -> Result.retry()
         }

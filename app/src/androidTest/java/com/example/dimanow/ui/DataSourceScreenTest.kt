@@ -1,11 +1,17 @@
 package com.example.dimanow.ui
 
 import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.graphics.toPixelMap
+import androidx.compose.material3.MaterialTheme
 import com.example.dimanow.domain.CampusZoneId
 import com.example.dimanow.domain.MealDay
 import com.example.dimanow.domain.MealValidationState
@@ -16,6 +22,7 @@ import com.example.dimanow.meal.MealSource
 import com.example.dimanow.shuttle.ShuttleData
 import com.example.dimanow.shuttle.ShuttleRefreshResult
 import com.example.dimanow.shuttle.ShuttleSource
+import com.example.dimanow.theme.DIMANowTheme
 import java.time.DayOfWeek
 import java.time.Instant
 import java.time.LocalDate
@@ -29,6 +36,43 @@ import org.junit.Test
 
 class DataSourceScreenTest {
     @get:Rule val composeRule = createComposeRule()
+
+    @Test
+    fun nearestNormalDepartureUsesTheSolidPrimaryColorInLightTheme() {
+        val now = ZonedDateTime.of(2026, 8, 31, 9, 30, 0, 0, ZoneId.of("Asia/Seoul"))
+        val departures = listOf(
+            departure("A", "main", LocalTime.of(8, 0), CampusZoneId.MAIN, CampusZoneId.YEIN, now.dayOfWeek),
+            departure("A", "main", LocalTime.of(10, 0), CampusZoneId.MAIN, CampusZoneId.YEIN, now.dayOfWeek),
+            departure("A", "main", LocalTime.of(11, 0), CampusZoneId.MAIN, CampusZoneId.YEIN, now.dayOfWeek),
+        )
+        var expected = Color.Unspecified
+        composeRule.setContent {
+            DIMANowTheme(darkTheme = false) {
+                expected = MaterialTheme.colorScheme.primary
+                ShuttleScreen(FakeShuttleSource(departures), CampusZoneId.MAIN, now = now)
+            }
+        }
+
+        composeRule.onNodeWithTag("next_departure_0").captureToImage().assertMostly(expected)
+    }
+
+    @Test
+    fun nearestLastDepartureUsesTheSolidErrorColorInLightTheme() {
+        val now = ZonedDateTime.of(2026, 8, 31, 8, 30, 0, 0, ZoneId.of("Asia/Seoul"))
+        val departures = listOf(
+            departure("A", "main", LocalTime.of(8, 0), CampusZoneId.MAIN, CampusZoneId.YEIN, now.dayOfWeek),
+            departure("A", "main", LocalTime.of(9, 0), CampusZoneId.MAIN, CampusZoneId.YEIN, now.dayOfWeek),
+        )
+        var expected = Color.Unspecified
+        composeRule.setContent {
+            DIMANowTheme(darkTheme = false) {
+                expected = MaterialTheme.colorScheme.error
+                ShuttleScreen(FakeShuttleSource(departures), CampusZoneId.MAIN, now = now)
+            }
+        }
+
+        composeRule.onNodeWithTag("next_departure_0").captureToImage().assertMostly(expected)
+    }
 
     @Test
     fun shuttleCacheDescribesRawWeeklyRowsAndUniqueUserDepartureSlots() {
@@ -204,6 +248,22 @@ class DataSourceScreenTest {
         composeRule.onNodeWithText("식단 데이터 관리").assertDoesNotExist()
     }
 
+    @Test
+    fun mealRefreshExplainsThatTheNewWeekHasNotBeenPublishedYet() {
+        composeRule.setContent {
+            MealScreen(
+                mealSource = object : MealSource {
+                    override val data = MutableStateFlow(MealData(emptyList(), null, null, null, "https://www.dima.ac.kr/?p=1", null, null))
+                    override suspend fun refresh() = MealRefreshResult.NotPublishedYet
+                },
+                today = LocalDate.parse("2026-08-31"),
+            )
+        }
+
+        composeRule.onNodeWithContentDescription("식단 새로고침").performClick()
+        composeRule.onNodeWithText("아직 새 식단이 올라오지 않았어요").assertExists()
+    }
+
     private fun departure(
         route: String,
         stop: String,
@@ -253,5 +313,27 @@ class DataSourceScreenTest {
             release.await()
             return ShuttleRefreshResult.Success(2, Instant.parse("2026-08-26T12:00:10Z"))
         }
+    }
+
+    private fun androidx.compose.ui.graphics.ImageBitmap.assertMostly(expected: Color) {
+        val pixels = toPixelMap()
+        var matches = 0
+        val expectedArgb = expected.toArgb()
+        val histogram = mutableMapOf<Int, Int>()
+        fun channel(argb: Int, shift: Int) = (argb ushr shift) and 0xff
+        for (x in 0 until width) {
+            for (y in 0 until height) {
+                val actual = pixels[x, y].toArgb()
+                histogram[actual] = (histogram[actual] ?: 0) + 1
+                val closeEnough = listOf(16, 8, 0).all { shift ->
+                    kotlin.math.abs(channel(actual, shift) - channel(expectedArgb, shift)) <= 3
+                }
+                if (closeEnough) matches++
+            }
+        }
+        org.junit.Assert.assertTrue(
+            "expected solid color ${expected.toArgb().toUInt().toString(16)} to cover the departure capsule, matched $matches/${width * height}; top=${histogram.entries.sortedByDescending { it.value }.take(8).joinToString { it.key.toUInt().toString(16) + ":" + it.value }}",
+            matches >= (width * height) / 2,
+        )
     }
 }

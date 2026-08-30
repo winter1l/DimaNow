@@ -42,7 +42,7 @@ class UrlConnectionStaticDataTransport : StaticDataTransport {
             connection.readTimeout = 20_000
             connection.instanceFollowRedirects = false
             connection.setRequestProperty("Accept", "application/json")
-            connection.setRequestProperty("User-Agent", "DIMA-Now/1.1")
+            connection.setRequestProperty("User-Agent", "DIMA-Now/1.2")
             require(connection.responseCode == HttpURLConnection.HTTP_OK) {
                 "동기화 서버 응답 ${connection.responseCode}"
             }

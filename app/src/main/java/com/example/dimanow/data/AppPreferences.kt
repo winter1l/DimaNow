@@ -3,6 +3,7 @@ package com.example.dimanow.data
 import android.content.Context
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.intPreferencesKey
+import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.core.edit
@@ -16,6 +17,15 @@ import com.example.dimanow.live.LiveClassOrder
 import com.example.dimanow.live.LiveDisplayOptions
 import com.example.dimanow.guidance.HomeBase
 import com.example.dimanow.location.LocationMode
+import com.example.dimanow.update.AppUpdateRelease
+
+data class AppUpdatePreferences(
+    val lastCheckedEpochMillis: Long? = null,
+    val cachedRelease: AppUpdateRelease? = null,
+    val dismissedVersion: String? = null,
+    val preparedPath: String? = null,
+    val preparedVersion: String? = null,
+)
 
 private val Context.settingsDataStore by preferencesDataStore(name = "dima_now_settings")
 
@@ -80,6 +90,29 @@ class AppPreferences(private val context: Context) {
         preferences[BACKGROUND_WORK_POLICY_VERSION] ?: 0
     }
 
+    val appUpdatePreferences: Flow<AppUpdatePreferences> = context.settingsDataStore.data.map { preferences ->
+        val version = preferences[UPDATE_LATEST_VERSION]
+        val release = if (
+            version != null && preferences[UPDATE_RELEASE_PAGE] != null && preferences[UPDATE_DOWNLOAD_URL] != null &&
+            preferences[UPDATE_SIZE] != null && preferences[UPDATE_SHA256] != null
+        ) {
+            AppUpdateRelease(
+                versionName = version,
+                releasePageUrl = preferences[UPDATE_RELEASE_PAGE]!!,
+                downloadUrl = preferences[UPDATE_DOWNLOAD_URL]!!,
+                sizeBytes = preferences[UPDATE_SIZE]!!,
+                sha256 = preferences[UPDATE_SHA256]!!,
+            )
+        } else null
+        AppUpdatePreferences(
+            lastCheckedEpochMillis = preferences[UPDATE_LAST_CHECKED],
+            cachedRelease = release,
+            dismissedVersion = preferences[UPDATE_DISMISSED_VERSION],
+            preparedPath = preferences[UPDATE_PREPARED_PATH],
+            preparedVersion = preferences[UPDATE_PREPARED_VERSION],
+        )
+    }
+
     @Deprecated("Automatic class guidance is always enabled")
     suspend fun setAutomaticClassGuidance(@Suppress("UNUSED_PARAMETER") enabled: Boolean) {
         context.settingsDataStore.edit { it[AUTOMATIC_CLASS_GUIDANCE] = true }
@@ -131,6 +164,35 @@ class AppPreferences(private val context: Context) {
         context.settingsDataStore.edit { it[BACKGROUND_WORK_POLICY_VERSION] = version }
     }
 
+    suspend fun recordAppUpdateCheck(atEpochMillis: Long, release: AppUpdateRelease) {
+        context.settingsDataStore.edit {
+            it[UPDATE_LAST_CHECKED] = atEpochMillis
+            it[UPDATE_LATEST_VERSION] = release.versionName
+            it[UPDATE_RELEASE_PAGE] = release.releasePageUrl
+            it[UPDATE_DOWNLOAD_URL] = release.downloadUrl
+            it[UPDATE_SIZE] = release.sizeBytes
+            it[UPDATE_SHA256] = release.sha256
+        }
+    }
+
+    suspend fun dismissAppUpdateVersion(version: String) {
+        context.settingsDataStore.edit { it[UPDATE_DISMISSED_VERSION] = version }
+    }
+
+    suspend fun recordPreparedAppUpdate(path: String, version: String) {
+        context.settingsDataStore.edit {
+            it[UPDATE_PREPARED_PATH] = path
+            it[UPDATE_PREPARED_VERSION] = version
+        }
+    }
+
+    suspend fun clearPreparedAppUpdate() {
+        context.settingsDataStore.edit {
+            it.remove(UPDATE_PREPARED_PATH)
+            it.remove(UPDATE_PREPARED_VERSION)
+        }
+    }
+
     private companion object {
         val AUTOMATIC_CLASS_GUIDANCE = booleanPreferencesKey("automatic_class_guidance")
         val LAST_RESOLVED_ZONE = stringPreferencesKey("last_resolved_zone")
@@ -144,5 +206,14 @@ class AppPreferences(private val context: Context) {
         val HOME_BASE_SELECTION_CONFIRMED = booleanPreferencesKey("home_base_selection_confirmed")
         val NOW_BAR_SETUP_COMPLETED = booleanPreferencesKey("now_bar_setup_completed")
         val BACKGROUND_WORK_POLICY_VERSION = intPreferencesKey("background_work_policy_version")
+        val UPDATE_LAST_CHECKED = longPreferencesKey("update_last_checked")
+        val UPDATE_LATEST_VERSION = stringPreferencesKey("update_latest_version")
+        val UPDATE_RELEASE_PAGE = stringPreferencesKey("update_release_page")
+        val UPDATE_DOWNLOAD_URL = stringPreferencesKey("update_download_url")
+        val UPDATE_SIZE = longPreferencesKey("update_size")
+        val UPDATE_SHA256 = stringPreferencesKey("update_sha256")
+        val UPDATE_DISMISSED_VERSION = stringPreferencesKey("update_dismissed_version")
+        val UPDATE_PREPARED_PATH = stringPreferencesKey("update_prepared_path")
+        val UPDATE_PREPARED_VERSION = stringPreferencesKey("update_prepared_version")
     }
 }

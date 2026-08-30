@@ -34,6 +34,7 @@ class MainActivity : ComponentActivity() {
             mealSource = application.mealSource,
             noticeSource = application.noticeSource,
             liveSurfaceController = application.liveSurfaceController,
+            appUpdateCoordinator = application.appUpdateCoordinator,
             initialTargetPage = targetPage,
           )
         }

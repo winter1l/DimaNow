@@ -101,6 +101,7 @@ data class MealCachedWeek(
 
 sealed interface MealRefreshResult {
     data class Success(val weekStart: LocalDate, val at: Instant) : MealRefreshResult
+    data object NotPublishedYet : MealRefreshResult
     data class NeedsReview(val reason: String, val sourceImageUrl: String?) : MealRefreshResult
     data class Failure(val message: String) : MealRefreshResult
 }
@@ -146,14 +147,76 @@ class StaticMealSource(
             val manifest = json.decodeFromString<CampusDataManifest>(transport.get(MANIFEST_URL).decodeToString())
             require(manifest.schemaVersion == 1) { "지원하지 않는 동기화 스키마입니다." }
             val descriptor = manifest.datasets.getValue(SOURCE_KEY)
-            require(descriptor.state == "READY") { descriptor.message ?: "식단 데이터가 준비되지 않았습니다." }
             require(descriptor.sourceUrl == OFFICIAL_MEAL_SOURCE_URL) { "허용되지 않은 식단 원문 주소입니다." }
             val previousSync = dao.syncState(SOURCE_KEY)
+            if (descriptor.state != "READY") {
+                val previousStatus = dao.sourceStatus(SOURCE_KEY)
+                val reason = descriptor.message ?: when (descriptor.state) {
+                    "WAITING" -> NOT_PUBLISHED_MESSAGE
+                    "NEEDS_REVIEW" -> "메뉴 확인 필요"
+                    else -> "식단 데이터가 준비되지 않았습니다."
+                }
+                database.withTransaction {
+                    dao.putSourceStatus(
+                        SourceStatusEntity(
+                            source = SOURCE_KEY,
+                            lastSuccessEpochMillis = previousStatus?.lastSuccessEpochMillis,
+                            lastAttemptEpochMillis = attempt.toEpochMilli(),
+                            error = if (descriptor.state == "NEEDS_REVIEW") reason else null,
+                            sourceUrl = descriptor.sourceUrl,
+                            candidateImageUrl = previousStatus?.candidateImageUrl,
+                            hours = previousStatus?.hours,
+                        ),
+                    )
+                    dao.putSyncState(
+                        (previousSync ?: SyncStateEntity(
+                            dataset = SOURCE_KEY,
+                            revision = descriptor.revision,
+                            etag = null,
+                            sha256 = descriptor.sha256,
+                            serverPublishedEpochMillis = runCatching { Instant.parse(descriptor.publishedAt).toEpochMilli() }.getOrNull(),
+                            lastCheckedEpochMillis = attempt.toEpochMilli(),
+                            lastImportedEpochMillis = null,
+                            serverState = descriptor.state,
+                            error = null,
+                        )).copy(
+                            revision = descriptor.revision,
+                            sha256 = descriptor.sha256,
+                            lastCheckedEpochMillis = attempt.toEpochMilli(),
+                            serverState = descriptor.state,
+                            error = if (descriptor.state == "NEEDS_REVIEW") reason else null,
+                        ),
+                    )
+                }
+                return@withContext when (descriptor.state) {
+                    "WAITING" -> MealRefreshResult.NotPublishedYet
+                    "NEEDS_REVIEW" -> MealRefreshResult.NeedsReview(reason, previousStatus?.candidateImageUrl)
+                    else -> MealRefreshResult.Failure(reason)
+                }
+            }
             if (previousSync?.revision == descriptor.revision && previousSync.sha256 == descriptor.sha256) {
                 val previousStatus = dao.sourceStatus(SOURCE_KEY)
                 val cachedDays = dao.observeMealDays().first()
                 val week = cachedDays.firstOrNull()?.epochDay?.let(LocalDate::ofEpochDay)
                     ?: throw IllegalStateException("식단 캐시가 비어 있습니다.")
+                val cachedLastDate = cachedDays.maxOf { LocalDate.ofEpochDay(it.epochDay) }
+                if (cachedLastDate.isBefore(MealRefreshClock.today(clock))) {
+                    database.withTransaction {
+                        dao.putSyncState(previousSync.copy(lastCheckedEpochMillis = attempt.toEpochMilli(), serverState = "WAITING", error = null))
+                        dao.putSourceStatus(
+                            SourceStatusEntity(
+                                source = SOURCE_KEY,
+                                lastSuccessEpochMillis = previousStatus?.lastSuccessEpochMillis,
+                                lastAttemptEpochMillis = attempt.toEpochMilli(),
+                                error = null,
+                                sourceUrl = descriptor.sourceUrl,
+                                candidateImageUrl = previousStatus?.candidateImageUrl,
+                                hours = previousStatus?.hours,
+                            ),
+                        )
+                    }
+                    return@withContext MealRefreshResult.NotPublishedYet
+                }
                 database.withTransaction {
                     dao.putSyncState(previousSync.copy(lastCheckedEpochMillis = attempt.toEpochMilli(), serverState = descriptor.state, error = null))
                     dao.putSourceStatus(
@@ -258,5 +321,6 @@ class StaticMealSource(
         const val DATA_ROOT = "https://winter1l.github.io/DimaNow/data/v1"
         const val MANIFEST_URL = "$DATA_ROOT/manifest.json"
         const val SOURCE_KEY = "meal"
+        const val NOT_PUBLISHED_MESSAGE = "아직 새 식단이 올라오지 않았어요"
     }
 }

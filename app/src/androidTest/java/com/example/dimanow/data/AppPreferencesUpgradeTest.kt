@@ -7,6 +7,7 @@ import com.example.dimanow.live.LiveClassOrder
 import com.example.dimanow.guidance.HomeBase
 import com.example.dimanow.domain.CampusZoneId
 import com.example.dimanow.location.LocationMode
+import com.example.dimanow.update.AppUpdateRelease
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertTrue
@@ -64,5 +65,27 @@ class AppPreferencesUpgradeTest {
 
         assertEquals(LiveChipContent.CLASSROOM, preferences.liveDisplayOptions.first().chipContent)
         assertEquals(LiveClassOrder.CLASSROOM_FIRST, preferences.liveDisplayOptions.first().classOrder)
+    }
+
+    @Test
+    fun updateCheckDismissalAndPreparedApkMetadataPersistTogether() = runTest {
+        val preferences = AppPreferences(ApplicationProvider.getApplicationContext())
+        val release = AppUpdateRelease(
+            "1.2",
+            "https://github.com/winter1l/DimaNow/releases/tag/v1.2",
+            "https://github.com/winter1l/DimaNow/releases/download/v1.2/DIMA-Now-v1.2-optimized.apk",
+            1234,
+            "a".repeat(64),
+        )
+
+        preferences.recordAppUpdateCheck(1_788_134_400_000, release)
+        preferences.dismissAppUpdateVersion("1.2")
+        preferences.recordPreparedAppUpdate("/cache/updates/v1.2.apk", "1.2")
+
+        val saved = preferences.appUpdatePreferences.first()
+        assertEquals(1_788_134_400_000, saved.lastCheckedEpochMillis)
+        assertEquals(release, saved.cachedRelease)
+        assertEquals("1.2", saved.dismissedVersion)
+        assertEquals("/cache/updates/v1.2.apk", saved.preparedPath)
     }
 }

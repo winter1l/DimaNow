@@ -86,7 +86,6 @@ class CampusGeofenceReceiver : BroadcastReceiver() {
         CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
             try {
                 handle(context, intent, app.preferences, app.repository.zones.first())
-                app.guidanceRuntimeCoordinator.requestRefresh()
             } finally {
                 pending.finish()
             }

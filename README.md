@@ -16,6 +16,7 @@ DIMA Now는 동아방송예술대학교 학생의 수업, 셔틀, 본관 학생�
 - Live Update: 수업과 셔틀 안내, 일반 진행 알림 대체 동작, Samsung Now Bar 지원 요청
 - 홈 화면 위젯: 셔틀, 식단, 캠퍼스 종합 위젯
 - 데이터 관리: 공식 원문, 캐시 상태, 마지막 동기화 결과와 수동 새로고침
+- 앱 업데이트: GitHub 최신 안정 릴리스를 하루 한 번 확인하고, 사용자가 요청한 경우에만 검증된 APK 설치 화면 열기
 
 ## 지원 환경
 
@@ -39,10 +40,12 @@ ADB로 기존 데이터를 유지하며 설치하려면 다음 명령을 사용�
 
 ```powershell
 adb devices
-adb -s <device-serial> install -r DIMA-Now-v1.1-optimized.apk
+adb -s <device-serial> install -r DIMA-Now-v1.2-optimized.apk
 ```
 
 릴리스 APK는 개인 직접 설치를 위해 Android 디버그 인증서로 서명되어 있습니다. Google Play 배포용 서명이 아니며, 기존 설치본과 서명 인증서가 다르면 `-r` 업데이트가 거부될 수 있습니다.
+
+앱은 실행 시 마지막 확인으로부터 24시간이 지났을 때 GitHub의 최신 안정 릴리스를 확인합니다. 새 버전 안내는 버전마다 한 번만 자동 표시하며, 설정의 `앱 업데이트`에서 언제든 다시 확인할 수 있습니다. APK는 자동으로 설치되지 않습니다. `다운로드 및 설치`를 누른 경우에만 GitHub asset을 내려받아 SHA-256, 패키지명, 더 높은 versionCode, versionName, 현재 앱과 같은 서명을 확인한 뒤 Android 시스템 설치 확인 화면을 엽니다. 필요한 경우 DIMA Now 한 앱에 대한 `알 수 없는 앱 설치` 권한 화면이 먼저 열립니다.
 
 ## Samsung Now Bar 설정
 
@@ -116,6 +119,12 @@ adb devices
 식단 후보가 아직 게시되지 않았거나 검증에 실패하면 manifest를 `WAITING` 또는 `NEEDS_REVIEW`로 갱신하고 기존 정상 식단 JSON은 유지합니다. GitHub Actions의 예약 실행은 지연될 수 있으므로 실시간 보장 서비스가 아닙니다.
 
 식단 게시 workflow에는 저장소 Actions Secret `GEMINI_API_KEY`가 필요합니다. 로컬 개발에서는 `.env.example`을 참고하되 실제 `.env`와 API 키를 커밋하지 않습니다. Gemini에는 공식 공개 식단표 이미지만 전송하며 앱의 사용자 데이터는 전송하지 않습니다.
+
+## 앱 업데이트 경로
+
+업데이트 확인은 공개 GitHub Releases API의 latest stable release만 사용합니다. draft와 prerelease는 받지 않으며, 태그는 `vMAJOR.MINOR` 또는 `vMAJOR.MINOR.PATCH`, asset 이름은 `DIMA-Now-v<버전>-optimized.apk` 하나와 일치해야 합니다. 다운로드는 GitHub HTTPS 호스트로만 제한하고 128 MiB를 넘는 파일, GitHub digest가 없는 asset, 해시·패키지·버전·서명이 다른 APK는 삭제하고 설치하지 않습니다.
+
+이 기능은 Google Play의 무인 업데이트가 아닙니다. 다운로드와 Android 설치 확인은 항상 사용자 동작이 필요하고, 시스템의 설치 차단이나 확인 화면을 우회하지 않습니다.
 
 ### 셔틀 수정 방법
 

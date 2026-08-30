@@ -2541,15 +2541,20 @@ internal fun AppUpdateCard(
                     modifier = Modifier.fillMaxWidth(),
                 )
             }
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 when (state.phase) {
                     AppUpdatePhase.AVAILABLE -> Button(onClick = onDownload) { Text("다운로드 및 설치") }
                     AppUpdatePhase.DOWNLOADING -> OutlinedButton(onClick = onCancelDownload) { Text("취소") }
                     AppUpdatePhase.READY_TO_INSTALL, AppUpdatePhase.PERMISSION_REQUIRED -> Button(onClick = onContinueInstall) { Text("설치 계속") }
                     else -> OutlinedButton(enabled = state.phase != AppUpdatePhase.CHECKING, onClick = onCheck) { Text("업데이트 확인") }
                 }
-                state.latestRelease?.let { release ->
-                    OutlinedButton(onClick = { openUrl(context, release.releasePageUrl) }) { Text("릴리스 보기") }
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    if (state.phase == AppUpdatePhase.AVAILABLE || state.phase == AppUpdatePhase.READY_TO_INSTALL || state.phase == AppUpdatePhase.PERMISSION_REQUIRED) {
+                        OutlinedButton(onClick = onCheck) { Text("업데이트 확인") }
+                    }
+                    state.latestRelease?.let { release ->
+                        OutlinedButton(onClick = { openUrl(context, release.releasePageUrl) }) { Text("릴리스 보기") }
+                    }
                 }
             }
         }

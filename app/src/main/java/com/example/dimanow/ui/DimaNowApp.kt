@@ -19,6 +19,7 @@ import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
@@ -290,7 +291,9 @@ fun DimaNowApp(
                     slideOutHorizontally(
                         animationSpec = spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessMediumLow),
                         targetOffsetX = { width -> -slideOffset(width) },
-                    )
+                    ) + fadeOut(
+                        animationSpec = tween(durationMillis = 180),
+                    ),
                 ).apply { targetContentZIndex = 1f }
             },
             label = "tab_transition",

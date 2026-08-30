@@ -102,7 +102,7 @@ class MealRemotePipeline(
         const val DISCOVERY_URL = "https://www.dima.ac.kr/?p=1"
         const val PROFILE_FEED_URL = "https://www.instagram.com/api/v1/feed/user/30891067635/?count=12"
         const val INSTAGRAM_PUBLIC_APP_ID = "936619743392459"
-        const val USER_AGENT = "DIMA-Now/1.2 GitHub data pipeline"
+        const val USER_AGENT = "DIMA-Now/1.3 GitHub data pipeline"
         const val MAX_IMAGE_BYTES = 15L * 1024 * 1024
         const val NOT_PUBLISHED_MESSAGE = "아직 새 식단이 올라오지 않았어요"
     }

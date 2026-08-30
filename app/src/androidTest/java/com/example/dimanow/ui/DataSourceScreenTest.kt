@@ -19,6 +19,9 @@ import com.example.dimanow.domain.ShuttleDeparture
 import com.example.dimanow.meal.MealData
 import com.example.dimanow.meal.MealRefreshResult
 import com.example.dimanow.meal.MealSource
+import com.example.dimanow.meal.DormitoryMealData
+import com.example.dimanow.meal.DormitoryMealDay
+import com.example.dimanow.meal.DormitoryMealSection
 import com.example.dimanow.shuttle.ShuttleData
 import com.example.dimanow.shuttle.ShuttleRefreshResult
 import com.example.dimanow.shuttle.ShuttleSource
@@ -221,6 +224,79 @@ class DataSourceScreenTest {
     }
 
     @Test
+    fun dormitoryTabShowsUploadOnlyWhenTheCurrentWeekIsMissing() {
+        composeRule.setContent {
+            MealScreen(
+                mealSource = FakeMealSource(),
+                today = LocalDate.parse("2026-08-27"),
+            )
+        }
+
+        composeRule.onNodeWithText("본관 학생식당").assertExists()
+        composeRule.onNodeWithText("기숙사").performClick()
+        composeRule.onNodeWithText("사진 올리기").assertExists()
+        composeRule.onAllNodesWithText("등록된 식단 없음").assertCountEquals(5)
+    }
+
+    @Test
+    fun currentDormitoryWeekKeepsEveryMealSectionAndHidesUpload() {
+        val dormitoryDays = listOf(
+            DormitoryMealDay(
+                date = LocalDate.parse("2026-08-24"),
+                sections = listOf(
+                    DormitoryMealSection("조식", "08:00~09:30", listOf("떡국", "쌀밥")),
+                    DormitoryMealSection("중식", "12:00~14:00", listOf("미역국", "오징어무침")),
+                    DormitoryMealSection("석식", "18:00~19:30", listOf("콩나물불고기")),
+                ),
+                sourceImageUrl = "https://example.invalid/dorm.jpg",
+            ),
+        )
+        composeRule.setContent {
+            MealScreen(
+                mealSource = FakeMealSource(dormitoryDays = dormitoryDays),
+                today = LocalDate.parse("2026-08-27"),
+            )
+        }
+
+        composeRule.onNodeWithText("기숙사").performClick()
+        composeRule.onNodeWithText("조식 · 08:00~09:30").assertExists()
+        composeRule.onNodeWithText("떡국 · 쌀밥").assertExists()
+        composeRule.onNodeWithText("중식 · 12:00~14:00").assertExists()
+        composeRule.onNodeWithText("석식 · 18:00~19:30").assertExists()
+        composeRule.onNodeWithText("사진 올리기").assertDoesNotExist()
+    }
+
+    @Test
+    fun dormitoryUploadRefreshesFirstAndStopsWhenTheServerAlreadyHasThisWeek() {
+        val source = DuplicateDormitoryMealSource()
+        composeRule.setContent {
+            MealScreen(mealSource = source, today = LocalDate.parse("2026-08-27"))
+        }
+
+        composeRule.onNodeWithText("기숙사").performClick()
+        composeRule.onNodeWithText("사진 올리기").performClick()
+
+        composeRule.waitUntil(5_000) { source.refreshCount == 1 }
+        composeRule.onNodeWithText("사진 선택").assertDoesNotExist()
+        composeRule.onNodeWithText("이번 주 기숙사 식단을 불러왔어요").assertExists()
+        composeRule.onNodeWithText("사진 올리기").assertDoesNotExist()
+    }
+
+    @Test
+    fun missingDormitoryWeekOffersOnlyPhotoOrCameraAfterRefresh() {
+        val source = FakeMealSource()
+        composeRule.setContent {
+            MealScreen(mealSource = source, today = LocalDate.parse("2026-08-27"))
+        }
+
+        composeRule.onNodeWithText("기숙사").performClick()
+        composeRule.onNodeWithText("사진 올리기").performClick()
+
+        composeRule.onNodeWithText("사진 선택").assertExists()
+        composeRule.onNodeWithText("카메라 촬영").assertExists()
+    }
+
+    @Test
     fun todaysMealExplainsThatServiceHasNotOpenedYet() {
         composeRule.setContent {
             MealScreen(
@@ -297,9 +373,30 @@ class DataSourceScreenTest {
         override suspend fun refresh() = ShuttleRefreshResult.Success(data.value.departures.size, Instant.parse("2026-08-26T12:00:10Z"))
     }
 
-    private class FakeMealSource(days: List<MealDay> = emptyList()) : MealSource {
+    private class FakeMealSource(
+        days: List<MealDay> = emptyList(),
+        dormitoryDays: List<DormitoryMealDay> = emptyList(),
+    ) : MealSource {
         override val data = MutableStateFlow(MealData(days, null, null, null, "https://www.dima.ac.kr/?p=1", null, "11:30~14:00"))
+        override val dormitoryData = MutableStateFlow(DormitoryMealData(dormitoryDays, null, null, null))
         override suspend fun refresh() = MealRefreshResult.Failure("unused")
+    }
+
+    private class DuplicateDormitoryMealSource : MealSource {
+        override val data = MutableStateFlow(MealData(emptyList(), null, null, null, "https://www.dima.ac.kr/?p=1", null, null))
+        override val dormitoryData = MutableStateFlow(DormitoryMealData(emptyList(), null, null, null))
+        var refreshCount = 0
+        override suspend fun refresh() = MealRefreshResult.Failure("unused")
+        override suspend fun refreshDormitory(): MealRefreshResult {
+            refreshCount++
+            dormitoryData.value = DormitoryMealData(
+                listOf(DormitoryMealDay(LocalDate.parse("2026-08-24"), listOf(DormitoryMealSection("중식", null, listOf("제육볶음"))), "https://example.invalid/dorm.jpg")),
+                Instant.parse("2026-08-27T01:00:00Z"),
+                Instant.parse("2026-08-27T01:00:00Z"),
+                null,
+            )
+            return MealRefreshResult.Success(LocalDate.parse("2026-08-24"), Instant.parse("2026-08-27T01:00:00Z"))
+        }
     }
 
     private class BlockingShuttleSource : ShuttleSource {

@@ -8,6 +8,7 @@ DIMA Now는 개인용 비공식 Android 앱입니다.
 - 선택한 귀가 기준지, 표시 옵션, 권한 안내 완료 여부와 테스트 모드
 - 앱이 판정한 마지막 캠퍼스 구역
 - GitHub Pages에서 동기화한 셔틀·식단·공지 캐시와 동기화 상태
+- 기숙사 식단 제출을 허용한 GitHub 연결 토큰. 토큰은 Android Keystore 키로 암호화되며 앱 전용 저장소에만 보관됩니다.
 - 마지막 앱 업데이트 확인 시각, 확인한 공개 릴리스 정보, 버전별 안내 닫기 상태와 검증된 대기 APK 경로
 
 이 정보는 앱의 Room 데이터베이스와 DataStore에 저장됩니다. DIMA Now 프로젝트가 운영하는 서버로 전송하지 않습니다. 앱 삭제 또는 Android의 앱 데이터 삭제로 제거할 수 있습니다.
@@ -20,7 +21,9 @@ DIMA Now는 개인용 비공식 Android 앱입니다.
 
 앱은 `winter1l.github.io`의 정적 JSON과 GitHub 공개 Releases API를 확인하고, 사용자가 원문 버튼을 누르면 Android 브라우저로 DIMA 또는 Instagram 공개 페이지를 엽니다. 업데이트 다운로드는 사용자가 직접 요청한 경우에만 GitHub release asset에서 실행됩니다. GitHub Pages, GitHub API와 외부 브라우저 서비스에는 해당 서비스의 접속 기록 정책이 적용될 수 있습니다.
 
-공식 DIMA 페이지 수집과 공개 Instagram 이미지 OCR은 앱이 아니라 GitHub Actions에서 실행됩니다. 식단표 이미지는 구조화된 메뉴 JSON을 만들기 위해 Google Gemini API로 전송됩니다. 이때 앱 사용자의 위치·시간표·설정·기기 정보는 전송하지 않으며, 계정 로그인이나 Instagram 자격 증명도 사용하지 않습니다.
+공식 DIMA 페이지 수집과 공개 Instagram 이미지 OCR은 앱이 아니라 GitHub Actions에서 실행됩니다. 식단표 이미지는 구조화된 메뉴 JSON을 만들기 위해 Google Gemini API로 전송됩니다. 이때 앱 사용자의 위치·시간표·설정·기기 정보는 전송하지 않으며, Instagram 자격 증명도 사용하지 않습니다.
+
+현재 주 기숙사 식단이 없을 때 사용자가 `사진 올리기`를 선택하면 앱은 먼저 Pages를 새로고침합니다. 여전히 식단이 없고 사용자가 공개 공유 안내를 확인한 경우에만 선택하거나 촬영한 사진을 공개 GitHub `dorm-submissions` 브랜치에 전송합니다. GitHub Actions가 사진을 Gemini로 보내 기숙사 식단표 여부와 표 전체 노출을 확인하고, 통과한 메뉴 JSON을 GitHub Pages에 게시합니다. 사진과 검증 JSON에는 GitHub의 공개 저장소·Pages 보존 및 접속 정책이 적용됩니다.
 
 ## 공개 저장소 사용 시 주의
 

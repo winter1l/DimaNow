@@ -1,7 +1,12 @@
 package com.example.dimanow.pipeline
 
 import com.example.dimanow.sync.CampusDataManifest
+import com.example.dimanow.sync.DormitoryMealDayPayload
+import com.example.dimanow.sync.DormitoryMealPayload
+import com.example.dimanow.sync.DormitoryMealSectionPayload
+import com.example.dimanow.sync.DormitoryMealSubmissionStatus
 import java.nio.file.Files
+import java.time.LocalDate
 import java.time.Instant
 import kotlinx.serialization.json.Json
 import org.junit.Assert.assertEquals
@@ -9,6 +14,54 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class StaticDataPublisherTest {
+    @Test
+    fun `검증된 기숙사 식단과 제출 결과를 Pages에 게시한다`() {
+        val output = Files.createTempDirectory("dima-dorm-meal")
+        val publisher = StaticDataPublisher(output)
+        val payload = dormitoryPayload()
+
+        publisher.publishDormitoryMeal(payload, revision = 2, publishedAt = Instant.parse("2026-08-27T04:00:00Z"))
+        publisher.publishDormitorySubmissionStatus(
+            DormitoryMealSubmissionStatus("submission-1", "PUBLISHED", null, "2026-08-27T04:00:00Z"),
+        )
+
+        val manifest = Json.decodeFromString<CampusDataManifest>(Files.readString(output.resolve("data/v1/manifest.json")))
+        val descriptor = manifest.datasets.getValue("dorm_meal")
+        assertEquals("READY", descriptor.state)
+        assertTrue(descriptor.url.matches(Regex("dorm-meal/[0-9a-f]{64}\\.json")))
+        assertTrue(Files.exists(output.resolve("data/v1").resolve(descriptor.url)))
+        val status = Json.decodeFromString<DormitoryMealSubmissionStatus>(
+            Files.readString(output.resolve("data/v1/dorm-submissions/submission-1.json")),
+        )
+        assertEquals("PUBLISHED", status.state)
+    }
+
+    @Test
+    fun `현재 주 기숙사 식단이 있으면 새 Gemini 처리를 막는다`() {
+        val output = Files.createTempDirectory("dima-dorm-dedupe")
+        val publisher = StaticDataPublisher(output)
+        publisher.publishDormitoryMeal(dormitoryPayload(), 1, Instant.parse("2026-08-27T04:00:00Z"))
+
+        assertTrue(publisher.hasCurrentDormitoryMeal(LocalDate.of(2026, 8, 27)))
+        assertEquals(false, publisher.hasCurrentDormitoryMeal(LocalDate.of(2026, 8, 31)))
+    }
+
+    @Test
+    fun `주말에는 다음 월요일 식단도 중복 제출로 판정한다`() {
+        val output = Files.createTempDirectory("dima-dorm-weekend-dedupe")
+        val publisher = StaticDataPublisher(output)
+        val payload = dormitoryPayload().copy(
+            weekStart = "2026-08-31",
+            weekEnd = "2026-09-06",
+            days = listOf(
+                DormitoryMealDayPayload("2026-08-31", listOf(DormitoryMealSectionPayload("중식", null, listOf("제육볶음")))),
+            ),
+        )
+        publisher.publishDormitoryMeal(payload, 1, Instant.parse("2026-08-30T04:00:00Z"))
+
+        assertTrue(publisher.hasCurrentDormitoryMeal(LocalDate.of(2026, 8, 30)))
+    }
+
     @Test
     fun `검증된 셔틀을 해시 payload와 manifest로 게시한다`() {
         val output = Files.createTempDirectory("dima-publish")
@@ -87,4 +140,16 @@ class StaticDataPublisherTest {
         assertEquals("2026-08-28T01:00:00Z", descriptor.publishedAt)
         assertEquals("2026-08-28T07:00:00Z", descriptor.lastAttemptAt)
     }
+
+    private fun dormitoryPayload() = DormitoryMealPayload(
+        weekStart = "2026-08-24",
+        weekEnd = "2026-08-30",
+        sourceImageUrl = "https://raw.githubusercontent.com/winter1l/DimaNow/dorm-submissions/dorm-submissions/example.jpg",
+        days = listOf(
+            DormitoryMealDayPayload(
+                date = "2026-08-24",
+                sections = listOf(DormitoryMealSectionPayload("조식", "08:00~09:30", listOf("떡국"))),
+            ),
+        ),
+    )
 }

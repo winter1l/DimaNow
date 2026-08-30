@@ -98,6 +98,12 @@ Evidence: commit `71a9478` replaced the GitHub-hosted Tesseract meal step with o
 
 Evidence: commit `23b0296` restores a 180 ms fade only to the outgoing tab while keeping the incoming tab fully opaque and above it. Card-level staggered entrance remains translation-only, so its elevation surface is not faded. On the API 36 `medium_phone` emulator, the focused `CardShadowTransitionTest` and `AppBackNavigationTest` run completed 3/3 cases with zero failures.
 
+### User-submitted dormitory meal pipeline - automated and GitHub configuration verified - 2026-08-31
+
+Evidence: the Meal screen separates `본관 학생식당` and `기숙사`; a missing target week exposes only the concise `사진 올리기` path with system Photo Picker and camera capture. Submission preflight refreshes the static manifest, serializes duplicate checks, caps JPEG/PNG/WebP uploads at 15 MiB, and obtains an expiring GitHub user token through Device Flow stored with Android Keystore encryption. GitHub App `DIMA Now Meal Upload` is installed only on `winter1l/DimaNow`; the verified permissions page shows `Contents: Read and write` plus GitHub-mandatory `Metadata: Read-only`, Device Flow enabled, no webhook, and no other selected permission. The public Client ID is embedded; no client secret, private key, user token, or Gemini key is stored in the app or repository.
+
+The Actions pipeline makes two schema-constrained `gemini-3.5-flash-lite` calls: HIGH-thinking dormitory/full-table validation with the exact approved Korean keys, followed by separate structured OCR. Duplicate and stale-week candidates publish a status without replacing last-good Pages data. App unit tests report 101/101 passing; pipeline tests report 31 passing plus one explicitly gated live probe; final Android-test compilation, `lintDebug`, debug/optimized assemblies, and the API 36 suite pass. The final emulator suite reports 73 cases, 70 passes, and three intentional Samsung-physical/live-network skips. Live Actions rejection, release publication, and Galaxy installation are recorded separately once completed.
+
 ## Permanently excluded
 
-- Dorm-meal automation, login automation, multi-user distribution, backend/server operation, and store release (D-001).
+- Everytime scraping/login automation, a separately operated backend/server, and store release. Dormitory menus are accepted only from explicit user photo submissions through the verified GitHub/Gemini pipeline.

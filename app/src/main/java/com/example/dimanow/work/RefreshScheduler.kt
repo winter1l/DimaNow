@@ -63,6 +63,9 @@ class CampusSyncWorker(context: Context, parameters: WorkerParameters) : Corouti
         val app = applicationContext as DimaNowApplication
         val shuttle = app.shuttleSource.refresh()
         val meal = app.mealSource.refresh()
+        if (RefreshPolicy.shouldRefreshDormitory(app.mealSource.dormitoryData.first(), ZonedDateTime.now(MinuteTicker.CAMPUS_ZONE))) {
+            app.mealSource.refreshDormitory()
+        }
         val notice = app.noticeSource.refresh()
         if (shuttle is ShuttleRefreshResult.Success) ShuttleWidgetProvider.updateAll(applicationContext)
         if (meal is MealRefreshResult.Success) MealWidgetProvider.updateAll(applicationContext)

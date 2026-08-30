@@ -12,12 +12,16 @@ import com.example.dimanow.domain.CampusZoneId
 import com.example.dimanow.domain.DefaultSchedule
 import com.example.dimanow.domain.ShuttleDeparture
 import com.example.dimanow.meal.MealData
+import com.example.dimanow.meal.DormitoryMealData
+import com.example.dimanow.meal.DormitoryMealDay
+import com.example.dimanow.meal.DormitoryMealSection
 import com.example.dimanow.shuttle.ShuttleData
 import com.example.dimanow.live.LiveChipContent
 import com.example.dimanow.live.LiveClassOrder
 import com.example.dimanow.live.LiveDisplayOptions
 import java.time.DayOfWeek
 import java.time.Instant
+import java.time.LocalDate
 import java.time.LocalTime
 import java.time.ZoneId
 import java.time.ZonedDateTime
@@ -27,6 +31,39 @@ import org.junit.Assert.assertEquals
 
 class GuidanceCardTest {
     @get:Rule val composeRule = createComposeRule()
+
+    @Test
+    fun dashboardUsesDormitoryMealAtYeinAndMainCafeteriaAtMain() {
+        val now = ZonedDateTime.of(2026, 8, 31, 12, 0, 0, 0, ZoneId.of("Asia/Seoul"))
+        val dormitory = DormitoryMealData(
+            days = listOf(
+                DormitoryMealDay(
+                    LocalDate.parse("2026-08-31"),
+                    listOf(DormitoryMealSection("중식", "12:00~14:00", listOf("기숙사 제육볶음"))),
+                    "https://example.invalid/dorm.jpg",
+                ),
+            ),
+            lastSuccess = null,
+            lastAttempt = null,
+            error = null,
+        )
+        composeRule.setContent {
+            DashboardScreen(
+                schedule = DefaultSchedule.create(),
+                zone = CampusZoneId.YEIN,
+                hasSavedOrigin = true,
+                automatic = true,
+                shuttle = ShuttleData(emptyList(), null, null, null, "https://www.dima.ac.kr/?p=97", null),
+                meal = MealData(emptyList(), null, null, null, "https://www.dima.ac.kr/?p=1", null, null),
+                dormitoryMeal = dormitory,
+                now = now,
+            )
+        }
+
+        composeRule.onNodeWithText("기숙사").assertIsDisplayed()
+        composeRule.onNodeWithText("중식 · 기숙사 제육볶음").assertIsDisplayed()
+        composeRule.onNodeWithText("학생식당").assertDoesNotExist()
+    }
 
     @Test
     fun dashboardShowsBothMainDestinationsFromTheSameCurrentInstant() {

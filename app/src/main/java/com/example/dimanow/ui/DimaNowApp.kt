@@ -135,6 +135,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
+import androidx.core.content.FileProvider
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.dimanow.data.AppPreferences
 import com.example.dimanow.data.CampusDataRepository
@@ -160,6 +161,11 @@ import com.example.dimanow.live.LivePromotionReadiness
 import com.example.dimanow.live.LiveSettingsDestination
 import com.example.dimanow.live.LiveSurfaceController
 import com.example.dimanow.meal.MealData
+import com.example.dimanow.meal.DormitoryMealData
+import com.example.dimanow.meal.DormitoryMealImage
+import com.example.dimanow.meal.DormitoryMealAuthorization
+import com.example.dimanow.meal.DormitoryMealSubmissionResult
+import com.example.dimanow.meal.DormitoryDeviceAuthorization
 import com.example.dimanow.meal.MealSource
 import com.example.dimanow.meal.mealServiceStatus
 import com.example.dimanow.notice.NoticeData
@@ -184,7 +190,14 @@ import java.time.Instant
 import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
 import java.time.temporal.TemporalAdjusters
+import java.io.File
+import java.io.ByteArrayOutputStream
+import java.io.InputStream
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.first
 
 internal enum class AppPage(val title: String, val icon: ImageVector) {
     DASHBOARD("홈", Icons.Default.Home),
@@ -317,11 +330,11 @@ fun DimaNowApp(
                     Modifier.padding(padding),
                     requireNotNull(minuteNow),
                 )
-                AppPage.MEAL -> MealScreen(
-                    mealSource,
-                    Modifier.padding(padding),
-                    requireNotNull(minuteNow).toLocalDate(),
-                    minuteNow.toLocalTime(),
+                AppPage.MEAL -> MealRoute(
+                    preferences = preferences,
+                    mealSource = mealSource,
+                    modifier = Modifier.padding(padding),
+                    now = requireNotNull(minuteNow),
                 )
                 AppPage.SETTINGS -> SettingsRoute(
                     preferences = preferences,
@@ -402,6 +415,9 @@ private fun DashboardRoute(
     val meal by mealSource.data.collectAsStateWithLifecycle(
         initialValue = MealData(emptyList(), null, null, null, OFFICIAL_MEAL_SOURCE_URL, null, null),
     )
+    val dormitoryMeal by mealSource.dormitoryData.collectAsStateWithLifecycle(
+        initialValue = DormitoryMealData(emptyList(), null, null, null),
+    )
     val homeBase by preferences.homeBase.collectAsStateWithLifecycle(initialValue = HomeBase.YEIN)
     val emptyNotices = remember { NoticeData(emptyList(), null, null, null, OFFICIAL_NOTICE_SOURCE_URL) }
     val notices by (noticeSource?.data ?: remember { kotlinx.coroutines.flow.flowOf(emptyNotices) })
@@ -415,6 +431,7 @@ private fun DashboardRoute(
         automatic = true,
         shuttle = shuttle,
         meal = meal,
+        dormitoryMeal = dormitoryMeal,
         homeBase = homeBase,
         notices = notices,
         onNavigateToPage = onNavigateToPage,
@@ -438,6 +455,23 @@ private fun ShuttleRoute(
 ) {
     val resolvedZone by preferences.effectiveZone.collectAsStateWithLifecycle(initialValue = CampusZoneId.OUTSIDE)
     ShuttleScreen(shuttleSource, resolvedZone, modifier, now)
+}
+
+@Composable
+private fun MealRoute(
+    preferences: AppPreferences,
+    mealSource: MealSource,
+    modifier: Modifier,
+    now: ZonedDateTime,
+) {
+    val resolvedZone by preferences.effectiveZone.collectAsStateWithLifecycle(initialValue = CampusZoneId.OUTSIDE)
+    MealScreen(
+        mealSource = mealSource,
+        modifier = modifier,
+        today = now.toLocalDate(),
+        nowTime = now.toLocalTime(),
+        initialVenue = if (resolvedZone == CampusZoneId.YEIN) MealVenue.DORMITORY else MealVenue.MAIN_CAFETERIA,
+    )
 }
 
 @Composable
@@ -504,6 +538,7 @@ internal fun DashboardScreen(
     automatic: Boolean,
     shuttle: ShuttleData,
     meal: MealData,
+    dormitoryMeal: DormitoryMealData = DormitoryMealData(emptyList(), null, null, null),
     homeBase: HomeBase = HomeBase.YEIN,
     notices: NoticeData = NoticeData(emptyList(), null, null, null, OFFICIAL_NOTICE_SOURCE_URL),
     onNavigateToPage: (AppPage) -> Unit = {},
@@ -541,6 +576,8 @@ internal fun DashboardScreen(
     )
 
     val todayMeal = meal.days.firstOrNull { it.date == now.toLocalDate() }
+    val todayDormitoryMeal = dormitoryMeal.days.firstOrNull { it.date == now.toLocalDate() }
+    val useDormitoryMeal = zone == CampusZoneId.YEIN
     val mealServiceStatus = meal.serviceStatusAt(now)
     val originName = DisplayVocabulary.originName(zone)
 
@@ -960,7 +997,7 @@ internal fun DashboardScreen(
             }
         }
 
-        // 3. 오늘의 학생식당 카드
+        // 3. 현재 구역의 오늘 식단 카드
         ElevatedCard(
             modifier = Modifier
                 .fillMaxWidth()
@@ -977,19 +1014,36 @@ internal fun DashboardScreen(
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Icon(Icons.Default.Restaurant, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(22.dp))
-                        Text(text = "학생식당", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                        Text(text = if (useDormitoryMeal) "기숙사" else "학생식당", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                     }
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Text(
-                            text = mealServiceStatus.label,
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
+                        if (!useDormitoryMeal) {
+                            Text(
+                                text = mealServiceStatus.label,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
                         Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(14.dp))
                     }
                 }
 
                 when {
+                    useDormitoryMeal && todayDormitoryMeal != null && todayDormitoryMeal.sections.isNotEmpty() -> {
+                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            todayDormitoryMeal.sections.forEach { section ->
+                                Text(
+                                    text = "${section.name} · ${section.menuLines.joinToString(" · ")}",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.Medium,
+                                    maxLines = 2,
+                                )
+                            }
+                        }
+                    }
+                    useDormitoryMeal -> {
+                        Text("오늘 등록된 식단 정보가 없습니다", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
                     todayMeal != null && todayMeal.menuLines.isNotEmpty() -> {
                         Text(
                             text = todayMeal.menuLines.joinToString(" · "),
@@ -1318,8 +1372,7 @@ private fun TimetableScreen(repository: CampusDataRepository, schedule: TermSche
                 showPauseChoice = false
             },
             onRangeRequested = {
-                showPauseChoice = false
-                pausePickerMode = "RANGE"
+                showPauseChoice = false; pausePickerMode = "RANGE"
             },
             onDismiss = { showPauseChoice = false },
         )
@@ -2109,20 +2162,105 @@ private fun FlowTimeChips(
 // -----------------------------------------------------------------------------
 // 4. 식단 전용 화면 (Meal) - 월~금 5일만 표시
 // -----------------------------------------------------------------------------
+enum class MealVenue { MAIN_CAFETERIA, DORMITORY }
+
 @Composable
 fun MealScreen(
     mealSource: MealSource,
     modifier: Modifier = Modifier,
     today: LocalDate = LocalDate.now(MinuteTicker.CAMPUS_ZONE),
     nowTime: LocalTime = LocalTime.now(MinuteTicker.CAMPUS_ZONE),
+    initialVenue: MealVenue = MealVenue.MAIN_CAFETERIA,
 ) {
+    val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
     val meal by mealSource.data.collectAsStateWithLifecycle(
         initialValue = MealData(emptyList(), null, null, null, OFFICIAL_MEAL_SOURCE_URL, null, null),
     )
+    val dormitoryMeal by mealSource.dormitoryData.collectAsStateWithLifecycle(
+        initialValue = DormitoryMealData(emptyList(), null, null, null),
+    )
+    var venue by remember(initialVenue) { mutableStateOf(initialVenue) }
     var refreshing by remember { mutableStateOf(false) }
+    var uploadPreflight by remember { mutableStateOf(false) }
+    var showDormitoryPhotoSource by remember { mutableStateOf(false) }
+    var pendingImage by remember { mutableStateOf<DormitoryMealImage?>(null) }
+    var pendingAuthorization by remember { mutableStateOf<DormitoryDeviceAuthorization?>(null) }
+    var authorizationPolling by remember { mutableStateOf(false) }
+    var uploadingDormitoryMeal by remember { mutableStateOf(false) }
+    var cameraOutput by remember { mutableStateOf<Uri?>(null) }
     var refreshMessage by remember { mutableStateOf<String?>(null) }
+
+    fun loadImage(uri: Uri) {
+        scope.launch {
+            runCatching { readDormitoryMealImage(context, uri) }
+                .onSuccess { pendingImage = it }
+                .onFailure { refreshMessage = it.message ?: "식단 사진을 읽지 못했습니다." }
+        }
+    }
+    val photoPicker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
+        uri?.let(::loadImage)
+    }
+    val cameraLauncher = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { saved ->
+        if (saved) cameraOutput?.let(::loadImage)
+    }
+
+    suspend fun submitAndWatch(image: DormitoryMealImage) {
+        uploadingDormitoryMeal = true
+        try {
+            when (val submitted = mealSource.submitDormitoryMeal(image)) {
+                is DormitoryMealSubmissionResult.Submitted -> {
+                    refreshMessage = "식단 확인 중"
+                    repeat(90) {
+                        delay(10_000)
+                        when (val status = mealSource.dormitorySubmissionStatus(submitted.submissionId)) {
+                            DormitoryMealSubmissionResult.Processing -> Unit
+                            DormitoryMealSubmissionResult.Published -> {
+                                mealSource.refreshDormitory()
+                                refreshMessage = "기숙사 식단을 등록했어요"
+                                return
+                            }
+                            DormitoryMealSubmissionResult.Duplicate -> {
+                                mealSource.refreshDormitory()
+                                refreshMessage = "이미 이번 주 식단이 등록되어 있어요"
+                                return
+                            }
+                            is DormitoryMealSubmissionResult.Rejected -> {
+                                refreshMessage = status.reason
+                                return
+                            }
+                            is DormitoryMealSubmissionResult.Failure -> {
+                                refreshMessage = status.message
+                                return
+                            }
+                            else -> Unit
+                        }
+                    }
+                    refreshMessage = "식단 확인이 계속되고 있어요. 잠시 후 새로고침해 주세요."
+                }
+                DormitoryMealSubmissionResult.AuthorizationRequired -> refreshMessage = "GitHub 연결이 필요합니다."
+                is DormitoryMealSubmissionResult.Failure -> refreshMessage = submitted.message
+                else -> Unit
+            }
+        } finally {
+            uploadingDormitoryMeal = false
+        }
+    }
+
+    suspend fun authorizeOrSubmit(image: DormitoryMealImage) {
+        when (val authorization = mealSource.beginDormitoryUploadAuthorization()) {
+            DormitoryMealAuthorization.AlreadyAuthorized,
+            DormitoryMealAuthorization.Authorized,
+            -> submitAndWatch(image)
+            is DormitoryMealAuthorization.Started -> {
+                pendingImage = image
+                pendingAuthorization = authorization.authorization
+            }
+            is DormitoryMealAuthorization.Failed -> refreshMessage = authorization.message
+            DormitoryMealAuthorization.Pending -> Unit
+        }
+    }
 
     LaunchedEffect(refreshMessage) {
         refreshMessage?.let {
@@ -2136,39 +2274,78 @@ fun MealScreen(
         title = "식단표",
         modifier = Modifier.fillMaxSize(),
         topAction = {
-            IconButton(
-                enabled = !refreshing,
-                onClick = {
-                    refreshing = true
-                    refreshMessage = null
-                    scope.launch {
-                        try {
-                            refreshMessage = when (val result = mealSource.refresh()) {
-                                is com.example.dimanow.meal.MealRefreshResult.Success -> "${result.weekStart} 주간 식단 저장 완료"
-                                com.example.dimanow.meal.MealRefreshResult.NotPublishedYet -> "아직 새 식단이 올라오지 않았어요"
-                                is com.example.dimanow.meal.MealRefreshResult.NeedsReview -> "확인 필요: ${result.reason}"
-                                is com.example.dimanow.meal.MealRefreshResult.Failure -> "실패: ${result.message}"
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                if (venue == MealVenue.DORMITORY && !dormitoryMeal.hasCurrentWeek(today)) {
+                    TextButton(
+                        enabled = !refreshing && !uploadPreflight && !uploadingDormitoryMeal,
+                        onClick = {
+                            uploadPreflight = true
+                            scope.launch {
+                                try {
+                                    val result = mealSource.refreshDormitory()
+                                    val currentWeekExists = mealSource.dormitoryData.first().hasCurrentWeek(today)
+                                    if (result is com.example.dimanow.meal.MealRefreshResult.Success && currentWeekExists) {
+                                        refreshMessage = "이번 주 기숙사 식단을 불러왔어요"
+                                    } else {
+                                        showDormitoryPhotoSource = true
+                                    }
+                                } finally {
+                                    uploadPreflight = false
+                                }
                             }
-                        } finally {
-                            refreshing = false
+                        },
+                    ) { Text("사진 올리기") }
+                }
+                IconButton(
+                    enabled = !refreshing,
+                    onClick = {
+                        refreshing = true
+                        refreshMessage = null
+                        scope.launch {
+                            try {
+                                val result = if (venue == MealVenue.DORMITORY) mealSource.refreshDormitory() else mealSource.refresh()
+                                refreshMessage = when (result) {
+                                    is com.example.dimanow.meal.MealRefreshResult.Success -> "${result.weekStart} 주간 식단 저장 완료"
+                                    com.example.dimanow.meal.MealRefreshResult.NotPublishedYet -> "아직 새 식단이 올라오지 않았어요"
+                                    is com.example.dimanow.meal.MealRefreshResult.NeedsReview -> "확인 필요: ${result.reason}"
+                                    is com.example.dimanow.meal.MealRefreshResult.Failure -> "실패: ${result.message}"
+                                }
+                            } finally {
+                                refreshing = false
+                            }
                         }
+                    },
+                ) {
+                    if (refreshing) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(24.dp).semantics { contentDescription = "식단 새로고침 중" },
+                            strokeWidth = 2.5.dp,
+                            strokeCap = androidx.compose.ui.graphics.StrokeCap.Round,
+                        )
+                    } else {
+                        Icon(Icons.Default.Refresh, contentDescription = "식단 새로고침")
                     }
-                },
-            ) {
-                if (refreshing) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(24.dp).semantics { contentDescription = "식단 새로고침 중" },
-                        strokeWidth = 2.5.dp,
-                        strokeCap = androidx.compose.ui.graphics.StrokeCap.Round,
-                    )
-                } else {
-                    Icon(Icons.Default.Refresh, contentDescription = "식단 새로고침")
                 }
             }
         },
     ) {
-        // 주간 식단: 월요일부터 금요일까지 5일만 표시 (토, 일 제외)
-        WeeklyMealMenu(meal = meal, today = today, nowTime = nowTime)
+        SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
+            SegmentedButton(
+                selected = venue == MealVenue.MAIN_CAFETERIA,
+                onClick = { venue = MealVenue.MAIN_CAFETERIA },
+                shape = SegmentedButtonDefaults.itemShape(0, 2),
+            ) { Text("본관 학생식당") }
+            SegmentedButton(
+                selected = venue == MealVenue.DORMITORY,
+                onClick = { venue = MealVenue.DORMITORY },
+                shape = SegmentedButtonDefaults.itemShape(1, 2),
+            ) { Text("기숙사") }
+        }
+        if (venue == MealVenue.DORMITORY) {
+            WeeklyDormitoryMealMenu(dormitoryMeal, today)
+        } else {
+            WeeklyMealMenu(meal = meal, today = today, nowTime = nowTime)
+        }
     }
     SnackbarHost(
         snackbarHostState,
@@ -2177,6 +2354,191 @@ fun MealScreen(
             .padding(16.dp)
             .semantics { liveRegion = LiveRegionMode.Polite },
     )
+    }
+    if (showDormitoryPhotoSource) {
+        AlertDialog(
+            onDismissRequest = { showDormitoryPhotoSource = false },
+            title = { Text("기숙사 식단표") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    TextButton(
+                        onClick = {
+                            showDormitoryPhotoSource = false
+                            photoPicker.launch(androidx.activity.result.PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+                        },
+                    ) { Text("사진 선택") }
+                    TextButton(
+                        onClick = {
+                            showDormitoryPhotoSource = false
+                            val file = File(context.cacheDir, "dorm-meals/capture-${System.currentTimeMillis()}.jpg").apply {
+                                parentFile?.mkdirs()
+                            }
+                            val outputUri = FileProvider.getUriForFile(context, "${context.packageName}.updates", file)
+                            cameraOutput = outputUri
+                            cameraLauncher.launch(outputUri)
+                        },
+                    ) { Text("카메라 촬영") }
+                }
+            },
+            confirmButton = {},
+        )
+    }
+    pendingImage?.let { image ->
+        if (pendingAuthorization == null) {
+            AlertDialog(
+                onDismissRequest = { pendingImage = null },
+                title = { Text("기숙사 식단 올리기") },
+                text = { Text("사진은 식단 확인 후 공개 데이터로 공유됩니다.") },
+                confirmButton = {
+                    Button(
+                        enabled = !uploadingDormitoryMeal,
+                        onClick = {
+                            pendingImage = null
+                            scope.launch { authorizeOrSubmit(image) }
+                        },
+                    ) { Text("올리기") }
+                },
+                dismissButton = { TextButton(onClick = { pendingImage = null }) { Text("취소") } },
+            )
+        }
+    }
+    pendingAuthorization?.let { authorization ->
+        AlertDialog(
+            onDismissRequest = {
+                authorizationPolling = false
+                pendingAuthorization = null
+                pendingImage = null
+            },
+            title = { Text("GitHub 연결") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(authorization.userCode, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                    if (authorizationPolling) CircularProgressIndicator(Modifier.size(24.dp))
+                }
+            },
+            confirmButton = {
+                Button(
+                    enabled = !authorizationPolling,
+                    onClick = {
+                        context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(authorization.verificationUri)))
+                        authorizationPolling = true
+                    },
+                ) { Text("GitHub에서 승인") }
+            },
+            dismissButton = { TextButton(onClick = { pendingAuthorization = null; pendingImage = null }) { Text("취소") } },
+        )
+    }
+    LaunchedEffect(pendingAuthorization, authorizationPolling) {
+        val authorization = pendingAuthorization ?: return@LaunchedEffect
+        if (!authorizationPolling) return@LaunchedEffect
+        val deadline = System.currentTimeMillis() + authorization.expiresInSeconds * 1_000L
+        var intervalMillis = authorization.intervalSeconds.coerceAtLeast(5) * 1_000L
+        while (System.currentTimeMillis() < deadline && authorizationPolling) {
+            delay(intervalMillis)
+            when (val state = mealSource.pollDormitoryUploadAuthorization(authorization)) {
+                DormitoryMealAuthorization.Authorized,
+                DormitoryMealAuthorization.AlreadyAuthorized,
+                -> {
+                    authorizationPolling = false
+                    pendingAuthorization = null
+                    pendingImage?.let { image ->
+                        pendingImage = null
+                        submitAndWatch(image)
+                    }
+                    return@LaunchedEffect
+                }
+                DormitoryMealAuthorization.Pending -> intervalMillis += 1_000L
+                is DormitoryMealAuthorization.Failed -> {
+                    authorizationPolling = false
+                    refreshMessage = state.message
+                    return@LaunchedEffect
+                }
+                is DormitoryMealAuthorization.Started -> Unit
+            }
+        }
+        authorizationPolling = false
+        refreshMessage = "GitHub 연결 시간이 지났습니다."
+    }
+}
+
+private suspend fun readDormitoryMealImage(context: Context, uri: Uri): DormitoryMealImage = withContext(Dispatchers.IO) {
+    val mimeType = context.contentResolver.getType(uri)
+        ?: if (uri.toString().endsWith(".png", ignoreCase = true)) "image/png" else "image/jpeg"
+    val extension = when (mimeType) {
+        "image/jpeg" -> "jpg"
+        "image/png" -> "png"
+        "image/webp" -> "webp"
+        else -> error("JPG, PNG, WebP 사진만 사용할 수 있습니다.")
+    }
+    val bytes = context.contentResolver.openInputStream(uri)?.use { it.readWithLimit(15 * 1024 * 1024) }
+        ?: error("식단 사진을 읽지 못했습니다.")
+    require(bytes.size <= 15 * 1024 * 1024) { "식단 이미지는 15MB 이하여야 합니다." }
+    require(bytes.isNotEmpty()) { "식단 사진이 비어 있습니다." }
+    DormitoryMealImage(bytes, mimeType, extension)
+}
+
+private fun InputStream.readWithLimit(maxBytes: Int): ByteArray {
+    val output = ByteArrayOutputStream(minOf(maxBytes, 64 * 1024))
+    val buffer = ByteArray(16 * 1024)
+    var total = 0
+    while (true) {
+        val read = read(buffer)
+        if (read < 0) break
+        total += read
+        require(total <= maxBytes) { "식단 이미지는 15MB 이하여야 합니다." }
+        output.write(buffer, 0, read)
+    }
+    return output.toByteArray()
+}
+
+@Composable
+internal fun WeeklyDormitoryMealMenu(
+    meal: DormitoryMealData,
+    today: LocalDate,
+    modifier: Modifier = Modifier,
+) {
+    val weekStart = today.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY))
+    val validDays = meal.days
+        .filter { it.date in weekStart..weekStart.plusDays(4) }
+        .associateBy { it.date }
+    val dateFormat = DateTimeFormatter.ofPattern("M/d")
+    Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        (0L..4L).forEach { offset ->
+            val date = weekStart.plusDays(offset)
+            val day = validDays[date]
+            val isToday = date == today
+            ElevatedCard(
+                modifier = Modifier.fillMaxWidth().staggeredEntrance(offset.toInt()),
+                shape = RoundedCornerShape(20.dp),
+                colors = CardDefaults.elevatedCardColors(
+                    containerColor = if (isToday) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerLow,
+                ),
+            ) {
+                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        "${date.format(dateFormat)} (${koreanWeekdayLabel(date.dayOfWeek).take(1)})",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                    )
+                    if (day == null || day.sections.isEmpty()) {
+                        Text("등록된 식단 없음", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    } else {
+                        day.sections.forEach { section ->
+                            Text(
+                                listOfNotNull(section.name, section.hours?.takeIf(String::isNotBlank)).joinToString(" · "),
+                                style = MaterialTheme.typography.labelLarge,
+                                fontWeight = FontWeight.Bold,
+                            )
+                            Text(
+                                section.menuLines.joinToString(" · "),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 

@@ -36,6 +36,7 @@ class AppUpdateCardTest {
 
         composeRule.onNodeWithText("현재 버전 1.1").assertExists()
         composeRule.onNodeWithText("새 버전 1.2").assertExists()
+        composeRule.onNodeWithText("업데이트 확인").assertExists()
         composeRule.onNodeWithText("다운로드 및 설치").performClick()
         composeRule.runOnIdle { assertTrue(downloadClicked) }
     }

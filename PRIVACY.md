@@ -19,10 +19,10 @@ DIMA Now는 개인용 비공식 Android 앱입니다.
 
 앱은 `winter1l.github.io`의 정적 JSON을 확인하고, 사용자가 원문 버튼을 누르면 Android 브라우저로 DIMA 또는 Instagram 공개 페이지를 엽니다. GitHub Pages와 외부 브라우저 서비스에는 해당 서비스의 접속 기록 정책이 적용될 수 있습니다.
 
-공식 DIMA 페이지 수집과 공개 Instagram 이미지 OCR은 앱이 아니라 GitHub Actions에서 실행됩니다. 계정 로그인이나 Instagram 자격 증명은 사용하지 않습니다.
+공식 DIMA 페이지 수집과 공개 Instagram 이미지 OCR은 앱이 아니라 GitHub Actions에서 실행됩니다. 식단표 이미지는 구조화된 메뉴 JSON을 만들기 위해 Google Gemini API로 전송됩니다. 이때 앱 사용자의 위치·시간표·설정·기기 정보는 전송하지 않으며, 계정 로그인이나 Instagram 자격 증명도 사용하지 않습니다.
 
 ## 공개 저장소 사용 시 주의
 
 Issue나 Pull Request에 개인 시간표, 정확한 현재 위치, 기기 식별자, 전체 logcat 또는 앱 데이터베이스를 첨부하지 마세요.
 
-최종 갱신: 2026-08-28
+최종 갱신: 2026-08-30

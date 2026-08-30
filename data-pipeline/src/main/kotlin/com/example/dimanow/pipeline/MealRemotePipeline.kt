@@ -3,7 +3,6 @@ package com.example.dimanow.pipeline
 import com.example.dimanow.sync.MealPayload
 import java.net.HttpURLConnection
 import java.net.URL
-import java.nio.file.Files
 import java.time.Clock
 import java.time.LocalDate
 import java.time.ZoneId
@@ -20,7 +19,10 @@ data class MealPost(val title: String, val sourceUrl: String, val hours: String)
     val embedUrl: String get() = sourceUrl.substringBefore('?').trimEnd('/') + "/embed/captioned/"
 }
 
-class MealRemotePipeline(private val clock: Clock = Clock.system(ZoneId.of("Asia/Seoul"))) {
+class MealRemotePipeline(
+    private val clock: Clock = Clock.system(ZoneId.of("Asia/Seoul")),
+    private val geminiClient: GeminiMealOcrClient = GeminiMealOcrClient(System.getenv("GEMINI_API_KEY").orEmpty()),
+) {
     fun fetch(): MealPayload {
         val discoveryHtml = Jsoup.connect(DISCOVERY_URL).userAgent(USER_AGENT).get().outerHtml()
         val post = MealDiscoveryParser().parse(discoveryHtml)
@@ -29,27 +31,15 @@ class MealRemotePipeline(private val clock: Clock = Clock.system(ZoneId.of("Asia
         val embedHtml = Jsoup.connect(post.embedUrl).userAgent(USER_AGENT).get().outerHtml()
         val imageUrl = InstagramCarouselParser().parse(embedHtml).imageUrls.getOrNull(1)
             ?: error("식단표 carousel 이미지를 찾지 못했습니다.")
-        val directory = Files.createTempDirectory("dima-meal-ocr")
-        return try {
-            val image = directory.resolve("meal-image")
-            download(imageUrl, image)
-            val outputBase = directory.resolve("meal-ocr")
-            val process = ProcessBuilder(
-                System.getenv("TESSERACT_BIN") ?: "tesseract",
-                image.toString(),
-                outputBase.toString(),
-                "-l",
-                "kor+eng",
-                "--psm",
-                "6",
-                "tsv",
-            ).redirectError(ProcessBuilder.Redirect.INHERIT).start()
-            require(process.waitFor() == 0) { "Tesseract OCR 실행에 실패했습니다." }
-            val lines = TesseractTsvParser.parse(Files.readString(outputBase.resolveSibling("${outputBase.fileName}.tsv")))
-            MealPayloadBuilder().build(lines, LocalDate.now(clock), post.hours, post.sourceUrl, imageUrl)
-        } finally {
-            directory.toFile().deleteRecursively()
-        }
+        val image = download(imageUrl)
+        val responseJson = geminiClient.extract(image.bytes, image.mimeType)
+        return GeminiMealPayloadBuilder().build(
+            responseJson,
+            LocalDate.now(clock),
+            post.hours,
+            post.sourceUrl,
+            imageUrl,
+        )
     }
 
     private fun profilePost(): MealPost? {
@@ -61,7 +51,7 @@ class MealRemotePipeline(private val clock: Clock = Clock.system(ZoneId.of("Asia
         return MealProfileFeedParser().parse(response.body())
     }
 
-    private fun download(url: String, target: java.nio.file.Path) {
+    private fun download(url: String): DownloadedImage {
         require(url.startsWith("https://")) { "식단 이미지가 HTTPS가 아닙니다." }
         val connection = URL(url).openConnection() as HttpURLConnection
         try {
@@ -71,11 +61,14 @@ class MealRemotePipeline(private val clock: Clock = Clock.system(ZoneId.of("Asia
             connection.setRequestProperty("User-Agent", USER_AGENT)
             require(connection.responseCode == HttpURLConnection.HTTP_OK) { "식단 이미지 응답 ${connection.responseCode}" }
             require(connection.contentLengthLong in -1L..MAX_IMAGE_BYTES) { "식단 이미지가 너무 큽니다." }
-            connection.inputStream.use { input ->
+            val bytes = connection.inputStream.use { input ->
                 val bytes = input.readNBytes(MAX_IMAGE_BYTES.toInt() + 1)
                 require(bytes.size <= MAX_IMAGE_BYTES) { "식단 이미지가 너무 큽니다." }
-                Files.write(target, bytes)
+                bytes
             }
+            val mimeType = connection.contentType?.substringBefore(';')?.trim().orEmpty()
+            require(mimeType.startsWith("image/")) { "식단 파일이 이미지가 아닙니다." }
+            return DownloadedImage(bytes, mimeType)
         } finally {
             connection.disconnect()
         }
@@ -88,6 +81,8 @@ class MealRemotePipeline(private val clock: Clock = Clock.system(ZoneId.of("Asia
         const val USER_AGENT = "DIMA-Now/1.1 GitHub data pipeline"
         const val MAX_IMAGE_BYTES = 15L * 1024 * 1024
     }
+
+    private data class DownloadedImage(val bytes: ByteArray, val mimeType: String)
 }
 
 internal class MealDiscoveryParser {

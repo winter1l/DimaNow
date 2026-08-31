@@ -17,7 +17,7 @@ jobs:
         with:
           distribution: temurin
           java-version: "17"
-      - uses: gradle/actions/setup-gradle@48b5f213c81028ace310571dc5ec0fbbca0b2947
+      - uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a
       - name: 셔틀 CSV 계약 검증
         run: bash ./gradlew :data-pipeline:run --args="publish-shuttle $GITHUB_WORKSPACE/data-source/shuttle.csv $RUNNER_TEMP/site"
       - name: JVM·파이프라인·Android 검증

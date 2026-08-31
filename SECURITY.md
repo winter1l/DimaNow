@@ -22,3 +22,7 @@
 - 앱 업데이트는 공개 GitHub latest stable release의 이름 규칙과 asset SHA-256을 확인합니다.
 - 업데이트 다운로드는 허용된 GitHub HTTPS 호스트와 128 MiB 상한으로 제한하고, 완료 전 `.part` 파일은 설치 대상으로 사용하지 않습니다.
 - 설치 전 APK의 패키지명, versionName, 더 높은 versionCode와 현재 설치본과 동일한 서명 인증서를 확인합니다. Android의 앱별 설치 출처 권한과 시스템 설치 확인 화면을 우회하지 않습니다.
+- LMS 자동 로그인 계정은 `dima_now_lms_credentials_v1` Android Keystore AES-256-GCM 키로 암호화하고 백업 제외 파일에만 저장합니다. 키 손상·무효화·암호문 변조 시 파일을 폐기하고 재입력을 요구합니다.
+- LMS WebView는 정확한 `lms.dima.ac.kr`·`portal.dima.ac.kr` HTTPS 호스트만 앱 안에서 허용하고, 파일/콘텐츠 접근과 mixed content를 차단하며 `addJavascriptInterface`를 사용하지 않습니다. 계정 주입은 공식 로그인 경로의 `#id`, `#pass`, `login_proc()`에 한정합니다.
+- 자동 로그인은 직렬화된 1회 시도만 수행하고 실패 자격 증명을 반복하지 않습니다. CAPTCHA·OTP·추가 인증·계정 잠금은 우회하지 않으며 네트워크 실패 자동 재시도는 15분 억제합니다.
+- LMS 목록 동기화는 상세 페이지를 미리 열지 않습니다. 상세 HTML은 script/form/iframe과 이벤트 속성을 제거하고, 첨부파일은 같은 공식 호스트·512 MiB 상한·HTML 로그인 응답 거부·임시 `.part` 확정 절차를 거칩니다.

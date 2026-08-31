@@ -45,6 +45,12 @@ import com.example.dimanow.location.LocationMode
 import com.example.dimanow.update.AndroidAppUpdateInstaller
 import com.example.dimanow.update.AppUpdateCoordinator
 import com.example.dimanow.update.GitHubAppUpdateSource
+import com.example.dimanow.lms.AndroidLmsCredentialStore
+import com.example.dimanow.lms.LmsAutoLoginCoordinator
+import com.example.dimanow.lms.LmsCacheDatabase
+import com.example.dimanow.lms.LmsLoginBridge
+import com.example.dimanow.lms.MutableLmsSessionController
+import com.example.dimanow.lms.RoomLmsSource
 
 class DimaNowApplication : Application() {
     private val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -79,6 +85,18 @@ class DimaNowApplication : Application() {
         )
     }
     val noticeSource: NoticeSource by lazy { StaticNoticeSource(database, staticDataTransport) }
+    val lmsDatabase: LmsCacheDatabase by lazy {
+        Room.databaseBuilder(this, LmsCacheDatabase::class.java, "lms-cache.db").build()
+    }
+    val lmsCredentialStore: AndroidLmsCredentialStore by lazy { AndroidLmsCredentialStore(this) }
+    val lmsSessionController: MutableLmsSessionController by lazy { MutableLmsSessionController() }
+    val lmsLoginBridge: LmsLoginBridge by lazy { LmsLoginBridge() }
+    val lmsAutoLoginCoordinator: LmsAutoLoginCoordinator by lazy {
+        LmsAutoLoginCoordinator(lmsCredentialStore, lmsSessionController, lmsLoginBridge)
+    }
+    val lmsSource: RoomLmsSource by lazy {
+        RoomLmsSource(lmsDatabase, lmsSessionController)
+    }
     val guidanceEngine: GuidanceEngine by lazy { GuidanceEngine() }
     val liveSurfaceController: AndroidLiveSurfaceController by lazy { AndroidLiveSurfaceController(this) }
     val guidanceAlarmScheduler: GuidanceAlarmScheduler by lazy { GuidanceAlarmScheduler(this) }

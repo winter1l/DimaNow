@@ -4,10 +4,6 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
-import com.example.dimanow.domain.ClassContent
-import com.example.dimanow.domain.GuidancePhase
-import com.example.dimanow.domain.GuidanceSnapshot
-import com.example.dimanow.domain.ShuttleLine
 import com.example.dimanow.domain.CampusZoneId
 import com.example.dimanow.domain.DefaultSchedule
 import com.example.dimanow.domain.ShuttleDeparture
@@ -51,7 +47,6 @@ class GuidanceCardTest {
             DashboardScreen(
                 schedule = DefaultSchedule.create(),
                 zone = CampusZoneId.YEIN,
-                hasSavedOrigin = true,
                 automatic = true,
                 shuttle = ShuttleData(emptyList(), null, null, null, "https://www.dima.ac.kr/?p=97", null),
                 meal = MealData(emptyList(), null, null, null, "https://www.dima.ac.kr/?p=1", null, null),
@@ -77,7 +72,6 @@ class GuidanceCardTest {
             DashboardScreen(
                 schedule = DefaultSchedule.create(),
                 zone = CampusZoneId.MAIN,
-                hasSavedOrigin = true,
                 automatic = true,
                 shuttle = ShuttleData(departures, Instant.parse("2026-08-26T12:00:10Z"), null, null, "https://www.dima.ac.kr/?p=97", null),
                 meal = MealData(emptyList(), null, null, null, "https://www.dima.ac.kr/?p=1", null, null),
@@ -102,7 +96,6 @@ class GuidanceCardTest {
             DashboardScreen(
                 schedule = DefaultSchedule.create(),
                 zone = CampusZoneId.YEIN,
-                hasSavedOrigin = true,
                 automatic = true,
                 shuttle = ShuttleData(departures, Instant.parse("2026-08-26T12:00:10Z"), null, null, "https://www.dima.ac.kr/?p=97", null),
                 meal = MealData(emptyList(), null, null, null, "https://www.dima.ac.kr/?p=1", null, null),
@@ -111,25 +104,6 @@ class GuidanceCardTest {
         }
 
         composeRule.onNodeWithText("운행 종료").assertIsDisplayed()
-    }
-
-    @Test
-    fun exactGuidanceTextOmitsProfessorAndUnneededShuttlePlaceholder() {
-        composeRule.setContent {
-            GuidanceCard(
-                GuidanceSnapshot(
-                    classContent = ClassContent("10:00 · 조명기초및실습", "시작까지 42분 · 덕성관 402"),
-                    shuttleLines = listOf(ShuttleLine("엔터관  5분, 30분")),
-                    phase = GuidancePhase.BEFORE_CLASS,
-                ),
-            )
-        }
-
-        composeRule.onNodeWithText("10:00 · 조명기초및실습").assertIsDisplayed()
-        composeRule.onNodeWithText("시작까지 42분 · 덕성관 402").assertIsDisplayed()
-        composeRule.onNodeWithText("엔터관  5분, 30분").assertIsDisplayed()
-        composeRule.onNodeWithText("이용창").assertDoesNotExist()
-        composeRule.onNodeWithText("셔틀 불필요").assertDoesNotExist()
     }
 
     @Test
@@ -164,7 +138,6 @@ class GuidanceCardTest {
             DashboardScreen(
                 schedule = DefaultSchedule.create(),
                 zone = CampusZoneId.YEIN,
-                hasSavedOrigin = true,
                 automatic = true,
                 shuttle = ShuttleData(
                     departures = listOf(
@@ -202,7 +175,6 @@ class GuidanceCardTest {
             DashboardScreen(
                 schedule = DefaultSchedule.create(),
                 zone = CampusZoneId.OUTSIDE,
-                hasSavedOrigin = false,
                 automatic = true,
                 shuttle = ShuttleData(
                     departures = emptyList(),

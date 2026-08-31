@@ -116,6 +116,7 @@ dependencies {
   implementation(libs.androidx.lifecycle.service)
   implementation(libs.androidx.compose.material.icons.extended)
   implementation(libs.kotlinx.serialization.json)
+  implementation(libs.jsoup)
   implementation(libs.androidx.profileinstaller)
   baselineProfile(project(":benchmark"))
 }

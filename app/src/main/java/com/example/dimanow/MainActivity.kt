@@ -16,11 +16,12 @@ import com.example.dimanow.theme.DIMANowTheme
 import com.example.dimanow.ui.DimaNowApp
 
 class MainActivity : ComponentActivity() {
-  private var targetPage by mutableStateOf<String?>(null)
+  // 값 + nonce 쌍이라 같은 위젯을 연달아 탭해도 매번 새 이벤트로 전달된다 (D-044 #7)
+  private var targetPageEvent by mutableStateOf<Pair<String, Long>?>(null)
 
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)
-    targetPage = intent.getStringExtra("TARGET_PAGE")
+    intent.getStringExtra("TARGET_PAGE")?.let { targetPageEvent = it to System.nanoTime() }
 
     enableEdgeToEdge()
     setContent {
@@ -33,9 +34,14 @@ class MainActivity : ComponentActivity() {
             shuttleSource = application.shuttleSource,
             mealSource = application.mealSource,
             noticeSource = application.noticeSource,
+            lmsCredentialStore = application.lmsCredentialStore,
+            lmsSessionController = application.lmsSessionController,
+            lmsLoginBridge = application.lmsLoginBridge,
+            lmsAutoLoginCoordinator = application.lmsAutoLoginCoordinator,
+            lmsSource = application.lmsSource,
             liveSurfaceController = application.liveSurfaceController,
             appUpdateCoordinator = application.appUpdateCoordinator,
-            initialTargetPage = targetPage,
+            targetPageEvent = targetPageEvent,
           )
         }
       }
@@ -45,6 +51,6 @@ class MainActivity : ComponentActivity() {
   override fun onNewIntent(intent: Intent) {
     super.onNewIntent(intent)
     setIntent(intent)
-    targetPage = intent.getStringExtra("TARGET_PAGE")
+    intent.getStringExtra("TARGET_PAGE")?.let { targetPageEvent = it to System.nanoTime() }
   }
 }

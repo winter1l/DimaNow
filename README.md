@@ -2,7 +2,7 @@
 
 DIMA Now는 동아방송예술대학교 학생의 수업, 셔틀, 본관 학생식당·기숙사 식단을 한곳에서 확인하는 개인용 Android 앱입니다.
 
-시간표와 설정, 위치 구역, 셔틀·식단·공지 캐시는 모두 기기에 저장됩니다. 앱은 계정 없이 GitHub Pages에 게시된 검증 JSON을 동기화합니다. 공식 페이지 수집과 식단 OCR은 GitHub Actions에서 수행되며, 기숙사 식단 사진 제출만 무료 Cloudflare Worker를 통과합니다.
+시간표와 설정, 위치 구역, 셔틀·식단·공지 캐시는 모두 기기에 저장됩니다. 공개 캠퍼스 데이터는 계정 없이 GitHub Pages의 검증 JSON으로 동기화합니다. 사용자가 선택한 경우에만 공식 DIMA LMS 계정을 기기에 암호화해 저장하고 수업 공지·과제·자료를 불러옵니다. 공식 공개 페이지 수집과 식단 OCR은 GitHub Actions에서 수행되며, 기숙사 식단 사진 제출만 무료 Cloudflare Worker를 통과합니다.
 
 > 이 프로젝트는 개인용으로 개발된 비공식 앱이며 동아방송예술대학교가 배포하거나 보증하는 공식 앱이 아닙니다.
 
@@ -10,6 +10,7 @@ DIMA Now는 동아방송예술대학교 학생의 수업, 셔틀, 본관 학생�
 
 - 홈: 현재 위치, 다음 수업, 셔틀 출발, 현재 구역의 오늘 식단, 학교 공지 요약
 - 시간표: 과목 추가·수정·삭제, 학기 기간, 휴강일과 휴강 모드 관리
+- 수업: 공식 LMS의 강의별 공지·과제·자료 목록과 상세 내용, 첨부파일을 Android 문서 저장 화면으로 저장
 - 셔틀: 요일별 전체 시간표, 실시간 남은 시간, 첫차·막차, 본관·운동장 승차 구분
 - 식단: 본관 학생식당·기숙사 주간 메뉴, 운영 상태, 기숙사 식단 사진 제출
 - 위치: 승인된 예인관·본관·원룸촌 다각형을 이용한 오프라인 구역 판정과 테스트 모드
@@ -25,6 +26,7 @@ DIMA Now는 동아방송예술대학교 학생의 수업, 셔틀, 본관 학생�
 | 언어 | Kotlin |
 | UI | Jetpack Compose / Material 3 |
 | 로컬 저장소 | Room / DataStore |
+| LMS 계정 보호 | Android Keystore AES-256-GCM / 백업 제외 암호문 |
 | 최소 Android | Android 12, API 31 |
 | compileSdk / targetSdk | API 36 |
 | 기준 시간대 | Asia/Seoul |
@@ -107,6 +109,14 @@ adb devices
 
 각 변경은 GitHub Actions의 JVM·파이프라인·계측 컴파일·lint·optimized 빌드를 모두 통과해야 합니다. Samsung Now Bar, 실제 세 구역 geofence, 잠금화면·AOD, 하루 배터리는 실제 기기 관찰이 필요한 별도 검수 항목입니다.
 
+## LMS 수업 탭
+
+하단 `수업` 탭에서 학번과 비밀번호를 입력하면 Android Keystore의 내보낼 수 없는 키로 AES-256-GCM 암호화한 암호문만 `noBackupFilesDir`에 저장합니다. 계정 원문, LMS 쿠키와 세션 값은 Room·DataStore·로그에 기록하지 않습니다. 자동 로그인은 앱이 포그라운드에 있을 때 공식 `lms.dima.ac.kr` 로그인 화면에서만 실행하며, CAPTCHA·추가 인증·계정 잠금은 우회하지 않습니다.
+
+목록은 5분 동안 기기 캐시를 사용하고 강의별 `공지`, `과제`, `자료`로 필터링할 수 있습니다. 상세 본문은 실행 가능한 태그와 이벤트 속성을 제거해 표시합니다. 첨부파일은 인증된 세션으로 임시 `.part` 파일에 내려받은 뒤 사용자가 선택한 Android 문서 위치로만 복사하며, 광범위한 저장소 권한을 요구하지 않습니다. 설정의 `LMS 계정`에서 저장 계정, 세션과 별도 `lms-cache.db`를 함께 삭제할 수 있습니다.
+
+LMS는 학교가 운영하는 외부 시스템입니다. 서버 화면·세션 정책이 바뀌면 자동 로그인이나 강의별 목록 동기화가 일시적으로 동작하지 않을 수 있으며, 앱은 로그인 반복으로 계정 잠금을 유발하지 않도록 자동 시도를 한 번으로 제한합니다. 수강 신청, 제출, 댓글 같은 쓰기 동작은 제공하지 않습니다.
+
 ## 정적 데이터 동기화
 
 앱의 동기화 endpoint는 [`manifest.json`](https://winter1l.github.io/DimaNow/data/v1/manifest.json)입니다. manifest에는 데이터셋별 revision, 게시 시각, 상태, SHA-256과 content-addressed JSON 경로가 들어갑니다. 앱은 HTTPS, 허용된 상대 경로, schema version과 SHA-256을 모두 검증한 뒤 Room 캐시를 한 트랜잭션으로 교체합니다. 네트워크·파싱·무결성 오류가 나면 마지막 정상 캐시를 보존합니다.
@@ -159,7 +169,7 @@ Android 원형 geofence는 앱을 깨우는 용도로만 사용하며 최종 판
 
 ```text
 app/
-  src/main/          앱, 위젯, 알림, Room/DataStore, 정적 데이터 동기화
+  src/main/          앱, 위젯, 알림, Room/DataStore, LMS·정적 데이터 동기화
   src/test/          JVM 단위 테스트
   src/androidTest/   API 36 Compose·Room·Live Update 계측 테스트
 benchmark/           Macrobenchmark와 Baseline Profile 생성
@@ -172,11 +182,11 @@ artifacts/           승인된 구역 경계와 검증 보고서 일부
 memory/              제품 결정과 검증 근거
 ```
 
-핵심 순수 로직은 `GuidanceEngine`이 담당합니다. 홈, 셔틀 화면, 위젯, Live Update는 동일한 셔틀 계산과 분 단위 반올림 결과를 소비합니다. 공개 테스트 경계는 `GuidanceEngine`, `CampusDataRepository`, `ShuttleSource`, `MealSource`, `LocationResolver`, `LiveSurfaceController`입니다.
+핵심 순수 로직은 `GuidanceEngine`이 담당합니다. 홈, 셔틀 화면, 위젯, Live Update는 동일한 셔틀 계산과 분 단위 반올림 결과를 소비합니다. 캠퍼스 기능의 공개 테스트 경계는 `GuidanceEngine`, `CampusDataRepository`, `ShuttleSource`, `MealSource`, `LocationResolver`, `LiveSurfaceController`이며, LMS 기능은 `LmsCredentialStore`, `LmsSessionController`, `LmsSource` 경계로 분리됩니다.
 
 ## 범위 밖
 
-- 로그인 자동화
+- LMS의 수강 신청·과제 제출·댓글 등 쓰기 자동화
 - 별도 상시 서버·개인 PC 서버 운영
 - 다중 사용자 배포
 - Google Play Store 출시

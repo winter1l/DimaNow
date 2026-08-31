@@ -10,10 +10,10 @@ import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.provider.Settings
+import android.webkit.CookieManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.ContentTransform
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Spring
@@ -26,7 +26,6 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutHorizontally
-import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
 import com.example.dimanow.ui.motion.AnimatedCountText
 import com.example.dimanow.ui.motion.expressiveBounceClick
@@ -68,7 +67,6 @@ import androidx.compose.material.icons.filled.DirectionsBus
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.LocationOn
-import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Restaurant
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.School
@@ -113,10 +111,13 @@ import androidx.compose.material3.rememberDateRangePickerState
 import androidx.compose.material3.rememberTimePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -145,8 +146,6 @@ import com.example.dimanow.domain.Course
 import com.example.dimanow.domain.DefaultCampusZones
 import com.example.dimanow.domain.DefaultSchedule
 import com.example.dimanow.domain.DisplayVocabulary
-import com.example.dimanow.domain.GuidancePhase
-import com.example.dimanow.domain.GuidanceSnapshot
 import com.example.dimanow.domain.GuidancePause
 import com.example.dimanow.domain.MealValidationState
 import com.example.dimanow.domain.ShuttleDeparture
@@ -158,7 +157,6 @@ import com.example.dimanow.guidance.ShuttleBoardPurpose
 import com.example.dimanow.live.LiveChipContent
 import com.example.dimanow.live.LiveClassOrder
 import com.example.dimanow.live.LiveDisplayOptions
-import com.example.dimanow.live.LivePromotionReadiness
 import com.example.dimanow.live.LiveSettingsDestination
 import com.example.dimanow.live.LiveSurfaceController
 import com.example.dimanow.meal.MealData
@@ -174,13 +172,19 @@ import com.example.dimanow.meal.OFFICIAL_MEAL_SOURCE_URL
 import com.example.dimanow.shuttle.OFFICIAL_SHUTTLE_SOURCE_URL
 import com.example.dimanow.shuttle.ShuttleData
 import com.example.dimanow.shuttle.ShuttleSource
-import com.example.dimanow.theme.SuccessGreen
-import com.example.dimanow.theme.WarningAmber
 import com.example.dimanow.time.MinuteTicker
 import com.example.dimanow.location.LocationMode
 import com.example.dimanow.update.AppUpdateCoordinator
 import com.example.dimanow.update.AppUpdatePhase
 import com.example.dimanow.update.AppUpdateUiState
+import com.example.dimanow.lms.LmsAutoLoginCoordinator
+import com.example.dimanow.lms.LmsCredentialStore
+import com.example.dimanow.lms.CredentialState
+import com.example.dimanow.lms.LmsSessionState
+import com.example.dimanow.lms.LmsLoginBridge
+import com.example.dimanow.lms.LmsRoute
+import com.example.dimanow.lms.LmsSessionController
+import com.example.dimanow.lms.LmsSource
 import java.time.DayOfWeek
 import java.time.LocalDate
 import java.time.LocalTime
@@ -199,16 +203,26 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.first
 
 internal enum class AppPage(val title: String, val icon: ImageVector) {
+    // D-044: 기존 4탭(홈·시간표·셔틀·식단)의 손가락 기억을 보존하기 위해 수업은 맨 뒤에 둔다
     DASHBOARD("홈", Icons.Default.Home),
     TIMETABLE("시간표", Icons.Default.Schedule),
     SHUTTLE("셔틀", Icons.Default.DirectionsBus),
     MEAL("식단", Icons.Default.Restaurant),
+    COURSES("수업", Icons.Default.School),
     SETTINGS("설정", Icons.Default.Settings),
     ;
 
     val usesMinuteTicker: Boolean
         get() = this == DASHBOARD || this == SHUTTLE || this == MEAL
 }
+
+internal val primaryAppPages = listOf(
+    AppPage.DASHBOARD,
+    AppPage.TIMETABLE,
+    AppPage.SHUTTLE,
+    AppPage.MEAL,
+    AppPage.COURSES,
+)
 
 @Composable
 private fun rememberMinuteNow(): ZonedDateTime {
@@ -230,9 +244,18 @@ fun DimaNowApp(
     liveSurfaceController: LiveSurfaceController,
     appUpdateCoordinator: AppUpdateCoordinator? = null,
     noticeSource: NoticeSource? = null,
-    initialTargetPage: String? = null,
+    lmsCredentialStore: LmsCredentialStore,
+    lmsSessionController: LmsSessionController,
+    lmsLoginBridge: LmsLoginBridge,
+    lmsAutoLoginCoordinator: LmsAutoLoginCoordinator,
+    lmsSource: LmsSource,
+    targetPageEvent: Pair<String, Long>? = null,
 ) {
     var page by remember { mutableStateOf(AppPage.DASHBOARD) }
+    var settingsReturnPage by remember { mutableStateOf(AppPage.DASHBOARD) }
+    // 수업 탭이 로그인 WebView/글 상세를 전체화면으로 띄우는 동안 하단 내비를 숨긴다 (D-044)
+    var lmsFullScreen by remember { mutableStateOf(false) }
+    val primaryPages = remember { primaryAppPages }
     val homeBaseConfirmed by preferences.homeBaseSelectionConfirmed.collectAsStateWithLifecycle(initialValue = false)
     val nowBarSetupCompleted by preferences.nowBarSetupCompleted.collectAsStateWithLifecycle(initialValue = false)
     var showNowBarSetup by remember { mutableStateOf(false) }
@@ -241,17 +264,24 @@ fun DimaNowApp(
     val initialUpdateState = remember { AppUpdateUiState(currentVersion = "") }
     val updateState by (appUpdateCoordinator?.state ?: remember { kotlinx.coroutines.flow.flowOf(initialUpdateState) })
         .collectAsStateWithLifecycle(initialValue = initialUpdateState)
-    LaunchedEffect(initialTargetPage) {
-        when (initialTargetPage) {
+    // nonce가 붙은 이벤트라 같은 위젯을 연달아 탭해도 매번 다시 이동한다 (#7)
+    LaunchedEffect(targetPageEvent) {
+        when (targetPageEvent?.first) {
+            "DASHBOARD" -> page = AppPage.DASHBOARD
             "SHUTTLE" -> page = AppPage.SHUTTLE
             "MEAL" -> page = AppPage.MEAL
+            // 아래 두 값은 현재 어떤 위젯도 보내지 않지만, 향후 위젯용으로 유지한다
             "TIMETABLE" -> page = AppPage.TIMETABLE
-            "SETTINGS" -> page = AppPage.SETTINGS
+            "COURSES" -> page = AppPage.COURSES
+            "SETTINGS" -> {
+                settingsReturnPage = page
+                page = AppPage.SETTINGS
+            }
         }
     }
 
     BackHandler(enabled = page != AppPage.DASHBOARD) {
-        page = AppPage.DASHBOARD
+        page = if (page == AppPage.SETTINGS) settingsReturnPage else AppPage.DASHBOARD
     }
 
     Scaffold(
@@ -260,44 +290,55 @@ fun DimaNowApp(
         // 스크롤 콘텐츠가 상태바 뒤까지 흐르게 한다 (상단 빈 띠 제거)
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         bottomBar = {
-            NavigationBar(
-                containerColor = MaterialTheme.colorScheme.surfaceContainer,
-                tonalElevation = 8.dp,
-            ) {
-                AppPage.entries.forEach { item ->
-                    val selected = page == item
-                    val iconScale by animateFloatAsState(
-                        targetValue = if (selected) 1.15f else 1f,
-                        animationSpec = spring(
-                            dampingRatio = Spring.DampingRatioMediumBouncy,
-                            stiffness = Spring.StiffnessMedium,
-                        ),
-                        label = "nav_icon_scale_${item.name}",
-                    )
-                    NavigationBarItem(
-                        modifier = Modifier.testTag("nav_${item.name}"),
-                        selected = selected,
-                        onClick = { page = item },
-                        icon = {
-                            Icon(
-                                item.icon,
-                                contentDescription = item.title,
-                                modifier = Modifier.scale(iconScale),
-                            )
-                        },
-                        label = { Text(item.title, fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal) },
-                    )
+            if (page != AppPage.SETTINGS && !(page == AppPage.COURSES && lmsFullScreen)) {
+                NavigationBar(
+                    containerColor = MaterialTheme.colorScheme.surfaceContainer,
+                    tonalElevation = 8.dp,
+                ) {
+                    primaryPages.forEach { item ->
+                        val selected = page == item
+                        val iconScale by animateFloatAsState(
+                            targetValue = if (selected) 1.15f else 1f,
+                            animationSpec = spring(
+                                dampingRatio = Spring.DampingRatioMediumBouncy,
+                                stiffness = Spring.StiffnessMedium,
+                            ),
+                            label = "nav_icon_scale_${item.name}",
+                        )
+                        NavigationBarItem(
+                            modifier = Modifier.testTag("nav_${item.name}"),
+                            selected = selected,
+                            onClick = { page = item },
+                            icon = {
+                                Icon(
+                                    item.icon,
+                                    contentDescription = item.title,
+                                    modifier = Modifier.scale(iconScale),
+                                )
+                            },
+                            label = { Text(item.title, fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal) },
+                        )
+                    }
                 }
             }
         },
     ) { padding ->
-        AnimatedContent(
-            targetState = page,
-            transitionSpec = { dimaTabContentTransform(targetState.ordinal > initialState.ordinal) },
-            label = "tab_transition",
-        ) { targetPage ->
-            val minuteNow = if (targetPage.usesMinuteTicker) rememberMinuteNow() else null
-            when (targetPage) {
+        // page가 바뀔 때만 람다를 재생성해 분 틱마다 모든 ScreenColumn이 무효화되지 않게 한다 (#15)
+        val openSettingsAction = remember(page) {
+            if (page == AppPage.SETTINGS) {
+                null
+            } else {
+                { settingsReturnPage = page; page = AppPage.SETTINGS }
+            }
+        }
+        CompositionLocalProvider(LocalOpenSettings provides openSettingsAction) {
+            AnimatedContent(
+                targetState = page,
+                transitionSpec = { dimaTabContentTransform(targetState.ordinal > initialState.ordinal) },
+                label = "tab_transition",
+            ) { targetPage ->
+                val minuteNow = if (targetPage.usesMinuteTicker) rememberMinuteNow() else null
+                when (targetPage) {
                 AppPage.DASHBOARD -> DashboardRoute(
                     repository = repository,
                     preferences = preferences,
@@ -309,6 +350,15 @@ fun DimaNowApp(
                     now = requireNotNull(minuteNow),
                 )
                 AppPage.TIMETABLE -> TimetableRoute(repository, Modifier.padding(padding))
+                AppPage.COURSES -> LmsRoute(
+                    credentialStore = lmsCredentialStore,
+                    sessionController = lmsSessionController,
+                    loginBridge = lmsLoginBridge,
+                    autoLoginCoordinator = lmsAutoLoginCoordinator,
+                    source = lmsSource,
+                    onFullScreenChange = { lmsFullScreen = it },
+                    modifier = Modifier.padding(padding),
+                )
                 AppPage.SHUTTLE -> ShuttleRoute(
                     preferences,
                     shuttleSource,
@@ -332,8 +382,13 @@ fun DimaNowApp(
                     onDownloadUpdate = { appUpdateCoordinator?.downloadAndInstall() },
                     onContinueInstall = { appUpdateCoordinator?.continueInstall() },
                     onCancelDownload = { appUpdateCoordinator?.cancelDownload() },
+                    lmsCredentialStore = lmsCredentialStore,
+                    lmsSessionController = lmsSessionController,
+                    lmsSource = lmsSource,
+                    onBack = { page = settingsReturnPage },
                     modifier = Modifier.padding(padding),
                 )
+            }
             }
         }
     }
@@ -406,7 +461,6 @@ private fun DashboardRoute(
     now: ZonedDateTime,
 ) {
     val schedule by repository.schedule.collectAsStateWithLifecycle(initialValue = DefaultSchedule.create())
-    val zones by repository.zones.collectAsStateWithLifecycle(initialValue = emptyList())
     val resolvedZone by preferences.effectiveZone.collectAsStateWithLifecycle(initialValue = CampusZoneId.OUTSIDE)
     val locationMode by preferences.locationMode.collectAsStateWithLifecycle(initialValue = LocationMode.GPS)
     val shuttle by shuttleSource.data.collectAsStateWithLifecycle(
@@ -426,7 +480,6 @@ private fun DashboardRoute(
     DashboardScreen(
         schedule = schedule,
         zone = resolvedZone,
-        hasSavedOrigin = zones.any { it.id == resolvedZone },
         testMode = locationMode == LocationMode.TEST,
         automatic = true,
         shuttle = shuttle,
@@ -486,6 +539,10 @@ private fun SettingsRoute(
     onDownloadUpdate: () -> Unit,
     onContinueInstall: () -> Unit,
     onCancelDownload: () -> Unit,
+    lmsCredentialStore: LmsCredentialStore,
+    lmsSessionController: LmsSessionController,
+    lmsSource: LmsSource,
+    onBack: () -> Unit,
     modifier: Modifier,
 ) {
     val scope = rememberCoroutineScope()
@@ -500,6 +557,7 @@ private fun SettingsRoute(
     val meal by mealSource.data.collectAsStateWithLifecycle(
         initialValue = MealData(emptyList(), null, null, null, OFFICIAL_MEAL_SOURCE_URL, null, null),
     )
+    val credentialState by lmsCredentialStore.state.collectAsStateWithLifecycle()
 
     SettingsScreen(
         locationMode = locationMode,
@@ -522,6 +580,17 @@ private fun SettingsRoute(
         onDownloadUpdate = onDownloadUpdate,
         onContinueInstall = onContinueInstall,
         onCancelDownload = onCancelDownload,
+        lmsCredentialState = credentialState,
+        onDeleteLmsAccount = {
+            scope.launch {
+                lmsCredentialStore.delete()
+                lmsSource.clearPrivateData()
+                CookieManager.getInstance().removeAllCookies(null)
+                CookieManager.getInstance().flush()
+                lmsSessionController.transition(LmsSessionState.SIGNED_OUT)
+            }
+        },
+        onBack = onBack,
         modifier = modifier,
     )
 }
@@ -533,7 +602,6 @@ private fun SettingsRoute(
 internal fun DashboardScreen(
     schedule: TermSchedule,
     zone: CampusZoneId,
-    hasSavedOrigin: Boolean,
     testMode: Boolean = false,
     automatic: Boolean,
     shuttle: ShuttleData,
@@ -556,30 +624,38 @@ internal fun DashboardScreen(
     val nextCourse = remainingCourses.firstOrNull()
     val upcomingAfterCourse = remainingCourses.getOrNull(1)
 
-    val shuttleBoard = GuidanceEngine().shuttleBoard(
-        now = now,
-        originZone = zone,
-        departures = shuttle.departures,
-        purpose = ShuttleBoardPurpose.GENERAL,
-    )
-    val guidanceSnapshot = GuidanceEngine().snapshot(
-        now = now,
-        termStart = schedule.termStart,
-        termEnd = schedule.termEnd,
-        courses = schedule.courses,
-        noClassDates = schedule.noClassDates,
-        resolvedZone = zone,
-        automaticClassGuidance = automatic,
-        shuttleDepartures = shuttle.departures,
-        homeBase = homeBase,
-        guidancePause = schedule.guidancePause,
-    )
+    // 엔진과 무거운 계산은 입력이 바뀔 때만 다시 수행한다 (#20)
+    val guidanceEngine = remember { GuidanceEngine() }
+    val shuttleBoard = remember(now, zone, shuttle.departures) {
+        guidanceEngine.shuttleBoard(
+            now = now,
+            originZone = zone,
+            departures = shuttle.departures,
+            purpose = ShuttleBoardPurpose.GENERAL,
+        )
+    }
+    val guidanceSnapshot = remember(now, schedule, zone, automatic, shuttle.departures, homeBase) {
+        guidanceEngine.snapshot(
+            now = now,
+            termStart = schedule.termStart,
+            termEnd = schedule.termEnd,
+            courses = schedule.courses,
+            noClassDates = schedule.noClassDates,
+            resolvedZone = zone,
+            automaticClassGuidance = automatic,
+            shuttleDepartures = shuttle.departures,
+            homeBase = homeBase,
+            guidancePause = schedule.guidancePause,
+        )
+    }
 
     val todayMeal = meal.days.firstOrNull { it.date == now.toLocalDate() }
     val todayDormitoryMeal = dormitoryMeal.days.firstOrNull { it.date == now.toLocalDate() }
     val useDormitoryMeal = zone == CampusZoneId.YEIN
-    val mealServiceStatus = meal.serviceStatusAt(now)
+    val mealStatusNow = meal.serviceStatusAt(now)
     val originName = DisplayVocabulary.originName(zone)
+    // 테스트 배너가 없을 때 히어로가 60ms 죽은 지연 없이 0번부터 시작하도록 러닝 인덱스 사용 (#21)
+    var cardIndex = 0
 
     ScreenColumn(
         modifier = modifier,
@@ -619,7 +695,7 @@ internal fun DashboardScreen(
             Surface(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .staggeredEntrance(0),
+                    .staggeredEntrance(cardIndex++),
                 shape = RoundedCornerShape(12.dp),
                 color = MaterialTheme.colorScheme.errorContainer,
             ) {
@@ -637,7 +713,7 @@ internal fun DashboardScreen(
         ElevatedCard(
             modifier = Modifier
                 .fillMaxWidth()
-                .staggeredEntrance(1)
+                .staggeredEntrance(cardIndex++)
                 .expressiveBounceClick { onNavigateToPage(AppPage.TIMETABLE) },
             shape = RoundedCornerShape(28.dp),
             colors = CardDefaults.elevatedCardColors(
@@ -825,7 +901,7 @@ internal fun DashboardScreen(
         ElevatedCard(
             modifier = Modifier
                 .fillMaxWidth()
-                .staggeredEntrance(2)
+                .staggeredEntrance(cardIndex++)
                 .expressiveBounceClick { onNavigateToPage(AppPage.SHUTTLE) },
             shape = RoundedCornerShape(24.dp),
             colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
@@ -845,7 +921,7 @@ internal fun DashboardScreen(
                         )
                     }
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(2.dp)) {
-                        Text("시간표", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
+                        Text("전체 시간표", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
                         Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(14.dp))
                     }
                 }
@@ -1001,7 +1077,7 @@ internal fun DashboardScreen(
         ElevatedCard(
             modifier = Modifier
                 .fillMaxWidth()
-                .staggeredEntrance(3)
+                .staggeredEntrance(cardIndex++)
                 .expressiveBounceClick { onNavigateToPage(AppPage.MEAL) },
             shape = RoundedCornerShape(24.dp),
             colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
@@ -1019,7 +1095,7 @@ internal fun DashboardScreen(
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         if (!useDormitoryMeal) {
                             Text(
-                                text = mealServiceStatus.label,
+                                text = mealStatusNow.label,
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
@@ -1066,7 +1142,7 @@ internal fun DashboardScreen(
         ElevatedCard(
             modifier = Modifier
                 .fillMaxWidth()
-                .staggeredEntrance(4),
+                .staggeredEntrance(cardIndex++),
             shape = RoundedCornerShape(24.dp),
             colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
         ) {
@@ -1125,11 +1201,11 @@ internal fun DashboardScreen(
             }
         }
 
-        // 5. 학교 서비스 바로가기 (DIMA Portal · LMS)
+        // 5. 학교 서비스 바로가기 (DIMA Portal · 수업 탭)
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .staggeredEntrance(5),
+                .staggeredEntrance(cardIndex),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             FilledTonalButton(
@@ -1141,49 +1217,18 @@ internal fun DashboardScreen(
                 Spacer(Modifier.width(6.dp))
                 Text("DIMA Portal", fontWeight = FontWeight.Bold)
             }
+            // 네이티브 수업 탭이 있으므로 외부 브라우저 대신 탭으로 이동한다 (#28)
             FilledTonalButton(
-                onClick = { openUrl(context, "https://lms.dima.ac.kr/lms/myLecture/doListView.dunet") },
+                onClick = { onNavigateToPage(AppPage.COURSES) },
                 modifier = Modifier.weight(1f),
                 shape = RoundedCornerShape(14.dp),
             ) {
                 Icon(Icons.Default.School, contentDescription = null, modifier = Modifier.size(16.dp))
                 Spacer(Modifier.width(6.dp))
-                Text("LMS", fontWeight = FontWeight.Bold)
+                Text("수업 (LMS)", fontWeight = FontWeight.Bold)
             }
         }
 
-    }
-}
-
-@Composable
-fun GuidanceCard(snapshot: GuidanceSnapshot, modifier: Modifier = Modifier) {
-    ElevatedCard(
-        modifier = modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.elevatedCardColors(
-            containerColor = MaterialTheme.colorScheme.tertiaryContainer,
-            contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
-        ),
-    ) {
-        Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            snapshot.classContent?.let {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Surface(shape = CircleShape, color = MaterialTheme.colorScheme.tertiary, modifier = Modifier.size(24.dp)) {
-                        Box(contentAlignment = Alignment.Center) {
-                            Icon(Icons.Default.Notifications, contentDescription = null, tint = MaterialTheme.colorScheme.onTertiary, modifier = Modifier.size(14.dp))
-                        }
-                    }
-                    Text(text = it.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                }
-                Text(text = it.detail, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
-            }
-            if (snapshot.shuttleLines.isNotEmpty()) {
-                HorizontalDivider(color = MaterialTheme.colorScheme.onTertiaryContainer.copy(alpha = 0.2f), modifier = Modifier.padding(vertical = 4.dp))
-                snapshot.shuttleLines.forEach { line ->
-                    Text(text = line.text, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Medium)
-                }
-            }
-        }
     }
 }
 
@@ -1295,7 +1340,7 @@ private fun TimetableScreen(repository: CampusDataRepository, schedule: TermSche
         ElevatedCard(
             modifier = Modifier
                 .fillMaxWidth()
-                .staggeredEntrance(entranceIndex),
+                .staggeredEntrance(entranceIndex++),
             shape = RoundedCornerShape(18.dp),
         ) {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -1326,7 +1371,10 @@ private fun TimetableScreen(repository: CampusDataRepository, schedule: TermSche
         }
 
         if (schedule.noClassDates.isNotEmpty()) {
-            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Column(
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+                modifier = Modifier.staggeredEntrance(entranceIndex),
+            ) {
                 schedule.noClassDates.sorted().forEach { date ->
                     Surface(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp), color = MaterialTheme.colorScheme.surfaceContainerLow) {
                         Row(
@@ -1700,8 +1748,8 @@ fun ShuttleScreen(
     )
     var refreshing by remember { mutableStateOf(false) }
     var refreshMessage by remember { mutableStateOf<String?>(null) }
-    var selectedDay by remember { mutableStateOf(now.dayOfWeek) }
-    val isToday = selectedDay == now.dayOfWeek
+    // 날짜가 바뀌면(자정) 선택 요일도 새 오늘로 재설정된다 (#14)
+    var selectedDay by remember(now.toLocalDate()) { mutableStateOf(now.dayOfWeek) }
     val nowTime = now.toLocalTime()
 
     LaunchedEffect(refreshMessage) {
@@ -1749,7 +1797,8 @@ fun ShuttleScreen(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(44.dp),
+                .height(44.dp)
+                .staggeredEntrance(0),
             horizontalArrangement = Arrangement.spacedBy(3.dp),
         ) {
             val weekdays = DayOfWeek.entries
@@ -1820,7 +1869,10 @@ fun ShuttleScreen(
                     .togetherWith(fadeOut(spring(stiffness = Spring.StiffnessMediumLow)))
             },
             label = "shuttle_day_list",
+            modifier = Modifier.staggeredEntrance(1),
         ) { activeDay ->
+            // 전환 중 나가는 패널이 새 요일의 카운트다운을 잘못 그리지 않도록 activeDay 기준으로 판정 (#12)
+            val isToday = activeDay == now.dayOfWeek
             val dayDepartures = remember(shuttle.departures, activeDay) {
                 shuttle.departures.filter { it.serviceDay == activeDay }
             }
@@ -1908,7 +1960,7 @@ fun ShuttleScreen(
                 }
                 val sortedTimes = annotatedDepartures.map { it.departure.time }
 
-                val upcomingCountdowns = remember(shuttle.departures, now, isToday, originZone, destinationZone) {
+                val upcomingCountdowns = remember(shuttle.departures, now, activeDay, isToday, originZone, destinationZone) {
                     if (isToday && destinationZone != null) {
                         guidanceEngine.shuttleBoard(
                             now = now,
@@ -2181,7 +2233,9 @@ fun MealScreen(
     val dormitoryMeal by mealSource.dormitoryData.collectAsStateWithLifecycle(
         initialValue = DormitoryMealData(emptyList(), null, null, null),
     )
-    var venue by remember(initialVenue) { mutableStateOf(initialVenue) }
+    // 사용자가 직접 선택하기 전에는 현재 구역을 따라가고, 선택한 뒤에는 존 변경이 덮어쓰지 않는다 (#11)
+    var userVenue by rememberSaveable { mutableStateOf<String?>(null) }
+    val venue = userVenue?.let(MealVenue::valueOf) ?: initialVenue
     var refreshing by remember { mutableStateOf(false) }
     var uploadPreflight by remember { mutableStateOf(false) }
     var showDormitoryPhotoSource by remember { mutableStateOf(false) }
@@ -2315,12 +2369,12 @@ fun MealScreen(
         SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
             SegmentedButton(
                 selected = venue == MealVenue.MAIN_CAFETERIA,
-                onClick = { venue = MealVenue.MAIN_CAFETERIA },
+                onClick = { userVenue = MealVenue.MAIN_CAFETERIA.name },
                 shape = SegmentedButtonDefaults.itemShape(0, 2),
             ) { Text("본관 학생식당") }
             SegmentedButton(
                 selected = venue == MealVenue.DORMITORY,
-                onClick = { venue = MealVenue.DORMITORY },
+                onClick = { userVenue = MealVenue.DORMITORY.name },
                 shape = SegmentedButtonDefaults.itemShape(1, 2),
             ) { Text("기숙사") }
         }
@@ -2431,19 +2485,46 @@ internal fun WeeklyDormitoryMealMenu(
             val date = weekStart.plusDays(offset)
             val day = validDays[date]
             val isToday = date == today
+            val isPast = date.isBefore(today)
+            // 본관 주간 뷰와 동일한 지난날 딤·오늘 뱃지 문법을 적용한다 (D-044 대칭화)
             ElevatedCard(
-                modifier = Modifier.fillMaxWidth().staggeredEntrance(offset.toInt()),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .staggeredEntrance(offset.toInt())
+                    .alpha(if (isPast) 0.5f else 1f),
                 shape = RoundedCornerShape(20.dp),
                 colors = CardDefaults.elevatedCardColors(
-                    containerColor = if (isToday) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerLow,
+                    containerColor = when {
+                        isToday -> MaterialTheme.colorScheme.primaryContainer
+                        isPast -> MaterialTheme.colorScheme.surfaceContainerLowest
+                        else -> MaterialTheme.colorScheme.surfaceContainerLow
+                    },
                 ),
             ) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(
-                        "${date.format(dateFormat)} (${koreanWeekdayLabel(date.dayOfWeek).take(1)})",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                    )
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text(
+                            "${date.format(dateFormat)} (${koreanWeekdayLabel(date.dayOfWeek).take(1)})",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = if (isToday) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface,
+                        )
+                        if (isToday) {
+                            Surface(
+                                shape = RoundedCornerShape(6.dp),
+                                color = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.pulseBreath(minAlpha = 0.75f),
+                            ) {
+                                Text(
+                                    text = "오늘",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onPrimary,
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                )
+                            }
+                        }
+                    }
                     if (day == null || day.sections.isEmpty()) {
                         Text("등록된 식단 없음", color = MaterialTheme.colorScheme.onSurfaceVariant)
                     } else {
@@ -2577,11 +2658,15 @@ private fun SettingsScreen(
     onDownloadUpdate: () -> Unit,
     onContinueInstall: () -> Unit,
     onCancelDownload: () -> Unit,
+    lmsCredentialState: CredentialState,
+    onDeleteLmsAccount: () -> Unit,
+    onBack: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
     var locationMessage by remember { mutableStateOf<String?>(null) }
     var liveSettingsMessage by remember { mutableStateOf<String?>(null) }
+    var confirmDeleteLmsAccount by remember { mutableStateOf(false) }
 
     val notifications = Build.VERSION.SDK_INT < 33 || ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
     val exact = (context.getSystemService(Context.ALARM_SERVICE) as AlarmManager).canScheduleExactAlarms()
@@ -2599,7 +2684,11 @@ private fun SettingsScreen(
         locationMessage = if (it) "백그라운드 위치 허용됨" else "백그라운드 위치 미허용"
     }
 
-    ScreenColumn(title = "설정 및 상태", modifier = modifier) {
+    ScreenColumn(
+        title = "설정 및 상태",
+        topAction = { TextButton(onClick = onBack, modifier = Modifier.testTag("close_settings")) { Text("닫기") } },
+        modifier = modifier,
+    ) {
         // 1) 귀가 기준지 — 가장 자주 바꾸는 개인 설정을 최상단에
         ElevatedCard(
             modifier = Modifier
@@ -2753,6 +2842,36 @@ private fun SettingsScreen(
             modifier = Modifier.staggeredEntrance(4),
         )
         DataAndSourcesCard(shuttleData, mealData, modifier = Modifier.staggeredEntrance(5))
+        ElevatedCard(
+            modifier = Modifier.fillMaxWidth().staggeredEntrance(6),
+            shape = RoundedCornerShape(20.dp),
+            colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+        ) {
+            Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text("LMS 계정", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                Text(
+                    if (lmsCredentialState == CredentialState.SAVED) "자동 로그인 계정 저장됨" else "저장된 계정 없음",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                if (lmsCredentialState == CredentialState.SAVED) {
+                    OutlinedButton(onClick = { confirmDeleteLmsAccount = true }, modifier = Modifier.fillMaxWidth()) {
+                        Text("계정 및 수업 캐시 삭제")
+                    }
+                }
+            }
+        }
+    }
+    if (confirmDeleteLmsAccount) {
+        AlertDialog(
+            onDismissRequest = { confirmDeleteLmsAccount = false },
+            title = { Text("LMS 계정을 삭제할까요?") },
+            text = { Text("저장한 계정, 로그인 세션과 수업 캐시가 이 기기에서 삭제됩니다.") },
+            confirmButton = {
+                Button(onClick = { confirmDeleteLmsAccount = false; onDeleteLmsAccount() }) { Text("삭제") }
+            },
+            dismissButton = { TextButton(onClick = { confirmDeleteLmsAccount = false }) { Text("취소") } },
+        )
     }
 }
 
@@ -3054,13 +3173,14 @@ fun LiveDisplaySettings(
 }
 
 @Composable
-private fun ScreenColumn(
+internal fun ScreenColumn(
     modifier: Modifier = Modifier,
     title: String? = null,
     topAction: (@Composable () -> Unit)? = null,
     customTopBar: (@Composable () -> Unit)? = null,
     content: @Composable ColumnScope.() -> Unit,
 ) {
+    val openSettings = LocalOpenSettings.current
     val statusBarTop = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
     val surfaceColor = MaterialTheme.colorScheme.surface
 
@@ -3086,6 +3206,14 @@ private fun ScreenColumn(
                 ) {
                     if (customTopBar != null) {
                         customTopBar()
+                        openSettings?.let { open ->
+                            IconButton(
+                                onClick = open,
+                                modifier = Modifier.align(Alignment.CenterEnd).testTag("open_settings"),
+                            ) {
+                                Icon(Icons.Default.Settings, contentDescription = "설정")
+                            }
+                        }
                     } else if (title != null) {
                         Row(
                             modifier = Modifier.fillMaxWidth(),
@@ -3097,7 +3225,14 @@ private fun ScreenColumn(
                                 style = MaterialTheme.typography.headlineMedium,
                                 fontWeight = FontWeight.Bold,
                             )
-                            topAction?.invoke()
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                topAction?.invoke()
+                                openSettings?.let { open ->
+                                    IconButton(onClick = open, modifier = Modifier.testTag("open_settings")) {
+                                        Icon(Icons.Default.Settings, contentDescription = "설정")
+                                    }
+                                }
+                            }
                         }
                     }
                 }
@@ -3107,10 +3242,11 @@ private fun ScreenColumn(
         }
 
         // 상단 시스템 상태바 영역 반투명 그라데이션 스크림 (스크롤 시 텍스트/아이콘 겹침 방지 및 부드러운 페이드)
+        // 헤더 행(콘텐츠 시작 statusBarTop+8dp)과 겹치지 않도록 스크림은 8dp까지만 내려온다 (#5)
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(statusBarTop + 20.dp)
+                .height(statusBarTop + 8.dp)
                 .background(
                     Brush.verticalGradient(
                         0.0f to surfaceColor.copy(alpha = 0.95f),
@@ -3121,6 +3257,8 @@ private fun ScreenColumn(
         )
     }
 }
+
+internal val LocalOpenSettings = compositionLocalOf<(() -> Unit)?> { null }
 
 private fun openUrl(context: Context, url: String) {
     context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))

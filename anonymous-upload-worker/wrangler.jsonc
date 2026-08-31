@@ -1,0 +1,22 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "dima-now-meal-upload",
+  "main": "src/index.mjs",
+  "compatibility_date": "2026-08-31",
+  "observability": {
+    "enabled": true
+  },
+  "vars": {
+    "GITHUB_APP_ID": "4774955",
+    "GITHUB_INSTALLATION_ID": "157828401",
+    "GITHUB_OWNER": "winter1l",
+    "GITHUB_REPOSITORY": "DimaNow",
+    "GITHUB_SUBMISSION_BRANCH": "dorm-submissions"
+  },
+  "kv_namespaces": [
+    {
+      "binding": "RATE_LIMIT",
+      "id": "998a2ec4b4084ac9aa4632cd5b2777d6"
+    }
+  ]
+}

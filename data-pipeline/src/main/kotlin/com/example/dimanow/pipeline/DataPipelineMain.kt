@@ -18,7 +18,7 @@ fun main(args: Array<String>) {
     when (command) {
         "publish-shuttle" -> publisher.publishShuttle(Files.readString(Path.of(args[1])), publisher.nextRevision("shuttle"), now)
         "publish-notice" -> runCatching {
-            val html = Jsoup.connect("https://www.dima.ac.kr/?p=111").userAgent("DIMA-Now/1.3 GitHub data pipeline").get().outerHtml()
+            val html = Jsoup.connect("https://www.dima.ac.kr/?p=111").userAgent("DIMA-Now/1.4 GitHub data pipeline").get().outerHtml()
             publisher.publishNotices(NoticePayloadBuilder().build(html), publisher.nextRevision("notice"), now)
         }.getOrElse { error ->
             publisher.recordFailure("notice", "ERROR", error.message ?: error.javaClass.simpleName, now)

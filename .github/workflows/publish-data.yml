@@ -10,7 +10,8 @@ on:
       - dorm-submissions/**
       - .github/workflows/publish-data.yml
   schedule:
-    - cron: "17 0,6 * * *"
+    # GitHub cron is UTC: Monday 01:15 UTC = Monday 10:15 KST.
+    - cron: "15 1 * * 1"
     - cron: "43 0 * * *"
   workflow_dispatch:
     inputs:

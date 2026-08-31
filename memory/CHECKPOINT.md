@@ -8,4 +8,6 @@ Live submission evidence: submitted photo ID `2f4363e1-d2c9-4221-b44a-04a2c0ddec
 
 Verification: Worker Node tests 3/3 pass. `testDebugUnitTest`, `:data-pipeline:test`, `compileDebugAndroidTestKotlin`, `lintDebug`, `assembleDebug`, and `assembleOptimized` pass. API 36 emulator has 73 tests completed, no failures, with 3 intentional skips. `app-optimized.apk` SHA-256 is `E683D36203BA77037A7F0431D38157A791BAC3C7BBED15936966D16B40F7E5DA`; release copy target is `dist/DIMA-Now-v1.4-optimized.apk`.
 
-Next actions: commit only task files (never `.gitignore` or `memory/SESSION-LOG.md`), push `main`, publish GitHub Release `v1.4` with the optimized APK, then if exact physical Galaxy serial `R3CW203NFSL` appears in `adb devices -l`, use `adb -s R3CW203NFSL install -r` and inspect cold-launch PID/FATAL/ANR. Do not claim production Samsung Now Bar/AOD acceptance absent fresh direct physical observation.
+Publication: source commit `8452383` is on `main`; GitHub Release v1.4 is public with a GitHub asset digest matching the local APK, and its validation/data-publish runs `33372618812`/`33372618799` both succeeded.
+
+Next action: if exact physical Galaxy serial `R3CW203NFSL` appears in `adb devices -l`, use `adb -s R3CW203NFSL install -r` and inspect cold-launch PID/FATAL/ANR. Do not claim production Samsung Now Bar/AOD acceptance absent fresh direct physical observation.

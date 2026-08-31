@@ -10,4 +10,6 @@ Verification: Worker Node tests 3/3 pass. `testDebugUnitTest`, `:data-pipeline:t
 
 Publication: source commit `8452383` is on `main`; GitHub Release v1.4 is public with a GitHub asset digest matching the local APK, and its validation/data-publish runs `33372618812`/`33372618799` both succeeded.
 
-Next action: if exact physical Galaxy serial `R3CW203NFSL` appears in `adb devices -l`, use `adb -s R3CW203NFSL install -r` and inspect cold-launch PID/FATAL/ANR. Do not claim production Samsung Now Bar/AOD acceptance absent fresh direct physical observation.
+Galaxy smoke: `R3CW203NFSL` has v1.4 (5) via successful `adb install -r`; `MainActivity` resumed with PID 26578 and no post-launch FATAL/ANR. A visual Home screenshot is at ignored local artifact `artifacts/dimanow-v14-galaxy-smoke.png`.
+
+Next action: observe an actual active class/Live Update on the Galaxy before claiming Samsung Now Bar/AOD acceptance. Live anonymous photo submission from the phone, real geofence behavior, widget update, and battery remain separate manual checks.

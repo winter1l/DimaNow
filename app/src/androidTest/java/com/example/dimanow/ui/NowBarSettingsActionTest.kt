@@ -4,6 +4,7 @@ import android.os.SystemClock
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.lifecycle.Lifecycle
 import com.example.dimanow.DimaNowApplication
@@ -73,7 +74,7 @@ class NowBarSettingsActionTest {
     }
 
     private fun openNowBarSetupGuide() {
-        composeRule.onNodeWithText("설정").performClick()
+        composeRule.onNodeWithTag("open_settings").performClick()
         composeRule.onNodeWithText("나우바 설정 안내").performClick()
     }
 

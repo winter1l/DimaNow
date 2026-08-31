@@ -24,8 +24,15 @@ class AppBackNavigationTest {
 
         composeRule.onNodeWithTag("nav_SHUTTLE").performClick()
         composeRule.onNodeWithTag("nav_MEAL").performClick()
-        composeRule.onNodeWithTag("nav_SETTINGS").performClick()
-        composeRule.onNodeWithTag("nav_SETTINGS").assertIsSelected()
+        composeRule.waitForIdle()
+        composeRule.onNodeWithTag("open_settings").performClick()
+        composeRule.onNodeWithTag("nav_SETTINGS").assertDoesNotExist()
+        composeRule.onNodeWithText("설정 및 상태").assertExists()
+
+        composeRule.activityRule.scenario.onActivity {
+            it.onBackPressedDispatcher.onBackPressed()
+        }
+        composeRule.onNodeWithTag("nav_MEAL").assertIsSelected()
 
         composeRule.activityRule.scenario.onActivity {
             it.onBackPressedDispatcher.onBackPressed()

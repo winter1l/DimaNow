@@ -36,7 +36,6 @@ class NoticeCardTest {
             DashboardScreen(
                 schedule = DefaultSchedule.create(),
                 zone = CampusZoneId.OUTSIDE,
-                hasSavedOrigin = false,
                 automatic = true,
                 shuttle = ShuttleData(emptyList(), null, null, null, "https://www.dima.ac.kr/?p=97", null),
                 meal = MealData(emptyList(), null, null, null, "https://www.dima.ac.kr/?p=1", null, null),
@@ -51,7 +50,7 @@ class NoticeCardTest {
         composeRule.onNodeWithText("2026-2학기 국가장학금 2차 신청 안내").assertExists()
         composeRule.onNodeWithText("네 번째 공지는 카드에 나오지 않습니다").assertDoesNotExist()
         composeRule.onNodeWithText("DIMA Portal").assertExists()
-        composeRule.onNodeWithText("LMS").assertExists()
+        composeRule.onNodeWithText("수업 (LMS)").assertExists()
     }
 
     @Test
@@ -60,7 +59,6 @@ class NoticeCardTest {
             DashboardScreen(
                 schedule = DefaultSchedule.create(),
                 zone = CampusZoneId.OUTSIDE,
-                hasSavedOrigin = false,
                 automatic = true,
                 shuttle = ShuttleData(emptyList(), null, null, null, "https://www.dima.ac.kr/?p=97", null),
                 meal = MealData(emptyList(), null, null, null, "https://www.dima.ac.kr/?p=1", null, null),

@@ -80,48 +80,5 @@ class CampusSyncWorker(context: Context, parameters: WorkerParameters) : Corouti
     }
 }
 
-class NoticeRefreshWorker(context: Context, parameters: WorkerParameters) : CoroutineWorker(context, parameters) {
-    override suspend fun doWork(): Result {
-        val app = applicationContext as DimaNowApplication
-        val now = ZonedDateTime.now(MinuteTicker.CAMPUS_ZONE)
-        if (!RefreshPolicy.shouldRefreshNotices(app.noticeSource.data.first(), now)) return Result.success()
-        return when (app.noticeSource.refresh()) {
-            is NoticeRefreshResult.Success -> Result.success()
-            is NoticeRefreshResult.Failure -> Result.retry()
-        }
-    }
-}
-
-class MealRefreshWorker(context: Context, parameters: WorkerParameters) : CoroutineWorker(context, parameters) {
-    override suspend fun doWork(): Result {
-        val app = applicationContext as DimaNowApplication
-        val now = ZonedDateTime.now(MinuteTicker.CAMPUS_ZONE)
-        if (!RefreshPolicy.shouldRefreshMeal(app.mealSource.data.first(), now)) return Result.success()
-        return when (val result = app.mealSource.refresh()) {
-            is MealRefreshResult.Success -> {
-                MealWidgetProvider.updateAll(applicationContext)
-                CampusSummaryWidgetProvider.updateAll(applicationContext)
-                if (result.weekStart.plusDays(4).isBefore(now.toLocalDate())) Result.retry() else Result.success()
-            }
-            MealRefreshResult.NotPublishedYet -> Result.retry()
-            is MealRefreshResult.NeedsReview -> Result.retry()
-            is MealRefreshResult.Failure -> Result.retry()
-        }
-    }
-}
-
-class ShuttleRefreshWorker(context: Context, parameters: WorkerParameters) : CoroutineWorker(context, parameters) {
-    override suspend fun doWork(): Result {
-        val app = applicationContext as DimaNowApplication
-        val now = ZonedDateTime.now(MinuteTicker.CAMPUS_ZONE)
-        if (!RefreshPolicy.shouldRefreshShuttle(app.shuttleSource.data.first(), now)) return Result.success()
-        return when (app.shuttleSource.refresh()) {
-            is ShuttleRefreshResult.Success -> {
-                ShuttleWidgetProvider.updateAll(applicationContext)
-                CampusSummaryWidgetProvider.updateAll(applicationContext)
-                Result.success()
-            }
-            is ShuttleRefreshResult.Failure -> Result.retry()
-        }
-    }
-}
+// D-038 통합 이후 개별 소스 워커(Notice/Meal/ShuttleRefreshWorker)는 어디서도 enqueue되지 않아
+// D-044 정리에서 제거되었다. 예약은 CampusSyncWorker 하나로 일원화되어 있다.

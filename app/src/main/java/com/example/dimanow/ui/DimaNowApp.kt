@@ -14,6 +14,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.ContentTransform
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateDpAsState
@@ -163,9 +164,7 @@ import com.example.dimanow.live.LiveSurfaceController
 import com.example.dimanow.meal.MealData
 import com.example.dimanow.meal.DormitoryMealData
 import com.example.dimanow.meal.DormitoryMealImage
-import com.example.dimanow.meal.DormitoryMealAuthorization
 import com.example.dimanow.meal.DormitoryMealSubmissionResult
-import com.example.dimanow.meal.DormitoryDeviceAuthorization
 import com.example.dimanow.meal.MealSource
 import com.example.dimanow.meal.mealServiceStatus
 import com.example.dimanow.notice.NoticeData
@@ -294,21 +293,7 @@ fun DimaNowApp(
     ) { padding ->
         AnimatedContent(
             targetState = page,
-            transitionSpec = {
-                val forward = targetState.ordinal > initialState.ordinal
-                val slideOffset = { width: Int -> if (forward) width / 4 else -width / 4 }
-                slideInHorizontally(
-                    animationSpec = spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessMediumLow),
-                    initialOffsetX = slideOffset,
-                ).togetherWith(
-                    slideOutHorizontally(
-                        animationSpec = spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessMediumLow),
-                        targetOffsetX = { width -> -slideOffset(width) },
-                    ) + fadeOut(
-                        animationSpec = tween(durationMillis = 180),
-                    ),
-                ).apply { targetContentZIndex = 1f }
-            },
+            transitionSpec = { dimaTabContentTransform(targetState.ordinal > initialState.ordinal) },
             label = "tab_transition",
         ) { targetPage ->
             val minuteNow = if (targetPage.usesMinuteTicker) rememberMinuteNow() else null
@@ -392,6 +377,21 @@ fun DimaNowApp(
             },
         )
     }
+}
+
+internal fun dimaTabContentTransform(forward: Boolean): ContentTransform {
+    val slideOffset = { width: Int -> if (forward) width / 4 else -width / 4 }
+    return (
+        slideInHorizontally(
+            animationSpec = spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessMediumLow),
+            initialOffsetX = slideOffset,
+        ) + fadeIn(animationSpec = tween(durationMillis = 180))
+    ).togetherWith(
+        slideOutHorizontally(
+            animationSpec = spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessMediumLow),
+            targetOffsetX = { width -> -slideOffset(width) },
+        ) + fadeOut(animationSpec = tween(durationMillis = 180)),
+    ).apply { targetContentZIndex = 1f }
 }
 
 @Composable
@@ -2186,8 +2186,6 @@ fun MealScreen(
     var uploadPreflight by remember { mutableStateOf(false) }
     var showDormitoryPhotoSource by remember { mutableStateOf(false) }
     var pendingImage by remember { mutableStateOf<DormitoryMealImage?>(null) }
-    var pendingAuthorization by remember { mutableStateOf<DormitoryDeviceAuthorization?>(null) }
-    var authorizationPolling by remember { mutableStateOf(false) }
     var uploadingDormitoryMeal by remember { mutableStateOf(false) }
     var cameraOutput by remember { mutableStateOf<Uri?>(null) }
     var refreshMessage by remember { mutableStateOf<String?>(null) }
@@ -2239,26 +2237,11 @@ fun MealScreen(
                     }
                     refreshMessage = "식단 확인이 계속되고 있어요. 잠시 후 새로고침해 주세요."
                 }
-                DormitoryMealSubmissionResult.AuthorizationRequired -> refreshMessage = "GitHub 연결이 필요합니다."
                 is DormitoryMealSubmissionResult.Failure -> refreshMessage = submitted.message
                 else -> Unit
             }
         } finally {
             uploadingDormitoryMeal = false
-        }
-    }
-
-    suspend fun authorizeOrSubmit(image: DormitoryMealImage) {
-        when (val authorization = mealSource.beginDormitoryUploadAuthorization()) {
-            DormitoryMealAuthorization.AlreadyAuthorized,
-            DormitoryMealAuthorization.Authorized,
-            -> submitAndWatch(image)
-            is DormitoryMealAuthorization.Started -> {
-                pendingImage = image
-                pendingAuthorization = authorization.authorization
-            }
-            is DormitoryMealAuthorization.Failed -> refreshMessage = authorization.message
-            DormitoryMealAuthorization.Pending -> Unit
         }
     }
 
@@ -2384,80 +2367,21 @@ fun MealScreen(
         )
     }
     pendingImage?.let { image ->
-        if (pendingAuthorization == null) {
-            AlertDialog(
-                onDismissRequest = { pendingImage = null },
-                title = { Text("기숙사 식단 올리기") },
-                text = { Text("사진은 식단 확인 후 공개 데이터로 공유됩니다.") },
-                confirmButton = {
-                    Button(
-                        enabled = !uploadingDormitoryMeal,
-                        onClick = {
-                            pendingImage = null
-                            scope.launch { authorizeOrSubmit(image) }
-                        },
-                    ) { Text("올리기") }
-                },
-                dismissButton = { TextButton(onClick = { pendingImage = null }) { Text("취소") } },
-            )
-        }
-    }
-    pendingAuthorization?.let { authorization ->
         AlertDialog(
-            onDismissRequest = {
-                authorizationPolling = false
-                pendingAuthorization = null
-                pendingImage = null
-            },
-            title = { Text("GitHub 연결") },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(authorization.userCode, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-                    if (authorizationPolling) CircularProgressIndicator(Modifier.size(24.dp))
-                }
-            },
+            onDismissRequest = { pendingImage = null },
+            title = { Text("기숙사 식단 올리기") },
+            text = { Text("사진은 식단 확인 후 공개 데이터로 공유됩니다.") },
             confirmButton = {
                 Button(
-                    enabled = !authorizationPolling,
+                    enabled = !uploadingDormitoryMeal,
                     onClick = {
-                        context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(authorization.verificationUri)))
-                        authorizationPolling = true
-                    },
-                ) { Text("GitHub에서 승인") }
-            },
-            dismissButton = { TextButton(onClick = { pendingAuthorization = null; pendingImage = null }) { Text("취소") } },
-        )
-    }
-    LaunchedEffect(pendingAuthorization, authorizationPolling) {
-        val authorization = pendingAuthorization ?: return@LaunchedEffect
-        if (!authorizationPolling) return@LaunchedEffect
-        val deadline = System.currentTimeMillis() + authorization.expiresInSeconds * 1_000L
-        var intervalMillis = authorization.intervalSeconds.coerceAtLeast(5) * 1_000L
-        while (System.currentTimeMillis() < deadline && authorizationPolling) {
-            delay(intervalMillis)
-            when (val state = mealSource.pollDormitoryUploadAuthorization(authorization)) {
-                DormitoryMealAuthorization.Authorized,
-                DormitoryMealAuthorization.AlreadyAuthorized,
-                -> {
-                    authorizationPolling = false
-                    pendingAuthorization = null
-                    pendingImage?.let { image ->
                         pendingImage = null
-                        submitAndWatch(image)
-                    }
-                    return@LaunchedEffect
-                }
-                DormitoryMealAuthorization.Pending -> intervalMillis += 1_000L
-                is DormitoryMealAuthorization.Failed -> {
-                    authorizationPolling = false
-                    refreshMessage = state.message
-                    return@LaunchedEffect
-                }
-                is DormitoryMealAuthorization.Started -> Unit
-            }
-        }
-        authorizationPolling = false
-        refreshMessage = "GitHub 연결 시간이 지났습니다."
+                        scope.launch { submitAndWatch(image) }
+                    },
+                ) { Text("올리기") }
+            },
+            dismissButton = { TextButton(onClick = { pendingImage = null }) { Text("취소") } },
+        )
     }
 }
 

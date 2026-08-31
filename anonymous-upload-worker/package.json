@@ -1,0 +1,8 @@
+{
+  "name": "dima-now-anonymous-upload-worker",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test"
+  }
+}

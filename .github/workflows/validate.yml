@@ -22,3 +22,6 @@ jobs:
         run: bash ./gradlew :data-pipeline:run --args="publish-shuttle $GITHUB_WORKSPACE/data-source/shuttle.csv $RUNNER_TEMP/site"
       - name: JVM·파이프라인·Android 검증
         run: bash ./gradlew testDebugUnitTest :data-pipeline:test compileDebugAndroidTestKotlin lintDebug assembleOptimized
+      - name: 익명 기숙사 식단 업로드 계약 검증
+        run: node --test
+        working-directory: anonymous-upload-worker

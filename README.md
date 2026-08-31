@@ -2,7 +2,7 @@
 
 DIMA Now는 동아방송예술대학교 학생의 수업, 셔틀, 본관 학생식당·기숙사 식단을 한곳에서 확인하는 개인용 Android 앱입니다.
 
-시간표와 설정, 위치 구역, 셔틀·식단·공지 캐시는 모두 기기에 저장됩니다. 앱은 계정이나 전용 백엔드 없이 GitHub Pages에 게시된 검증 JSON만 동기화합니다. 공식 페이지 수집과 식단 OCR은 GitHub Actions에서 수행됩니다.
+시간표와 설정, 위치 구역, 셔틀·식단·공지 캐시는 모두 기기에 저장됩니다. 앱은 계정 없이 GitHub Pages에 게시된 검증 JSON을 동기화합니다. 공식 페이지 수집과 식단 OCR은 GitHub Actions에서 수행되며, 기숙사 식단 사진 제출만 무료 Cloudflare Worker를 통과합니다.
 
 > 이 프로젝트는 개인용으로 개발된 비공식 앱이며 동아방송예술대학교가 배포하거나 보증하는 공식 앱이 아닙니다.
 
@@ -40,7 +40,7 @@ ADB로 기존 데이터를 유지하며 설치하려면 다음 명령을 사용�
 
 ```powershell
 adb devices
-adb -s <device-serial> install -r DIMA-Now-v1.3-optimized.apk
+adb -s <device-serial> install -r DIMA-Now-v1.4-optimized.apk
 ```
 
 릴리스 APK는 개인 직접 설치를 위해 Android 디버그 인증서로 서명되어 있습니다. Google Play 배포용 서명이 아니며, 기존 설치본과 서명 인증서가 다르면 `-r` 업데이트가 거부될 수 있습니다.
@@ -113,7 +113,7 @@ adb devices
 
 - 셔틀: 관리자가 [`data-source/shuttle.csv`](data-source/shuttle.csv)를 수정하면 `main` 반영 후 자동 게시합니다.
 - 식단: GitHub Actions가 DIMA 공식 공개 게시물과 공개 Instagram embed를 확인하고, Gemini 3.5 Flash-Lite의 구조화 JSON 출력으로 식단 이미지를 전사합니다. 월~금 날짜와 빈 메뉴 여부만 최소 검증한 뒤 게시합니다.
-- 기숙사 식단: 현재 주 데이터가 없을 때 저장소 소유자가 앱에서 사진을 고르거나 촬영할 수 있습니다. 앱은 Pages를 먼저 다시 확인하고, 제출 workflow도 직렬화된 상태에서 중복 주차를 다시 검사합니다. 검증 호출은 표의 출처·전체 노출 여부만 `HIGH` 추론으로 확인하고, 통과한 사진만 별도의 Flash-Lite 구조화 출력으로 전사합니다.
+- 기숙사 식단: 현재 주 데이터가 없을 때 누구나 앱에서 사진을 고르거나 촬영할 수 있습니다. 앱은 Pages를 먼저 다시 확인하고, 제출 workflow도 직렬화된 상태에서 중복 주차를 다시 검사합니다. 검증 호출은 표의 출처·전체 노출 여부만 `HIGH` 추론으로 확인하고, 통과한 사진만 별도의 Flash-Lite 구조화 출력으로 전사합니다.
 - 공지: GitHub Actions가 DIMA 공식 공지 목록을 읽어 최대 10개를 게시합니다.
 - 앱: 실행 시와 12시간마다 작은 manifest를 확인합니다. 수동 새로고침도 같은 endpoint만 사용합니다.
 
@@ -121,7 +121,7 @@ adb devices
 
 식단 게시 workflow에는 저장소 Actions Secret `GEMINI_API_KEY`가 필요합니다. 로컬 개발에서는 `.env.example`을 참고하되 실제 `.env`와 API 키를 커밋하지 않습니다. Gemini에는 공개 학생식당 이미지 또는 사용자가 명시적으로 제출한 기숙사 식단표 사진만 전송하며 앱의 위치·시간표·설정은 전송하지 않습니다.
 
-기숙사 사진 제출은 이 저장소에만 설치하고 `Contents: write`만 부여한 전용 GitHub App의 device flow를 사용합니다. 앱 코드는 쓰기 경로를 `dorm-submissions` 브랜치의 신규 사진으로 고정합니다. 토큰은 Android Keystore 키로 암호화해 기기에만 저장하며, Gemini 키·GitHub App 비밀키·저장소 토큰은 APK에 포함하지 않습니다. 제출 사진은 공개 브랜치에 올라가므로 업로드 확인창에서 공개 공유 사실을 먼저 알립니다. 다른 사용자는 GitHub 로그인 없이 Pages의 검증 JSON만 동기화합니다.
+기숙사 사진은 GitHub 로그인 없이 Cloudflare Worker로 전송됩니다. Worker는 이미지 형식·15 MiB 제한을 확인하고 IP 단방향 해시로 짧은 중복 제출 제한을 적용한 뒤, 이 저장소에만 설치된 전용 GitHub App의 단기 설치 토큰으로 `dorm-submissions` 브랜치에 신규 사진을 기록합니다. Gemini 키·GitHub App 개인 키·저장소 토큰은 APK와 Git에 포함하지 않습니다. 제출 사진은 공개 브랜치에 올라가므로 업로드 확인창에서 공개 공유 사실을 먼저 알립니다.
 
 ## 앱 업데이트 경로
 
@@ -165,6 +165,7 @@ app/
 benchmark/           Macrobenchmark와 Baseline Profile 생성
 sync-contract/       앱과 게시 파이프라인이 공유하는 JSON 계약
 data-pipeline/       셔틀 CSV 검증, 식단 OCR, 공지 수집, 정적 사이트 게시
+anonymous-upload-worker/  GitHub 로그인 없는 기숙사 사진 제출 게이트웨이
 data-source/         관리자가 수정하는 셔틀 CSV
 .github/workflows/   검증과 GitHub Pages 데이터 게시
 artifacts/           승인된 구역 경계와 검증 보고서 일부
@@ -176,7 +177,7 @@ memory/              제품 결정과 검증 근거
 ## 범위 밖
 
 - 로그인 자동화
-- 별도 상시 백엔드·개인 PC 서버 운영
+- 별도 상시 서버·개인 PC 서버 운영
 - 다중 사용자 배포
 - Google Play Store 출시
 

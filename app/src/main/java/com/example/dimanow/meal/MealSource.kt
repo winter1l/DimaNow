@@ -151,12 +151,8 @@ interface MealSource {
         get() = flowOf(DormitoryMealData(emptyList(), null, null, null))
     suspend fun refresh(): MealRefreshResult
     suspend fun refreshDormitory(): MealRefreshResult = MealRefreshResult.NotPublishedYet
-    suspend fun beginDormitoryUploadAuthorization(): DormitoryMealAuthorization =
-        DormitoryMealAuthorization.Failed("GitHub 업로드 연결이 준비되지 않았습니다.")
-    suspend fun pollDormitoryUploadAuthorization(authorization: DormitoryDeviceAuthorization): DormitoryMealAuthorization =
-        DormitoryMealAuthorization.Failed("GitHub 업로드 연결이 준비되지 않았습니다.")
     suspend fun submitDormitoryMeal(image: DormitoryMealImage): DormitoryMealSubmissionResult =
-        DormitoryMealSubmissionResult.Failure("GitHub 업로드 연결이 준비되지 않았습니다.")
+        DormitoryMealSubmissionResult.Failure("기숙사 식단 업로드 서비스가 준비되지 않았습니다.")
     suspend fun dormitorySubmissionStatus(submissionId: String): DormitoryMealSubmissionResult =
         DormitoryMealSubmissionResult.Failure("식단 처리 상태를 확인하지 못했습니다.")
 }
@@ -477,17 +473,9 @@ class StaticMealSource(
         }
     } }
 
-    override suspend fun beginDormitoryUploadAuthorization(): DormitoryMealAuthorization =
-        dormitorySubmissionService?.beginAuthorization()
-            ?: DormitoryMealAuthorization.Failed("GitHub 업로드 연결이 준비되지 않았습니다.")
-
-    override suspend fun pollDormitoryUploadAuthorization(authorization: DormitoryDeviceAuthorization): DormitoryMealAuthorization =
-        dormitorySubmissionService?.pollAuthorization(authorization)
-            ?: DormitoryMealAuthorization.Failed("GitHub 업로드 연결이 준비되지 않았습니다.")
-
     override suspend fun submitDormitoryMeal(image: DormitoryMealImage): DormitoryMealSubmissionResult =
         dormitorySubmissionService?.submit(image)
-            ?: DormitoryMealSubmissionResult.Failure("GitHub 업로드 연결이 준비되지 않았습니다.")
+            ?: DormitoryMealSubmissionResult.Failure("기숙사 식단 업로드 서비스가 준비되지 않았습니다.")
 
     override suspend fun dormitorySubmissionStatus(submissionId: String): DormitoryMealSubmissionResult =
         dormitorySubmissionService?.status(submissionId)

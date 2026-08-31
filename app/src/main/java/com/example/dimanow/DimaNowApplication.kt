@@ -35,9 +35,8 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import com.example.dimanow.meal.MealSource
 import com.example.dimanow.meal.StaticMealSource
-import com.example.dimanow.meal.AndroidDormitoryMealTokenStore
 import com.example.dimanow.meal.DormitoryMealSubmissionService
-import com.example.dimanow.meal.GitHubDormitoryMealApi
+import com.example.dimanow.meal.AnonymousDormitoryMealApi
 import com.example.dimanow.notice.NoticeSource
 import com.example.dimanow.notice.StaticNoticeSource
 import com.example.dimanow.sync.UrlConnectionStaticDataTransport
@@ -67,9 +66,9 @@ class DimaNowApplication : Application() {
     val shuttleSource: ShuttleSource by lazy { StaticShuttleSource(database, staticDataTransport) }
     private val dormitoryMealSubmissionService by lazy {
         DormitoryMealSubmissionService(
-            clientId = getString(R.string.github_dormitory_meal_client_id),
-            gateway = GitHubDormitoryMealApi(),
-            tokenStore = AndroidDormitoryMealTokenStore(this),
+            gateway = AnonymousDormitoryMealApi(
+                uploadRoot = getString(R.string.dormitory_meal_upload_url),
+            ),
         )
     }
     val mealSource: MealSource by lazy {

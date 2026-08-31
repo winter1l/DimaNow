@@ -1,6 +1,8 @@
 package com.example.dimanow.ui
 
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.CardDefaults
@@ -16,6 +18,9 @@ import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.unit.dp
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.setValue
 import com.example.dimanow.theme.DIMANowTheme
 import com.example.dimanow.ui.motion.staggeredEntrance
 import org.junit.Assert.assertTrue
@@ -50,5 +55,35 @@ class CardShadowTransitionTest {
             if (pixels[x, y].toArgb() == expectedArgb) matches++
         }
         assertTrue("card surface was translucent at the transition midpoint: $matches/${image.width * image.height}", matches >= image.width * image.height * 4 / 5)
+    }
+
+    @Test
+    fun incomingAndOutgoingTabsBothFadeDuringTheOriginalDirectionalTransition() {
+        composeRule.mainClock.autoAdvance = false
+        var page by mutableIntStateOf(0)
+        composeRule.setContent {
+            Box(Modifier.size(200.dp).background(Color.Black)) {
+                AnimatedContent(
+                    targetState = page,
+                    transitionSpec = { dimaTabContentTransform(targetState > initialState) },
+                    label = "tab_transition_test",
+                ) { target ->
+                    Box(
+                        Modifier
+                            .size(200.dp)
+                            .background(if (target == 0) Color.Red else Color.Blue)
+                            .testTag("tab_$target"),
+                    )
+                }
+            }
+        }
+
+        composeRule.runOnIdle { page = 1 }
+        composeRule.mainClock.advanceTimeBy(90)
+
+        val center = composeRule.onNodeWithTag("tab_1").captureToImage().toPixelMap()[100, 100].toArgb()
+        val red = (center ushr 16) and 0xff
+        val blue = center and 0xff
+        assertTrue("incoming tab was already opaque at the midpoint: ${center.toUInt().toString(16)}", red in 20..220 && blue in 40..235)
     }
 }

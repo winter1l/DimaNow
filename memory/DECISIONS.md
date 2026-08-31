@@ -218,3 +218,11 @@ The Meal tab has separate `본관 학생식당` and `기숙사` views. The dormi
 A submitted image is processed only by GitHub-hosted automation. The first independent `gemini-3.5-flash-lite` request uses `thinkingLevel=HIGH` and the exact three-field Korean validation contract approved by the user. Only when both booleans are true does a second Flash-Lite request transcribe every dated meal section into structured JSON. Rejection publishes only the short optional reason; a valid week is content-addressed on GitHub Pages for every app to synchronize. Gemini and GitHub write credentials are never embedded in the APK. The contributing device authorizes GitHub once; other users only read the public Pages payload.
 
 Dashboard meal selection follows the effective zone without a manual selector: YEIN shows the dormitory menu, MAIN shows the main cafeteria menu, and zones without a matching cafeteria retain the main cafeteria fallback. Existing main-cafeteria cache, refresh semantics, widgets, timetable, and guidance remain intact.
+
+## D-042 - Original tab fade, Monday meal refresh, and anonymous dormitory submission - 2026-08-31 (user-approved change; supersedes D-039 schedule, D-040 outgoing-only fade, and D-041 device authorization)
+
+Bottom-tab navigation again fades both incoming and outgoing pages while retaining the approved directional spring slide. Card-level entrance staggering remains translation-only, so card elevation is not independently faded.
+
+The main-cafeteria discovery/OCR workflow runs once each Monday at 10:15 KST (`01:15 UTC`) instead of twice daily. Manual workflow dispatch remains available, and the independent daily notice schedule is unchanged.
+
+Dormitory meal photo submission requires no GitHub login or user token. The app uploads the confirmed image to a narrowly scoped Cloudflare Worker. The Worker validates JPEG/PNG/WebP signatures and the 15 MiB limit, applies a short per-address hashed rate limit, and uses a server-held GitHub App private key to obtain an expiring installation token for a new file under the `dorm-submissions` branch. No GitHub or Gemini write credential is embedded in the APK or committed to Git. GitHub Actions retains the duplicate-week check, high-reasoning validation, structured OCR, and last-good cache protection.

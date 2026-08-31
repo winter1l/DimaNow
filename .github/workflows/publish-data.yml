@@ -133,7 +133,7 @@ jobs:
             git -C site push origin HEAD:data
           fi
           rm -f site/.git
-      - uses: actions/configure-pages@983d7736d9b0ae728b81ab479565c72886d7745b
+      - uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d
       - name: Pages 아티팩트 생성
         shell: bash
         run: |

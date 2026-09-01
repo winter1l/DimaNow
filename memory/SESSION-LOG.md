@@ -119,3 +119,9 @@
 - Captured the failed Galaxy card-open path at 5 fps without opening another LMS session. The card click was real; native automatic-login progress existed for less than one 0.2-second sample, then the direct HTTP detail path reported an expired session.
 - Added red-green coverage and implementation for direct-HTTP login-shell fallback to the authenticated hidden session engine, standard public card clicks, password keyboard type, trusted single-session dialogs, official AJAX setup, and normal form navigation.
 - Focused physical instrumentation passed 24/24. A live UI smoke passed in 3.8 seconds, and a direct ADB tap showed the native `프로툴 사전진단` body with no visible WebView. Full JVM, data-pipeline, Android-test compile, lint, and optimized assembly passed.
+
+## 2026-09-01 - LMS notice/material parsing and course-content fallback
+
+- Inspected the authenticated official `전체 학습` list and detail structures without exporting private content. Notices and materials use `table.table_view_basic` plus `fncFileDown`; video content routes to the course schedule/player and is not an article.
+- Added red-green coverage and implementation for native notice/material bodies, authenticated attachment URLs, distinct identities for repeated official content IDs, and an explicit same-session official course page for CONTENT. The first `학습시작` was observed only long enough to confirm the player flow and was paused immediately.
+- Focused Galaxy instrumentation and the full JVM, pipeline, Android-test compile, lint, and optimized build passed. Optimized v1.5 (6), SHA-256 `AB827298CB5B40DB6218DB12499FACF85684A13E7D20BECB35E619A6870C49BC`, was installed with `adb install -r`; PID 31212 stayed top-resumed with no immediate FATAL/ANR. Live authenticated item opening is pending resolution of the official LMS single-session conflict caused by the still-active side-browser login.

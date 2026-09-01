@@ -138,6 +138,28 @@ class LmsHtmlParserTest {
     }
 
     @Test
+    fun videoRowsSharingTheOfficialCourseContentIdRemainSeparateItems() {
+        val html = """
+            <div class="learn_element_detail_list"><ul>
+              <li><span class="cata">콘텐츠</span>
+                <a href="javascript:fnGoContent('8','COURSE-A','D','COURSE-A_V','S');">[과목] 방송 프로그램 제작(0분/26분)</a></li>
+              <li><span class="cata">콘텐츠</span>
+                <a href="javascript:fnGoContent('8','COURSE-A','D','COURSE-A_V','S');">[과목] 사운드디자인 기초(1)(0분/28분)</a></li>
+              <li><span class="cata">콘텐츠</span>
+                <a href="javascript:fnGoContent('8','COURSE-A','D','COURSE-A_V','S');">[과목] 사운드디자인 기초(2)(0분/26분)</a></li>
+            </ul></div>
+        """.trimIndent()
+
+        val items = parser.parseDashboard(html, "https://lms.dima.ac.kr").items
+
+        assertEquals(
+            listOf("방송 프로그램 제작(0분/26분)", "사운드디자인 기초(1)(0분/28분)", "사운드디자인 기초(2)(0분/26분)"),
+            items.map { it.title },
+        )
+        assertEquals(3, items.map { it.id }.distinct().size)
+    }
+
+    @Test
     fun selectedTermCanBeAppliedBeforeLoadingTheCompleteCourseList() {
         val html = """
             <div class="select_learn_term">
@@ -408,6 +430,39 @@ class LmsHtmlParserTest {
         assertEquals("진단 양식.pdf", detail.attachments.single().fileName)
         assertEquals(
             "https://lms.dima.ac.kr/lms/class/report/stud/doDownloadFile.dunet?report_attach_no=77",
+            detail.attachments.single().downloadUrl,
+        )
+    }
+
+    @Test
+    fun officialBoardViewTableBecomesNativeBodyAndAuthenticatedAttachment() {
+        val item = LmsItem(
+            id = "32258",
+            courseId = "COURSE-A",
+            courseName = "음향기초실습(D반)",
+            kind = LmsItemKind.MATERIAL,
+            title = "방송제작 수업 자료",
+            detailUrl = "https://lms.dima.ac.kr/lms/class/boardItem/doViewBoardItem.dunet",
+        )
+        val html = """
+            <table class="table_view_basic">
+              <thead><tr><th class="ta_l pd_l10 end">방송제작 수업 자료</th></tr></thead>
+              <tbody>
+                <tr><td class="ta_l end">작성자 : 담당교수 | 등록일 : 2026-08-30 15:12 | 조회수 : 8</td></tr>
+                <tr><td class="end ta_l"><p>방송제작 강의자료입니다</p></td></tr>
+                <tr><td class="end">첨부파일 : <a href="javascript:fncFileDown('30379', '')">2주자료.pdf</a></td></tr>
+              </tbody>
+            </table>
+            <table class="table_comment"><tr><td>댓글 입력창</td></tr></table>
+        """.trimIndent()
+
+        val detail = parser.parseDetail(item, html, "https://lms.dima.ac.kr")
+
+        assertEquals("방송제작 강의자료입니다", org.jsoup.Jsoup.parse(detail.sanitizedHtml).text())
+        assertEquals(listOf("2주자료.pdf"), detail.attachments.map { it.fileName })
+        assertEquals(
+            "https://lms.dima.ac.kr/lms/class/boardItem/doDownloadFile.dunet?" +
+                "boarditem_attach_file_no=30379&board_no=6&boarditem_no=32258&learning_design_yn=N&time_flag=OK",
             detail.attachments.single().downloadUrl,
         )
     }

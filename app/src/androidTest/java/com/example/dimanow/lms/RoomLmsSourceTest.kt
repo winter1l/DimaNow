@@ -306,6 +306,34 @@ class RoomLmsSourceTest {
     }
 
     @Test
+    fun videoContentReturnsTheOfficialCoursePageInsteadOfPretendingItIsANativeArticle() = runTest {
+        val database = Room.inMemoryDatabaseBuilder(
+            ApplicationProvider.getApplicationContext(),
+            LmsCacheDatabase::class.java,
+        ).allowMainThreadQueries().build()
+        val source = RoomLmsSource(
+            database,
+            MutableLmsSessionController(LmsSessionState.ACTIVE),
+            RecordingLmsTransport(),
+        )
+        val content = LmsItem(
+            id = "202620UN00025451401401D_V",
+            courseId = "202620UN00025451401401D",
+            courseName = "음향기초실습(D반)",
+            kind = LmsItemKind.CONTENT,
+            title = "방송 프로그램 제작",
+            detailUrl = "https://lms.dima.ac.kr/lms/class/courseSchedule/doListView.dunet",
+        )
+
+        assertEquals(
+            LmsDetailLoadResult.OfficialCoursePage,
+            source.loadDetail(content),
+        )
+
+        database.close()
+    }
+
+    @Test
     fun directHttpLoginShellFallsBackToTheAuthenticatedHiddenSessionEngine() = runTest {
         val database = Room.inMemoryDatabaseBuilder(
             ApplicationProvider.getApplicationContext(),

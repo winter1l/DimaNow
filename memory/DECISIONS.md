@@ -266,3 +266,9 @@ After an existing successful baseline, a newly observed stable item key is `NEW`
 ## D-048 - Retry transient Gemini dormitory-meal failures - 2026-09-01 (user-requested fix)
 
 Dormitory-meal validation and OCR retry only HTTP 429 and 5xx responses, at most three attempts with bounded delays. Permanent 4xx and response-contract errors still fail immediately. The existing duplicate-week check, two-stage validation/OCR contract, last-good publication protection, and user-facing rejection/error states remain unchanged. A failed submission can be recovered by rerunning its original GitHub Actions event against the fixed `main`; no new photo, release, branch, or worktree is required.
+
+## D-049 - Native LMS detail and non-visible SSO engine - 2026-09-01 (user-requested fix)
+
+LMS item details render only in a native Compose surface. Sanitized article text is selectable, authenticated same-host attachments remain explicit Android document-save actions, and no article WebView or external browser fallback is allowed. An authenticated LMS landing shell is not accepted as an article and cannot replace the last-good cached detail. Course-session POST redirects preserve cookies before the destination request is followed.
+
+The official portal SSO engine remains an internal WebView because the portal login depends on its browser-owned ASP.NET/JavaScript flow, but it is invisible and excluded from accessibility. During first or renewed automatic login, the user sees only the native `공식 포털에서 로그인 중` progress surface. This does not claim a fully browser-free network implementation; it guarantees that the portal WebView is not user-visible.

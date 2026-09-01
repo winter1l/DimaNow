@@ -173,8 +173,16 @@ class LmsHtmlParser(private val zoneId: ZoneId = ZoneId.of("Asia/Seoul")) {
         val document = Jsoup.parse(html, origin)
         val matchingRow = findItemLink(document, item)
             ?.closest("tr, li, .list-item, .content-item, .lecture-item")
+        val officialBoardTable = document.selectFirst("table.table_view_basic")
+        val officialBoardBody = officialBoardTable
+            ?.select("tbody tr > td.ta_l")
+            ?.firstOrNull { cell ->
+                val text = cell.text().trim()
+                !text.startsWith("작성자") && !text.startsWith("첨부파일")
+            }
         val articleBody = document.selectFirst("#board_contents, .board_contents, .view_content, .report-content")
         val body = articleBody
+            ?: officialBoardBody
             ?: matchingRow
             ?: throw InvalidLmsDetailException("게시글 본문을 찾지 못했습니다")
         body.select("script, style, iframe, object, embed, form").remove()
@@ -191,9 +199,14 @@ class LmsHtmlParser(private val zoneId: ZoneId = ZoneId.of("Asia/Seoul")) {
                 .addAttributes(":all", "class")
                 .removeAttributes(":all", "style"),
         )
-        val attachmentScope = if (articleBody == null && matchingRow != null) matchingRow else document
+        val attachmentScope = when {
+            articleBody != null -> document
+            officialBoardTable != null -> officialBoardTable
+            matchingRow != null -> matchingRow
+            else -> document
+        }
         val attachments = attachmentScope.select("a")
-            .mapNotNull { parseAttachment(it, origin) }
+            .mapNotNull { parseAttachment(it, origin, item) }
             .distinctBy { it.id }
         return LmsItemDetail(item, clean, attachments)
     }
@@ -262,15 +275,21 @@ class LmsHtmlParser(private val zoneId: ZoneId = ZoneId.of("Asia/Seoul")) {
             ?: courses.firstOrNull { it.name == titleCourse || title.startsWith("[${it.name}]") }
         val courseName = course?.name ?: titleCourse.orEmpty().ifBlank { "전체" }
         val courseId = course?.id ?: contentCourseId.ifBlank { stableId(courseName) }
+        val normalizedTitle = title.replaceFirst(COURSE_PREFIX, "").trim()
+        val officialItemId = queryValue(href, "boarditem_no")
+            ?: queryValue(href, "report_no")
+            ?: contentMatch?.groupValues?.get(4)?.takeIf { it.isNotBlank() }
+        val stableItemId = if (kind == LmsItemKind.CONTENT && officialItemId?.endsWith("_V") == true) {
+            stableId(kind.name, courseId, normalizedTitle)
+        } else {
+            officialItemId ?: stableId(kind.name, title, href)
+        }
         return LmsItem(
-            id = queryValue(href, "boarditem_no")
-                ?: queryValue(href, "report_no")
-                ?: contentMatch?.groupValues?.get(4)?.takeIf { it.isNotBlank() }
-                ?: stableId(kind.name, title, href),
+            id = stableItemId,
             courseId = courseId,
             courseName = courseName,
             kind = kind,
-            title = title.replaceFirst(COURSE_PREFIX, "").trim(),
+            title = normalizedTitle,
             registeredAt = extractInstant(element.text(), "등록일"),
             dueAt = extractInstant(element.text(), "종료시간")
                 ?: extractInstant(element.text(), "종료시한")
@@ -324,8 +343,25 @@ class LmsHtmlParser(private val zoneId: ZoneId = ZoneId.of("Asia/Seoul")) {
         return resolve(origin, "${pathAndFields.first}?$query")
     }
 
-    private fun parseAttachment(link: Element, origin: String): LmsAttachment? {
+    private fun parseAttachment(link: Element, origin: String, item: LmsItem): LmsAttachment? {
         val action = link.attr("href") + " " + link.attr("onclick")
+        FNC_FILE_DOWN.find(action)?.groupValues?.get(1)?.let { attachNo ->
+            val boardNo = when (item.kind) {
+                LmsItemKind.NOTICE -> "7"
+                LmsItemKind.MATERIAL -> "6"
+                LmsItemKind.QUESTION -> "5"
+                else -> return@let
+            }
+            val url = "$origin/lms/class/boardItem/doDownloadFile.dunet" +
+                "?boarditem_attach_file_no=${encode(attachNo)}&board_no=$boardNo" +
+                "&boarditem_no=${encode(item.id)}&learning_design_yn=N&time_flag=OK"
+            return LmsAttachment(
+                id = "$boardNo:${item.id}:$attachNo",
+                fileName = link.text().trim().ifBlank { "첨부파일" },
+                downloadUrl = url,
+                sizeBytes = parseAttachmentSize(link.parent()?.text().orEmpty()),
+            )
+        }
         DOWNLOAD.find(action)?.groupValues?.let { values ->
             val attachNo = values[1]
             val boardNo = values[2]
@@ -453,6 +489,7 @@ class LmsHtmlParser(private val zoneId: ZoneId = ZoneId.of("Asia/Seoul")) {
         val LOGIN_REDIRECT_LOCATION = Regex("(?:top\\.)?(?:window\\.)?location(?:\\.href)?\\s*=", RegexOption.IGNORE_CASE)
         val PROFESSOR = Regex("교수(?:명)?\\s*[:：]\\s*([^·|\\n]+)")
         val DOWNLOAD = Regex("(?:doDownloadFile|fn_fileDown)\\(['\"]([^'\"]+)['\"]\\s*,\\s*['\"]([^'\"]+)['\"]\\s*,\\s*['\"]([^'\"]+)['\"](?:\\s*,\\s*['\"]([^'\"]*)['\"])?")
+        val FNC_FILE_DOWN = Regex("fncFileDown\\(\\s*['\"]([^'\"]+)['\"]")
         val DOWNLOAD_PATH = Regex("(?:download|filedown)", RegexOption.IGNORE_CASE)
         val YEAR = Regex("(\\d{4})년?")
         val CHANGE_YEAR_TERM = Regex("changeYearTerm\\(\\s*['\"]([^'\"]+)['\"]\\s*,\\s*['\"]([^'\"]+)['\"]\\s*,\\s*['\"]([^'\"]+)['\"]")

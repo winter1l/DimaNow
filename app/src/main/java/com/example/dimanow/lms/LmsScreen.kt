@@ -73,6 +73,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
@@ -107,6 +108,11 @@ private data class LmsPresentedDetail(
     val attachmentsChanged: Boolean,
 )
 
+private data class LmsOfficialCoursePage(
+    val item: LmsItem,
+    val course: LmsCourse,
+)
+
 @Composable
 fun LmsRoute(
     credentialStore: LmsCredentialStore,
@@ -132,11 +138,13 @@ fun LmsRoute(
     var selectedKind by remember { mutableStateOf<LmsItemKind?>(null) }
     var selectedRead by remember { mutableStateOf<Boolean?>(null) }
     var selectedDetail by remember { mutableStateOf<LmsPresentedDetail?>(null) }
+    var officialCoursePage by remember { mutableStateOf<LmsOfficialCoursePage?>(null) }
     BackHandler(enabled = selectedDetail != null) { selectedDetail = null }
+    BackHandler(enabled = officialCoursePage != null) { officialCoursePage = null }
     BackHandler(enabled = loginRequest != null) { loginBridge.cancel() }
     BackHandler(enabled = renderedPageRequest != null) { renderedPageBridge?.cancel() }
     // 로그인 WebView·글 상세가 떠 있는 동안 상위 셸이 하단 내비를 숨기게 알린다 (D-044)
-    val fullScreen = loginRequest != null || renderedPageRequest != null || selectedDetail != null
+    val fullScreen = loginRequest != null || renderedPageRequest != null || selectedDetail != null || officialCoursePage != null
     LaunchedEffect(fullScreen) { onFullScreenChange(fullScreen) }
     DisposableEffect(Unit) {
         onDispose { onFullScreenChange(false) }
@@ -201,6 +209,19 @@ fun LmsRoute(
                 onCancel = renderedPageBridge::cancel,
                 modifier = Modifier.fillMaxSize(),
             )
+            officialCoursePage != null -> LmsOfficialCourseWebView(
+                page = requireNotNull(officialCoursePage),
+                onBack = { officialCoursePage = null },
+                onSessionExpired = {
+                    officialCoursePage = null
+                    scope.launch {
+                        autoLoginCoordinator.markExpired()
+                        snackbar.showSnackbar("로그인이 필요합니다")
+                    }
+                },
+                onMessage = { scope.launch { snackbar.showSnackbar(it) } },
+                modifier = Modifier.fillMaxSize(),
+            )
             selectedDetail != null -> LmsDetailScreen(
                 presented = requireNotNull(selectedDetail),
                 source = source,
@@ -263,6 +284,16 @@ fun LmsRoute(
                                 selectedDetail = LmsPresentedDetail(result.detail, cached = true, attachmentsChanged = false)
                                 true
                             }
+                            LmsDetailLoadResult.OfficialCoursePage -> {
+                                val course = snapshot.courses.firstOrNull { it.id == item.courseId }
+                                if (course == null) {
+                                    snackbar.showSnackbar("공식 LMS 수업을 찾지 못했습니다")
+                                    false
+                                } else {
+                                    officialCoursePage = LmsOfficialCoursePage(item, course)
+                                    true
+                                }
+                            }
                             is LmsDetailLoadResult.Failure -> {
                                 snackbar.showSnackbar(result.message)
                                 false
@@ -288,6 +319,116 @@ fun LmsRoute(
             )
         }
         SnackbarHost(snackbar, Modifier.align(Alignment.BottomCenter))
+    }
+}
+
+@Composable
+private fun LmsOfficialCourseWebView(
+    page: LmsOfficialCoursePage,
+    onBack: () -> Unit,
+    onSessionExpired: () -> Unit,
+    onMessage: (String) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val context = LocalContext.current
+    var ready by remember(page) { mutableStateOf(false) }
+    Column(modifier.statusBarsPadding().navigationBarsPadding()) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(start = 4.dp, end = 16.dp, top = 4.dp, bottom = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            IconButton(onClick = onBack) {
+                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "뒤로")
+            }
+            Text(
+                text = page.item.title,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f),
+            )
+        }
+        Box(Modifier.weight(1f).fillMaxWidth()) {
+            AndroidView(
+                factory = {
+                    WebView(context).apply {
+                        importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_YES
+                        settings.javaScriptEnabled = true
+                        settings.domStorageEnabled = true
+                        settings.allowFileAccess = false
+                        settings.allowContentAccess = false
+                        settings.mixedContentMode = android.webkit.WebSettings.MIXED_CONTENT_NEVER_ALLOW
+                        var submitted = false
+                        webViewClient = object : WebViewClient() {
+                            override fun shouldOverrideUrlLoading(
+                                view: WebView,
+                                webRequest: WebResourceRequest,
+                            ): Boolean {
+                                if (LmsUrlPolicy.isAllowed(webRequest.url.toString())) return false
+                                onMessage("안전하지 않은 페이지가 차단되었습니다")
+                                return true
+                            }
+
+                            override fun onPageFinished(view: WebView, url: String) {
+                                val path = Uri.parse(url).path.orEmpty()
+                                if (isOfficialLmsCredentialPage(url) || path == MAIN_PATH) {
+                                    onSessionExpired()
+                                    return
+                                }
+                                if (path == "/lms/myLecture/doListView.dunet" && !submitted) {
+                                    submitted = true
+                                    val script =
+                                        "(function(){if(typeof fnGoContent!=='function')return 'missing';" +
+                                            "fnGoContent('8',${JSONObject.quote(page.course.id)}," +
+                                            "${JSONObject.quote(page.course.classNo)}," +
+                                            "${JSONObject.quote(page.course.id + "_V")},'S');return 'submitted';})()"
+                                    view.evaluateJavascript(script) { result ->
+                                        if (result == "\"missing\"") onMessage("공식 LMS 콘텐츠를 열 수 없습니다")
+                                    }
+                                    return
+                                }
+                                if (submitted && path.startsWith("/lms/class/")) {
+                                    ready = true
+                                    val title = JSONObject.quote(page.item.title)
+                                    view.evaluateJavascript(
+                                        "(function(){var target=$title.replace(/^\\[[^\\]]+\\]\\s*/, '').replace(/\\([^)]*분\\)$/, '');" +
+                                            "var nodes=Array.from(document.querySelectorAll('strong,p,li,div'));" +
+                                            "var hit=nodes.find(function(n){return (n.innerText||'').trim().startsWith(target);});" +
+                                            "if(hit)hit.scrollIntoView({block:'center'});})()",
+                                        null,
+                                    )
+                                }
+                            }
+
+                            override fun onReceivedError(
+                                view: WebView,
+                                webRequest: WebResourceRequest,
+                                error: WebResourceError,
+                            ) {
+                                if (webRequest.isForMainFrame) onMessage(error.description.toString())
+                            }
+                        }
+                        loadUrl(LMS_NATIVE_DETAIL_DASHBOARD_URL)
+                    }
+                },
+                modifier = Modifier.fillMaxSize().then(if (ready) Modifier else Modifier.alpha(0f)),
+                onRelease = { webView ->
+                    webView.stopLoading()
+                    webView.destroy()
+                },
+            )
+            if (!ready) {
+                CircularProgressIndicator(
+                    Modifier.align(Alignment.Center).size(36.dp).pulseBreath(),
+                    strokeWidth = 3.dp,
+                    strokeCap = StrokeCap.Round,
+                )
+            }
+        }
     }
 }
 

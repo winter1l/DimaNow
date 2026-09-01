@@ -29,6 +29,7 @@ sealed interface LmsRefreshResult {
 sealed interface LmsDetailLoadResult {
     data class Fresh(val detail: LmsItemDetail, val attachmentsChanged: Boolean) : LmsDetailLoadResult
     data class Cached(val detail: LmsItemDetail) : LmsDetailLoadResult
+    data object OfficialCoursePage : LmsDetailLoadResult
     data object SessionExpired : LmsDetailLoadResult
     data class Failure(val message: String) : LmsDetailLoadResult
 }
@@ -423,6 +424,10 @@ class RoomLmsSource(
 
     override suspend fun loadDetail(item: LmsItem): LmsDetailLoadResult = refreshMutex.withLock {
         val key = itemKey(item)
+        if (item.kind == LmsItemKind.CONTENT) {
+            dao.markItemOpened(key)
+            return@withLock LmsDetailLoadResult.OfficialCoursePage
+        }
         val cachedEntity = dao.getDetail(key)
         val cachedAttachments = dao.getAttachments(key)
         val openedItem = item.copy(isRead = true, changeState = LmsChangeState.NONE)

@@ -59,6 +59,7 @@ class UrlConnectionLmsTransport(
     private val cookieProvider: (String) -> String? = { CookieManager.getInstance().getCookie(it) },
     private val cookieSink: (String, String) -> Unit = { url, cookie -> CookieManager.getInstance().setCookie(url, cookie) },
     private val userAgent: String = DEFAULT_BROWSER_USER_AGENT,
+    private val connectionFactory: (URL) -> HttpURLConnection = { it.openConnection() as HttpURLConnection },
 ) : LmsHttpTransport {
     override suspend fun get(url: String, maxBytes: Long): LmsHttpResponse = withContext(Dispatchers.IO) {
         execute(url, maxBytes) { connection, total ->
@@ -80,41 +81,66 @@ class UrlConnectionLmsTransport(
     }
 
     override suspend fun postForm(url: String, fields: Map<String, String>, maxBytes: Long): LmsHttpResponse = withContext(Dispatchers.IO) {
-        val uri = validateUrl(url)
-        val connection = URL(uri.toString()).openConnection() as HttpURLConnection
-        connection.instanceFollowRedirects = false
-        connection.connectTimeout = 15_000
-        connection.readTimeout = 30_000
-        connection.requestMethod = "POST"
-        connection.doOutput = true
-        connection.setRequestProperty("Content-Type", "application/x-www-form-urlencoded; charset=UTF-8")
-        connection.setRequestProperty("Accept", "application/json,text/html,*/*")
-        connection.setRequestProperty("User-Agent", userAgent)
-        cookieProvider(url)?.takeIf { it.isNotBlank() }?.let { connection.setRequestProperty("Cookie", it) }
-        val body = fields.entries.joinToString("&") { (key, value) ->
+        val encodedBody = fields.entries.joinToString("&") { (key, value) ->
             "${java.net.URLEncoder.encode(key, "UTF-8")}" +
                 "=${java.net.URLEncoder.encode(value, "UTF-8")}"
         }.toByteArray()
-        connection.setFixedLengthStreamingMode(body.size)
-        connection.outputStream.use { it.write(body) }
-        val status = connection.responseCode
-        check(status in 200..299) { "LMS HTTP $status ${uri.path}" }
-        val responseBytes = connection.inputStream.use { input ->
-            val output = java.io.ByteArrayOutputStream()
-            val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
-            var count = 0L
-            while (true) {
-                val read = input.read(buffer)
-                if (read < 0) break
-                count += read
-                check(count <= maxBytes) { "LMS response is too large" }
-                output.write(buffer, 0, read)
+        var current = url
+        var sendPostBody = true
+        var redirectCookies: String? = null
+        repeat(MAX_REDIRECTS + 1) { redirectCount ->
+            val uri = validateUrl(current)
+            val connection = connectionFactory(URL(uri.toString()))
+            connection.instanceFollowRedirects = false
+            connection.connectTimeout = 15_000
+            connection.readTimeout = 30_000
+            connection.setRequestProperty("Accept", "application/json,text/html,*/*")
+            connection.setRequestProperty("User-Agent", userAgent)
+            mergeCookieHeaders(cookieProvider(current), redirectCookies)
+                ?.let { connection.setRequestProperty("Cookie", it) }
+            if (sendPostBody) {
+                connection.requestMethod = "POST"
+                connection.doOutput = true
+                connection.setRequestProperty("Content-Type", "application/x-www-form-urlencoded; charset=UTF-8")
+                connection.setFixedLengthStreamingMode(encodedBody.size)
+                connection.outputStream.use { it.write(encodedBody) }
             }
-            output.toByteArray()
+            val status = connection.responseCode
+            storeResponseCookies(current, connection)
+            redirectCookies = mergeCookieHeaders(
+                redirectCookies,
+                connection.headerFields.entries
+                    .filter { it.key?.equals("Set-Cookie", ignoreCase = true) == true }
+                    .flatMap { it.value.orEmpty() }
+                    .map { it.substringBefore(';') }
+                    .joinToString("; "),
+            )
+            if (status in 300..399) {
+                val location = connection.getHeaderField("Location") ?: error("LMS redirect has no location")
+                check(redirectCount < MAX_REDIRECTS) { "Too many LMS redirects" }
+                current = uri.resolve(location).toString()
+                if (status in 301..303) sendPostBody = false
+                connection.disconnect()
+                return@repeat
+            }
+            check(status in 200..299) { "LMS HTTP $status ${uri.path}" }
+            val responseBytes = connection.inputStream.use { input ->
+                val output = java.io.ByteArrayOutputStream()
+                val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+                var count = 0L
+                while (true) {
+                    val read = input.read(buffer)
+                    if (read < 0) break
+                    count += read
+                    check(count <= maxBytes) { "LMS response is too large" }
+                    output.write(buffer, 0, read)
+                }
+                output.toByteArray()
+            }
+            return@withContext LmsHttpResponse(current, status, connection.contentType, safeHeaders(connection), responseBytes)
+                .also { connection.disconnect() }
         }
-        storeResponseCookies(url, connection)
-        LmsHttpResponse(url, status, connection.contentType, safeHeaders(connection), responseBytes)
-            .also { connection.disconnect() }
+        error("Too many LMS redirects")
     }
 
     override suspend fun download(
@@ -159,7 +185,7 @@ class UrlConnectionLmsTransport(
         var current = initialUrl
         repeat(MAX_REDIRECTS + 1) { redirectCount ->
             val uri = validateUrl(current)
-            val connection = URL(uri.toString()).openConnection() as HttpURLConnection
+            val connection = connectionFactory(URL(uri.toString()))
             connection.instanceFollowRedirects = false
             connection.connectTimeout = 15_000
             connection.readTimeout = 30_000
@@ -200,6 +226,18 @@ class UrlConnectionLmsTransport(
             .filter { it.key?.equals("Set-Cookie", ignoreCase = true) == true }
             .flatMap { it.value.orEmpty() }
             .forEach { cookieSink(url, it) }
+    }
+
+    private fun mergeCookieHeaders(vararg headers: String?): String? {
+        val cookies = linkedMapOf<String, String>()
+        headers.filterNotNull().forEach { header ->
+            header.split(';').forEach { segment ->
+                val cookie = segment.trim()
+                val separator = cookie.indexOf('=')
+                if (separator > 0) cookies[cookie.substring(0, separator)] = cookie
+            }
+        }
+        return cookies.values.takeIf { it.isNotEmpty() }?.joinToString("; ")
     }
 
     private fun safeHeaders(connection: HttpURLConnection): Map<String, List<String>> = buildMap {
@@ -394,6 +432,8 @@ class RoomLmsSource(
                 detail.attachments.map { LmsAttachmentEntity("$key:${it.id}", key, it.id, it.fileName, it.downloadUrl, it.sizeBytes) },
             )
             LmsDetailLoadResult.Fresh(detail, attachmentsChanged)
+        } catch (error: InvalidLmsDetailException) {
+            LmsDetailLoadResult.Failure(error.message ?: "게시글 본문을 찾지 못했습니다")
         } catch (error: Throwable) {
             if (cachedDetail != null) {
                 dao.markItemOpened(key)

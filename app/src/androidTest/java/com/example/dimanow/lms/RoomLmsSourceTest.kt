@@ -327,6 +327,35 @@ class RoomLmsSourceTest {
 
         database.close()
     }
+
+    @Test
+    fun authenticatedLandingPageIsRejectedWithoutOverwritingTheLastGoodDetail() = runTest {
+        val database = Room.inMemoryDatabaseBuilder(
+            ApplicationProvider.getApplicationContext(),
+            LmsCacheDatabase::class.java,
+        ).allowMainThreadQueries().build()
+        val transport = RecordingLmsTransport(allLearningKinds = true)
+        val source = RoomLmsSource(
+            database,
+            MutableLmsSessionController(LmsSessionState.ACTIVE),
+            transport,
+        )
+        assertEquals(LmsRefreshResult.Success, source.refresh(force = true))
+        val assignment = source.snapshot.first().items.single { it.kind == LmsItemKind.ASSIGNMENT }
+        assertTrue(source.loadDetail(assignment) is LmsDetailLoadResult.Fresh)
+
+        transport.returnLandingPageForDetail = true
+        val rejected = source.loadDetail(assignment)
+        assertTrue(rejected is LmsDetailLoadResult.Failure)
+
+        transport.returnLandingPageForDetail = false
+        transport.failDetailRequests = true
+        val cached = source.loadDetail(assignment)
+        assertTrue(cached is LmsDetailLoadResult.Cached)
+        assertTrue((cached as LmsDetailLoadResult.Cached).detail.sanitizedHtml.contains("제출 안내"))
+
+        database.close()
+    }
 }
 
 private class RecordingLmsTransport(
@@ -343,6 +372,7 @@ private class RecordingLmsTransport(
     var useRevisedDashboard = false
     var assignmentAttachmentName = "과제 양식.pdf"
     var failDetailRequests = false
+    var returnLandingPageForDetail = false
     var failIncompleteStatus = false
     val sessionFields = mutableListOf<Map<String, String>>()
     val termFields = mutableListOf<Map<String, String>>()
@@ -353,7 +383,14 @@ private class RecordingLmsTransport(
         if (url.contains("myLecture") && failDashboard) error("offline")
         if (url.contains("to_do_type=incomplete") && failIncompleteStatus) error("offline status")
         if (!url.contains("myLecture") && failDetailRequests) error("offline detail")
-        val html = if (url.contains("to_do_type=complete")) {
+        val html = if (!url.contains("myLecture") && returnLandingPageForDetail) {
+            """
+                <html><body><header>나의 강의실 입장</header>
+                  <nav><a href="/main/MainView.dunet">마이페이지</a></nav>
+                  <main><p>데이터 로딩 중입니다.</p></main>
+                </body></html>
+            """.trimIndent()
+        } else if (url.contains("to_do_type=complete")) {
             statusHtml("1", "91", "1주차 안내")
         } else if (url.contains("to_do_type=incomplete")) {
             statusHtml("3", "301", "프로툴 사전진단")

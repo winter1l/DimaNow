@@ -5,6 +5,7 @@ import android.graphics.Bitmap
 import android.net.Uri
 import android.os.Build
 import android.util.Log
+import android.view.View
 import android.view.ViewGroup
 import android.view.WindowManager
 import android.webkit.SafeBrowsingResponse
@@ -28,6 +29,9 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.selection.SelectionContainer
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -69,7 +73,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.fromHtml
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -707,34 +713,40 @@ private fun LmsDetailScreen(
                 Text("저장된 내용", fontWeight = FontWeight.Bold, modifier = Modifier.padding(12.dp))
             }
         }
-        AndroidView(
-            factory = { viewContext ->
-                WebView(viewContext).apply {
-                    settings.javaScriptEnabled = false
-                    settings.allowFileAccess = false
-                    settings.allowContentAccess = false
-                    settings.domStorageEnabled = false
-                    webViewClient = object : WebViewClient() {
-                        override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean = true
-
-                        @Suppress("DEPRECATION")
-                        override fun shouldOverrideUrlLoading(view: WebView, url: String): Boolean = true
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxWidth()
+                .verticalScroll(rememberScrollState())
+                .padding(16.dp)
+                .testTag("lms_native_detail_body"),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+        ) {
+            SelectionContainer {
+                Text(
+                    text = AnnotatedString.fromHtml(
+                        htmlString = detail.sanitizedHtml,
+                        linkInteractionListener = {},
+                    ),
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+            }
+            if (detail.attachments.isNotEmpty()) {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("첨부파일", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                    detail.attachments.forEach { attachment ->
+                        OutlinedButton(
+                            onClick = { pending = attachment; createDocument.launch(attachment.fileName) },
+                            enabled = !downloading,
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Icon(Icons.Default.Download, null)
+                            Spacer(Modifier.size(8.dp))
+                            Text(attachment.fileName, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        }
                     }
-                    loadDataWithBaseURL("https://lms.dima.ac.kr", detail.sanitizedHtml, "text/html", "UTF-8", null)
-                }
-            },
-            update = { it.loadDataWithBaseURL("https://lms.dima.ac.kr", detail.sanitizedHtml, "text/html", "UTF-8", null) },
-            modifier = Modifier.weight(1f).fillMaxWidth(),
-        )
-        if (detail.attachments.isNotEmpty()) {
-            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                detail.attachments.forEach { attachment ->
-                    OutlinedButton(
-                        onClick = { pending = attachment; createDocument.launch(attachment.fileName) },
-                        enabled = !downloading,
-                        shape = RoundedCornerShape(12.dp),
-                        modifier = Modifier.fillMaxWidth(),
-                    ) { Icon(Icons.Default.Download, null); Spacer(Modifier.size(8.dp)); Text(attachment.fileName, maxLines = 1, overflow = TextOverflow.Ellipsis) }
                 }
             }
         }
@@ -778,120 +790,158 @@ private fun LmsAuthenticationWebView(
                 strokeCap = StrokeCap.Round,
             )
         }
-        AndroidView(
-            factory = { context ->
-                WebView(context).apply {
-                    layoutParams = ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
-                    settings.javaScriptEnabled = true
-                    settings.domStorageEnabled = true
-                    settings.allowFileAccess = false
-                    settings.allowContentAccess = false
-                    settings.mixedContentMode = android.webkit.WebSettings.MIXED_CONTENT_NEVER_ALLOW
-                    if (Build.VERSION.SDK_INT >= 26) WebView.startSafeBrowsing(context, null)
-                    var injected = false
-                    var catalogRequested = false
-                    webViewClient = object : WebViewClient() {
-                        override fun shouldOverrideUrlLoading(view: WebView, webRequest: WebResourceRequest): Boolean {
-                            val uri = webRequest.url
-                            val allowed = LmsUrlPolicy.isAllowedLoginNavigation(uri.toString())
-                            if (!allowed) {
-                                val upgraded = LmsUrlPolicy.upgradeOfficialHttp(uri.toString())
-                                if (upgraded != null) view.loadUrl(upgraded)
-                                else {
-                                    Log.w(
-                                        "DimaNowLms",
-                                        "External navigation scheme=${uri.scheme} host=${uri.host} path=${uri.path} " +
-                                            "port=${uri.port} userInfoPresent=${uri.userInfo != null}",
-                                    )
-                                    context.startActivity(Intent(Intent.ACTION_VIEW, uri))
-                                }
-                            }
-                            return !allowed
-                        }
-
-                        override fun onPageStarted(view: WebView, url: String, favicon: Bitmap?) = Unit
-
-                        override fun onPageFinished(view: WebView, url: String) {
-                            val path = Uri.parse(url).path.orEmpty()
-                            if (path == MAIN_PATH) {
-                                view.evaluateJavascript(
-                                    "Boolean(document.querySelector(\"a[href*='/lms/myLecture/doListView']\"))",
-                                ) { authenticated ->
-                                    if (
-                                        lmsLoginPageAction(url, pageFinished = true, authenticatedMain = authenticated == "true") ==
-                                        LmsLoginPageAction.LOAD_DASHBOARD
-                                    ) {
-                                        view.loadUrl(LMS_DASHBOARD_URL)
-                                    }
-                                }
-                            } else if (
-                                lmsLoginPageAction(url, pageFinished = true, authenticatedMain = false) ==
-                                LmsLoginPageAction.EXTRACT_COURSES && !catalogRequested
-                            ) {
-                                catalogRequested = true
-                                view.evaluateJavascript(EXTRACT_RENDERED_COURSES_SCRIPT) { value ->
-                                    val courses = parser.parseRenderedCourses(value)
-                                    if (courses.isEmpty()) {
-                                        onComplete(LmsLoginResult.Failure("수업 목록을 확인하지 못했습니다"))
-                                    } else {
-                                        CookieManager.getInstance().flush()
-                                        onAuthenticated(courses)
-                                    }
-                                }
-                            } else if (isOfficialLmsCredentialPage(url) && !injected) {
-                                injected = true
-                                val user = JSONObject.quote(request.credentials.username)
-                                val password = JSONObject.quote(request.credentials.password)
-                                val portal = Uri.parse(url).host == PORTAL_HOST
-                                val submission = if (portal) {
-                                    "var i=document.querySelector('#txtID'),p=document.querySelector('#txtPwd');" +
-                                        "if(!i||!p||typeof Login!=='function')return 'interactive';" +
-                                        "i.value=$user;p.value=$password;Login('N');return 'submitted';"
-                                } else {
-                                    "var i=document.querySelector('#id'),p=document.querySelector('#pass');" +
-                                        "if(!i||!p||typeof login_proc!=='function')return 'interactive';" +
-                                        "i.value=$user;p.value=$password;login_proc();return 'submitted';"
-                                }
-                                view.evaluateJavascript(
-                                    "(function(){$submission})()",
-                                ) { result ->
-                                    if (result == "\"submitted\"") {
-                                        view.postDelayed(
-                                            {
-                                                if (
-                                                    !request.result.isCompleted &&
-                                                    shouldReviewStoredLmsCredentials(
-                                                        view.url.orEmpty(),
-                                                        submitted = true,
-                                                        elapsedMillis = LOGIN_RESULT_TIMEOUT_MILLIS,
-                                                    )
-                                                ) {
-                                                    onComplete(LmsLoginResult.CredentialsRejected)
-                                                }
-                                            },
-                                            LOGIN_RESULT_TIMEOUT_MILLIS,
+        Box(
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxWidth(),
+            contentAlignment = Alignment.Center,
+        ) {
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                CircularProgressIndicator(
+                    Modifier.size(36.dp).pulseBreath(),
+                    strokeWidth = 3.dp,
+                    strokeCap = StrokeCap.Round,
+                )
+                Text("공식 포털에서 로그인 중", fontWeight = FontWeight.SemiBold)
+            }
+            AndroidView(
+                factory = { context ->
+                    WebView(context).apply {
+                        visibility = View.INVISIBLE
+                        importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS
+                        layoutParams = ViewGroup.LayoutParams(
+                            ViewGroup.LayoutParams.MATCH_PARENT,
+                            ViewGroup.LayoutParams.MATCH_PARENT,
+                        )
+                        settings.javaScriptEnabled = true
+                        settings.domStorageEnabled = true
+                        settings.allowFileAccess = false
+                        settings.allowContentAccess = false
+                        settings.mixedContentMode = android.webkit.WebSettings.MIXED_CONTENT_NEVER_ALLOW
+                        if (Build.VERSION.SDK_INT >= 26) WebView.startSafeBrowsing(context, null)
+                        var injected = false
+                        var catalogRequested = false
+                        webViewClient = object : WebViewClient() {
+                            override fun shouldOverrideUrlLoading(
+                                view: WebView,
+                                webRequest: WebResourceRequest,
+                            ): Boolean {
+                                val uri = webRequest.url
+                                val allowed = LmsUrlPolicy.isAllowedLoginNavigation(uri.toString())
+                                if (!allowed) {
+                                    val upgraded = LmsUrlPolicy.upgradeOfficialHttp(uri.toString())
+                                    if (upgraded != null) view.loadUrl(upgraded)
+                                    else {
+                                        Log.w(
+                                            "DimaNowLms",
+                                            "External navigation scheme=${uri.scheme} host=${uri.host} path=${uri.path} " +
+                                                "port=${uri.port} userInfoPresent=${uri.userInfo != null}",
                                         )
+                                        context.startActivity(Intent(Intent.ACTION_VIEW, uri))
+                                    }
+                                }
+                                return !allowed
+                            }
+
+                            override fun onPageStarted(view: WebView, url: String, favicon: Bitmap?) = Unit
+
+                            override fun onPageFinished(view: WebView, url: String) {
+                                val path = Uri.parse(url).path.orEmpty()
+                                if (path == MAIN_PATH) {
+                                    view.evaluateJavascript(
+                                        "Boolean(document.querySelector(\"a[href*='/lms/myLecture/doListView']\"))",
+                                    ) { authenticated ->
+                                        if (
+                                            lmsLoginPageAction(
+                                                url,
+                                                pageFinished = true,
+                                                authenticatedMain = authenticated == "true",
+                                            ) == LmsLoginPageAction.LOAD_DASHBOARD
+                                        ) {
+                                            view.loadUrl(LMS_DASHBOARD_URL)
+                                        }
+                                    }
+                                } else if (
+                                    lmsLoginPageAction(url, pageFinished = true, authenticatedMain = false) ==
+                                    LmsLoginPageAction.EXTRACT_COURSES && !catalogRequested
+                                ) {
+                                    catalogRequested = true
+                                    view.evaluateJavascript(EXTRACT_RENDERED_COURSES_SCRIPT) { value ->
+                                        val courses = parser.parseRenderedCourses(value)
+                                        if (courses.isEmpty()) {
+                                            onComplete(LmsLoginResult.Failure("수업 목록을 확인하지 못했습니다"))
+                                        } else {
+                                            CookieManager.getInstance().flush()
+                                            onAuthenticated(courses)
+                                        }
+                                    }
+                                } else if (isOfficialLmsCredentialPage(url) && !injected) {
+                                    injected = true
+                                    val user = JSONObject.quote(request.credentials.username)
+                                    val password = JSONObject.quote(request.credentials.password)
+                                    val portal = Uri.parse(url).host == PORTAL_HOST
+                                    val submission = if (portal) {
+                                        "var i=document.querySelector('#txtID'),p=document.querySelector('#txtPwd');" +
+                                            "if(!i||!p||typeof Login!=='function')return 'interactive';" +
+                                            "i.value=$user;p.value=$password;Login('N');return 'submitted';"
+                                    } else {
+                                        "var i=document.querySelector('#id'),p=document.querySelector('#pass');" +
+                                            "if(!i||!p||typeof login_proc!=='function')return 'interactive';" +
+                                            "i.value=$user;p.value=$password;login_proc();return 'submitted';"
+                                    }
+                                    view.evaluateJavascript(
+                                        "(function(){$submission})()",
+                                    ) { result ->
+                                        if (result == "\"submitted\"") {
+                                            view.postDelayed(
+                                                {
+                                                    if (
+                                                        !request.result.isCompleted &&
+                                                        shouldReviewStoredLmsCredentials(
+                                                            view.url.orEmpty(),
+                                                            submitted = true,
+                                                            elapsedMillis = LOGIN_RESULT_TIMEOUT_MILLIS,
+                                                        )
+                                                    ) {
+                                                        onComplete(LmsLoginResult.CredentialsRejected)
+                                                    }
+                                                },
+                                                LOGIN_RESULT_TIMEOUT_MILLIS,
+                                            )
+                                                }
                                     }
                                 }
                             }
-                        }
 
-                        override fun onReceivedError(view: WebView, request: WebResourceRequest, error: WebResourceError) {
-                            if (request.isForMainFrame) {
-                                onComplete(LmsLoginResult.NetworkError(error.description.toString()))
+                            override fun onReceivedError(
+                                view: WebView,
+                                request: WebResourceRequest,
+                                error: WebResourceError,
+                            ) {
+                                if (request.isForMainFrame) {
+                                    onComplete(LmsLoginResult.NetworkError(error.description.toString()))
+                                }
+                            }
+
+                            override fun onSafeBrowsingHit(
+                                view: WebView,
+                                request: WebResourceRequest,
+                                threatType: Int,
+                                callback: SafeBrowsingResponse,
+                            ) {
+                                callback.backToSafety(true)
+                                onComplete(LmsLoginResult.Failure("안전하지 않은 페이지가 차단되었습니다"))
                             }
                         }
-
-                        override fun onSafeBrowsingHit(view: WebView, request: WebResourceRequest, threatType: Int, callback: SafeBrowsingResponse) {
-                            callback.backToSafety(true)
-                            onComplete(LmsLoginResult.Failure("안전하지 않은 페이지가 차단되었습니다"))
-                        }
+                        loadUrl(LOGIN_URL)
                     }
-                    loadUrl(LOGIN_URL)
-                }
-            },
-            modifier = Modifier.weight(1f).fillMaxWidth(),
-        )
+                },
+                modifier = Modifier.size(1.dp),
+            )
+        }
     }
 }
 

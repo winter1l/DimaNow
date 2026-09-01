@@ -3,6 +3,7 @@ package com.example.dimanow.lms
 import java.time.ZoneId
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -427,5 +428,28 @@ class LmsHtmlParserTest {
         """.trimIndent()
 
         assertEquals(2_048L, parser.parseDetail(item, html, "https://lms.dima.ac.kr").attachments.single().sizeBytes)
+    }
+
+    @Test
+    fun authenticatedLandingPageIsNotAcceptedAsAnArticleDetail() {
+        val item = LmsItem(
+            id = "91",
+            courseId = "COURSE-A",
+            courseName = "음향기초실습",
+            kind = LmsItemKind.NOTICE,
+            title = "수업안내",
+            detailUrl = "https://lms.dima.ac.kr/detail",
+        )
+        val html = """
+            <html><body>
+              <header>나의 강의실 입장</header>
+              <nav><a href="/main/MainView.dunet">마이페이지</a></nav>
+              <main><p>데이터 로딩 중입니다.</p></main>
+            </body></html>
+        """.trimIndent()
+
+        assertThrows(IllegalArgumentException::class.java) {
+            parser.parseDetail(item, html, "https://lms.dima.ac.kr")
+        }
     }
 }

@@ -3,6 +3,7 @@ package com.example.dimanow.lms
 import java.time.Clock
 import java.time.Duration
 import java.time.Instant
+import java.net.URI
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -62,6 +63,40 @@ class LmsLoginBridge : LmsLoginDriver {
         complete(LmsLoginResult.Failure("로그인이 취소되었습니다"))
     }
 }
+
+internal enum class LmsLoginPageAction { WAIT, LOAD_DASHBOARD, EXTRACT_COURSES }
+
+internal fun lmsLoginPageAction(
+    url: String,
+    pageFinished: Boolean,
+    authenticatedMain: Boolean,
+): LmsLoginPageAction {
+    if (!pageFinished) return LmsLoginPageAction.WAIT
+    return when (runCatching { URI.create(url).path }.getOrNull()) {
+        "/lms/myLecture/doListView.dunet" -> LmsLoginPageAction.EXTRACT_COURSES
+        "/main/MainView.dunet" -> if (authenticatedMain) {
+            LmsLoginPageAction.LOAD_DASHBOARD
+        } else {
+            LmsLoginPageAction.WAIT
+        }
+        else -> LmsLoginPageAction.WAIT
+    }
+}
+
+internal fun isCompletedLmsLogin(url: String, pageFinished: Boolean, authenticatedMain: Boolean): Boolean =
+    lmsLoginPageAction(url, pageFinished, authenticatedMain) == LmsLoginPageAction.EXTRACT_COURSES
+
+internal fun isOfficialLmsCredentialPage(url: String): Boolean = runCatching {
+    val uri = URI.create(url)
+    uri.scheme == "https" && when (uri.host) {
+        "portal.dima.ac.kr" -> uri.path.isNullOrBlank() || uri.path == "/" || uri.path == "/default.aspx"
+        "lms.dima.ac.kr" -> uri.path == "/login/doLoginPage.dunet"
+        else -> false
+    }
+}.getOrDefault(false)
+
+internal fun shouldReviewStoredLmsCredentials(url: String, submitted: Boolean, elapsedMillis: Long): Boolean =
+    submitted && elapsedMillis >= 10_000L && isOfficialLmsCredentialPage(url)
 
 class LmsAutoLoginCoordinator(
     private val credentialStore: LmsCredentialStore,

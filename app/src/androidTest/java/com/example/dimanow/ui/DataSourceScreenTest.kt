@@ -150,7 +150,7 @@ class DataSourceScreenTest {
             departure("B", "headquarters", LocalTime.of(8, 40), CampusZoneId.MAIN, CampusZoneId.YEIN, serviceDay),
             departure("B", "headquarters", LocalTime.of(9, 10), CampusZoneId.MAIN, CampusZoneId.YEIN, serviceDay),
             departure("A", "headquarters", LocalTime.of(8, 20), CampusZoneId.MAIN, CampusZoneId.ONE_ROOM, serviceDay),
-            departure("B", "headquarters", LocalTime.NOON, CampusZoneId.MAIN, CampusZoneId.YEIN, DayOfWeek.TUESDAY),
+            departure("B", "headquarters", LocalTime.NOON, CampusZoneId.MAIN, CampusZoneId.YEIN, serviceDay.plus(1)),
         )
         composeRule.setContent {
             ShuttleScreen(

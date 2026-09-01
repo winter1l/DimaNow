@@ -86,7 +86,13 @@ class DimaNowApplication : Application() {
     }
     val noticeSource: NoticeSource by lazy { StaticNoticeSource(database, staticDataTransport) }
     val lmsDatabase: LmsCacheDatabase by lazy {
-        Room.databaseBuilder(this, LmsCacheDatabase::class.java, "lms-cache.db").build()
+        Room.databaseBuilder(this, LmsCacheDatabase::class.java, "lms-cache.db")
+            .addMigrations(
+                com.example.dimanow.lms.LMS_CACHE_MIGRATION_1_2,
+                com.example.dimanow.lms.LMS_CACHE_MIGRATION_2_3,
+                com.example.dimanow.lms.LMS_CACHE_MIGRATION_3_4,
+            )
+            .build()
     }
     val lmsCredentialStore: AndroidLmsCredentialStore by lazy { AndroidLmsCredentialStore(this) }
     val lmsSessionController: MutableLmsSessionController by lazy { MutableLmsSessionController() }

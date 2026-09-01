@@ -4,9 +4,11 @@ import android.content.Intent
 import android.graphics.Bitmap
 import android.net.Uri
 import android.os.Build
+import android.util.Log
 import android.view.ViewGroup
 import android.view.WindowManager
 import android.webkit.SafeBrowsingResponse
+import android.webkit.CookieManager
 import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
 import android.webkit.WebView
@@ -44,6 +46,9 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
@@ -58,6 +63,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.StrokeCap
@@ -70,16 +76,26 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.dimanow.ui.ScreenColumn
+import com.example.dimanow.ui.ScreenLazyColumn
 import com.example.dimanow.ui.motion.expressiveBounceClick
 import com.example.dimanow.ui.motion.pulseBreath
 import com.example.dimanow.ui.motion.staggeredEntrance
 import java.io.File
+import java.time.Clock
+import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
+import java.util.Locale
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
+
+private data class LmsPresentedDetail(
+    val detail: LmsItemDetail,
+    val cached: Boolean,
+    val attachmentsChanged: Boolean,
+)
 
 @Composable
 fun LmsRoute(
@@ -88,10 +104,10 @@ fun LmsRoute(
     loginBridge: LmsLoginBridge,
     autoLoginCoordinator: LmsAutoLoginCoordinator,
     source: LmsSource,
+    now: Instant,
     modifier: Modifier = Modifier,
     onFullScreenChange: (Boolean) -> Unit = {},
 ) {
-    val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val sessionState by sessionController.state.collectAsStateWithLifecycle()
     val credentialState by credentialStore.state.collectAsStateWithLifecycle()
@@ -100,14 +116,10 @@ fun LmsRoute(
     val snackbar = remember { SnackbarHostState() }
     var selectedCourse by remember { mutableStateOf<String?>(null) }
     var selectedKind by remember { mutableStateOf<LmsItemKind?>(null) }
-    var selectedDetail by remember { mutableStateOf<LmsItemDetail?>(null) }
+    var selectedRead by remember { mutableStateOf<Boolean?>(null) }
+    var selectedDetail by remember { mutableStateOf<LmsPresentedDetail?>(null) }
     BackHandler(enabled = selectedDetail != null) { selectedDetail = null }
     BackHandler(enabled = loginRequest != null) { loginBridge.cancel() }
-    DisposableEffect(loginRequest) {
-        onDispose {
-            if (loginRequest != null) loginBridge.cancel()
-        }
-    }
     // 로그인 WebView·글 상세가 떠 있는 동안 상위 셸이 하단 내비를 숨기게 알린다 (D-044)
     val fullScreen = loginRequest != null || selectedDetail != null
     LaunchedEffect(fullScreen) { onFullScreenChange(fullScreen) }
@@ -116,12 +128,24 @@ fun LmsRoute(
     }
 
     suspend fun loginAndRefresh(force: Boolean) {
-        val state = autoLoginCoordinator.ensureActive(force)
+        // `force` bypasses only the local data TTL. An already-active LMS session must not be
+        // logged in again, because the official LMS allows only one concurrent session.
+        val state = autoLoginCoordinator.ensureActive(force = false)
         if (state == LmsSessionState.ACTIVE) {
             when (val result = source.refresh(force = force)) {
                 LmsRefreshResult.SessionExpired -> {
                     autoLoginCoordinator.markExpired()
                     if (autoLoginCoordinator.ensureActive(force = true) == LmsSessionState.ACTIVE) source.refresh(force = true)
+                }
+                LmsRefreshResult.CourseCatalogRequired -> {
+                    sessionController.transition(LmsSessionState.EXPIRED)
+                    if (autoLoginCoordinator.ensureActive(force = true) == LmsSessionState.ACTIVE) {
+                        when (val retried = source.refresh(force = true)) {
+                            is LmsRefreshResult.Failure -> snackbar.showSnackbar(retried.message)
+                            LmsRefreshResult.CourseCatalogRequired -> snackbar.showSnackbar("수업 목록을 확인하지 못했습니다")
+                            else -> Unit
+                        }
+                    }
                 }
                 is LmsRefreshResult.Failure -> snackbar.showSnackbar(result.message)
                 else -> Unit
@@ -134,6 +158,7 @@ fun LmsRoute(
         if (credentialState == CredentialState.SAVED) {
             when (source.refresh(force = false)) {
                 LmsRefreshResult.SessionExpired -> loginAndRefresh(force = false)
+                LmsRefreshResult.CourseCatalogRequired -> loginAndRefresh(force = false)
                 is LmsRefreshResult.Failure -> Unit
                 else -> sessionController.transition(LmsSessionState.ACTIVE)
             }
@@ -145,11 +170,18 @@ fun LmsRoute(
             loginRequest != null -> LmsAuthenticationWebView(
                 request = requireNotNull(loginRequest),
                 onComplete = loginBridge::complete,
-                onCancel = { loginBridge.cancel() },
+                onAuthenticated = { courses ->
+                    scope.launch {
+                        runCatching { source.storeRenderedCourses(courses) }
+                            .onSuccess { loginBridge.complete(LmsLoginResult.Success) }
+                            .onFailure { loginBridge.complete(LmsLoginResult.Failure("수업 목록을 저장하지 못했습니다")) }
+                    }
+                },
+                onCancel = loginBridge::cancel,
                 modifier = Modifier.fillMaxSize(),
             )
             selectedDetail != null -> LmsDetailScreen(
-                detail = requireNotNull(selectedDetail),
+                presented = requireNotNull(selectedDetail),
                 source = source,
                 sessionController = sessionController,
                 autoLoginCoordinator = autoLoginCoordinator,
@@ -190,24 +222,47 @@ fun LmsRoute(
                 sessionState = sessionState,
                 selectedCourse = selectedCourse,
                 selectedKind = selectedKind,
+                selectedRead = selectedRead,
                 onCourseChange = { selectedCourse = it },
                 onKindChange = { selectedKind = it },
+                onReadChange = { selectedRead = it },
                 onRefresh = { scope.launch { loginAndRefresh(force = true) } },
                 onOpenItem = { item ->
-                    if (item.kind == LmsItemKind.OTHER) {
-                        context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(item.detailUrl)))
-                    } else {
-                        scope.launch {
-                            val detail = source.loadDetail(item)
-                            if (detail == null) {
-                                autoLoginCoordinator.markExpired()
-                                if (autoLoginCoordinator.ensureActive(force = true) == LmsSessionState.ACTIVE) {
-                                    selectedDetail = source.loadDetail(item, force = true)
+                    scope.launch {
+                        suspend fun present(result: LmsDetailLoadResult): Boolean = when (result) {
+                            is LmsDetailLoadResult.Fresh -> {
+                                selectedDetail = LmsPresentedDetail(
+                                    result.detail,
+                                    cached = false,
+                                    attachmentsChanged = result.attachmentsChanged,
+                                )
+                                true
+                            }
+                            is LmsDetailLoadResult.Cached -> {
+                                selectedDetail = LmsPresentedDetail(result.detail, cached = true, attachmentsChanged = false)
+                                true
+                            }
+                            is LmsDetailLoadResult.Failure -> {
+                                snackbar.showSnackbar(result.message)
+                                false
+                            }
+                            LmsDetailLoadResult.SessionExpired -> false
+                        }
+                        val first = source.loadDetail(item)
+                        if (!present(first) && first == LmsDetailLoadResult.SessionExpired) {
+                            autoLoginCoordinator.markExpired()
+                            if (autoLoginCoordinator.ensureActive(force = true) == LmsSessionState.ACTIVE) {
+                                val retried = source.loadDetail(item)
+                                if (!present(retried)) {
+                                    snackbar.showSnackbar(
+                                        if (retried == LmsDetailLoadResult.SessionExpired) "로그인이 필요합니다" else "글을 불러오지 못했습니다",
+                                    )
                                 }
-                            } else selectedDetail = detail
+                            }
                         }
                     }
                 },
+                now = now,
                 modifier = Modifier.fillMaxSize(),
             )
         }
@@ -290,28 +345,35 @@ private fun LmsLoginScreen(
 }
 
 @Composable
-private fun LmsItemsScreen(
+internal fun LmsItemsScreen(
     snapshot: LmsSnapshot,
     sessionState: LmsSessionState,
     selectedCourse: String?,
     selectedKind: LmsItemKind?,
+    selectedRead: Boolean?,
     onCourseChange: (String?) -> Unit,
     onKindChange: (LmsItemKind?) -> Unit,
+    onReadChange: (Boolean?) -> Unit,
     onRefresh: () -> Unit,
     onOpenItem: (LmsItem) -> Unit,
+    now: Instant,
     modifier: Modifier = Modifier,
 ) {
-    val filtered = snapshot.items.filter { item ->
-        (selectedCourse == null || item.courseId == selectedCourse) &&
-            (selectedKind == null || item.kind == selectedKind)
-    }
-    val filterActive = selectedCourse != null || selectedKind != null
+    val filtered = filterLmsItems(snapshot.items, selectedCourse, selectedKind, selectedRead)
+    val filterActive = selectedCourse != null || selectedKind != null || selectedRead != null
     val syncing = snapshot.syncState == LmsSyncState.SYNCING
     val hasError = sessionState == LmsSessionState.ERROR || snapshot.syncState == LmsSyncState.ERROR
+    var todayMode by rememberSaveable { mutableStateOf(true) }
+    var completedExpanded by rememberSaveable { mutableStateOf(false) }
+    val agenda = remember(snapshot.items, now) {
+        LmsAgendaPlanner(Clock.fixed(now, SEOUL)).plan(snapshot.items, now)
+    }
+    val visibleEmpty = if (todayMode) agenda.groups.isEmpty() else filtered.isEmpty()
 
-    ScreenColumn(
+    ScreenLazyColumn(
         title = "수업",
         modifier = modifier,
+        listTag = "lms_history",
         topAction = {
             IconButton(onClick = onRefresh, enabled = !syncing) {
                 if (syncing) {
@@ -326,125 +388,157 @@ private fun LmsItemsScreen(
             }
         },
     ) {
-        LazyRow(
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            modifier = Modifier.staggeredEntrance(0),
-        ) {
-            item { FilterChip(selected = selectedCourse == null, onClick = { onCourseChange(null) }, label = { Text("전체") }, shape = RoundedCornerShape(10.dp)) }
-            items(snapshot.courses, key = { it.id }) { course ->
-                FilterChip(selected = selectedCourse == course.id, onClick = { onCourseChange(course.id) }, label = { Text(course.name) }, shape = RoundedCornerShape(10.dp))
+        item {
+            SingleChoiceSegmentedButtonRow(
+                modifier = Modifier.fillMaxWidth().staggeredEntrance(0),
+            ) {
+                listOf(true to "오늘", false to "전체").forEachIndexed { index, (isToday, label) ->
+                    SegmentedButton(
+                        selected = todayMode == isToday,
+                        onClick = { todayMode = isToday },
+                        shape = SegmentedButtonDefaults.itemShape(index, 2),
+                        label = { Text(label, fontWeight = FontWeight.Bold) },
+                        modifier = Modifier.weight(1f).testTag(if (isToday) "lms_mode_today" else "lms_mode_all"),
+                    )
+                }
             }
         }
-        LazyRow(
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            modifier = Modifier.staggeredEntrance(1),
-        ) {
-            item { FilterChip(selected = selectedKind == null, onClick = { onKindChange(null) }, label = { Text("전체") }, shape = RoundedCornerShape(10.dp)) }
-            items(listOf(LmsItemKind.NOTICE, LmsItemKind.ASSIGNMENT, LmsItemKind.MATERIAL)) { kind ->
-                FilterChip(selected = selectedKind == kind, onClick = { onKindChange(kind) }, label = { Text(kindLabel(kind)) }, shape = RoundedCornerShape(10.dp))
+
+        if (!todayMode) {
+            item {
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.staggeredEntrance(1)) {
+                    item { FilterChip(selected = selectedCourse == null, onClick = { onCourseChange(null) }, label = { Text("전체") }, shape = RoundedCornerShape(10.dp)) }
+                    items(snapshot.courses, key = { it.id }) { course ->
+                        FilterChip(selected = selectedCourse == course.id, onClick = { onCourseChange(course.id) }, label = { Text(course.name) }, shape = RoundedCornerShape(10.dp))
+                    }
+                }
+            }
+            item {
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.staggeredEntrance(2)) {
+                    item { FilterChip(selected = selectedKind == null, onClick = { onKindChange(null) }, label = { Text("전체") }, shape = RoundedCornerShape(10.dp)) }
+                    items(LmsItemKind.entries.filter { kind -> snapshot.items.any { it.kind == kind } }) { kind ->
+                        FilterChip(
+                            selected = selectedKind == kind,
+                            onClick = { onKindChange(kind) },
+                            label = { Text(kindLabel(kind)) },
+                            shape = RoundedCornerShape(10.dp),
+                            modifier = Modifier.testTag("lms_kind_${kind.name}"),
+                        )
+                    }
+                }
+            }
+            item {
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.staggeredEntrance(3)) {
+                    item { FilterChip(selected = selectedRead == null, onClick = { onReadChange(null) }, label = { Text("모두") }, shape = RoundedCornerShape(10.dp), modifier = Modifier.testTag("lms_read_all")) }
+                    item { FilterChip(selected = selectedRead == false, onClick = { onReadChange(false) }, label = { Text("안읽음") }, shape = RoundedCornerShape(10.dp), modifier = Modifier.testTag("lms_read_unread")) }
+                    item { FilterChip(selected = selectedRead == true, onClick = { onReadChange(true) }, label = { Text("읽음") }, shape = RoundedCornerShape(10.dp), modifier = Modifier.testTag("lms_read_read")) }
+                }
             }
         }
 
         when {
-            filtered.isEmpty() && syncing -> {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 48.dp)
-                        .staggeredEntrance(2),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(14.dp),
-                ) {
-                    CircularProgressIndicator(strokeWidth = 3.dp, strokeCap = StrokeCap.Round)
-                    Text("수업 정보를 불러오는 중", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            visibleEmpty && syncing -> {
+                item {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 48.dp)
+                            .staggeredEntrance(3),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(14.dp),
+                    ) {
+                        CircularProgressIndicator(strokeWidth = 3.dp, strokeCap = StrokeCap.Round)
+                        Text("수업 정보를 불러오는 중", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
                 }
             }
-            filtered.isEmpty() && hasError -> {
-                ElevatedCard(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .staggeredEntrance(2),
-                    shape = RoundedCornerShape(20.dp),
-                    colors = CardDefaults.elevatedCardColors(
-                        containerColor = MaterialTheme.colorScheme.errorContainer,
-                        contentColor = MaterialTheme.colorScheme.onErrorContainer,
-                    ),
-                ) {
-                    Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                        Text(
-                            text = snapshot.errorMessage ?: "수업 정보를 불러오지 못했습니다",
-                            style = MaterialTheme.typography.bodyMedium,
-                            fontWeight = FontWeight.SemiBold,
-                        )
-                        FilledTonalButton(onClick = onRefresh, shape = RoundedCornerShape(12.dp)) {
-                            Text("다시 시도", fontWeight = FontWeight.Bold)
+            visibleEmpty && hasError -> {
+                item {
+                    ElevatedCard(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .staggeredEntrance(3),
+                        shape = RoundedCornerShape(20.dp),
+                        colors = CardDefaults.elevatedCardColors(
+                            containerColor = MaterialTheme.colorScheme.errorContainer,
+                            contentColor = MaterialTheme.colorScheme.onErrorContainer,
+                        ),
+                    ) {
+                        Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                            Text(
+                                text = snapshot.errorMessage ?: "수업 정보를 불러오지 못했습니다",
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.SemiBold,
+                            )
+                            FilledTonalButton(onClick = onRefresh, shape = RoundedCornerShape(12.dp)) {
+                                Text("다시 시도", fontWeight = FontWeight.Bold)
+                            }
                         }
                     }
                 }
             }
-            filtered.isEmpty() -> {
-                ElevatedCard(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .staggeredEntrance(2),
-                    shape = RoundedCornerShape(20.dp),
-                    colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
-                ) {
-                    Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                        Text(
-                            text = if (filterActive) "필터에 해당하는 항목이 없습니다" else "표시할 항목이 없습니다",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                        if (filterActive) {
-                            TextButton(onClick = { onCourseChange(null); onKindChange(null) }) {
-                                Text("필터 해제", fontWeight = FontWeight.Bold)
+            visibleEmpty -> {
+                item {
+                    ElevatedCard(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .staggeredEntrance(3),
+                        shape = RoundedCornerShape(20.dp),
+                        colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+                    ) {
+                        Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                            Text(
+                                text = if (todayMode) "오늘 확인할 학습이 없습니다" else if (filterActive) "필터에 해당하는 항목이 없습니다" else "표시할 항목이 없습니다",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                            if (!todayMode && filterActive) {
+                                TextButton(onClick = { onCourseChange(null); onKindChange(null); onReadChange(null) }) {
+                                    Text("필터 해제", fontWeight = FontWeight.Bold)
+                                }
                             }
                         }
                     }
                 }
             }
             else -> {
-                var entranceIndex = 2
-                filtered.forEach { item ->
-                    ElevatedCard(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .staggeredEntrance(entranceIndex++)
-                            .expressiveBounceClick { onOpenItem(item) },
-                        shape = RoundedCornerShape(20.dp),
-                        colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
-                    ) {
-                        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                Surface(
-                                    shape = RoundedCornerShape(6.dp),
-                                    color = MaterialTheme.colorScheme.primaryContainer,
+                if (todayMode) {
+                    agenda.groups.forEach { group ->
+                        item(key = "agenda-${group.key}-${group.date}") {
+                            if (group.key == LmsAgendaGroupKey.COMPLETED) {
+                                TextButton(
+                                    onClick = { completedExpanded = !completedExpanded },
+                                    modifier = Modifier.fillMaxWidth(),
                                 ) {
                                     Text(
-                                        text = kindLabel(item.kind),
-                                        style = MaterialTheme.typography.labelSmall,
+                                        group.title,
+                                        style = MaterialTheme.typography.titleSmall,
                                         fontWeight = FontWeight.Bold,
-                                        color = MaterialTheme.colorScheme.onPrimaryContainer,
-                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                        modifier = Modifier.weight(1f),
                                     )
+                                    Text("${group.items.size}개")
+                                    Spacer(Modifier.size(8.dp))
+                                    Text(if (completedExpanded) "접기" else "보기")
                                 }
+                            } else {
                                 Text(
-                                    text = item.courseName,
-                                    style = MaterialTheme.typography.labelMedium,
+                                    text = agendaGroupTitle(group),
+                                    style = MaterialTheme.typography.titleSmall,
                                     fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.primary,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.padding(top = 8.dp),
                                 )
                             }
-                            Text(item.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                            item.dueAt?.let {
-                                Text("마감 ${LMS_TIME.format(it.atZone(SEOUL))}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            } ?: item.registeredAt?.let {
-                                Text("등록 ${LMS_TIME.format(it.atZone(SEOUL))}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                        if (group.key != LmsAgendaGroupKey.COMPLETED || completedExpanded) {
+                            items(group.items, key = { item -> "today-${item.kind}-${item.courseId}-${item.id}" }) { item ->
+                                LmsItemCard(item, onOpenItem)
                             }
                         }
+                    }
+                } else {
+                    items(filtered, key = { item -> "${item.kind}:${item.courseId}:${item.id}" }) { item ->
+                        LmsItemCard(item, onOpenItem)
                     }
                 }
             }
@@ -453,8 +547,92 @@ private fun LmsItemsScreen(
 }
 
 @Composable
+private fun LmsItemCard(item: LmsItem, onOpenItem: (LmsItem) -> Unit) {
+    ElevatedCard(
+        modifier = Modifier.fillMaxWidth().staggeredEntrance(4).expressiveBounceClick { onOpenItem(item) },
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+    ) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                LmsStatusBadge(kindLabel(item.kind), prominent = false)
+                Text(
+                    item.courseName,
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f),
+                )
+                LmsStatusBadge(if (item.isRead) "읽음" else "안읽음", prominent = !item.isRead)
+            }
+            val badges = buildList {
+                when (item.changeState) {
+                    LmsChangeState.NEW -> add("새 항목")
+                    LmsChangeState.UPDATED -> add("변경됨")
+                    LmsChangeState.NONE -> Unit
+                }
+                when (item.completionState) {
+                    LmsCompletionState.COMPLETE -> add("완료")
+                    LmsCompletionState.INCOMPLETE -> add("미완료")
+                    LmsCompletionState.NOT_TRACKED, LmsCompletionState.UNKNOWN -> Unit
+                }
+            }
+            if (badges.isNotEmpty()) {
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    badges.forEach { badge -> LmsStatusBadge(badge, prominent = true) }
+                }
+            }
+            Text(item.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            item.dueAt?.let {
+                Text("마감 ${LMS_TIME.format(it.atZone(SEOUL))}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            } ?: item.registeredAt?.let {
+                Text("등록 ${LMS_TIME.format(it.atZone(SEOUL))}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+    }
+}
+
+@Composable
+private fun LmsStatusBadge(label: String, prominent: Boolean) {
+    Surface(
+        shape = RoundedCornerShape(6.dp),
+        color = if (prominent) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.primaryContainer,
+    ) {
+        Text(
+            label,
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = FontWeight.Bold,
+            color = if (prominent) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onPrimaryContainer,
+            modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp),
+        )
+    }
+}
+
+private fun agendaGroupTitle(group: LmsAgendaGroup): String = when (group.key) {
+    LmsAgendaGroupKey.DATE -> if (group.title == "오늘") {
+        "오늘"
+    } else {
+        group.date?.format(DateTimeFormatter.ofPattern("M월 d일 EEEE", Locale.KOREAN)) ?: group.title
+    }
+    else -> group.title
+}
+
+internal fun filterLmsItems(
+    items: List<LmsItem>,
+    courseId: String?,
+    kind: LmsItemKind?,
+    isRead: Boolean?,
+): List<LmsItem> = items.filter { item ->
+    (courseId == null || item.courseId == courseId) &&
+        (kind == null || item.kind == kind) &&
+        (isRead == null || item.isRead == isRead)
+}
+
+@Composable
 private fun LmsDetailScreen(
-    detail: LmsItemDetail,
+    presented: LmsPresentedDetail,
     source: LmsSource,
     sessionController: LmsSessionController,
     autoLoginCoordinator: LmsAutoLoginCoordinator,
@@ -462,6 +640,7 @@ private fun LmsDetailScreen(
     onMessage: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val detail = presented.detail
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var pending by remember { mutableStateOf<LmsAttachment?>(null) }
@@ -511,6 +690,23 @@ private fun LmsDetailScreen(
                 modifier = Modifier.weight(1f),
             )
         }
+        if (presented.attachmentsChanged) {
+            Surface(
+                color = MaterialTheme.colorScheme.tertiaryContainer,
+                contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text("첨부파일이 변경됐어요", fontWeight = FontWeight.Bold, modifier = Modifier.padding(12.dp))
+            }
+        } else if (presented.cached) {
+            Surface(
+                color = MaterialTheme.colorScheme.secondaryContainer,
+                contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text("저장된 내용", fontWeight = FontWeight.Bold, modifier = Modifier.padding(12.dp))
+            }
+        }
         AndroidView(
             factory = { viewContext ->
                 WebView(viewContext).apply {
@@ -518,6 +714,12 @@ private fun LmsDetailScreen(
                     settings.allowFileAccess = false
                     settings.allowContentAccess = false
                     settings.domStorageEnabled = false
+                    webViewClient = object : WebViewClient() {
+                        override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean = true
+
+                        @Suppress("DEPRECATION")
+                        override fun shouldOverrideUrlLoading(view: WebView, url: String): Boolean = true
+                    }
                     loadDataWithBaseURL("https://lms.dima.ac.kr", detail.sanitizedHtml, "text/html", "UTF-8", null)
                 }
             },
@@ -543,10 +745,12 @@ private fun LmsDetailScreen(
 private fun LmsAuthenticationWebView(
     request: LmsLoginRequest,
     onComplete: (LmsLoginResult) -> Unit,
+    onAuthenticated: (List<LmsCourse>) -> Unit,
     onCancel: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val activity = LocalActivity.current
+    val parser = remember { LmsHtmlParser() }
     DisposableEffect(activity) {
         activity?.window?.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
         onDispose { activity?.window?.clearFlags(WindowManager.LayoutParams.FLAG_SECURE) }
@@ -563,7 +767,7 @@ private fun LmsAuthenticationWebView(
                 Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "로그인 취소")
             }
             Text(
-                text = "공식 LMS에서 로그인 중",
+                text = "공식 포털에서 로그인 중",
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold,
                 modifier = Modifier.weight(1f),
@@ -585,36 +789,97 @@ private fun LmsAuthenticationWebView(
                     settings.mixedContentMode = android.webkit.WebSettings.MIXED_CONTENT_NEVER_ALLOW
                     if (Build.VERSION.SDK_INT >= 26) WebView.startSafeBrowsing(context, null)
                     var injected = false
+                    var catalogRequested = false
                     webViewClient = object : WebViewClient() {
                         override fun shouldOverrideUrlLoading(view: WebView, webRequest: WebResourceRequest): Boolean {
                             val uri = webRequest.url
-                            val allowed = LmsUrlPolicy.isAllowed(uri.toString())
-                            if (!allowed) context.startActivity(Intent(Intent.ACTION_VIEW, uri))
+                            val allowed = LmsUrlPolicy.isAllowedLoginNavigation(uri.toString())
+                            if (!allowed) {
+                                val upgraded = LmsUrlPolicy.upgradeOfficialHttp(uri.toString())
+                                if (upgraded != null) view.loadUrl(upgraded)
+                                else {
+                                    Log.w(
+                                        "DimaNowLms",
+                                        "External navigation scheme=${uri.scheme} host=${uri.host} path=${uri.path} " +
+                                            "port=${uri.port} userInfoPresent=${uri.userInfo != null}",
+                                    )
+                                    context.startActivity(Intent(Intent.ACTION_VIEW, uri))
+                                }
+                            }
                             return !allowed
                         }
 
-                        override fun onPageStarted(view: WebView, url: String, favicon: Bitmap?) {
-                            if (Uri.parse(url).path == SUCCESS_PATH) onComplete(LmsLoginResult.Success)
-                        }
+                        override fun onPageStarted(view: WebView, url: String, favicon: Bitmap?) = Unit
 
                         override fun onPageFinished(view: WebView, url: String) {
                             val path = Uri.parse(url).path.orEmpty()
-                            if (path == SUCCESS_PATH) {
-                                onComplete(LmsLoginResult.Success)
-                            } else if (path == LOGIN_PATH && !injected) {
+                            if (path == MAIN_PATH) {
+                                view.evaluateJavascript(
+                                    "Boolean(document.querySelector(\"a[href*='/lms/myLecture/doListView']\"))",
+                                ) { authenticated ->
+                                    if (
+                                        lmsLoginPageAction(url, pageFinished = true, authenticatedMain = authenticated == "true") ==
+                                        LmsLoginPageAction.LOAD_DASHBOARD
+                                    ) {
+                                        view.loadUrl(LMS_DASHBOARD_URL)
+                                    }
+                                }
+                            } else if (
+                                lmsLoginPageAction(url, pageFinished = true, authenticatedMain = false) ==
+                                LmsLoginPageAction.EXTRACT_COURSES && !catalogRequested
+                            ) {
+                                catalogRequested = true
+                                view.evaluateJavascript(EXTRACT_RENDERED_COURSES_SCRIPT) { value ->
+                                    val courses = parser.parseRenderedCourses(value)
+                                    if (courses.isEmpty()) {
+                                        onComplete(LmsLoginResult.Failure("수업 목록을 확인하지 못했습니다"))
+                                    } else {
+                                        CookieManager.getInstance().flush()
+                                        onAuthenticated(courses)
+                                    }
+                                }
+                            } else if (isOfficialLmsCredentialPage(url) && !injected) {
                                 injected = true
                                 val user = JSONObject.quote(request.credentials.username)
                                 val password = JSONObject.quote(request.credentials.password)
-                                view.evaluateJavascript(
-                                    "(function(){var i=document.querySelector('#id'),p=document.querySelector('#pass');" +
+                                val portal = Uri.parse(url).host == PORTAL_HOST
+                                val submission = if (portal) {
+                                    "var i=document.querySelector('#txtID'),p=document.querySelector('#txtPwd');" +
+                                        "if(!i||!p||typeof Login!=='function')return 'interactive';" +
+                                        "i.value=$user;p.value=$password;Login('N');return 'submitted';"
+                                } else {
+                                    "var i=document.querySelector('#id'),p=document.querySelector('#pass');" +
                                         "if(!i||!p||typeof login_proc!=='function')return 'interactive';" +
-                                        "i.value=$user;p.value=$password;login_proc();return 'submitted';})()",
-                                ) { _ -> Unit }
+                                        "i.value=$user;p.value=$password;login_proc();return 'submitted';"
+                                }
+                                view.evaluateJavascript(
+                                    "(function(){$submission})()",
+                                ) { result ->
+                                    if (result == "\"submitted\"") {
+                                        view.postDelayed(
+                                            {
+                                                if (
+                                                    !request.result.isCompleted &&
+                                                    shouldReviewStoredLmsCredentials(
+                                                        view.url.orEmpty(),
+                                                        submitted = true,
+                                                        elapsedMillis = LOGIN_RESULT_TIMEOUT_MILLIS,
+                                                    )
+                                                ) {
+                                                    onComplete(LmsLoginResult.CredentialsRejected)
+                                                }
+                                            },
+                                            LOGIN_RESULT_TIMEOUT_MILLIS,
+                                        )
+                                    }
+                                }
                             }
                         }
 
                         override fun onReceivedError(view: WebView, request: WebResourceRequest, error: WebResourceError) {
-                            if (request.isForMainFrame) onComplete(LmsLoginResult.NetworkError(error.description.toString()))
+                            if (request.isForMainFrame) {
+                                onComplete(LmsLoginResult.NetworkError(error.description.toString()))
+                            }
                         }
 
                         override fun onSafeBrowsingHit(view: WebView, request: WebResourceRequest, threatType: Int, callback: SafeBrowsingResponse) {
@@ -633,12 +898,38 @@ private fun LmsAuthenticationWebView(
 private fun kindLabel(kind: LmsItemKind): String = when (kind) {
     LmsItemKind.NOTICE -> "공지"
     LmsItemKind.ASSIGNMENT -> "과제"
+    LmsItemKind.CONTENT -> "콘텐츠"
     LmsItemKind.MATERIAL -> "자료"
+    LmsItemKind.QUESTION -> "질문"
+    LmsItemKind.DISCUSSION -> "토론"
+    LmsItemKind.TEAM_PROJECT -> "팀프로젝트"
+    LmsItemKind.QUIZ -> "퀴즈"
+    LmsItemKind.EXAM -> "시험"
     LmsItemKind.OTHER -> "기타"
 }
 
 private val SEOUL = ZoneId.of("Asia/Seoul")
 private val LMS_TIME = DateTimeFormatter.ofPattern("M월 d일 HH:mm")
-private const val LOGIN_URL = "https://lms.dima.ac.kr/login/doLoginPage.dunet"
-private const val LOGIN_PATH = "/login/doLoginPage.dunet"
-private const val SUCCESS_PATH = "/lms/myLecture/doListView.dunet"
+internal const val OFFICIAL_LMS_LOGIN_URL =
+    "https://portal.dima.ac.kr/?r=https://lms.dima.ac.kr/sso/index.jsp"
+private const val LOGIN_URL = OFFICIAL_LMS_LOGIN_URL
+private const val LMS_DASHBOARD_URL =
+    "https://lms.dima.ac.kr/lms/myLecture/doListView.dunet?to_do_type=all"
+private val EXTRACT_RENDERED_COURSES_SCRIPT = """
+    (function(){
+      return Array.from(document.querySelectorAll("[href*='fncGoClassroom'],[onclick*='fncGoClassroom']"))
+        .map(function(link){
+          var action=(link.getAttribute('href')||'')+' '+(link.getAttribute('onclick')||'');
+          var match=action.match(/fncGoClassroom\(\s*['"]([^'"]+)['"]\s*,\s*['"]([^'"]*)['"]/);
+          if(!match)return null;
+          var root=link.closest('li.box,.lecture_info,.lecture-card,.course-card')||link.parentElement||link;
+          var nameNode=link.querySelector('.title,.lecture_title')||root.querySelector('.title,.lecture_title')||link;
+          var text=root.innerText||'';
+          var professor=text.match(/교수(?:명)?\s*[:：]\s*([^\n·|]+)/);
+          return {id:match[1],classNo:match[2],name:(nameNode.textContent||'').trim(),professor:professor?professor[1].trim():null};
+        }).filter(Boolean);
+    })()
+""".trimIndent()
+private const val PORTAL_HOST = "portal.dima.ac.kr"
+private const val MAIN_PATH = "/main/MainView.dunet"
+private const val LOGIN_RESULT_TIMEOUT_MILLIS = 10_000L

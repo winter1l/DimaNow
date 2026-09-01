@@ -25,4 +25,4 @@
 - LMS 자동 로그인 계정은 `dima_now_lms_credentials_v1` Android Keystore AES-256-GCM 키로 암호화하고 백업 제외 파일에만 저장합니다. 키 손상·무효화·암호문 변조 시 파일을 폐기하고 재입력을 요구합니다.
 - LMS WebView는 정확한 `lms.dima.ac.kr`·`portal.dima.ac.kr` HTTPS 호스트만 앱 안에서 허용하고, 파일/콘텐츠 접근과 mixed content를 차단하며 `addJavascriptInterface`를 사용하지 않습니다. 계정 주입은 공식 로그인 경로의 `#id`, `#pass`, `login_proc()`에 한정합니다.
 - 자동 로그인은 직렬화된 1회 시도만 수행하고 실패 자격 증명을 반복하지 않습니다. CAPTCHA·OTP·추가 인증·계정 잠금은 우회하지 않으며 네트워크 실패 자동 재시도는 15분 억제합니다.
-- LMS 목록 동기화는 상세 페이지를 미리 열지 않습니다. 상세 HTML은 script/form/iframe과 이벤트 속성을 제거하고, 첨부파일은 같은 공식 호스트·512 MiB 상한·HTML 로그인 응답 거부·임시 `.part` 확정 절차를 거칩니다.
+- LMS 목록 동기화는 상세 페이지를 미리 열지 않습니다. 완료·미완료 보조 목록 실패는 전체 목록 실패로 확대하지 않으며 이전 상태를 보존합니다. 사용자가 상세를 열 때만 최신 본문과 첨부 메타데이터를 재확인합니다. 상세 HTML은 script/form/iframe과 이벤트 속성을 제거하고, 첨부파일은 같은 공식 호스트·512 MiB 상한·HTML 로그인 응답 거부·임시 `.part` 확정 절차를 거칩니다.

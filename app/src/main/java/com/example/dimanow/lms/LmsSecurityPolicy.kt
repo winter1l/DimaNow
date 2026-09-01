@@ -11,9 +11,25 @@ object LmsUrlPolicy {
         uri.scheme == "https" && uri.host in allowedHosts && uri.userInfo == null
     }.getOrDefault(false)
 
+    fun isAllowedLoginNavigation(value: String): Boolean = isAllowed(value) || runCatching {
+        val uri = URI.create(value)
+        uri.scheme == "http" && uri.host == "sso.dima.ac.kr" &&
+            uri.path in setOf("/sso/pmi-sso.jsp", "/sso/pmi-sso2.jsp") &&
+            uri.userInfo == null && uri.port == 8080
+    }.getOrDefault(false)
+
     fun requireAllowed(value: String): URI = URI.create(value).also {
         require(isAllowed(value)) { "허용되지 않은 LMS 주소입니다" }
     }
+
+    fun upgradeOfficialHttp(value: String): String? = runCatching {
+        val uri = URI.create(value)
+        if (
+            uri.scheme != "http" || uri.host !in allowedHosts || uri.userInfo != null ||
+            uri.port !in setOf(-1, 80)
+        ) return@runCatching null
+        value.replaceFirst("http://", "https://")
+    }.getOrNull()
 }
 
 object LmsAttachmentNaming {

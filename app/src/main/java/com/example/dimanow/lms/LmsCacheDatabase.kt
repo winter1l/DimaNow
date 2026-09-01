@@ -9,6 +9,8 @@ import androidx.room.PrimaryKey
 import androidx.room.Query
 import androidx.room.RoomDatabase
 import androidx.room.Transaction
+import androidx.room.migration.Migration
+import androidx.sqlite.db.SupportSQLiteDatabase
 import kotlinx.coroutines.flow.Flow
 
 @Entity(tableName = "lms_courses")
@@ -16,6 +18,7 @@ data class LmsCourseEntity(
     @PrimaryKey val id: String,
     val name: String,
     val professor: String?,
+    val classNo: String = "",
 )
 
 @Entity(tableName = "lms_items")
@@ -29,6 +32,9 @@ data class LmsItemEntity(
     val registeredAtMillis: Long?,
     val dueAtMillis: Long?,
     val detailUrl: String,
+    val isRead: Boolean = false,
+    val completionState: String = LmsCompletionState.UNKNOWN.name,
+    val changeState: String = LmsChangeState.NONE.name,
 )
 
 @Entity(tableName = "lms_details")
@@ -67,6 +73,9 @@ interface LmsCacheDao {
     @Query("SELECT * FROM lms_items")
     suspend fun getAllItems(): List<LmsItemEntity>
 
+    @Query("SELECT * FROM lms_courses ORDER BY name")
+    suspend fun getAllCourses(): List<LmsCourseEntity>
+
     @Query("SELECT * FROM lms_sync WHERE id = 1")
     fun observeSync(): Flow<LmsSyncEntity?>
 
@@ -75,6 +84,12 @@ interface LmsCacheDao {
 
     @Query("SELECT * FROM lms_items WHERE `key` = :key")
     suspend fun getItem(key: String): LmsItemEntity?
+
+    @Query("UPDATE lms_items SET isRead = 1 WHERE `key` = :key")
+    suspend fun markItemRead(key: String)
+
+    @Query("UPDATE lms_items SET isRead = 1, changeState = 'NONE' WHERE `key` = :key")
+    suspend fun markItemOpened(key: String)
 
     @Query("SELECT * FROM lms_details WHERE itemKey = :key")
     suspend fun getDetail(key: String): LmsDetailEntity?
@@ -125,10 +140,24 @@ interface LmsCacheDao {
     }
 
     @Transaction
+    suspend fun replaceCourses(courses: List<LmsCourseEntity>) {
+        clearCourses()
+        insertCourses(courses)
+    }
+
+    @Transaction
     suspend fun replaceDetail(detail: LmsDetailEntity, attachments: List<LmsAttachmentEntity>) {
         insertDetail(detail)
         clearAttachments(detail.itemKey)
         insertAttachments(attachments)
+    }
+
+    @Transaction
+    suspend fun replaceDetailAndOpen(detail: LmsDetailEntity, attachments: List<LmsAttachmentEntity>) {
+        insertDetail(detail)
+        clearAttachments(detail.itemKey)
+        insertAttachments(attachments)
+        markItemOpened(detail.itemKey)
     }
 
     @Transaction
@@ -149,9 +178,28 @@ interface LmsCacheDao {
         LmsAttachmentEntity::class,
         LmsSyncEntity::class,
     ],
-    version = 1,
+    version = 4,
     exportSchema = false,
 )
 abstract class LmsCacheDatabase : RoomDatabase() {
     abstract fun dao(): LmsCacheDao
+}
+
+val LMS_CACHE_MIGRATION_1_2 = object : Migration(1, 2) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE lms_items ADD COLUMN isRead INTEGER NOT NULL DEFAULT 0")
+    }
+}
+
+val LMS_CACHE_MIGRATION_2_3 = object : Migration(2, 3) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE lms_courses ADD COLUMN classNo TEXT NOT NULL DEFAULT ''")
+    }
+}
+
+val LMS_CACHE_MIGRATION_3_4 = object : Migration(3, 4) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE lms_items ADD COLUMN completionState TEXT NOT NULL DEFAULT 'UNKNOWN'")
+        db.execSQL("ALTER TABLE lms_items ADD COLUMN changeState TEXT NOT NULL DEFAULT 'NONE'")
+    }
 }

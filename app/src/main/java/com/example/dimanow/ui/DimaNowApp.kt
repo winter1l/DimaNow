@@ -213,7 +213,7 @@ internal enum class AppPage(val title: String, val icon: ImageVector) {
     ;
 
     val usesMinuteTicker: Boolean
-        get() = this == DASHBOARD || this == SHUTTLE || this == MEAL
+        get() = this == DASHBOARD || this == SHUTTLE || this == MEAL || this == COURSES
 }
 
 internal val primaryAppPages = listOf(
@@ -356,6 +356,7 @@ fun DimaNowApp(
                     loginBridge = lmsLoginBridge,
                     autoLoginCoordinator = lmsAutoLoginCoordinator,
                     source = lmsSource,
+                    now = requireNotNull(minuteNow).toInstant(),
                     onFullScreenChange = { lmsFullScreen = it },
                     modifier = Modifier.padding(padding),
                 )
@@ -3243,6 +3244,73 @@ internal fun ScreenColumn(
 
         // 상단 시스템 상태바 영역 반투명 그라데이션 스크림 (스크롤 시 텍스트/아이콘 겹침 방지 및 부드러운 페이드)
         // 헤더 행(콘텐츠 시작 statusBarTop+8dp)과 겹치지 않도록 스크림은 8dp까지만 내려온다 (#5)
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(statusBarTop + 8.dp)
+                .background(
+                    Brush.verticalGradient(
+                        0.0f to surfaceColor.copy(alpha = 0.95f),
+                        0.6f to surfaceColor.copy(alpha = 0.70f),
+                        1.0f to surfaceColor.copy(alpha = 0.0f),
+                    ),
+                ),
+        )
+    }
+}
+
+@Composable
+internal fun ScreenLazyColumn(
+    modifier: Modifier = Modifier,
+    title: String,
+    topAction: (@Composable () -> Unit)? = null,
+    listTag: String? = null,
+    content: androidx.compose.foundation.lazy.LazyListScope.() -> Unit,
+) {
+    val openSettings = LocalOpenSettings.current
+    val statusBarTop = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
+    val surfaceColor = MaterialTheme.colorScheme.surface
+
+    Box(modifier = modifier.fillMaxSize()) {
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxSize()
+                .then(if (listTag == null) Modifier else Modifier.testTag(listTag)),
+            contentPadding = PaddingValues(
+                start = 16.dp,
+                end = 16.dp,
+                top = statusBarTop + 8.dp,
+                bottom = 8.dp,
+            ),
+            verticalArrangement = Arrangement.spacedBy(14.dp),
+        ) {
+            item {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(48.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text = title,
+                        style = MaterialTheme.typography.headlineMedium,
+                        fontWeight = FontWeight.Bold,
+                    )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        topAction?.invoke()
+                        openSettings?.let { open ->
+                            IconButton(onClick = open, modifier = Modifier.testTag("open_settings")) {
+                                Icon(Icons.Default.Settings, contentDescription = "설정")
+                            }
+                        }
+                    }
+                }
+            }
+            content()
+            item { Spacer(Modifier.height(16.dp)) }
+        }
+
         Box(
             modifier = Modifier
                 .fillMaxWidth()

@@ -12,7 +12,7 @@ class AppPageTest {
         assertTrue(AppPage.SHUTTLE.usesMinuteTicker)
         assertTrue(AppPage.MEAL.usesMinuteTicker)
         assertFalse(AppPage.TIMETABLE.usesMinuteTicker)
-        assertFalse(AppPage.COURSES.usesMinuteTicker)
+        assertTrue(AppPage.COURSES.usesMinuteTicker)
         assertFalse(AppPage.SETTINGS.usesMinuteTicker)
     }
 

@@ -1,0 +1,22 @@
+{
+  "version": 1,
+  "rules": [
+    {
+      "id": "no-unrequested-git-publishing",
+      "title": "요청 없는 Git 게시 작업 금지",
+      "when": {
+        "keywords": [
+          "깃",
+          "Git",
+          "GitHub",
+          "릴리스",
+          "release",
+          "브랜치",
+          "branch",
+          "워크트리"
+        ]
+      },
+      "body": "사용자가 따로 언급하거나 작업 완료에 필수인 경우가 아니면 GitHub 릴리스를 게시하거나 브랜치·워크트리를 만들지 않는다."
+    }
+  ]
+}

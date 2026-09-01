@@ -1,6 +1,5 @@
 {
     "submissionId": "8d7d15b1-323d-49da-b10c-24b4af5bc1b9",
-    "state": "ERROR",
-    "message": "식단 사진을 처리하지 못했습니다. 잠시 후 다시 시도해 주세요.",
-    "updatedAt": "2026-09-01T08:41:26.735072278Z"
+    "state": "PUBLISHED",
+    "updatedAt": "2026-09-01T10:22:49.575499528Z"
 }

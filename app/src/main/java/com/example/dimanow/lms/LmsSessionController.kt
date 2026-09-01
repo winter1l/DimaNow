@@ -98,6 +98,9 @@ internal fun isOfficialLmsCredentialPage(url: String): Boolean = runCatching {
 internal fun shouldReviewStoredLmsCredentials(url: String, submitted: Boolean, elapsedMillis: Long): Boolean =
     submitted && elapsedMillis >= 10_000L && isOfficialLmsCredentialPage(url)
 
+internal fun shouldConfirmOfficialLmsLoginDialog(url: String): Boolean =
+    isOfficialLmsCredentialPage(url)
+
 class LmsAutoLoginCoordinator(
     private val credentialStore: LmsCredentialStore,
     private val sessionController: LmsSessionController,

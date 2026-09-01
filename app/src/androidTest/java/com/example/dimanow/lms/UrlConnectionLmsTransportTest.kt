@@ -11,6 +11,32 @@ import org.junit.Test
 
 class UrlConnectionLmsTransportTest {
     @Test
+    fun normalFormPostDoesNotAdvertiseItselfAsAnAjaxRequest() = runTest {
+        val connection = FakeConnection(
+            url = URL("https://lms.dima.ac.kr/lms/class/boardItem/doViewBoardItem.dunet"),
+            status = 200,
+            body = "<main>본문</main>".toByteArray(),
+        )
+        val transport = UrlConnectionLmsTransport(
+            cookieProvider = { "SESSION=ready" },
+            connectionFactory = { connection },
+        )
+
+        transport.postForm(connection.url.toString(), mapOf("boarditem_no" to "91"))
+
+        assertEquals("POST", connection.requestMethod)
+        assertEquals(null, connection.getRequestProperty("X-Requested-With"))
+        assertEquals("https://lms.dima.ac.kr", connection.getRequestProperty("Origin"))
+        assertEquals(
+            "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+            connection.getRequestProperty("Accept"),
+        )
+        assertEquals("application/x-www-form-urlencoded", connection.getRequestProperty("Content-Type"))
+        assertEquals("navigate", connection.getRequestProperty("Sec-Fetch-Mode"))
+        assertEquals("document", connection.getRequestProperty("Sec-Fetch-Dest"))
+    }
+
+    @Test
     fun postFormFollowsTheOfficialRedirectAndKeepsItsSessionCookie() = runTest {
         val first = FakeConnection(
             url = URL("https://lms.dima.ac.kr/lms/class/classroom/doSetSessionClassRoom.dunet"),
@@ -33,12 +59,20 @@ class UrlConnectionLmsTransportTest {
             connectionFactory = { connections.removeFirst() },
         )
 
-        val response = transport.postForm(
+        val response = transport.postAjax(
             first.url.toString(),
             mapOf("course_id" to "COURSE-A", "class_no" to "D"),
         )
 
         assertEquals("POST", first.requestMethod)
+        assertEquals("XMLHttpRequest", first.getRequestProperty("X-Requested-With"))
+        assertEquals("*/*", first.getRequestProperty("Accept"))
+        assertEquals("cors", first.getRequestProperty("Sec-Fetch-Mode"))
+        assertEquals("https://lms.dima.ac.kr", first.getRequestProperty("Origin"))
+        assertEquals(
+            "https://lms.dima.ac.kr/lms/myLecture/doListView.dunet?mnid=201008840728",
+            first.getRequestProperty("Referer"),
+        )
         assertEquals("GET", second.requestMethod)
         assertEquals("CLASS_CONTEXT=ready", second.getRequestProperty("Cookie"))
         assertEquals(second.url.toString(), response.finalUrl)

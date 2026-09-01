@@ -182,6 +182,7 @@ import com.example.dimanow.lms.LmsCredentialStore
 import com.example.dimanow.lms.CredentialState
 import com.example.dimanow.lms.LmsSessionState
 import com.example.dimanow.lms.LmsLoginBridge
+import com.example.dimanow.lms.LmsRenderedPageBridge
 import com.example.dimanow.lms.LmsRoute
 import com.example.dimanow.lms.LmsSessionController
 import com.example.dimanow.lms.LmsSource
@@ -247,6 +248,7 @@ fun DimaNowApp(
     lmsCredentialStore: LmsCredentialStore,
     lmsSessionController: LmsSessionController,
     lmsLoginBridge: LmsLoginBridge,
+    lmsRenderedPageBridge: LmsRenderedPageBridge? = null,
     lmsAutoLoginCoordinator: LmsAutoLoginCoordinator,
     lmsSource: LmsSource,
     targetPageEvent: Pair<String, Long>? = null,
@@ -354,6 +356,7 @@ fun DimaNowApp(
                     credentialStore = lmsCredentialStore,
                     sessionController = lmsSessionController,
                     loginBridge = lmsLoginBridge,
+                    renderedPageBridge = lmsRenderedPageBridge,
                     autoLoginCoordinator = lmsAutoLoginCoordinator,
                     source = lmsSource,
                     now = requireNotNull(minuteNow).toInstant(),

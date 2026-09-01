@@ -1,14 +1,19 @@
 package com.example.dimanow.lms
 
+import android.os.ParcelFileDescriptor
+import android.text.InputType
 import android.webkit.WebView
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performTextInput
 import androidx.test.espresso.Espresso.onView
 import androidx.test.espresso.matcher.ViewMatchers.isAssignableFrom
 import androidx.test.espresso.matcher.ViewMatchers.isDisplayed
 import androidx.test.espresso.assertion.ViewAssertions.doesNotExist
+import androidx.test.platform.app.InstrumentationRegistry
 import org.hamcrest.Matchers.allOf
 import com.example.dimanow.theme.DIMANowTheme
 import java.io.File
@@ -16,6 +21,7 @@ import java.time.Instant
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import org.junit.Assert.assertEquals
 import org.junit.Rule
 import org.junit.Test
 
@@ -94,6 +100,45 @@ class LmsNativeDetailScreenTest {
         }
         onView(allOf(isAssignableFrom(WebView::class.java), isDisplayed())).check(doesNotExist())
     }
+
+    @Test
+    fun passwordFieldReportsPasswordInputTypeToTheKeyboard() {
+        val credentials = EmptyCredentialStore()
+        val session = MutableLmsSessionController(LmsSessionState.SIGNED_OUT)
+        val loginBridge = LmsLoginBridge()
+
+        composeRule.setContent {
+            DIMANowTheme {
+                LmsRoute(
+                    credentialStore = credentials,
+                    sessionController = session,
+                    loginBridge = loginBridge,
+                    autoLoginCoordinator = LmsAutoLoginCoordinator(credentials, session, loginBridge),
+                    source = ExpiringLmsSource(),
+                    now = Instant.parse("2026-09-01T03:00:00Z"),
+                )
+            }
+        }
+
+        composeRule.onNodeWithTag("lms_password").performClick().performTextInput("dummy-secret")
+        composeRule.waitUntil(5_000) {
+            val inputType = currentEditorInputType() ?: return@waitUntil false
+            inputType and InputType.TYPE_MASK_CLASS == InputType.TYPE_CLASS_TEXT
+        }
+        val inputType = requireNotNull(currentEditorInputType())
+
+        assertEquals(InputType.TYPE_CLASS_TEXT, inputType and InputType.TYPE_MASK_CLASS)
+        assertEquals(InputType.TYPE_TEXT_VARIATION_PASSWORD, inputType and InputType.TYPE_MASK_VARIATION)
+    }
+}
+
+private fun currentEditorInputType(): Int? {
+    val descriptor = InstrumentationRegistry.getInstrumentation().uiAutomation
+        .executeShellCommand("dumpsys input_method")
+    val dump = ParcelFileDescriptor.AutoCloseInputStream(descriptor).bufferedReader().use { it.readText() }
+    return Regex(
+        """curEditorInfo:\s+inputType=0x([0-9a-fA-F]+)[\s\S]*?packageName=com\.example\.dimanow""",
+    ).find(dump)?.groupValues?.get(1)?.toInt(16)
 }
 
 private class EmptyCredentialStore : LmsCredentialStore {

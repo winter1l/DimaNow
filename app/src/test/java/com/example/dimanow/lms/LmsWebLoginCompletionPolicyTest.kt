@@ -65,4 +65,12 @@ class LmsWebLoginCompletionPolicyTest {
         assertFalse(isOfficialLmsCredentialPage("https://portal.dima.ac.kr/find/id_find.aspx"))
         assertFalse(isOfficialLmsCredentialPage("https://example.com/?r=https://lms.dima.ac.kr/sso/index.jsp"))
     }
+
+    @Test
+    fun onlyOfficialLoginPagesMayConfirmTheSingleSessionDialog() {
+        assertTrue(shouldConfirmOfficialLmsLoginDialog("https://portal.dima.ac.kr/?r=https://lms.dima.ac.kr/sso/index.jsp"))
+        assertTrue(shouldConfirmOfficialLmsLoginDialog("https://lms.dima.ac.kr/login/doLoginPage.dunet"))
+        assertFalse(shouldConfirmOfficialLmsLoginDialog("https://lms.dima.ac.kr/lms/myLecture/doListView.dunet"))
+        assertFalse(shouldConfirmOfficialLmsLoginDialog("https://example.com/login"))
+    }
 }

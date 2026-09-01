@@ -97,11 +97,18 @@ class DimaNowApplication : Application() {
     val lmsCredentialStore: AndroidLmsCredentialStore by lazy { AndroidLmsCredentialStore(this) }
     val lmsSessionController: MutableLmsSessionController by lazy { MutableLmsSessionController() }
     val lmsLoginBridge: LmsLoginBridge by lazy { LmsLoginBridge() }
+    val lmsRenderedPageBridge: com.example.dimanow.lms.LmsRenderedPageBridge by lazy {
+        com.example.dimanow.lms.LmsRenderedPageBridge()
+    }
     val lmsAutoLoginCoordinator: LmsAutoLoginCoordinator by lazy {
         LmsAutoLoginCoordinator(lmsCredentialStore, lmsSessionController, lmsLoginBridge)
     }
     val lmsSource: RoomLmsSource by lazy {
-        RoomLmsSource(lmsDatabase, lmsSessionController)
+        RoomLmsSource(
+            database = lmsDatabase,
+            sessionController = lmsSessionController,
+            renderedPageLoader = lmsRenderedPageBridge,
+        )
     }
     val guidanceEngine: GuidanceEngine by lazy { GuidanceEngine() }
     val liveSurfaceController: AndroidLiveSurfaceController by lazy { AndroidLiveSurfaceController(this) }

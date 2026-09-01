@@ -113,3 +113,9 @@
 - Replaced the detail WebView with selectable Compose text and native attachment-save actions. Invalid landing-shell responses are rejected without overwriting last-good detail, and course-session POST redirects now forward their response cookie.
 - Kept the official portal WebView only as an invisible SSO engine and exposed a native `공식 포털에서 로그인 중` progress surface. Four focused physical API 36 tests, full JVM and pipeline tests, lint, and optimized assembly pass.
 - A Gradle-connected instrumentation invocation unexpectedly reset the app's private data before the preservation-safe manual instrumentation path was adopted. The final optimized APK is installed and healthy, but live authenticated visual acceptance requires the user to sign in again.
+
+## 2026-09-01 - LMS native detail single-session recovery
+
+- Captured the failed Galaxy card-open path at 5 fps without opening another LMS session. The card click was real; native automatic-login progress existed for less than one 0.2-second sample, then the direct HTTP detail path reported an expired session.
+- Added red-green coverage and implementation for direct-HTTP login-shell fallback to the authenticated hidden session engine, standard public card clicks, password keyboard type, trusted single-session dialogs, official AJAX setup, and normal form navigation.
+- Focused physical instrumentation passed 24/24. A live UI smoke passed in 3.8 seconds, and a direct ADB tap showed the native `프로툴 사전진단` body with no visible WebView. Full JVM, data-pipeline, Android-test compile, lint, and optimized assembly passed.

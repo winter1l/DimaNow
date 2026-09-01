@@ -100,3 +100,16 @@
 - Traced the latest dormitory submission end to end: Worker-created image commit `b420f32e`, Actions run `33488270773`, and published submission status all matched. The image reached Gemini, which returned HTTP 503; the client had no retry and the workflow recorded `ERROR` while still reporting job success.
 - Added a red-green regression test and bounded retry for Gemini HTTP 429/5xx. Full data-pipeline tests and anonymous Worker tests pass. The user-approved ballast rule `no-unrequested-git-publishing` records that releases, branches, and worktrees are not created unless explicitly requested or required.
 - Pushed `1517e18` directly to `main` without a release/branch/worktree, reran the original submission as Actions attempt 2, and verified public `PUBLISHED` status plus `dorm_meal` READY revision 1 for 2026-08-31 through 2026-09-06. A single Galaxy refresh replaced five empty-day rows with ten meal sections and removed the upload action; the app process remained healthy.
+
+## 2026-09-01 - Multiple simultaneous Samsung Live Updates
+
+- Posted two independent promotable ongoing DIMA Now notifications on exact Galaxy serial `R3CW203NFSL`; IDs `6300` and `6301` were simultaneously active and both received Samsung's `FLAG_PROMOTED_ONGOING`.
+- The notification center visibly showed both under `실시간 정보`. The lock-screen Now Bar showed one at a time, and the user directly observed that swiping the bar upward revealed the next DIMA Now item. Compact status-chip rotation was not separately accepted.
+- Used only the relevant all-app live-information developer setting during the test and restored its prior unset value. Canceled both notifications, removed the test package and temporary test source, restored optimized v1.5 (6) with `adb install -r`, and retained no screenshots containing other apps' personal notifications. Detailed evidence is in `docs/now-bar-multiple-live-updates-2026-09-01.md`.
+
+## 2026-09-01 - Native LMS item detail and invisible automatic login
+
+- Reproduced the live defect on the Galaxy: opening an LMS item displayed the authenticated LMS shell inside the detail WebView instead of a native article.
+- Replaced the detail WebView with selectable Compose text and native attachment-save actions. Invalid landing-shell responses are rejected without overwriting last-good detail, and course-session POST redirects now forward their response cookie.
+- Kept the official portal WebView only as an invisible SSO engine and exposed a native `공식 포털에서 로그인 중` progress surface. Four focused physical API 36 tests, full JVM and pipeline tests, lint, and optimized assembly pass.
+- A Gradle-connected instrumentation invocation unexpectedly reset the app's private data before the preservation-safe manual instrumentation path was adopted. The final optimized APK is installed and healthy, but live authenticated visual acceptance requires the user to sign in again.

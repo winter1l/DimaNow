@@ -48,3 +48,9 @@ Pending: no physical Galaxy was connected. After it reconnects, verify its exact
 Physical install is complete: optimized v1.5 (6) is on `R3CW203NFSL`, cold-launched with PID 9460 and no immediate FATAL/ANR. The 2026-09-01 dormitory upload reached GitHub but Gemini validation returned HTTP 503, producing submission `ERROR` in Actions run `33488270773`.
 
 The client now retries only 429/5xx up to three attempts. The exact 503-then-success regression test, full pipeline suite, three Worker tests, app JVM tests, Android-test compilation, lint, and optimized build pass. Commit `1517e18` is on `main`; original run `33488270773` attempt 2 published the same photo successfully. Public status is `PUBLISHED`, `dorm_meal` revision 1 is READY for 2026-08-31 through 2026-09-06, and one Galaxy refresh rendered ten meal sections while removing the empty/upload UI. No GitHub Release, branch, or worktree was created.
+
+# Update - 2026-09-01 (D-049 native LMS detail)
+
+Current state: LMS items now open a native Compose detail body with Android document-save attachment actions. The authenticated LMS landing shell is rejected instead of being shown or cached as an article. Course-session POST redirects forward response cookies, and the official portal WebView is retained only as an invisible SSO engine behind native login progress.
+
+Verification: full app JVM, data-pipeline, Android-test compilation, lint, optimized assembly, and four focused API 36 tests on physical `R3CW203NFSL` pass. Optimized v1.5 (6) SHA-256 is `5CA13B9194D44FAD8AB2D53A90C8E9A05FC6BA7726F7B03C1FDF6698BC6E244C`; it replace-installed, launched in 485 ms, remained resumed, and had no immediate FATAL/ANR. Final authenticated visual acceptance is pending one fresh login because an earlier Gradle-connected test reset private app data.

@@ -6,6 +6,7 @@ import java.io.FileOutputStream
 import java.net.HttpURLConnection
 import java.net.URI
 import java.net.URL
+import java.net.URLDecoder
 import java.nio.charset.Charset
 import java.time.Clock
 import java.time.Duration
@@ -32,6 +33,8 @@ sealed interface LmsDetailLoadResult {
     data class Failure(val message: String) : LmsDetailLoadResult
 }
 
+private class RenderedLmsSessionExpiredException : Exception()
+
 interface LmsSource {
     val snapshot: Flow<LmsSnapshot>
     suspend fun refresh(force: Boolean = false): LmsRefreshResult
@@ -52,6 +55,8 @@ data class LmsHttpResponse(
 interface LmsHttpTransport {
     suspend fun get(url: String, maxBytes: Long = 8L * 1024 * 1024): LmsHttpResponse
     suspend fun postForm(url: String, fields: Map<String, String>, maxBytes: Long = 2L * 1024 * 1024): LmsHttpResponse
+    suspend fun postAjax(url: String, fields: Map<String, String>, maxBytes: Long = 2L * 1024 * 1024): LmsHttpResponse =
+        postForm(url, fields, maxBytes)
     suspend fun download(url: String, destination: File, maxBytes: Long, onProgress: (Long, Long?) -> Unit): LmsHttpResponse
 }
 
@@ -80,7 +85,18 @@ class UrlConnectionLmsTransport(
         }.first
     }
 
-    override suspend fun postForm(url: String, fields: Map<String, String>, maxBytes: Long): LmsHttpResponse = withContext(Dispatchers.IO) {
+    override suspend fun postForm(url: String, fields: Map<String, String>, maxBytes: Long): LmsHttpResponse =
+        executePost(url, fields, maxBytes, ajax = false)
+
+    override suspend fun postAjax(url: String, fields: Map<String, String>, maxBytes: Long): LmsHttpResponse =
+        executePost(url, fields, maxBytes, ajax = true)
+
+    private suspend fun executePost(
+        url: String,
+        fields: Map<String, String>,
+        maxBytes: Long,
+        ajax: Boolean,
+    ): LmsHttpResponse = withContext(Dispatchers.IO) {
         val encodedBody = fields.entries.joinToString("&") { (key, value) ->
             "${java.net.URLEncoder.encode(key, "UTF-8")}" +
                 "=${java.net.URLEncoder.encode(value, "UTF-8")}"
@@ -94,14 +110,31 @@ class UrlConnectionLmsTransport(
             connection.instanceFollowRedirects = false
             connection.connectTimeout = 15_000
             connection.readTimeout = 30_000
-            connection.setRequestProperty("Accept", "application/json,text/html,*/*")
+            connection.setRequestProperty(
+                "Accept",
+                if (ajax) "*/*" else "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+            )
             connection.setRequestProperty("User-Agent", userAgent)
             mergeCookieHeaders(cookieProvider(current), redirectCookies)
                 ?.let { connection.setRequestProperty("Cookie", it) }
             if (sendPostBody) {
+                connection.setRequestProperty("Origin", "${uri.scheme}://${uri.authority}")
+                connection.setRequestProperty("Referer", LMS_DASHBOARD_REFERER)
+                connection.setRequestProperty("Sec-Fetch-Site", "same-origin")
+                connection.setRequestProperty("Sec-Fetch-Mode", if (ajax) "cors" else "navigate")
+                connection.setRequestProperty("Sec-Fetch-Dest", if (ajax) "empty" else "document")
+                if (ajax) {
+                    connection.setRequestProperty("X-Requested-With", "XMLHttpRequest")
+                } else {
+                    connection.setRequestProperty("Sec-Fetch-User", "?1")
+                    connection.setRequestProperty("Upgrade-Insecure-Requests", "1")
+                }
                 connection.requestMethod = "POST"
                 connection.doOutput = true
-                connection.setRequestProperty("Content-Type", "application/x-www-form-urlencoded; charset=UTF-8")
+                connection.setRequestProperty(
+                    "Content-Type",
+                    if (ajax) "application/x-www-form-urlencoded; charset=UTF-8" else "application/x-www-form-urlencoded",
+                )
                 connection.setFixedLengthStreamingMode(encodedBody.size)
                 connection.outputStream.use { it.write(encodedBody) }
             }
@@ -248,6 +281,8 @@ class UrlConnectionLmsTransport(
 
     private companion object {
         const val MAX_REDIRECTS = 5
+        const val LMS_DASHBOARD_REFERER =
+            "https://lms.dima.ac.kr/lms/myLecture/doListView.dunet?mnid=201008840728"
         const val DEFAULT_BROWSER_USER_AGENT =
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 " +
                 "(KHTML, like Gecko) Chrome/140.0 Safari/537.36"
@@ -260,6 +295,7 @@ class RoomLmsSource(
     private val transport: LmsHttpTransport = UrlConnectionLmsTransport(),
     private val parser: LmsHtmlParser = LmsHtmlParser(),
     private val clock: Clock = Clock.systemUTC(),
+    private val renderedPageLoader: LmsRenderedPageLoader? = null,
 ) : LmsSource {
     private val dao = database.dao()
     private val refreshMutex = Mutex()
@@ -399,39 +435,61 @@ class RoomLmsSource(
         }
         try {
             val course = dao.getAllCourses().firstOrNull { it.id == item.courseId }
+            val courseModel = course?.let { LmsCourse(it.id, it.name, it.professor, it.classNo) }
+            suspend fun loadFromRenderedSession(): LmsItemDetail {
+                val loader = renderedPageLoader ?: throw RenderedLmsSessionExpiredException()
+                val renderedCourse = courseModel ?: throw RenderedLmsSessionExpiredException()
+                return when (val rendered = loader.load(openedItem, renderedCourse)) {
+                    is LmsRenderedPageResult.Success -> parser.parseDetail(openedItem, rendered.html, LMS_ORIGIN)
+                    LmsRenderedPageResult.SessionExpired -> throw RenderedLmsSessionExpiredException()
+                    is LmsRenderedPageResult.Failure -> throw InvalidLmsDetailException(rendered.message)
+                }
+            }
             if (course != null && !course.id.startsWith("local-")) {
                 runCatching {
-                    transport.postForm(
+                    transport.postAjax(
                         CLASS_SESSION_URL,
                         mapOf("course_id" to course.id, "class_no" to course.classNo),
                     )
                 }
             }
-            var response = transport.get(item.detailUrl)
+            var response = requestOfficialDetail(item.detailUrl)
             var html = response.htmlText()
+            var detail: LmsItemDetail? = null
             if (parser.isLoginPage(html, response.finalUrl)) {
-                sessionController.transition(LmsSessionState.EXPIRED)
-                return@withLock LmsDetailLoadResult.SessionExpired
+                detail = loadFromRenderedSession()
             }
-            parser.resolveLinkedDetailUrl(item, html, LMS_ORIGIN)?.let { nestedUrl ->
-                response = transport.get(nestedUrl)
-                html = response.htmlText()
-                if (parser.isLoginPage(html, response.finalUrl)) {
-                    sessionController.transition(LmsSessionState.EXPIRED)
-                    return@withLock LmsDetailLoadResult.SessionExpired
+            if (detail == null) {
+                parser.resolveLinkedDetailUrl(item, html, LMS_ORIGIN)?.let { nestedUrl ->
+                    response = transport.get(nestedUrl)
+                    html = response.htmlText()
+                    if (parser.isLoginPage(html, response.finalUrl)) {
+                        detail = loadFromRenderedSession()
+                    }
+                }
+                if (detail == null) {
+                    detail = try {
+                        parser.parseDetail(openedItem, html, LMS_ORIGIN)
+                    } catch (invalid: InvalidLmsDetailException) {
+                        if (renderedPageLoader == null || courseModel == null) throw invalid
+                        loadFromRenderedSession()
+                    }
                 }
             }
-            val detail = parser.parseDetail(openedItem, html, LMS_ORIGIN)
+            val loadedDetail = requireNotNull(detail)
             val oldSignature = cachedAttachments.map { Triple(it.sourceId, it.fileName, it.sizeBytes) }
                 .sortedBy { it.first }
-            val newSignature = detail.attachments.map { Triple(it.id, it.fileName, it.sizeBytes) }
+            val newSignature = loadedDetail.attachments.map { Triple(it.id, it.fileName, it.sizeBytes) }
                 .sortedBy { it.first }
             val attachmentsChanged = cachedEntity != null && oldSignature != newSignature
             dao.replaceDetailAndOpen(
-                LmsDetailEntity(key, detail.sanitizedHtml, clock.millis()),
-                detail.attachments.map { LmsAttachmentEntity("$key:${it.id}", key, it.id, it.fileName, it.downloadUrl, it.sizeBytes) },
+                LmsDetailEntity(key, loadedDetail.sanitizedHtml, clock.millis()),
+                loadedDetail.attachments.map { LmsAttachmentEntity("$key:${it.id}", key, it.id, it.fileName, it.downloadUrl, it.sizeBytes) },
             )
-            LmsDetailLoadResult.Fresh(detail, attachmentsChanged)
+            LmsDetailLoadResult.Fresh(loadedDetail, attachmentsChanged)
+        } catch (_: RenderedLmsSessionExpiredException) {
+            sessionController.transition(LmsSessionState.EXPIRED)
+            LmsDetailLoadResult.SessionExpired
         } catch (error: InvalidLmsDetailException) {
             LmsDetailLoadResult.Failure(error.message ?: "게시글 본문을 찾지 못했습니다")
         } catch (error: Throwable) {
@@ -472,6 +530,25 @@ class RoomLmsSource(
         dueAtMillis = item.dueAt?.toEpochMilli(), detailUrl = item.detailUrl, isRead = item.isRead,
         completionState = item.completionState.name, changeState = item.changeState.name,
     )
+
+    private suspend fun requestOfficialDetail(url: String): LmsHttpResponse {
+        val uri = runCatching { URI.create(url) }.getOrNull() ?: return transport.get(url)
+        val fields = uri.rawQuery.orEmpty()
+            .split('&')
+            .mapNotNull { pair ->
+                val name = pair.substringBefore('=', missingDelimiterValue = "")
+                if (name.isBlank()) return@mapNotNull null
+                URLDecoder.decode(name, Charsets.UTF_8.name()) to
+                    URLDecoder.decode(pair.substringAfter('=', missingDelimiterValue = ""), Charsets.UTF_8.name())
+            }
+            .toMap(linkedMapOf())
+        val isOfficialForm = uri.host.equals("lms.dima.ac.kr", ignoreCase = true) &&
+            uri.path.orEmpty().startsWith("/lms/class/") &&
+            fields.keys.containsAll(setOf("mnid", "course_id", "class_no"))
+        if (!isOfficialForm) return transport.get(url)
+        val actionUrl = URI(uri.scheme, uri.authority, uri.path, null, null).toString()
+        return transport.postForm(actionUrl, fields)
+    }
 
     private fun toModel(item: LmsItemEntity) = LmsItem(
         id = item.sourceId, courseId = item.courseId, courseName = item.courseName,

@@ -37,6 +37,7 @@ class MainActivity : ComponentActivity() {
             lmsCredentialStore = application.lmsCredentialStore,
             lmsSessionController = application.lmsSessionController,
             lmsLoginBridge = application.lmsLoginBridge,
+            lmsRenderedPageBridge = application.lmsRenderedPageBridge,
             lmsAutoLoginCoordinator = application.lmsAutoLoginCoordinator,
             lmsSource = application.lmsSource,
             liveSurfaceController = application.liveSurfaceController,

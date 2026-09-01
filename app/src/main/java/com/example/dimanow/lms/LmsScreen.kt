@@ -10,9 +10,11 @@ import android.view.ViewGroup
 import android.view.WindowManager
 import android.webkit.SafeBrowsingResponse
 import android.webkit.CookieManager
+import android.webkit.JsResult
 import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
 import android.webkit.WebView
+import android.webkit.WebChromeClient
 import android.webkit.WebViewClient
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.BackHandler
@@ -30,6 +32,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.LazyRow
@@ -76,6 +79,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.fromHtml
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -108,6 +112,7 @@ fun LmsRoute(
     credentialStore: LmsCredentialStore,
     sessionController: LmsSessionController,
     loginBridge: LmsLoginBridge,
+    renderedPageBridge: LmsRenderedPageBridge? = null,
     autoLoginCoordinator: LmsAutoLoginCoordinator,
     source: LmsSource,
     now: Instant,
@@ -119,6 +124,9 @@ fun LmsRoute(
     val credentialState by credentialStore.state.collectAsStateWithLifecycle()
     val snapshot by source.snapshot.collectAsStateWithLifecycle(initialValue = LmsSnapshot())
     val loginRequest by loginBridge.request.collectAsStateWithLifecycle()
+    val renderedPageRequest by (
+        renderedPageBridge?.request ?: remember { kotlinx.coroutines.flow.flowOf<LmsRenderedPageRequest?>(null) }
+        ).collectAsStateWithLifecycle(initialValue = null)
     val snackbar = remember { SnackbarHostState() }
     var selectedCourse by remember { mutableStateOf<String?>(null) }
     var selectedKind by remember { mutableStateOf<LmsItemKind?>(null) }
@@ -126,8 +134,9 @@ fun LmsRoute(
     var selectedDetail by remember { mutableStateOf<LmsPresentedDetail?>(null) }
     BackHandler(enabled = selectedDetail != null) { selectedDetail = null }
     BackHandler(enabled = loginRequest != null) { loginBridge.cancel() }
+    BackHandler(enabled = renderedPageRequest != null) { renderedPageBridge?.cancel() }
     // 로그인 WebView·글 상세가 떠 있는 동안 상위 셸이 하단 내비를 숨기게 알린다 (D-044)
-    val fullScreen = loginRequest != null || selectedDetail != null
+    val fullScreen = loginRequest != null || renderedPageRequest != null || selectedDetail != null
     LaunchedEffect(fullScreen) { onFullScreenChange(fullScreen) }
     DisposableEffect(Unit) {
         onDispose { onFullScreenChange(false) }
@@ -184,6 +193,12 @@ fun LmsRoute(
                     }
                 },
                 onCancel = loginBridge::cancel,
+                modifier = Modifier.fillMaxSize(),
+            )
+            renderedPageRequest != null && renderedPageBridge != null -> LmsRenderedPageWebView(
+                request = requireNotNull(renderedPageRequest),
+                onComplete = renderedPageBridge::complete,
+                onCancel = renderedPageBridge::cancel,
                 modifier = Modifier.fillMaxSize(),
             )
             selectedDetail != null -> LmsDetailScreen(
@@ -328,6 +343,7 @@ private fun LmsLoginScreen(
                     onValueChange = { password = it },
                     label = { Text("비밀번호") },
                     visualTransformation = PasswordVisualTransformation(),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
                     singleLine = true,
                     shape = RoundedCornerShape(12.dp),
                     modifier = Modifier.fillMaxWidth().testTag("lms_password"),
@@ -555,7 +571,8 @@ internal fun LmsItemsScreen(
 @Composable
 private fun LmsItemCard(item: LmsItem, onOpenItem: (LmsItem) -> Unit) {
     ElevatedCard(
-        modifier = Modifier.fillMaxWidth().staggeredEntrance(4).expressiveBounceClick { onOpenItem(item) },
+        onClick = { onOpenItem(item) },
+        modifier = Modifier.fillMaxWidth().staggeredEntrance(4).expressiveBounceClick(),
         shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
     ) {
@@ -824,6 +841,33 @@ private fun LmsAuthenticationWebView(
                         if (Build.VERSION.SDK_INT >= 26) WebView.startSafeBrowsing(context, null)
                         var injected = false
                         var catalogRequested = false
+                        webChromeClient = object : WebChromeClient() {
+                            override fun onJsAlert(
+                                view: WebView,
+                                url: String,
+                                message: String,
+                                result: JsResult,
+                            ): Boolean {
+                                if (!shouldConfirmOfficialLmsLoginDialog(url)) {
+                                    return super.onJsAlert(view, url, message, result)
+                                }
+                                result.confirm()
+                                return true
+                            }
+
+                            override fun onJsConfirm(
+                                view: WebView,
+                                url: String,
+                                message: String,
+                                result: JsResult,
+                            ): Boolean {
+                                if (!shouldConfirmOfficialLmsLoginDialog(url)) {
+                                    return super.onJsConfirm(view, url, message, result)
+                                }
+                                result.confirm()
+                                return true
+                            }
+                        }
                         webViewClient = object : WebViewClient() {
                             override fun shouldOverrideUrlLoading(
                                 view: WebView,
@@ -945,6 +989,147 @@ private fun LmsAuthenticationWebView(
     }
 }
 
+@Composable
+private fun LmsRenderedPageWebView(
+    request: LmsRenderedPageRequest,
+    onComplete: (LmsRenderedPageResult) -> Unit,
+    onCancel: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val context = LocalContext.current
+    Column(modifier.statusBarsPadding().navigationBarsPadding()) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(start = 4.dp, end = 16.dp, top = 4.dp, bottom = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            IconButton(onClick = onCancel) {
+                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "불러오기 취소")
+            }
+            Text(
+                text = "글 불러오는 중",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.weight(1f),
+            )
+            CircularProgressIndicator(
+                Modifier.size(20.dp).pulseBreath(),
+                strokeWidth = 2.5.dp,
+                strokeCap = StrokeCap.Round,
+            )
+        }
+        Box(
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxWidth(),
+            contentAlignment = Alignment.Center,
+        ) {
+            CircularProgressIndicator(
+                Modifier.size(36.dp).pulseBreath(),
+                strokeWidth = 3.dp,
+                strokeCap = StrokeCap.Round,
+            )
+            AndroidView(
+                factory = {
+                    WebView(context).apply {
+                        visibility = View.INVISIBLE
+                        importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS
+                        settings.javaScriptEnabled = true
+                        settings.domStorageEnabled = true
+                        settings.allowFileAccess = false
+                        settings.allowContentAccess = false
+                        settings.mixedContentMode = android.webkit.WebSettings.MIXED_CONTENT_NEVER_ALLOW
+                        var submitted = false
+                        webViewClient = object : WebViewClient() {
+                            override fun shouldOverrideUrlLoading(
+                                view: WebView,
+                                webRequest: WebResourceRequest,
+                            ): Boolean {
+                                if (LmsUrlPolicy.isAllowed(webRequest.url.toString())) return false
+                                onComplete(LmsRenderedPageResult.Failure("안전하지 않은 페이지가 차단되었습니다"))
+                                return true
+                            }
+
+                            override fun onPageFinished(view: WebView, url: String) {
+                                val uri = Uri.parse(url)
+                                val path = uri.path.orEmpty()
+                                if (isOfficialLmsCredentialPage(url) || path == MAIN_PATH) {
+                                    onComplete(LmsRenderedPageResult.SessionExpired)
+                                    return
+                                }
+                                if (path == "/lms/myLecture/doListView.dunet" && !submitted) {
+                                    val type = request.item.kind.officialContentType()
+                                    if (type == null) {
+                                        onComplete(LmsRenderedPageResult.Failure("이 글 형식은 아직 지원하지 않습니다"))
+                                        return
+                                    }
+                                    submitted = true
+                                    val script =
+                                        "(function(){if(typeof fnGoContent!=='function')return 'missing';" +
+                                            "fnGoContent(${JSONObject.quote(type)}," +
+                                            "${JSONObject.quote(request.course.id)}," +
+                                            "${JSONObject.quote(request.course.classNo)}," +
+                                            "${JSONObject.quote(request.item.id)},'S');return 'submitted';})()"
+                                    view.evaluateJavascript(script) { result ->
+                                        if (result == "\"missing\"") {
+                                            onComplete(LmsRenderedPageResult.Failure("공식 LMS 글 열기 기능을 찾지 못했습니다"))
+                                        }
+                                    }
+                                    return
+                                }
+                                if (submitted && path.startsWith("/lms/class/")) {
+                                    view.evaluateJavascript("document.documentElement.outerHTML") { value ->
+                                        val html = runCatching {
+                                            JSONObject("{\"value\":$value}").getString("value")
+                                        }.getOrNull()
+                                        if (html.isNullOrBlank()) {
+                                            onComplete(LmsRenderedPageResult.Failure("글 내용을 확인하지 못했습니다"))
+                                        } else {
+                                            CookieManager.getInstance().flush()
+                                            onComplete(LmsRenderedPageResult.Success(url, html))
+                                        }
+                                    }
+                                }
+                            }
+
+                            override fun onReceivedError(
+                                view: WebView,
+                                webRequest: WebResourceRequest,
+                                error: WebResourceError,
+                            ) {
+                                if (webRequest.isForMainFrame) {
+                                    onComplete(LmsRenderedPageResult.Failure(error.description.toString()))
+                                }
+                            }
+                        }
+                        loadUrl(LMS_NATIVE_DETAIL_DASHBOARD_URL)
+                    }
+                },
+                modifier = Modifier.size(1.dp),
+                onRelease = { webView ->
+                    webView.stopLoading()
+                    webView.destroy()
+                },
+            )
+        }
+    }
+}
+
+private fun LmsItemKind.officialContentType(): String? = when (this) {
+    LmsItemKind.NOTICE -> "1"
+    LmsItemKind.QUESTION -> "2"
+    LmsItemKind.ASSIGNMENT -> "3"
+    LmsItemKind.DISCUSSION -> "4"
+    LmsItemKind.TEAM_PROJECT -> "5"
+    LmsItemKind.QUIZ -> "6"
+    LmsItemKind.EXAM -> "7"
+    LmsItemKind.CONTENT -> "8"
+    LmsItemKind.MATERIAL -> "9"
+    LmsItemKind.OTHER -> null
+}
+
 private fun kindLabel(kind: LmsItemKind): String = when (kind) {
     LmsItemKind.NOTICE -> "공지"
     LmsItemKind.ASSIGNMENT -> "과제"
@@ -965,6 +1150,8 @@ internal const val OFFICIAL_LMS_LOGIN_URL =
 private const val LOGIN_URL = OFFICIAL_LMS_LOGIN_URL
 private const val LMS_DASHBOARD_URL =
     "https://lms.dima.ac.kr/lms/myLecture/doListView.dunet?to_do_type=all"
+private const val LMS_NATIVE_DETAIL_DASHBOARD_URL =
+    "https://lms.dima.ac.kr/lms/myLecture/doListView.dunet?mnid=201008840728"
 private val EXTRACT_RENDERED_COURSES_SCRIPT = """
     (function(){
       return Array.from(document.querySelectorAll("[href*='fncGoClassroom'],[onclick*='fncGoClassroom']"))

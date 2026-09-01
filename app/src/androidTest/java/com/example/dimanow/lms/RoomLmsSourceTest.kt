@@ -237,6 +237,109 @@ class RoomLmsSourceTest {
     }
 
     @Test
+    fun officialDashboardDetailUsesThePostFormDeclaredByTheLmsPage() = runTest {
+        val database = Room.inMemoryDatabaseBuilder(
+            ApplicationProvider.getApplicationContext(),
+            LmsCacheDatabase::class.java,
+        ).allowMainThreadQueries().build()
+        val transport = RecordingLmsTransport()
+        val source = RoomLmsSource(
+            database,
+            MutableLmsSessionController(LmsSessionState.ACTIVE),
+            transport,
+        )
+
+        assertEquals(LmsRefreshResult.Success, source.refresh(force = true))
+        val notice = source.snapshot.first { it.items.isNotEmpty() }.items.single()
+
+        val result = source.loadDetail(notice)
+        assertTrue(result.toString(), result is LmsDetailLoadResult.Fresh)
+        assertEquals(
+            "https://lms.dima.ac.kr/lms/class/boardItem/doViewBoardItem.dunet" to mapOf(
+                "mnid" to "201008945595",
+                "course_id" to "202620UN00025451401401D",
+                "class_no" to "D",
+                "boarditem_no" to "91",
+                "board_no" to "7",
+                "dataType" to "C",
+            ),
+            transport.detailPosts.single(),
+        )
+
+        database.close()
+    }
+
+    @Test
+    fun officialMainShellFallsBackToTheHiddenSessionEngineAndStillReturnsNativeDetail() = runTest {
+        val database = Room.inMemoryDatabaseBuilder(
+            ApplicationProvider.getApplicationContext(),
+            LmsCacheDatabase::class.java,
+        ).allowMainThreadQueries().build()
+        val transport = RecordingLmsTransport()
+        val renderedCalls = mutableListOf<Pair<LmsItem, LmsCourse>>()
+        val renderedPageLoader = object : LmsRenderedPageLoader {
+            override suspend fun load(item: LmsItem, course: LmsCourse): LmsRenderedPageResult {
+                renderedCalls += item to course
+                return LmsRenderedPageResult.Success(
+                    finalUrl = "https://lms.dima.ac.kr/lms/class/boardItem/doViewBoardItem.dunet",
+                    html = "<div id=\"board_contents\"><p>숨김 세션으로 받은 수업 안내</p></div>",
+                )
+            }
+        }
+        val source = RoomLmsSource(
+            database = database,
+            sessionController = MutableLmsSessionController(LmsSessionState.ACTIVE),
+            transport = transport,
+            renderedPageLoader = renderedPageLoader,
+        )
+
+        assertEquals(LmsRefreshResult.Success, source.refresh(force = true))
+        val notice = source.snapshot.first { it.items.isNotEmpty() }.items.single()
+        transport.returnLandingPageForDetail = true
+
+        val result = source.loadDetail(notice)
+
+        assertTrue(result.toString(), result is LmsDetailLoadResult.Fresh)
+        assertTrue((result as LmsDetailLoadResult.Fresh).detail.sanitizedHtml.contains("숨김 세션으로 받은 수업 안내"))
+        assertEquals(listOf(notice.id), renderedCalls.map { it.first.id })
+        database.close()
+    }
+
+    @Test
+    fun directHttpLoginShellFallsBackToTheAuthenticatedHiddenSessionEngine() = runTest {
+        val database = Room.inMemoryDatabaseBuilder(
+            ApplicationProvider.getApplicationContext(),
+            LmsCacheDatabase::class.java,
+        ).allowMainThreadQueries().build()
+        val transport = RecordingLmsTransport()
+        val session = MutableLmsSessionController(LmsSessionState.ACTIVE)
+        val renderedPageLoader = object : LmsRenderedPageLoader {
+            override suspend fun load(item: LmsItem, course: LmsCourse): LmsRenderedPageResult =
+                LmsRenderedPageResult.Success(
+                    finalUrl = "https://lms.dima.ac.kr/lms/class/boardItem/doViewBoardItem.dunet",
+                    html = "<div id=\"board_contents\"><p>웹 세션으로 받은 본문</p></div>",
+                )
+        }
+        val source = RoomLmsSource(
+            database = database,
+            sessionController = session,
+            transport = transport,
+            renderedPageLoader = renderedPageLoader,
+        )
+
+        assertEquals(LmsRefreshResult.Success, source.refresh(force = true))
+        val notice = source.snapshot.first { it.items.isNotEmpty() }.items.single()
+        transport.returnLoginPageForDetail = true
+
+        val result = source.loadDetail(notice)
+
+        assertTrue(result.toString(), result is LmsDetailLoadResult.Fresh)
+        assertTrue((result as LmsDetailLoadResult.Fresh).detail.sanitizedHtml.contains("웹 세션으로 받은 본문"))
+        assertEquals(LmsSessionState.ACTIVE, session.state.value)
+        database.close()
+    }
+
+    @Test
     fun laterRefreshMarksNewAndChangedRowsUntilTheUserOpensThem() = runTest {
         val database = Room.inMemoryDatabaseBuilder(
             ApplicationProvider.getApplicationContext(),
@@ -373,9 +476,11 @@ private class RecordingLmsTransport(
     var assignmentAttachmentName = "과제 양식.pdf"
     var failDetailRequests = false
     var returnLandingPageForDetail = false
+    var returnLoginPageForDetail = false
     var failIncompleteStatus = false
     val sessionFields = mutableListOf<Map<String, String>>()
     val termFields = mutableListOf<Map<String, String>>()
+    val detailPosts = mutableListOf<Pair<String, Map<String, String>>>()
     val requestedUrls = mutableListOf<String>()
 
     override suspend fun get(url: String, maxBytes: Long): LmsHttpResponse {
@@ -383,6 +488,15 @@ private class RecordingLmsTransport(
         if (url.contains("myLecture") && failDashboard) error("offline")
         if (url.contains("to_do_type=incomplete") && failIncompleteStatus) error("offline status")
         if (!url.contains("myLecture") && failDetailRequests) error("offline detail")
+        if (!url.contains("myLecture") && returnLoginPageForDetail) {
+            return LmsHttpResponse(
+                "https://lms.dima.ac.kr/login/doLoginPage.dunet",
+                200,
+                "text/html;charset=UTF-8",
+                emptyMap(),
+                "<form><input id=\"id\"><input id=\"pass\"></form>".toByteArray(),
+            )
+        }
         val html = if (!url.contains("myLecture") && returnLandingPageForDetail) {
             """
                 <html><body><header>나의 강의실 입장</header>
@@ -428,8 +542,11 @@ private class RecordingLmsTransport(
         if (url.contains("doChangeCourseYear")) {
             termFields += fields
             termApplied = true
-        } else {
+        } else if (url.contains("doSetSessionClassRoom")) {
             sessionFields += fields
+        } else {
+            detailPosts += url to fields
+            return get(url)
         }
         return LmsHttpResponse(url, 200, "application/json", emptyMap(), "{}".toByteArray())
     }

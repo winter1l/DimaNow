@@ -1,6 +1,7 @@
 package com.example.dimanow.lms
 
 import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
@@ -10,10 +11,51 @@ import com.example.dimanow.theme.DIMANowTheme
 import java.time.Instant
 import org.junit.Rule
 import org.junit.Test
+import org.junit.Assert.assertEquals
 
 class LmsHistoryScreenTest {
     @get:Rule
     val composeRule = createComposeRule()
+
+    @Test
+    fun tappingAnItemUsesThePublicOpenAction() {
+        var openedId: String? = null
+        composeRule.setContent {
+            DIMANowTheme {
+                LmsItemsScreen(
+                    snapshot = LmsSnapshot(
+                        courses = listOf(LmsCourse("audio", "음향기초실습")),
+                        items = listOf(
+                            LmsItem(
+                                id = "assignment-301",
+                                courseId = "audio",
+                                courseName = "음향기초실습",
+                                kind = LmsItemKind.ASSIGNMENT,
+                                title = "프로툴 사전진단",
+                                dueAt = Instant.parse("2026-09-01T14:59:00Z"),
+                                detailUrl = "https://lms.dima.ac.kr/item/assignment-301",
+                            ),
+                        ),
+                        syncState = LmsSyncState.READY,
+                    ),
+                    sessionState = LmsSessionState.ACTIVE,
+                    selectedCourse = null,
+                    selectedKind = null,
+                    selectedRead = null,
+                    onCourseChange = {},
+                    onKindChange = {},
+                    onReadChange = {},
+                    onRefresh = {},
+                    onOpenItem = { openedId = it.id },
+                    now = Instant.parse("2026-09-01T03:00:00Z"),
+                )
+            }
+        }
+
+        composeRule.onNode(hasText("프로툴 사전진단") and hasClickAction()).performClick()
+
+        assertEquals("assignment-301", openedId)
+    }
 
     @Test
     fun allReadFiltersAreVisibleAndADeepHistoryItemCanBeReached() {

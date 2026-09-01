@@ -54,3 +54,9 @@ The client now retries only 429/5xx up to three attempts. The exact 503-then-suc
 Current state: LMS items now open a native Compose detail body with Android document-save attachment actions. The authenticated LMS landing shell is rejected instead of being shown or cached as an article. Course-session POST redirects forward response cookies, and the official portal WebView is retained only as an invisible SSO engine behind native login progress.
 
 Verification: full app JVM, data-pipeline, Android-test compilation, lint, optimized assembly, and four focused API 36 tests on physical `R3CW203NFSL` pass. Optimized v1.5 (6) SHA-256 is `5CA13B9194D44FAD8AB2D53A90C8E9A05FC6BA7726F7B03C1FDF6698BC6E244C`; it replace-installed, launched in 485 ms, remained resumed, and had no immediate FATAL/ANR. Final authenticated visual acceptance is pending one fresh login because an earlier Gradle-connected test reset private app data.
+
+# Update - 2026-09-01 (D-050 LMS single-session recovery)
+
+Current state: the live `로그인이 필요합니다` loop is fixed. If direct HTTP receives a login or landing shell but the app-owned WebView session is authenticated, the official LMS form navigation runs invisibly and only sanitized HTML reaches the native detail screen. Cards now expose Android's standard click action without losing bounce motion, and the saved password field reports a password keyboard type.
+
+Verification: Galaxy `R3CW203NFSL` opened `프로툴 사전진단` as native selectable content with no visible WebView; PID 13928 stayed alive and no FATAL/ANR was captured. Focused physical instrumentation passed 24/24. App JVM, pipeline, Android-test compilation, lint, and optimized assembly are green. Do not open a second LMS browser session during app acceptance because the LMS invalidates the previous session.

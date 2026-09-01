@@ -26,6 +26,8 @@ data class ParsedLmsBoardPage(
     val nextPages: List<LmsBoardPageRequest>,
 )
 
+internal class InvalidLmsDetailException(message: String) : IllegalArgumentException(message)
+
 class LmsHtmlParser(private val zoneId: ZoneId = ZoneId.of("Asia/Seoul")) {
     fun parseRenderedCourses(value: String): List<LmsCourse> = runCatching {
         Json.parseToJsonElement(value).jsonArray.mapNotNull { element ->
@@ -174,8 +176,7 @@ class LmsHtmlParser(private val zoneId: ZoneId = ZoneId.of("Asia/Seoul")) {
         val articleBody = document.selectFirst("#board_contents, .board_contents, .view_content, .report-content")
         val body = articleBody
             ?: matchingRow
-            ?: document.selectFirst(".sub_content, main, [role=main]")
-            ?: document.body()
+            ?: throw InvalidLmsDetailException("게시글 본문을 찾지 못했습니다")
         body.select("script, style, iframe, object, embed, form").remove()
         body.allElements.forEach { element ->
             element.attributes().asList()

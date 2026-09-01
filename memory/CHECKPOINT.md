@@ -42,3 +42,9 @@ Current state: v1.5 (6) implements the approved LMS Today/All experience. The of
 Verification: app JVM 130/130; pipeline 33 with one gated skip; Android-test compilation, lint, debug and optimized assembly green. API 36 instrumentation finished 89 cases (86 pass, three intentional skips). `dist/DIMA-Now-v1.5-optimized.apk` is 5,171,257 bytes, SHA-256 `565806F95ECE294072AE7F5D5F101BBAE7659A93924A6E6B6B00740D5FDAA94A`. It replace-installed on `emulator-5554`; MainActivity stayed resumed as PID 18648 with no captured FATAL/ANR.
 
 Pending: no physical Galaxy was connected. After it reconnects, verify its exact serial, `adb install -r` this v1.5 artifact, open the saved LMS account, refresh once, and visually verify Today/All, completion badges, one internal detail, and one attachment download. Do not export private LMS content. GitHub Release publication was not part of this implementation.
+
+# Update - 2026-09-01 (D-048 dormitory meal transient retry)
+
+Physical install is complete: optimized v1.5 (6) is on `R3CW203NFSL`, cold-launched with PID 9460 and no immediate FATAL/ANR. The 2026-09-01 dormitory upload reached GitHub but Gemini validation returned HTTP 503, producing submission `ERROR` in Actions run `33488270773`.
+
+The client now retries only 429/5xx up to three attempts. The exact 503-then-success regression test, full pipeline suite, and three Worker tests pass. Next action is to push the fixed `main`, rerun `33488270773`, and verify the submission status plus public `dorm_meal` manifest. Do not publish a GitHub Release or create a branch/worktree unless explicitly requested or strictly required.

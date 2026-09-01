@@ -10,6 +10,41 @@ import org.junit.Test
 
 class GeminiDormitoryMealClientTest {
     @Test
+    fun `일시적인 503 이후 같은 요청을 재시도해 검증을 완료한다`() {
+        var calls = 0
+        val server = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0).apply {
+            createContext("/v1beta/models/gemini-3.5-flash-lite:generateContent") { exchange ->
+                calls++
+                exchange.requestBody.readBytes()
+                if (calls == 1) {
+                    val response = """{"error":{"code":503,"message":"The service is temporarily unavailable."}}""".toByteArray()
+                    exchange.sendResponseHeaders(503, response.size.toLong())
+                    exchange.responseBody.use { it.write(response) }
+                } else {
+                    val response = """
+                        {"candidates":[{"content":{"parts":[{"text":"{\"동아방송예술대 기숙사 식단이 맞는가?\":true,\"식단표가 전부 보이는가?\":true}"}]}}]}
+                    """.trimIndent().toByteArray()
+                    exchange.sendResponseHeaders(200, response.size.toLong())
+                    exchange.responseBody.use { it.write(response) }
+                }
+            }
+            start()
+        }
+
+        try {
+            val result = GeminiDormitoryMealClient(
+                apiKey = "test-secret",
+                endpointRoot = "http://127.0.0.1:${server.address.port}",
+            ).validate(byteArrayOf(1, 2, 3), "image/jpeg")
+
+            assertEquals(2, calls)
+            assertTrue(result.accepted)
+        } finally {
+            server.stop(0)
+        }
+    }
+
+    @Test
     fun `기숙사 식단 검증은 high 추론과 승인된 한국어 JSON 계약을 사용한다`() {
         var receivedKey: String? = null
         var receivedBody = ""

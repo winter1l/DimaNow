@@ -56,6 +56,20 @@ class GeminiDormitoryMealClient(
         require(imageBytes.isNotEmpty()) { "식단 이미지가 비어 있습니다." }
         require(mimeType.startsWith("image/")) { "식단 파일이 이미지가 아닙니다." }
         val requestBytes = body.toString().toByteArray()
+        var lastTransientFailure: GeminiHttpException? = null
+        repeat(MAX_ATTEMPTS) { attempt ->
+            try {
+                return requestOnce(requestBytes)
+            } catch (error: GeminiHttpException) {
+                if (!error.retryable || attempt == MAX_ATTEMPTS - 1) throw error
+                lastTransientFailure = error
+                Thread.sleep(RETRY_DELAYS_MILLIS[attempt])
+            }
+        }
+        throw checkNotNull(lastTransientFailure)
+    }
+
+    private fun requestOnce(requestBytes: ByteArray): String {
         val connection = URL("$endpointRoot/v1beta/models/$MODEL:generateContent").openConnection() as HttpURLConnection
         try {
             connection.requestMethod = "POST"
@@ -68,7 +82,7 @@ class GeminiDormitoryMealClient(
             connection.outputStream.use { it.write(requestBytes) }
             if (connection.responseCode !in 200..299) {
                 val detail = connection.errorStream?.bufferedReader()?.readText().orEmpty().take(800)
-                error("Gemini API 응답 ${connection.responseCode}: $detail")
+                throw GeminiHttpException(connection.responseCode, detail)
             }
             val envelope = json.parseToJsonElement(connection.inputStream.bufferedReader().readText()) as? JsonObject
                 ?: error("Gemini API JSON 응답이 아닙니다.")
@@ -128,6 +142,8 @@ class GeminiDormitoryMealClient(
 
     private companion object {
         const val MODEL = "gemini-3.5-flash-lite"
+        const val MAX_ATTEMPTS = 3
+        val RETRY_DELAYS_MILLIS = longArrayOf(1_000L, 4_000L)
         const val DORMITORY_KEY = "동아방송예술대 기숙사 식단이 맞는가?"
         const val COMPLETE_KEY = "식단표가 전부 보이는가?"
         const val REASON_KEY = "모두 true가 아닌 경우 사용자에게 알려줄 간단 사유"
@@ -198,5 +214,12 @@ class GeminiDormitoryMealClient(
                 })
             })
         }
+    }
+
+    private class GeminiHttpException(
+        private val statusCode: Int,
+        detail: String,
+    ) : IllegalStateException("Gemini API 응답 $statusCode: $detail") {
+        val retryable: Boolean get() = statusCode == 429 || statusCode in 500..599
     }
 }

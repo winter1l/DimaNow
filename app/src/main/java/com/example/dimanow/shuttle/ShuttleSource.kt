@@ -34,6 +34,7 @@ data class ShuttleData(
     val noticeUrl: String?,
     val serverPublishedAt: Instant? = null,
     val serverState: String? = null,
+    val serverRevision: Long? = null,
 )
 
 sealed interface ShuttleRefreshResult {
@@ -59,7 +60,9 @@ class StaticShuttleSource(
     private val json = Json { ignoreUnknownKeys = false }
 
     override val data: Flow<ShuttleData> = combine(
-        dao.observeShuttleDepartures().map { rows -> rows.map { it.toDomain() } }.distinctUntilChanged(),
+        dao.observeShuttleDepartures()
+            .map { rows -> FieldShuttleOverrides.apply(rows.map { it.toDomain() }) }
+            .distinctUntilChanged(),
         dao.observeSourceStatus(SOURCE_KEY),
         dao.observeSyncState(SOURCE_KEY),
     ) { departures, status, sync ->
@@ -72,6 +75,7 @@ class StaticShuttleSource(
             status?.noticeUrl,
             sync?.serverPublishedEpochMillis?.let(Instant::ofEpochMilli),
             sync?.serverState,
+            sync?.revision,
         )
     }
 

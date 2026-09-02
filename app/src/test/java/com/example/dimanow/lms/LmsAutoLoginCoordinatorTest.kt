@@ -38,6 +38,19 @@ class LmsAutoLoginCoordinatorTest {
     }
 
     @Test
+    fun sessionConflictDoesNotMarkStoredCredentialsForReview() = runTest {
+        val store = RecordingCredentialStore(SavedLmsCredentials("student", "secret"))
+        val session = MutableLmsSessionController()
+        val driver = RecordingLoginDriver(LmsLoginResult.SessionConflict)
+        val coordinator = LmsAutoLoginCoordinator(store, session, driver, fixedClock())
+
+        coordinator.ensureActive(force = false)
+
+        assertEquals(1, driver.attempts)
+        assertEquals(LmsSessionState.ERROR, session.state.value)
+    }
+
+    @Test
     fun networkFailureSuppressesAutomaticRetryForFifteenMinutesButManualRetryBypassesIt() = runTest {
         val store = RecordingCredentialStore(SavedLmsCredentials("student", "secret"))
         val session = MutableLmsSessionController()

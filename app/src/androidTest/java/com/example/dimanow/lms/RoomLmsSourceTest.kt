@@ -211,6 +211,27 @@ class RoomLmsSourceTest {
     }
 
     @Test
+    fun portalLoginRedirectExpiresSessionWithoutReplacingLastGoodItems() = runTest {
+        val database = Room.inMemoryDatabaseBuilder(
+            ApplicationProvider.getApplicationContext(),
+            LmsCacheDatabase::class.java,
+        ).allowMainThreadQueries().build()
+        val transport = RecordingLmsTransport()
+        val session = MutableLmsSessionController(LmsSessionState.ACTIVE)
+        val source = RoomLmsSource(database, session, transport)
+
+        assertEquals(LmsRefreshResult.Success, source.refresh(force = true))
+        assertEquals("1주차 안내", source.snapshot.first { it.items.isNotEmpty() }.items.single().title)
+
+        transport.returnPortalLoginForDashboard = true
+        assertEquals(LmsRefreshResult.SessionExpired, source.refresh(force = true))
+        assertEquals("1주차 안내", source.snapshot.first().items.single().title)
+        assertEquals(LmsSessionState.EXPIRED, session.state.value)
+
+        database.close()
+    }
+
+    @Test
     fun openingAnItemMarksItReadAndRefreshKeepsThatState() = runTest {
         val database = Room.inMemoryDatabaseBuilder(
             ApplicationProvider.getApplicationContext(),
@@ -306,6 +327,38 @@ class RoomLmsSourceTest {
     }
 
     @Test
+    fun boardListResponseFallsBackToOfficialScreenWithoutMarkingTheNoticeRead() = runTest {
+        val database = Room.inMemoryDatabaseBuilder(
+            ApplicationProvider.getApplicationContext(),
+            LmsCacheDatabase::class.java,
+        ).allowMainThreadQueries().build()
+        val transport = RecordingLmsTransport()
+        val renderedCalls = mutableListOf<String>()
+        val source = RoomLmsSource(
+            database = database,
+            sessionController = MutableLmsSessionController(LmsSessionState.ACTIVE),
+            transport = transport,
+            renderedPageLoader = object : LmsRenderedPageLoader {
+                override suspend fun load(item: LmsItem, course: LmsCourse): LmsRenderedPageResult {
+                    renderedCalls += item.id
+                    return LmsRenderedPageResult.OfficialCoursePage
+                }
+            },
+        )
+
+        assertEquals(LmsRefreshResult.Success, source.refresh(force = true))
+        val notice = source.snapshot.first { it.items.isNotEmpty() }.items.single()
+        assertEquals(false, notice.isRead)
+        transport.returnBoardListForDetail = true
+
+        assertEquals(LmsDetailLoadResult.OfficialCoursePage, source.loadDetail(notice))
+        assertEquals(listOf("91"), renderedCalls)
+        assertEquals(false, source.snapshot.first().items.single { it.id == "91" }.isRead)
+
+        database.close()
+    }
+
+    @Test
     fun videoContentReturnsTheOfficialCoursePageInsteadOfPretendingItIsANativeArticle() = runTest {
         val database = Room.inMemoryDatabaseBuilder(
             ApplicationProvider.getApplicationContext(),
@@ -328,6 +381,75 @@ class RoomLmsSourceTest {
         assertEquals(
             LmsDetailLoadResult.OfficialCoursePage,
             source.loadDetail(content),
+        )
+
+        database.close()
+    }
+
+    @Test
+    fun unsupportedLearningKindsUseTheOfficialSameSessionScreenInsteadOfTheNativeParser() = runTest {
+        val database = Room.inMemoryDatabaseBuilder(
+            ApplicationProvider.getApplicationContext(),
+            LmsCacheDatabase::class.java,
+        ).allowMainThreadQueries().build()
+        val transport = RecordingLmsTransport()
+        val source = RoomLmsSource(
+            database,
+            MutableLmsSessionController(LmsSessionState.ACTIVE),
+            transport,
+        )
+
+        listOf(
+            LmsItemKind.QUESTION,
+            LmsItemKind.DISCUSSION,
+            LmsItemKind.TEAM_PROJECT,
+            LmsItemKind.QUIZ,
+            LmsItemKind.EXAM,
+            LmsItemKind.OTHER,
+        ).forEachIndexed { index, kind ->
+            val item = LmsItem(
+                id = "unsupported-$index",
+                courseId = "202620UN00025451401401D",
+                courseName = "음향기초실습(D반)",
+                kind = kind,
+                title = "$kind 항목",
+                detailUrl = "https://lms.dima.ac.kr/lms/class/official/$index",
+            )
+
+            assertEquals(LmsDetailLoadResult.OfficialCoursePage, source.loadDetail(item))
+        }
+        assertEquals(emptyList<String>(), transport.requestedUrls)
+        assertEquals(emptyList<Pair<String, Map<String, String>>>(), transport.detailPosts)
+
+        database.close()
+    }
+
+    @Test
+    fun contentStaysUnreadUntilThePublicPlayerLaunchSeamMarksItOpened() = runTest {
+        val database = Room.inMemoryDatabaseBuilder(
+            ApplicationProvider.getApplicationContext(),
+            LmsCacheDatabase::class.java,
+        ).allowMainThreadQueries().build()
+        val source = RoomLmsSource(
+            database,
+            MutableLmsSessionController(LmsSessionState.ACTIVE),
+            RecordingLmsTransport(allLearningKinds = true),
+        )
+
+        assertEquals(LmsRefreshResult.Success, source.refresh(force = true))
+        val content = source.snapshot.first().items.single { it.kind == LmsItemKind.CONTENT }
+        assertEquals(false, content.isRead)
+
+        assertEquals(LmsDetailLoadResult.OfficialCoursePage, source.loadDetail(content))
+        assertEquals(
+            false,
+            source.snapshot.first().items.single { it.id == content.id }.isRead,
+        )
+
+        source.markItemOpened(content)
+        assertEquals(
+            true,
+            source.snapshot.first().items.single { it.id == content.id }.isRead,
         )
 
         database.close()
@@ -398,16 +520,18 @@ class RoomLmsSourceTest {
     }
 
     @Test
-    fun listBackedItemOpensItsMatchingArticleInsideTheSourceAndKeepsAttachments() = runTest {
+    fun assignmentUsesItsExactOfficialReportFormAndKeepsNativeMetadataAndAttachments() = runTest {
         val database = Room.inMemoryDatabaseBuilder(
             ApplicationProvider.getApplicationContext(),
             LmsCacheDatabase::class.java,
         ).allowMainThreadQueries().build()
         val transport = RecordingLmsTransport(allLearningKinds = true)
+        val renderedCalls = mutableListOf<String>()
         val source = RoomLmsSource(
             database,
             MutableLmsSessionController(LmsSessionState.ACTIVE),
             transport,
+            renderedPageLoader = transport.assignmentRenderedPageLoader(renderedCalls),
         )
 
         assertEquals(LmsRefreshResult.Success, source.refresh(force = true))
@@ -419,7 +543,9 @@ class RoomLmsSourceTest {
 
         assertTrue(detail.sanitizedHtml.contains("제출 안내"))
         assertEquals("과제 양식.pdf", detail.attachments.single().fileName)
-        assertTrue(transport.requestedUrls.any { it.contains("doViewReportStudent") })
+        assertEquals("10점", detail.metadata.maxScore)
+        assertEquals(listOf(assignment.id), renderedCalls)
+        assertTrue(transport.detailPosts.any { (url, _) -> url.contains("doListView") })
         assertEquals(
             mapOf("course_id" to "202620UN00025451401401D", "class_no" to "D"),
             transport.sessionFields.single(),
@@ -439,6 +565,7 @@ class RoomLmsSourceTest {
             database,
             MutableLmsSessionController(LmsSessionState.ACTIVE),
             transport,
+            renderedPageLoader = transport.assignmentRenderedPageLoader(),
         )
         assertEquals(LmsRefreshResult.Success, source.refresh(force = true))
         val assignment = source.snapshot.first().items.single { it.kind == LmsItemKind.ASSIGNMENT }
@@ -470,6 +597,7 @@ class RoomLmsSourceTest {
             database,
             MutableLmsSessionController(LmsSessionState.ACTIVE),
             transport,
+            renderedPageLoader = transport.assignmentRenderedPageLoader(),
         )
         assertEquals(LmsRefreshResult.Success, source.refresh(force = true))
         val assignment = source.snapshot.first().items.single { it.kind == LmsItemKind.ASSIGNMENT }
@@ -504,16 +632,50 @@ private class RecordingLmsTransport(
     var assignmentAttachmentName = "과제 양식.pdf"
     var failDetailRequests = false
     var returnLandingPageForDetail = false
+    var returnBoardListForDetail = false
     var returnLoginPageForDetail = false
+    var returnPortalLoginForDashboard = false
     var failIncompleteStatus = false
     val sessionFields = mutableListOf<Map<String, String>>()
     val termFields = mutableListOf<Map<String, String>>()
     val detailPosts = mutableListOf<Pair<String, Map<String, String>>>()
     val requestedUrls = mutableListOf<String>()
 
+    fun assignmentRenderedPageLoader(
+        renderedCalls: MutableList<String> = mutableListOf(),
+    ): LmsRenderedPageLoader = object : LmsRenderedPageLoader {
+        override suspend fun load(item: LmsItem, course: LmsCourse): LmsRenderedPageResult {
+            renderedCalls += item.id
+            if (returnLandingPageForDetail) {
+                return LmsRenderedPageResult.Success(
+                    finalUrl = "https://lms.dima.ac.kr/lms/class/report/stud/doListView.dunet",
+                    html = """
+                        <html><body><header>나의 강의실 입장</header>
+                          <nav><a href="/main/MainView.dunet">마이페이지</a></nav>
+                          <main><p>데이터 로딩 중입니다.</p></main>
+                        </body></html>
+                    """.trimIndent(),
+                )
+            }
+            return LmsRenderedPageResult.Success(
+                finalUrl = "https://lms.dima.ac.kr/lms/class/report/stud/doFormReport.dunet",
+                html = assignmentDetailHtml(),
+            )
+        }
+    }
+
     override suspend fun get(url: String, maxBytes: Long): LmsHttpResponse {
         requestedUrls += url
         if (url.contains("myLecture") && failDashboard) error("offline")
+        if (url.contains("myLecture") && returnPortalLoginForDashboard) {
+            return LmsHttpResponse(
+                "https://portal.dima.ac.kr/?r=https://lms.dima.ac.kr/sso/index.jsp",
+                200,
+                "text/html;charset=UTF-8",
+                emptyMap(),
+                "<form><input id=\"txtID\"><input id=\"txtPwd\" type=\"password\"></form>".toByteArray(),
+            )
+        }
         if (url.contains("to_do_type=incomplete") && failIncompleteStatus) error("offline status")
         if (!url.contains("myLecture") && failDetailRequests) error("offline detail")
         if (!url.contains("myLecture") && returnLoginPageForDetail) {
@@ -532,6 +694,14 @@ private class RecordingLmsTransport(
                   <main><p>데이터 로딩 중입니다.</p></main>
                 </body></html>
             """.trimIndent()
+        } else if (!url.contains("myLecture") && returnBoardListForDetail) {
+            """
+                <table class="table_list_basic"><tbody><tr>
+                  <td>1주차</td>
+                  <td><a href="/lms/class/boardItem/doViewBoardItem.dunet?boarditem_no=91">1주차 안내</a></td>
+                  <td>비공개</td><td>2026.08.30</td>
+                </tr></tbody></table>
+            """.trimIndent()
         } else if (url.contains("to_do_type=complete")) {
             statusHtml("1", "91", "1주차 안내")
         } else if (url.contains("to_do_type=incomplete")) {
@@ -539,10 +709,8 @@ private class RecordingLmsTransport(
         } else if (url.contains("myLecture")) {
             dashboardRequests += 1
             dashboardHtml(includeCourse = !rawDashboardOmitsCourses && (!requiresTermSelection || termApplied))
-        } else if (url.contains("report/stud/doListView")) {
-            """<table><tr><td><a href="/lms/class/report/stud/doViewReportStudent.dunet?report_no=301">프로툴 사전진단</a></td></tr></table>"""
-        } else if (url.contains("doViewReportStudent")) {
-            """<div class="report-content"><p>제출 안내</p></div><a href="javascript:doDownloadFile('501','7','301','N')">$assignmentAttachmentName</a>"""
+        } else if (url.contains("doFormReport")) {
+            assignmentDetailHtml()
         } else if (url.contains("boardItem/doViewBoardItem")) {
             """<div id="board_contents"><p>수업 안내 본문</p></div>"""
         } else "<main class=\"sub_content\"><p>학습 상세</p></main>"
@@ -554,6 +722,24 @@ private class RecordingLmsTransport(
             html.toByteArray(Charset.forName("MS949")),
         )
     }
+
+    private fun assignmentDetailHtml(): String = """
+        <input type="hidden" name="report_no" value="301">
+        <table class="table_view_basic"><tbody>
+          <tr><th>과제내용</th><td class="ta_l"><p>제출 안내</p></td></tr>
+          <tr><th>제출기간</th><td>2026.09.01 09:00:00 ~ 2026.09.08 15:59:00</td></tr>
+          <tr><th>만점</th><td>10점</td></tr>
+          <tr><th>첨부파일</th><td><a href="javascript:fncDownAttachFile('501')">$assignmentAttachmentName</a></td></tr>
+        </tbody></table>
+    """.trimIndent()
+
+    override suspend fun downloadAttachment(
+        request: LmsAttachmentRequest,
+        destination: File,
+        suggestedFileName: String,
+        maxBytes: Long,
+        onProgress: (Long, Long?) -> Unit,
+    ): LmsAttachmentDownloadResult = LmsAttachmentDownloadResult.Failure("not used in this source fixture")
 
     override suspend fun postForm(url: String, fields: Map<String, String>, maxBytes: Long): LmsHttpResponse {
         if (url.contains("myLecture")) {
@@ -597,8 +783,13 @@ private class RecordingLmsTransport(
     } else {
         """
             ${if (includeStatusLinks) """
-              <nav><a href="/lms/myLecture/doListView.dunet?to_do_type=complete">완료한 학습</a>
-              <a href="/lms/myLecture/doListView.dunet?to_do_type=incomplete">미완료한 학습</a></nav>
+              <nav><a href="javascript:changeToDoList('complete')">완료한 학습</a>
+              <a href="javascript:changeToDoList('incomplete')">미완료한 학습</a></nav>
+              <script>
+                function changeToDoList(type) {
+                  location.href = '/lms/myLecture/doListView.dunet?to_do_type=' + type;
+                }
+              </script>
             """.trimIndent() else ""}
             <li class="box"><div class="top offline">
               <a href="javascript:fncGoClassroom('202620UN00025451401401D','D','3');">
@@ -629,10 +820,4 @@ private class RecordingLmsTransport(
         </ul></div></div>
     """.trimIndent()
 
-    override suspend fun download(
-        url: String,
-        destination: File,
-        maxBytes: Long,
-        onProgress: (Long, Long?) -> Unit,
-    ): LmsHttpResponse = error("not used")
 }

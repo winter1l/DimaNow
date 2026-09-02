@@ -4,6 +4,7 @@ import android.content.Intent
 import android.graphics.Bitmap
 import android.net.Uri
 import android.os.Build
+import android.provider.DocumentsContract
 import android.util.Log
 import android.view.View
 import android.view.ViewGroup
@@ -13,6 +14,7 @@ import android.webkit.CookieManager
 import android.webkit.JsResult
 import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
+import android.webkit.WebResourceResponse
 import android.webkit.WebView
 import android.webkit.WebChromeClient
 import android.webkit.WebViewClient
@@ -43,6 +45,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.Button
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ElevatedCard
@@ -69,6 +72,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
@@ -92,6 +96,7 @@ import com.example.dimanow.ui.motion.expressiveBounceClick
 import com.example.dimanow.ui.motion.pulseBreath
 import com.example.dimanow.ui.motion.staggeredEntrance
 import java.io.File
+import java.io.ByteArrayInputStream
 import java.time.Clock
 import java.time.Instant
 import java.time.ZoneId
@@ -111,6 +116,11 @@ private data class LmsPresentedDetail(
 private data class LmsOfficialCoursePage(
     val item: LmsItem,
     val course: LmsCourse,
+)
+
+private data class LmsPendingDocument(
+    val cache: File,
+    val expectedBytes: Long,
 )
 
 @Composable
@@ -139,8 +149,10 @@ fun LmsRoute(
     var selectedRead by remember { mutableStateOf<Boolean?>(null) }
     var selectedDetail by remember { mutableStateOf<LmsPresentedDetail?>(null) }
     var officialCoursePage by remember { mutableStateOf<LmsOfficialCoursePage?>(null) }
+    var pendingOfficialCoursePage by remember { mutableStateOf<LmsOfficialCoursePage?>(null) }
     BackHandler(enabled = selectedDetail != null) { selectedDetail = null }
     BackHandler(enabled = officialCoursePage != null) { officialCoursePage = null }
+    BackHandler(enabled = pendingOfficialCoursePage != null) { pendingOfficialCoursePage = null }
     BackHandler(enabled = loginRequest != null) { loginBridge.cancel() }
     BackHandler(enabled = renderedPageRequest != null) { renderedPageBridge?.cancel() }
     // 로그인 WebView·글 상세가 떠 있는 동안 상위 셸이 하단 내비를 숨기게 알린다 (D-044)
@@ -212,6 +224,11 @@ fun LmsRoute(
             officialCoursePage != null -> LmsOfficialCourseWebView(
                 page = requireNotNull(officialCoursePage),
                 onBack = { officialCoursePage = null },
+                onLaunched = {
+                    officialCoursePage?.item?.let { item ->
+                        scope.launch { source.markItemOpened(item) }
+                    }
+                },
                 onSessionExpired = {
                     officialCoursePage = null
                     scope.launch {
@@ -289,6 +306,9 @@ fun LmsRoute(
                                 if (course == null) {
                                     snackbar.showSnackbar("공식 LMS 수업을 찾지 못했습니다")
                                     false
+                                } else if (item.kind == LmsItemKind.CONTENT) {
+                                    pendingOfficialCoursePage = LmsOfficialCoursePage(item, course)
+                                    true
                                 } else {
                                     officialCoursePage = LmsOfficialCoursePage(item, course)
                                     true
@@ -319,6 +339,23 @@ fun LmsRoute(
             )
         }
         SnackbarHost(snackbar, Modifier.align(Alignment.BottomCenter))
+        pendingOfficialCoursePage?.let { pendingPage ->
+            AlertDialog(
+                onDismissRequest = { pendingOfficialCoursePage = null },
+                title = { Text("학습 시작을 하실건가요?") },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            pendingOfficialCoursePage = null
+                            officialCoursePage = pendingPage
+                        },
+                    ) { Text("시작") }
+                },
+                dismissButton = {
+                    TextButton(onClick = { pendingOfficialCoursePage = null }) { Text("취소") }
+                },
+            )
+        }
     }
 }
 
@@ -326,13 +363,19 @@ fun LmsRoute(
 private fun LmsOfficialCourseWebView(
     page: LmsOfficialCoursePage,
     onBack: () -> Unit,
+    onLaunched: () -> Unit,
     onSessionExpired: () -> Unit,
     onMessage: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
     var ready by remember(page) { mutableStateOf(false) }
-    Column(modifier.statusBarsPadding().navigationBarsPadding()) {
+    Column(
+        modifier
+            .testTag("lms_official_course_screen")
+            .statusBarsPadding()
+            .navigationBarsPadding(),
+    ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -362,8 +405,41 @@ private fun LmsOfficialCourseWebView(
                         settings.allowFileAccess = false
                         settings.allowContentAccess = false
                         settings.mixedContentMode = android.webkit.WebSettings.MIXED_CONTENT_NEVER_ALLOW
+                        settings.javaScriptCanOpenWindowsAutomatically = true
+                        settings.setSupportMultipleWindows(false)
                         var submitted = false
+                        var learningLaunchState = LmsLearningLaunchState.LOCATING
+                        var launchReported = false
+                        var launchWatchdogScheduled = false
+                        var officialFallbackReported = false
+                        var selectionAttempts = 0
+                        var learningActionResolutionInFlight = false
+                        webChromeClient = object : WebChromeClient() {
+                            override fun onJsConfirm(
+                                view: WebView,
+                                url: String,
+                                message: String,
+                                result: JsResult,
+                            ): Boolean {
+                                if (!shouldConfirmOfficialLearningDialog(url, message)) {
+                                    return super.onJsConfirm(view, url, message, result)
+                                }
+                                result.confirm()
+                                return true
+                            }
+                        }
                         webViewClient = object : WebViewClient() {
+                            override fun shouldInterceptRequest(
+                                view: WebView,
+                                webRequest: WebResourceRequest,
+                            ): WebResourceResponse? = if (
+                                shouldBlockLmsWebResource(webRequest.url.toString(), loginFlow = false)
+                            ) {
+                                blockedLmsWebResourceResponse()
+                            } else {
+                                super.shouldInterceptRequest(view, webRequest)
+                            }
+
                             override fun shouldOverrideUrlLoading(
                                 view: WebView,
                                 webRequest: WebResourceRequest,
@@ -375,32 +451,193 @@ private fun LmsOfficialCourseWebView(
 
                             override fun onPageFinished(view: WebView, url: String) {
                                 val path = Uri.parse(url).path.orEmpty()
+                                val isVideo = page.item.kind == LmsItemKind.CONTENT
+                                fun reportOpened() {
+                                    if (!launchReported) {
+                                        launchReported = true
+                                        onLaunched()
+                                    }
+                                }
+                                fun reportOfficialFallbackDisplayed() {
+                                    val previous = learningLaunchState
+                                    learningLaunchState = reduceOfficialLearningLaunch(
+                                        previous,
+                                        LmsLearningLaunchEvent.OFFICIAL_FALLBACK_DISPLAYED,
+                                    )
+                                    ready = true
+                                    if (didConfirmedLearningBecomeOpened(previous, learningLaunchState)) {
+                                        reportOpened()
+                                    }
+                                }
+                                fun showOfficialFallback(message: String) {
+                                    val currentPath = Uri.parse(view.url.orEmpty()).path.orEmpty()
+                                    if (currentPath == LMS_COURSE_SCHEDULE_PATH) {
+                                        reportOfficialFallbackDisplayed()
+                                        if (!officialFallbackReported) {
+                                            officialFallbackReported = true
+                                            onMessage(message)
+                                        }
+                                    } else {
+                                        view.loadUrl(LMS_COURSE_SCHEDULE_URL)
+                                    }
+                                }
                                 if (isOfficialLmsCredentialPage(url) || path == MAIN_PATH) {
                                     onSessionExpired()
                                     return
                                 }
                                 if (path == "/lms/myLecture/doListView.dunet" && !submitted) {
                                     submitted = true
-                                    val script =
-                                        "(function(){if(typeof fnGoContent!=='function')return 'missing';" +
-                                            "fnGoContent('8',${JSONObject.quote(page.course.id)}," +
-                                            "${JSONObject.quote(page.course.classNo)}," +
-                                            "${JSONObject.quote(page.course.id + "_V")},'S');return 'submitted';})()"
+                                    val contentType = page.item.kind.officialContentType()
+                                    if (contentType == null) {
+                                        if (LmsUrlPolicy.isAllowed(page.item.detailUrl)) {
+                                            view.loadUrl(page.item.detailUrl)
+                                        } else {
+                                            ready = true
+                                            onMessage("공식 LMS 항목을 열 수 없습니다")
+                                        }
+                                        return
+                                    }
+                                    val officialItemId = if (isVideo) page.course.id + "_V" else page.item.id
+                                    val script = "(function(){if(typeof fnGoContent!=='function')return 'missing';" +
+                                        "fnGoContent(${JSONObject.quote(contentType)},${JSONObject.quote(page.course.id)}," +
+                                        "${JSONObject.quote(page.course.classNo)},${JSONObject.quote(officialItemId)},'S');" +
+                                        "return 'submitted';})()"
                                     view.evaluateJavascript(script) { result ->
-                                        if (result == "\"missing\"") onMessage("공식 LMS 콘텐츠를 열 수 없습니다")
+                                        if (result == "\"missing\"") {
+                                            if (LmsUrlPolicy.isAllowed(page.item.detailUrl)) {
+                                                view.loadUrl(page.item.detailUrl)
+                                            } else {
+                                                ready = true
+                                                onMessage("공식 LMS 항목을 열 수 없습니다")
+                                            }
+                                        }
                                     }
                                     return
                                 }
-                                if (submitted && path.startsWith("/lms/class/")) {
-                                    ready = true
-                                    val title = JSONObject.quote(page.item.title)
-                                    view.evaluateJavascript(
-                                        "(function(){var target=$title.replace(/^\\[[^\\]]+\\]\\s*/, '').replace(/\\([^)]*분\\)$/, '');" +
-                                            "var nodes=Array.from(document.querySelectorAll('strong,p,li,div'));" +
-                                            "var hit=nodes.find(function(n){return (n.innerText||'').trim().startsWith(target);});" +
-                                            "if(hit)hit.scrollIntoView({block:'center'});})()",
-                                        null,
+                                if (path == LMS_LEARNING_WINDOW_PATH) {
+                                    val previous = learningLaunchState
+                                    learningLaunchState = reduceOfficialLearningLaunch(
+                                        previous,
+                                        LmsLearningLaunchEvent.PLAYER_PAGE_REACHED,
                                     )
+                                    ready = true
+                                    if (didConfirmedLearningBecomeOpened(previous, learningLaunchState)) {
+                                        reportOpened()
+                                    }
+                                    return
+                                }
+                                if (
+                                    learningLaunchState in setOf(
+                                        LmsLearningLaunchState.OFFICIAL_FALLBACK,
+                                        LmsLearningLaunchState.OFFICIAL_FALLBACK_OPENED,
+                                    ) &&
+                                    path == LMS_COURSE_SCHEDULE_PATH
+                                ) {
+                                    reportOfficialFallbackDisplayed()
+                                    if (!officialFallbackReported) {
+                                        officialFallbackReported = true
+                                        onMessage("영상 플레이어를 열지 못해 공식 수업 화면을 열었습니다")
+                                    }
+                                    return
+                                }
+                                if (!isVideo && submitted && path.startsWith("/lms/class/")) {
+                                    ready = true
+                                    reportOpened()
+                                    return
+                                }
+                                if (
+                                    isVideo && submitted && path == LMS_COURSE_SCHEDULE_PATH &&
+                                    learningLaunchState == LmsLearningLaunchState.LOCATING
+                                ) {
+                                    val target = normalizeOfficialLearningTitle(page.item.title)
+                                    fun markUnavailable(message: String) {
+                                        learningLaunchState = reduceOfficialLearningLaunch(
+                                            learningLaunchState,
+                                            LmsLearningLaunchEvent.EXACT_CANDIDATE_UNAVAILABLE,
+                                        )
+                                        reportOfficialFallbackDisplayed()
+                                        onMessage(message)
+                                    }
+                                    fun scheduleLaunchWatchdog() {
+                                        if (launchWatchdogScheduled) return
+                                        launchWatchdogScheduled = true
+                                        view.postDelayed(
+                                            {
+                                                val next = reduceOfficialLearningLaunch(
+                                                    learningLaunchState,
+                                                    LmsLearningLaunchEvent.WATCHDOG_EXPIRED,
+                                                )
+                                                if (next != learningLaunchState) {
+                                                    learningLaunchState = next
+                                                    showOfficialFallback(
+                                                        "영상 플레이어를 열지 못해 공식 수업 화면을 열었습니다",
+                                                    )
+                                                }
+                                            },
+                                            LMS_LEARNING_LAUNCH_TIMEOUT_MILLIS,
+                                        )
+                                    }
+                                    fun executeExactAction() {
+                                        learningLaunchState = reduceOfficialLearningLaunch(
+                                            learningLaunchState,
+                                            LmsLearningLaunchEvent.EXACT_CANDIDATE_STARTED,
+                                        )
+                                        if (learningLaunchState != LmsLearningLaunchState.REQUESTED) return
+                                        scheduleLaunchWatchdog()
+                                        view.evaluateJavascript(officialLearningActionExecutionScript(target)) { rawResult ->
+                                            if (rawResult != "\"started\"" && rawResult != "\"already_started\"") {
+                                                val next = reduceOfficialLearningLaunch(
+                                                    learningLaunchState,
+                                                    LmsLearningLaunchEvent.EXACT_CANDIDATE_UNAVAILABLE,
+                                                )
+                                                if (next != learningLaunchState) {
+                                                    learningLaunchState = next
+                                                    showOfficialFallback(
+                                                        if (rawResult == "\"ambiguous\"") {
+                                                            "같은 이름의 영상이 있어 공식 화면을 열었습니다"
+                                                        } else {
+                                                            "해당 영상 차시를 찾지 못해 공식 화면을 열었습니다"
+                                                        },
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    }
+                                    fun locateAndStart() {
+                                        if (
+                                            learningActionResolutionInFlight ||
+                                            learningLaunchState != LmsLearningLaunchState.LOCATING
+                                        ) {
+                                            return
+                                        }
+                                        learningActionResolutionInFlight = true
+                                        selectionAttempts += 1
+                                        view.evaluateJavascript(officialLearningActionResolutionScript(target)) { rawResult ->
+                                            learningActionResolutionInFlight = false
+                                            when (rawResult) {
+                                                "\"ready\"" -> executeExactAction()
+                                                "\"waiting\"" -> if (selectionAttempts < LMS_LEARNING_SELECTION_ATTEMPTS) {
+                                                    view.postDelayed(::locateAndStart, LMS_LEARNING_SELECTION_RETRY_MILLIS)
+                                                } else {
+                                                    markUnavailable("해당 영상 차시를 찾지 못해 공식 화면을 열었습니다")
+                                                }
+                                                "\"ambiguous\"" -> markUnavailable("같은 이름의 영상이 있어 공식 화면을 열었습니다")
+                                                else -> markUnavailable("해당 영상 차시를 찾지 못해 공식 화면을 열었습니다")
+                                            }
+                                        }
+                                    }
+                                    locateAndStart()
+                                    return
+                                }
+                                if (
+                                    isVideo && submitted && path.startsWith("/lms/class/") &&
+                                    learningLaunchState == LmsLearningLaunchState.LOCATING
+                                ) {
+                                    learningLaunchState = reduceOfficialLearningLaunch(
+                                        learningLaunchState,
+                                        LmsLearningLaunchEvent.EXACT_CANDIDATE_UNAVAILABLE,
+                                    )
+                                    reportOfficialFallbackDisplayed()
                                 }
                             }
 
@@ -431,6 +668,84 @@ private fun LmsOfficialCourseWebView(
         }
     }
 }
+
+private fun officialLearningActionLookupScript(target: String): String {
+    val quotedTarget = JSONObject.quote(target)
+    return """
+          var target=$quotedTarget;
+          function normalize(value){
+            return (value||'')
+              .replace(/^\[[^\]]+\]\s*/, '')
+              .replace(/\s*\(?\s*\d+\s*분\s*\/\s*\d+\s*분\s*\)?\s*$/, '')
+              .replace(/\s*\(영상콘텐츠\([^)]+\)\)\s*\|\s*출석인정시간\s*:\s*\d+\s*분\s*$/, '')
+              .replace(/\s+/g, ' ')
+              .trim();
+          }
+          function findExactAction(){
+            var rows=Array.from(document.querySelectorAll('.view_act_cont'));
+            if(rows.length===0)return {status:'waiting'};
+            var matchingRows=rows.filter(function(row){
+              var subject=row.querySelector('strong');
+              return subject && normalize(subject.innerText||subject.textContent||'')===target;
+            });
+            if(matchingRows.length===0)return {status:'missing'};
+            if(matchingRows.length!==1)return {status:'ambiguous'};
+            var actions=Array.from(matchingRows[0].querySelectorAll(
+              "button.btn_learn[onclick*='fncLearningWindow']"
+            ));
+            if(actions.length===0)return {status:'waiting'};
+            if(actions.length!==1)return {status:'ambiguous'};
+            return {status:'ready',action:actions[0]};
+          }
+    """.trimIndent()
+}
+
+internal fun officialLearningActionResolutionScript(target: String): String = """
+        (function(){
+          ${officialLearningActionLookupScript(target)}
+          return findExactAction().status;
+        })()
+    """.trimIndent()
+
+internal fun officialLearningActionExecutionScript(target: String): String = """
+        (function(){
+          ${officialLearningActionLookupScript(target)}
+          var found=findExactAction();
+          if(found.status!=='ready')return found.status;
+          if(window.__dimaNowLearningActionStarted===true)return 'already_started';
+          window.__dimaNowLearningActionStarted=true;
+          window.open=function(url){
+            if(typeof url==='string'&&url.trim()){
+              try{
+                var next=new URL(url,window.location.href);
+                if(next.protocol==='https:'&&next.hostname==='lms.dima.ac.kr'&&(!next.port||next.port==='443')){
+                  window.location.assign(next.href);
+                }
+              }catch(ignored){}
+            }
+            return window;
+          };
+          var stripTargets=function(){
+            Array.from(document.querySelectorAll('form[target]')).forEach(function(form){form.removeAttribute('target');});
+          };
+          var nativeSubmit=HTMLFormElement.prototype.submit;
+          HTMLFormElement.prototype.submit=function(){
+            this.removeAttribute('target');
+            return nativeSubmit.call(this);
+          };
+          if(HTMLFormElement.prototype.requestSubmit){
+            var nativeRequestSubmit=HTMLFormElement.prototype.requestSubmit;
+            HTMLFormElement.prototype.requestSubmit=function(submitter){
+              this.removeAttribute('target');
+              return arguments.length ? nativeRequestSubmit.call(this,submitter) : nativeRequestSubmit.call(this);
+            };
+          }
+          stripTargets();
+          new MutationObserver(stripTargets).observe(document.documentElement,{childList:true,subtree:true});
+          found.action.click();
+          return 'started';
+        })()
+    """.trimIndent()
 
 @Composable
 private fun LmsLoginScreen(
@@ -738,8 +1053,12 @@ private fun LmsItemCard(item: LmsItem, onOpenItem: (LmsItem) -> Unit) {
                     LmsChangeState.NONE -> Unit
                 }
                 when (item.completionState) {
-                    LmsCompletionState.COMPLETE -> add("완료")
-                    LmsCompletionState.INCOMPLETE -> add("미완료")
+                    LmsCompletionState.COMPLETE -> add(
+                        if (item.kind == LmsItemKind.CONTENT) "수강 완료" else "완료",
+                    )
+                    LmsCompletionState.INCOMPLETE -> add(
+                        if (item.kind == LmsItemKind.CONTENT) "미수강" else "미완료",
+                    )
                     LmsCompletionState.NOT_TRACKED, LmsCompletionState.UNKNOWN -> Unit
                 }
             }
@@ -807,31 +1126,43 @@ private fun LmsDetailScreen(
     val detail = presented.detail
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    var pending by remember { mutableStateOf<LmsAttachment?>(null) }
+    var pendingDocument by remember { mutableStateOf<LmsPendingDocument?>(null) }
     var downloading by remember { mutableStateOf(false) }
+    var activeDownloadCache by remember { mutableStateOf<File?>(null) }
+    val activeDownloadCacheOnDispose by rememberUpdatedState(activeDownloadCache)
+    DisposableEffect(Unit) {
+        onDispose {
+            activeDownloadCacheOnDispose?.delete()
+        }
+    }
     val createDocument = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/octet-stream")) { uri ->
-        val attachment = pending
-        pending = null
-        if (uri != null && attachment != null) {
-            scope.launch {
-                downloading = true
-                val cache = File(context.cacheDir, "lms-attachments/${System.nanoTime()}-${attachment.fileName}").apply { parentFile?.mkdirs() }
-                var result = source.downloadAttachment(attachment, cache)
-                if (result is LmsRefreshResult.Failure && result.message.contains("로그인 세션")) {
-                    sessionController.transition(LmsSessionState.EXPIRED)
-                    if (autoLoginCoordinator.ensureActive(force = true) == LmsSessionState.ACTIVE) {
-                        result = source.downloadAttachment(attachment, cache)
-                    }
-                }
-                if (result is LmsRefreshResult.Success) {
-                    withContext(Dispatchers.IO) {
-                        context.contentResolver.openOutputStream(uri)?.use { output -> cache.inputStream().use { it.copyTo(output) } }
-                        cache.delete()
-                    }
-                    onMessage("저장했습니다")
-                } else onMessage((result as? LmsRefreshResult.Failure)?.message ?: "저장하지 못했습니다")
-                downloading = false
+        val verified = pendingDocument
+        pendingDocument = null
+        if (uri == null || verified == null) {
+            verified?.cache?.delete()
+            activeDownloadCache = null
+            downloading = false
+            return@rememberLauncherForActivityResult
+        }
+        scope.launch {
+            val result = withContext(Dispatchers.IO) {
+                LmsDocumentWriter(
+                    openOutputStream = { destination: Uri ->
+                        context.contentResolver.openOutputStream(destination, "w")
+                    },
+                    deleteDocument = { destination: Uri ->
+                        runCatching {
+                            DocumentsContract.deleteDocument(context.contentResolver, destination)
+                        }.getOrDefault(false)
+                    },
+                ).write(verified.cache, uri, verified.expectedBytes)
             }
+            when (result) {
+                is LmsDocumentWriteResult.Success -> onMessage("저장했습니다")
+                is LmsDocumentWriteResult.Failure -> onMessage(result.message)
+            }
+            activeDownloadCache = null
+            downloading = false
         }
     }
     Column(modifier.statusBarsPadding().navigationBarsPadding()) {
@@ -880,6 +1211,32 @@ private fun LmsDetailScreen(
                 .testTag("lms_native_detail_body"),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    detail.item.courseName,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.weight(1f),
+                )
+                LmsStatusBadge(kindLabel(detail.item.kind), prominent = false)
+            }
+            Text(detail.item.title, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+            val registeredAt = detail.metadata.registeredAt ?: detail.item.registeredAt
+            if (!detail.metadata.author.isNullOrBlank() || registeredAt != null) {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    detail.metadata.author?.takeIf { it.isNotBlank() }?.let { author ->
+                        LmsDetailMetadataRow("작성자", author)
+                    }
+                    registeredAt?.let { value ->
+                        LmsDetailMetadataRow("등록일", LMS_DETAIL_TIME.format(value.atZone(SEOUL)))
+                    }
+                }
+            }
+            Text("내용", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
             SelectionContainer {
                 Text(
                     text = AnnotatedString.fromHtml(
@@ -890,17 +1247,74 @@ private fun LmsDetailScreen(
                     color = MaterialTheme.colorScheme.onSurface,
                 )
             }
+            if (detail.item.kind == LmsItemKind.ASSIGNMENT) {
+                assignmentPeriod(detail)?.let { period ->
+                    LmsDetailMetadataRow("제출기간", period)
+                }
+                detail.metadata.maxScore?.takeIf { it.isNotBlank() }?.let { score ->
+                    LmsDetailMetadataRow("만점", score)
+                }
+            }
             if (detail.attachments.isNotEmpty()) {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text("첨부파일", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
                     detail.attachments.forEach { attachment ->
                         OutlinedButton(
-                            onClick = { pending = attachment; createDocument.launch(attachment.fileName) },
+                            onClick = {
+                                if (downloading) return@OutlinedButton
+                                downloading = true
+                                scope.launch {
+                                    val cache = runCatching {
+                                        createLmsAttachmentCacheFile(context.cacheDir)
+                                    }.getOrElse { error ->
+                                        downloading = false
+                                        onMessage(error.message ?: "첨부파일 임시 경로를 만들지 못했습니다")
+                                        return@launch
+                                    }
+                                    activeDownloadCache = cache
+                                    var result = source.downloadAttachment(attachment, cache)
+                                    if (result == LmsAttachmentDownloadResult.SessionExpired) {
+                                        sessionController.transition(LmsSessionState.EXPIRED)
+                                        if (autoLoginCoordinator.ensureActive(force = true) == LmsSessionState.ACTIVE) {
+                                            result = source.downloadAttachment(attachment, cache)
+                                        }
+                                    }
+                                    when (result) {
+                                        is LmsAttachmentDownloadResult.Success -> {
+                                            if (result.bytesWritten <= 0L || cache.length() != result.bytesWritten) {
+                                                cache.delete()
+                                                activeDownloadCache = null
+                                                downloading = false
+                                                onMessage("첨부파일 크기를 확인하지 못했습니다")
+                                            } else {
+                                                pendingDocument = LmsPendingDocument(cache, result.bytesWritten)
+                                                createDocument.launch(result.fileName)
+                                            }
+                                        }
+                                        LmsAttachmentDownloadResult.SessionExpired -> {
+                                            cache.delete()
+                                            activeDownloadCache = null
+                                            downloading = false
+                                            onMessage("로그인이 필요합니다")
+                                        }
+                                        is LmsAttachmentDownloadResult.Failure -> {
+                                            cache.delete()
+                                            activeDownloadCache = null
+                                            downloading = false
+                                            onMessage(result.message)
+                                        }
+                                    }
+                                }
+                            },
                             enabled = !downloading,
                             shape = RoundedCornerShape(12.dp),
                             modifier = Modifier.fillMaxWidth(),
                         ) {
-                            Icon(Icons.Default.Download, null)
+                            if (downloading) {
+                                CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+                            } else {
+                                Icon(Icons.Default.Download, null)
+                            }
                             Spacer(Modifier.size(8.dp))
                             Text(attachment.fileName, maxLines = 1, overflow = TextOverflow.Ellipsis)
                         }
@@ -908,6 +1322,30 @@ private fun LmsDetailScreen(
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun LmsDetailMetadataRow(label: String, value: String) {
+    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Text(
+            label,
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Text(value, style = MaterialTheme.typography.bodyLarge)
+    }
+}
+
+private fun assignmentPeriod(detail: LmsItemDetail): String? {
+    val start = detail.metadata.submissionStartsAt
+    val end = detail.metadata.submissionEndsAt ?: detail.item.dueAt
+    return when {
+        start != null && end != null ->
+            "${LMS_DETAIL_TIME.format(start.atZone(SEOUL))} ~ ${LMS_DETAIL_TIME.format(end.atZone(SEOUL))}"
+        end != null -> "마감 · ${LMS_DETAIL_TIME.format(end.atZone(SEOUL))}"
+        start != null -> "시작 · ${LMS_DETAIL_TIME.format(start.atZone(SEOUL))}"
+        else -> null
     }
 }
 
@@ -982,6 +1420,81 @@ private fun LmsAuthenticationWebView(
                         if (Build.VERSION.SDK_INT >= 26) WebView.startSafeBrowsing(context, null)
                         var injected = false
                         var catalogRequested = false
+                        var flowState = LmsLoginFlowState.initial()
+                        var finished = false
+
+                        fun finish(result: LmsLoginResult) {
+                            if (finished || request.result.isCompleted) return
+                            finished = true
+                            onComplete(result)
+                        }
+
+                        fun advance(
+                            webView: WebView,
+                            event: LmsLoginFlowEvent,
+                            extractedCourses: List<LmsCourse>? = null,
+                        ) {
+                            if (finished || request.result.isCompleted) return
+                            val transition = reduceLmsLoginFlow(flowState, event)
+                            flowState = transition.state
+                            when (val command = transition.command) {
+                                LmsLoginFlowCommand.None -> Unit
+                                LmsLoginFlowCommand.SubmitCredentials -> webView.loadUrl(LOGIN_URL)
+                                LmsLoginFlowCommand.InspectSessionTakeoverAction -> {
+                                    webView.evaluateJavascript(VERIFY_LMS_SESSION_TAKEOVER_ACTION_SCRIPT) { raw ->
+                                        when (parseLmsSessionTakeoverScriptResult(raw)) {
+                                            LmsSessionTakeoverScriptResult.VERIFIED ->
+                                                advance(webView, LmsLoginFlowEvent.SessionTakeoverActionVerified)
+                                            LmsSessionTakeoverScriptResult.INTERACTIVE ->
+                                                advance(webView, LmsLoginFlowEvent.InteractiveChallengeDetected)
+                                            else -> advance(
+                                                webView,
+                                                LmsLoginFlowEvent.SessionTakeoverActionUnavailable,
+                                            )
+                                        }
+                                    }
+                                }
+                                LmsLoginFlowCommand.SubmitVerifiedSessionTakeover -> {
+                                    // The official 3045 recovery returns to the portal login form. Allow exactly
+                                    // one credential resubmission after the live page action is re-verified.
+                                    injected = false
+                                    webView.evaluateJavascript(SUBMIT_LMS_SESSION_TAKEOVER_ACTION_SCRIPT) { raw ->
+                                        when (parseLmsSessionTakeoverScriptResult(raw)) {
+                                            LmsSessionTakeoverScriptResult.SUBMITTED -> Unit
+                                            LmsSessionTakeoverScriptResult.INTERACTIVE ->
+                                                advance(webView, LmsLoginFlowEvent.InteractiveChallengeDetected)
+                                            else -> advance(
+                                                webView,
+                                                LmsLoginFlowEvent.SessionTakeoverActionUnavailable,
+                                            )
+                                        }
+                                    }
+                                }
+                                LmsLoginFlowCommand.LoadDashboard -> webView.loadUrl(LMS_DASHBOARD_URL)
+                                LmsLoginFlowCommand.ExtractCourses -> {
+                                    if (catalogRequested) return
+                                    catalogRequested = true
+                                    webView.evaluateJavascript(EXTRACT_RENDERED_COURSES_SCRIPT) { value ->
+                                        val courses = parser.parseRenderedCourses(value)
+                                        advance(
+                                            webView,
+                                            LmsLoginFlowEvent.CourseExtractionFinished(courses.isNotEmpty()),
+                                            courses,
+                                        )
+                                    }
+                                }
+                                is LmsLoginFlowCommand.Complete -> {
+                                    if (command.result == LmsLoginResult.Success && extractedCourses != null) {
+                                        finished = true
+                                        CookieManager.getInstance().flush()
+                                        onAuthenticated(extractedCourses)
+                                    } else {
+                                        finish(command.result)
+                                    }
+                                }
+                            }
+                        }
+
                         webChromeClient = object : WebChromeClient() {
                             override fun onJsAlert(
                                 view: WebView,
@@ -989,11 +1502,17 @@ private fun LmsAuthenticationWebView(
                                 message: String,
                                 result: JsResult,
                             ): Boolean {
-                                if (!shouldConfirmOfficialLmsLoginDialog(url)) {
-                                    return super.onJsAlert(view, url, message, result)
+                                if (isOfficialLmsCredentialPage(url)) {
+                                    result.confirm()
+                                    advance(view, LmsLoginFlowEvent.CredentialsRejected)
+                                    return true
                                 }
-                                result.confirm()
-                                return true
+                                if (isExactOfficialLmsSessionConflictUrl(url)) {
+                                    result.cancel()
+                                    advance(view, LmsLoginFlowEvent.InteractiveChallengeDetected)
+                                    return true
+                                }
+                                return super.onJsAlert(view, url, message, result)
                             }
 
                             override fun onJsConfirm(
@@ -1002,83 +1521,78 @@ private fun LmsAuthenticationWebView(
                                 message: String,
                                 result: JsResult,
                             ): Boolean {
-                                if (!shouldConfirmOfficialLmsLoginDialog(url)) {
-                                    return super.onJsConfirm(view, url, message, result)
+                                if (LmsUrlPolicy.isAllowedLoginNavigation(url)) {
+                                    result.cancel()
+                                    advance(view, LmsLoginFlowEvent.InteractiveChallengeDetected)
+                                    return true
                                 }
-                                result.confirm()
-                                return true
+                                return super.onJsConfirm(view, url, message, result)
                             }
                         }
                         webViewClient = object : WebViewClient() {
+                            override fun shouldInterceptRequest(
+                                view: WebView,
+                                webRequest: WebResourceRequest,
+                            ): WebResourceResponse? = if (
+                                shouldBlockLmsWebResource(webRequest.url.toString(), loginFlow = true)
+                            ) {
+                                blockedLmsWebResourceResponse()
+                            } else {
+                                super.shouldInterceptRequest(view, webRequest)
+                            }
+
                             override fun shouldOverrideUrlLoading(
                                 view: WebView,
                                 webRequest: WebResourceRequest,
                             ): Boolean {
                                 val uri = webRequest.url
                                 val allowed = LmsUrlPolicy.isAllowedLoginNavigation(uri.toString())
-                                if (!allowed) {
-                                    val upgraded = LmsUrlPolicy.upgradeOfficialHttp(uri.toString())
-                                    if (upgraded != null) view.loadUrl(upgraded)
-                                    else {
-                                        Log.w(
-                                            "DimaNowLms",
-                                            "External navigation scheme=${uri.scheme} host=${uri.host} path=${uri.path} " +
-                                                "port=${uri.port} userInfoPresent=${uri.userInfo != null}",
-                                        )
-                                        context.startActivity(Intent(Intent.ACTION_VIEW, uri))
-                                    }
-                                }
-                                return !allowed
+                                if (allowed) return false
+                                val upgraded = LmsUrlPolicy.upgradeOfficialHttp(uri.toString())
+                                if (upgraded != null) view.loadUrl(upgraded)
+                                else advance(view, LmsLoginFlowEvent.MainFrameFinished(uri.toString()))
+                                return true
                             }
 
                             override fun onPageStarted(view: WebView, url: String, favicon: Bitmap?) = Unit
 
                             override fun onPageFinished(view: WebView, url: String) {
+                                if (isExactOfficialLmsSessionConflictUrl(url)) {
+                                    advance(view, LmsLoginFlowEvent.MainFrameFinished(url))
+                                    return
+                                }
                                 val path = Uri.parse(url).path.orEmpty()
                                 if (path == MAIN_PATH) {
                                     view.evaluateJavascript(
                                         "Boolean(document.querySelector(\"a[href*='/lms/myLecture/doListView']\"))",
                                     ) { authenticated ->
-                                        if (
-                                            lmsLoginPageAction(
-                                                url,
-                                                pageFinished = true,
-                                                authenticatedMain = authenticated == "true",
-                                            ) == LmsLoginPageAction.LOAD_DASHBOARD
-                                        ) {
-                                            view.loadUrl(LMS_DASHBOARD_URL)
-                                        }
-                                    }
-                                } else if (
-                                    lmsLoginPageAction(url, pageFinished = true, authenticatedMain = false) ==
-                                    LmsLoginPageAction.EXTRACT_COURSES && !catalogRequested
-                                ) {
-                                    catalogRequested = true
-                                    view.evaluateJavascript(EXTRACT_RENDERED_COURSES_SCRIPT) { value ->
-                                        val courses = parser.parseRenderedCourses(value)
-                                        if (courses.isEmpty()) {
-                                            onComplete(LmsLoginResult.Failure("수업 목록을 확인하지 못했습니다"))
+                                        if (authenticated == "true") {
+                                            advance(
+                                                view,
+                                                LmsLoginFlowEvent.MainFrameFinished(
+                                                    url = url,
+                                                    authenticatedMain = true,
+                                                ),
+                                            )
+                                        } else if (flowState.stage == LmsLoginFlowStage.LOGIN_SUBMISSION) {
+                                            advance(view, LmsLoginFlowEvent.CredentialsRejected)
                                         } else {
-                                            CookieManager.getInstance().flush()
-                                            onAuthenticated(courses)
+                                            advance(view, LmsLoginFlowEvent.SessionTakeoverActionUnavailable)
                                         }
                                     }
+                                    return
+                                } else if (path == "/lms/myLecture/doListView.dunet") {
+                                    advance(view, LmsLoginFlowEvent.MainFrameFinished(url))
+                                    return
                                 } else if (isOfficialLmsCredentialPage(url) && !injected) {
                                     injected = true
-                                    val user = JSONObject.quote(request.credentials.username)
-                                    val password = JSONObject.quote(request.credentials.password)
                                     val portal = Uri.parse(url).host == PORTAL_HOST
-                                    val submission = if (portal) {
-                                        "var i=document.querySelector('#txtID'),p=document.querySelector('#txtPwd');" +
-                                            "if(!i||!p||typeof Login!=='function')return 'interactive';" +
-                                            "i.value=$user;p.value=$password;Login('N');return 'submitted';"
-                                    } else {
-                                        "var i=document.querySelector('#id'),p=document.querySelector('#pass');" +
-                                            "if(!i||!p||typeof login_proc!=='function')return 'interactive';" +
-                                            "i.value=$user;p.value=$password;login_proc();return 'submitted';"
-                                    }
                                     view.evaluateJavascript(
-                                        "(function(){$submission})()",
+                                        lmsCredentialSubmissionScript(
+                                            username = request.credentials.username,
+                                            password = request.credentials.password,
+                                            portal = portal,
+                                        ),
                                     ) { result ->
                                         if (result == "\"submitted\"") {
                                             view.postDelayed(
@@ -1091,14 +1605,25 @@ private fun LmsAuthenticationWebView(
                                                             elapsedMillis = LOGIN_RESULT_TIMEOUT_MILLIS,
                                                         )
                                                     ) {
-                                                        onComplete(LmsLoginResult.CredentialsRejected)
+                                                        if (flowState.stage == LmsLoginFlowStage.LOGIN_SUBMISSION) {
+                                                            advance(view, LmsLoginFlowEvent.CredentialsRejected)
+                                                        } else {
+                                                            advance(
+                                                                view,
+                                                                LmsLoginFlowEvent.SessionTakeoverActionUnavailable,
+                                                            )
+                                                        }
                                                     }
                                                 },
                                                 LOGIN_RESULT_TIMEOUT_MILLIS,
                                             )
-                                                }
+                                        } else {
+                                            advance(view, LmsLoginFlowEvent.InteractiveChallengeDetected)
+                                        }
                                     }
+                                    return
                                 }
+                                advance(view, LmsLoginFlowEvent.MainFrameFinished(url))
                             }
 
                             override fun onReceivedError(
@@ -1107,7 +1632,7 @@ private fun LmsAuthenticationWebView(
                                 error: WebResourceError,
                             ) {
                                 if (request.isForMainFrame) {
-                                    onComplete(LmsLoginResult.NetworkError(error.description.toString()))
+                                    finish(LmsLoginResult.NetworkError(error.description.toString()))
                                 }
                             }
 
@@ -1118,10 +1643,10 @@ private fun LmsAuthenticationWebView(
                                 callback: SafeBrowsingResponse,
                             ) {
                                 callback.backToSafety(true)
-                                onComplete(LmsLoginResult.Failure("안전하지 않은 페이지가 차단되었습니다"))
+                                finish(LmsLoginResult.Failure("안전하지 않은 페이지가 차단되었습니다"))
                             }
                         }
-                        loadUrl(LOGIN_URL)
+                        advance(this, LmsLoginFlowEvent.CredentialsAvailable)
                     }
                 },
                 modifier = Modifier.size(1.dp),
@@ -1138,6 +1663,7 @@ private fun LmsRenderedPageWebView(
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
+    val parser = remember { LmsHtmlParser() }
     Column(modifier.statusBarsPadding().navigationBarsPadding()) {
         Row(
             modifier = Modifier
@@ -1183,7 +1709,19 @@ private fun LmsRenderedPageWebView(
                         settings.allowContentAccess = false
                         settings.mixedContentMode = android.webkit.WebSettings.MIXED_CONTENT_NEVER_ALLOW
                         var submitted = false
+                        var assignmentActionSubmitted = false
                         webViewClient = object : WebViewClient() {
+                            override fun shouldInterceptRequest(
+                                view: WebView,
+                                webRequest: WebResourceRequest,
+                            ): WebResourceResponse? = if (
+                                shouldBlockLmsWebResource(webRequest.url.toString(), loginFlow = false)
+                            ) {
+                                blockedLmsWebResourceResponse()
+                            } else {
+                                super.shouldInterceptRequest(view, webRequest)
+                            }
+
                             override fun shouldOverrideUrlLoading(
                                 view: WebView,
                                 webRequest: WebResourceRequest,
@@ -1218,6 +1756,42 @@ private fun LmsRenderedPageWebView(
                                             onComplete(LmsRenderedPageResult.Failure("공식 LMS 글 열기 기능을 찾지 못했습니다"))
                                         }
                                     }
+                                    return
+                                }
+                                if (
+                                    submitted &&
+                                    request.item.kind == LmsItemKind.ASSIGNMENT &&
+                                    path == "/lms/class/report/stud/doListView.dunet" &&
+                                    !assignmentActionSubmitted
+                                ) {
+                                    assignmentActionSubmitted = true
+                                    view.evaluateJavascript("document.documentElement.outerHTML") { value ->
+                                        val html = runCatching {
+                                            JSONObject("{\"value\":$value}").getString("value")
+                                        }.getOrNull()
+                                        val action = html?.let {
+                                            parser.resolveAssignmentListOnClick(request.item, it)
+                                        }
+                                        if (action == null) {
+                                            onComplete(LmsRenderedPageResult.OfficialCoursePage)
+                                            return@evaluateJavascript
+                                        }
+                                        val script =
+                                            "(function(){if(typeof fncModifyReport!=='function')return 'missing';" +
+                                                "$action;return 'submitted';})()"
+                                        view.evaluateJavascript(script) { result ->
+                                            if (result == "\"missing\"") {
+                                                onComplete(LmsRenderedPageResult.OfficialCoursePage)
+                                            }
+                                        }
+                                    }
+                                    return
+                                }
+                                if (
+                                    submitted &&
+                                    request.item.kind == LmsItemKind.ASSIGNMENT &&
+                                    path != "/lms/class/report/stud/doFormReport.dunet"
+                                ) {
                                     return
                                 }
                                 if (submitted && path.startsWith("/lms/class/")) {
@@ -1286,6 +1860,7 @@ private fun kindLabel(kind: LmsItemKind): String = when (kind) {
 
 private val SEOUL = ZoneId.of("Asia/Seoul")
 private val LMS_TIME = DateTimeFormatter.ofPattern("M월 d일 HH:mm")
+private val LMS_DETAIL_TIME = DateTimeFormatter.ofPattern("yyyy년 M월 d일 HH:mm")
 internal const val OFFICIAL_LMS_LOGIN_URL =
     "https://portal.dima.ac.kr/?r=https://lms.dima.ac.kr/sso/index.jsp"
 private const val LOGIN_URL = OFFICIAL_LMS_LOGIN_URL
@@ -1293,6 +1868,70 @@ private const val LMS_DASHBOARD_URL =
     "https://lms.dima.ac.kr/lms/myLecture/doListView.dunet?to_do_type=all"
 private const val LMS_NATIVE_DETAIL_DASHBOARD_URL =
     "https://lms.dima.ac.kr/lms/myLecture/doListView.dunet?mnid=201008840728"
+private const val LMS_COURSE_SCHEDULE_PATH = "/lms/class/courseSchedule/doListView.dunet"
+private const val LMS_COURSE_SCHEDULE_URL =
+    "https://lms.dima.ac.kr/lms/class/courseSchedule/doListView.dunet"
+private const val LMS_LEARNING_WINDOW_PATH = "/lms/class/courseSchedule/doLearningWindow2.dunet"
+private const val LMS_LEARNING_SELECTION_ATTEMPTS = 20
+private const val LMS_LEARNING_SELECTION_RETRY_MILLIS = 250L
+private const val LMS_LEARNING_LAUNCH_TIMEOUT_MILLIS = 8_000L
+
+internal fun shouldBlockLmsWebResource(url: String, loginFlow: Boolean): Boolean {
+    val scheme = runCatching { java.net.URI.create(url).scheme?.lowercase() }.getOrNull()
+    if (scheme !in setOf("http", "https")) return false
+    return if (loginFlow) {
+        !LmsUrlPolicy.isAllowedLoginNavigation(url)
+    } else {
+        !LmsUrlPolicy.isAllowed(url)
+    }
+}
+
+private fun blockedLmsWebResourceResponse(): WebResourceResponse = WebResourceResponse(
+    "text/plain",
+    "UTF-8",
+    403,
+    "Blocked",
+    mapOf("Cache-Control" to "no-store"),
+    ByteArrayInputStream(ByteArray(0)),
+)
+
+internal fun lmsCredentialSubmissionScript(
+    username: String,
+    password: String,
+    portal: Boolean,
+): String {
+    val user = JSONObject.quote(username)
+    val secret = JSONObject.quote(password)
+    val userSelector = if (portal) "#txtID" else "#id"
+    val passwordSelector = if (portal) "#txtPwd" else "#pass"
+    val submitCheck = if (portal) "typeof Login==='function'" else "typeof login_proc==='function'"
+    val submit = if (portal) "Login('N')" else "login_proc()"
+    return """
+        (function(){
+          var i=document.querySelector('$userSelector'),p=document.querySelector('$passwordSelector');
+          if(!i||!p||!($submitCheck))return 'interactive';
+          function isHidden(control){
+            if(control.hidden)return true;
+            if(control.tagName==='INPUT'&&control.type==='hidden')return true;
+            var style=window.getComputedStyle(control);
+            return style.display==='none'||style.visibility==='hidden';
+          }
+          var challengeMarker=document.querySelector(
+            "[data-sitekey],.g-recaptcha,img[src*='captcha' i]"
+          );
+          var unexpectedControl=Array.from(document.querySelectorAll(
+            "input,select,textarea,iframe"
+          )).some(function(control){
+            if(control===i||control===p||control.disabled||isHidden(control))return false;
+            if(control.tagName!=='INPUT')return true;
+            return !['button','submit','reset','image','checkbox','radio'].includes(control.type);
+          });
+          if(challengeMarker||unexpectedControl)return 'interactive';
+          i.value=$user;p.value=$secret;$submit;return 'submitted';
+        })()
+    """.trimIndent()
+}
+
 private val EXTRACT_RENDERED_COURSES_SCRIPT = """
     (function(){
       return Array.from(document.querySelectorAll("[href*='fncGoClassroom'],[onclick*='fncGoClassroom']"))
@@ -1306,6 +1945,85 @@ private val EXTRACT_RENDERED_COURSES_SCRIPT = """
           var professor=text.match(/교수(?:명)?\s*[:：]\s*([^\n·|]+)/);
           return {id:match[1],classNo:match[2],name:(nameNode.textContent||'').trim(),professor:professor?professor[1].trim():null};
         }).filter(Boolean);
+    })()
+""".trimIndent()
+private val LMS_SESSION_TAKEOVER_CANDIDATE_FUNCTION = """
+    function findVerifiedTakeoverAction(){
+      var query=new URLSearchParams(location.search);
+      var queryNames=Array.from(query.keys());
+      var exactQuery=query.getAll('errorCode').length===1&&query.get('errorCode')==='3045'&&
+        query.getAll('errorMsg').length<=1&&queryNames.every(function(name){
+          return name==='errorCode'||name==='errorMsg';
+        });
+      if(location.protocol!=='https:'||location.hostname!=='portal.dima.ac.kr'||
+         location.pathname!=='/sso/error.aspx'||!exactQuery){
+        return {state:'unavailable'};
+      }
+      if(document.querySelector("input[type='password'],input[name*='otp' i],input[id*='otp' i],"+
+          "input[name*='captcha' i],input[id*='captcha' i],iframe[src*='captcha' i]")){
+        return {state:'interactive'};
+      }
+      function parseExactConflictUrl(raw){
+        try{
+          var url=new URL(raw,location.href);
+          var names=Array.from(url.searchParams.keys());
+          var validQuery=url.searchParams.getAll('errorCode').length===1&&
+            url.searchParams.get('errorCode')==='3045'&&
+            url.searchParams.getAll('errorMsg').length<=1&&
+            names.every(function(name){return name==='errorCode'||name==='errorMsg';});
+          return url.protocol==='https:'&&url.hostname==='portal.dima.ac.kr'&&
+            (url.port===''||url.port==='443')&&url.pathname==='/sso/error.aspx'&&
+            !url.hash&&validQuery?url:null;
+        }catch(e){return null;}
+      }
+      var forms=Array.from(document.forms);
+      var form=forms.length===1?forms[0]:null;
+      var controls=form?Array.from(form.elements):[];
+      var actionUrl=form?parseExactConflictUrl(form.getAttribute('action')||location.href):null;
+      var hiddenOnly=Boolean(form)&&form.method.toLowerCase()==='post'&&controls.length>0&&
+        controls.every(function(control){return control.tagName==='INPUT'&&control.type==='hidden';})&&
+        controls.some(function(control){return control.name==='__VIEWSTATE';})&&
+        actionUrl!==null&&actionUrl.search===location.search;
+      var hasInteractiveControl=Boolean(document.querySelector(
+        "button,input:not([type='hidden']),select,textarea,a[href],a[onclick],[onclick],"+
+        "[role='button'],[tabindex]:not([tabindex='-1']),"+
+        "[contenteditable]:not([contenteditable='false'])"
+      ));
+      var redirectUrls=Array.from(document.scripts).map(function(script){
+        var match=(script.textContent||'').match(
+          /top\.location\.href\s*=\s*['"](https:\/\/portal\.dima\.ac\.kr\/?)['"]/
+        );
+        if(!match)return null;
+        try{
+          var target=new URL(match[1]);
+          return target.protocol==='https:'&&target.hostname==='portal.dima.ac.kr'&&
+            target.pathname==='/'&&!target.search&&!target.hash?target.href:null;
+        }catch(e){return null;}
+      }).filter(Boolean);
+      if(hiddenOnly&&!hasInteractiveControl&&redirectUrls.length===1){
+        return {state:'verified',redirectUrl:redirectUrls[0]};
+      }
+      return {state:'unavailable'};
+    }
+""".trimIndent()
+
+internal val VERIFY_LMS_SESSION_TAKEOVER_ACTION_SCRIPT = """
+    (function(){
+      $LMS_SESSION_TAKEOVER_CANDIDATE_FUNCTION
+      return findVerifiedTakeoverAction().state;
+    })()
+""".trimIndent()
+
+internal val SUBMIT_LMS_SESSION_TAKEOVER_ACTION_SCRIPT = """
+    (function(){
+      $LMS_SESSION_TAKEOVER_CANDIDATE_FUNCTION
+      var result=findVerifiedTakeoverAction();
+      if(result.state!=='verified')return result.state;
+      if(!result.redirectUrl)return 'unavailable';
+      setTimeout(function(){
+        location.replace(result.redirectUrl);
+      },0);
+      return 'submitted';
     })()
 """.trimIndent()
 private const val PORTAL_HOST = "portal.dima.ac.kr"

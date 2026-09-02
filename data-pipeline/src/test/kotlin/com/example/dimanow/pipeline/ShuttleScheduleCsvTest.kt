@@ -3,8 +3,28 @@ package com.example.dimanow.pipeline
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertThrows
 import org.junit.Test
+import java.nio.file.Path
+import java.nio.file.Files
 
 class ShuttleScheduleCsvTest {
+    @Test
+    fun `현장 시간표의 평일 원룸촌 30분 추가 운행을 보존한다`() {
+        val source = Files.readString(Path.of("..", "data-source", "shuttle.csv"))
+
+        val records = ShuttleScheduleCsv.parse(source)
+        val additions = records.filter { it.routeId == "A-field-extra" }
+
+        assertEquals(625, records.size)
+        assertEquals(20, additions.size)
+        assertEquals(
+            listOf("14:30", "15:30", "16:30", "17:30"),
+            additions.filter { it.serviceDay == "MONDAY" }.map { it.departureTime },
+        )
+        assertEquals(listOf("ONE_ROOM"), additions.map { it.originZone }.distinct())
+        assertEquals(listOf("MAIN"), additions.map { it.destinationZone }.distinct())
+        assertEquals(listOf(null), additions.map { it.arrivalTime }.distinct())
+    }
+
     @Test
     fun `운동장 승차 행을 앱 동기화 레코드로 변환한다`() {
         val csv = """

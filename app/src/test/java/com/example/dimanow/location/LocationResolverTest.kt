@@ -11,6 +11,30 @@ import org.junit.Test
 
 class LocationResolverTest {
     @Test
+    fun `shuttle report location requires a fresh accurate gps sample at the actual stop zone`() {
+        val now = Instant.parse("2026-09-02T09:00:00Z")
+        val zones = listOf(CampusZone(CampusZoneId.MAIN, GeoPoint(37.0590, 127.3580), 250))
+        val resolver = LocationResolver()
+
+        assertEquals(
+            true,
+            resolver.isFreshSampleAtZone(LocationSample(GeoPoint(37.0590, 127.3580), 18f, now.minusSeconds(30)), now, zones, CampusZoneId.MAIN),
+        )
+        assertEquals(
+            false,
+            resolver.isFreshSampleAtZone(LocationSample(GeoPoint(37.0590, 127.3580), 18f, now.minusSeconds(121)), now, zones, CampusZoneId.MAIN),
+        )
+        assertEquals(
+            false,
+            resolver.isFreshSampleAtZone(LocationSample(GeoPoint(37.0590, 127.3580), 101f, now), now, zones, CampusZoneId.MAIN),
+        )
+        assertEquals(
+            false,
+            resolver.isFreshSampleAtZone(LocationSample(GeoPoint(37.0, 127.0), 18f, now), now, zones, CampusZoneId.MAIN),
+        )
+    }
+
+    @Test
     fun `approved Yein polygon classifies its lower west area`() {
         val resolved = LocationResolver().resolve(
             sample = GeoPoint(37.0575, 127.3534),

@@ -18,6 +18,7 @@ import com.example.dimanow.live.LiveDisplayOptions
 import com.example.dimanow.guidance.HomeBase
 import com.example.dimanow.location.LocationMode
 import com.example.dimanow.update.AppUpdateRelease
+import java.util.UUID
 
 data class AppUpdatePreferences(
     val lastCheckedEpochMillis: Long? = null,
@@ -164,6 +165,16 @@ class AppPreferences(private val context: Context) {
         context.settingsDataStore.edit { it[BACKGROUND_WORK_POLICY_VERSION] = version }
     }
 
+    suspend fun getOrCreateShuttleReporterToken(): String {
+        var result = ""
+        context.settingsDataStore.edit { preferences ->
+            result = preferences[SHUTTLE_REPORTER_TOKEN] ?: "install_${UUID.randomUUID().toString().replace('-', '_')}".also {
+                preferences[SHUTTLE_REPORTER_TOKEN] = it
+            }
+        }
+        return result
+    }
+
     suspend fun recordAppUpdateCheck(atEpochMillis: Long, release: AppUpdateRelease) {
         context.settingsDataStore.edit {
             it[UPDATE_LAST_CHECKED] = atEpochMillis
@@ -215,5 +226,6 @@ class AppPreferences(private val context: Context) {
         val UPDATE_DISMISSED_VERSION = stringPreferencesKey("update_dismissed_version")
         val UPDATE_PREPARED_PATH = stringPreferencesKey("update_prepared_path")
         val UPDATE_PREPARED_VERSION = stringPreferencesKey("update_prepared_version")
+        val SHUTTLE_REPORTER_TOKEN = stringPreferencesKey("shuttle_reporter_token")
     }
 }

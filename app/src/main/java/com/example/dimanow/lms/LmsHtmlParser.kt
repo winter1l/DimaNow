@@ -100,6 +100,23 @@ class LmsHtmlParser(private val zoneId: ZoneId = ZoneId.of("Asia/Seoul")) {
                 return@mapNotNull url.takeIf(LmsUrlPolicy::isAllowed)
                     ?.let { LmsStatusPageRequest(completionState, it) }
             }
+            STATUS_JAVASCRIPT_LINK.matchEntire(rawHref)?.let { match ->
+                val renderedState = match.groupValues[2].lowercase()
+                val expectedState = when (completionState) {
+                    LmsCompletionState.COMPLETE -> "complete"
+                    LmsCompletionState.INCOMPLETE -> "incomplete"
+                    else -> return@let
+                }
+                if (renderedState == expectedState) {
+                    val url = resolve(
+                        origin,
+                        "/lms/myLecture/doListView.dunet?to_do_type=$renderedState",
+                    )
+                    if (LmsUrlPolicy.isAllowed(url)) {
+                        return@mapNotNull LmsStatusPageRequest(completionState, url)
+                    }
+                }
+            }
             val form = control.closest("form") ?: return@mapNotNull null
             val url = form.absUrl("action").ifBlank { resolve(origin, form.attr("action")) }
             if (!LmsUrlPolicy.isAllowed(url)) return@mapNotNull null
@@ -169,22 +186,47 @@ class LmsHtmlParser(private val zoneId: ZoneId = ZoneId.of("Asia/Seoul")) {
         return ParsedLmsBoardPage(items, nextPages)
     }
 
-    fun parseDetail(item: LmsItem, html: String, origin: String): LmsItemDetail {
-        val document = Jsoup.parse(html, origin)
+    fun parseDetail(item: LmsItem, html: String, finalUrl: String): LmsItemDetail {
+        val document = Jsoup.parse(html, finalUrl)
         val matchingRow = findItemLink(document, item)
             ?.closest("tr, li, .list-item, .content-item, .lecture-item")
         val officialBoardTable = document.selectFirst("table.table_view_basic")
-        val officialBoardBody = officialBoardTable
-            ?.select("tbody tr > td.ta_l")
-            ?.firstOrNull { cell ->
-                val text = cell.text().trim()
-                !text.startsWith("작성자") && !text.startsWith("첨부파일")
-            }
+        val labeledOfficialBody = officialBoardTable?.select("tbody tr")?.firstNotNullOfOrNull { row ->
+            val cells = row.children().filter { it.tagName() == "th" || it.tagName() == "td" }
+            val labelIndex = cells.indexOfFirst { normalizeLabel(it.text()) in DETAIL_BODY_LABELS }
+            if (labelIndex >= 0) cells.getOrNull(labelIndex + 1) else null
+        }
+        val officialBoardBody = labeledOfficialBody
+            ?: officialBoardTable
+                ?.select("tbody tr > td.ta_l")
+                ?.firstOrNull { cell ->
+                    val text = cell.text().trim()
+                    !text.startsWith("작성자") && !text.startsWith("첨부파일")
+                }
         val articleBody = document.selectFirst("#board_contents, .board_contents, .view_content, .report-content")
+        if (item.kind == LmsItemKind.ASSIGNMENT && articleBody == null && labeledOfficialBody == null) {
+            throw InvalidLmsDetailException("정확한 과제 내용을 찾지 못했습니다")
+        }
+        if (
+            (item.kind == LmsItemKind.NOTICE || item.kind == LmsItemKind.MATERIAL) &&
+            officialBoardTable == null &&
+            articleBody == null
+        ) {
+            throw InvalidLmsDetailException("정확한 게시글 내용을 찾지 못했습니다")
+        }
         val body = articleBody
             ?: officialBoardBody
             ?: matchingRow
             ?: throw InvalidLmsDetailException("게시글 본문을 찾지 못했습니다")
+        val attachmentScope = when {
+            articleBody != null -> document
+            officialBoardTable != null -> officialBoardTable
+            matchingRow != null -> matchingRow
+            else -> document
+        }
+        val attachments = attachmentScope.select("a")
+            .mapNotNull { parseAttachment(it, finalUrl) }
+            .distinctBy { it.id }
         body.select("script, style, iframe, object, embed, form").remove()
         body.allElements.forEach { element ->
             element.attributes().asList()
@@ -193,23 +235,70 @@ class LmsHtmlParser(private val zoneId: ZoneId = ZoneId.of("Asia/Seoul")) {
         }
         val clean = Jsoup.clean(
             body.html(),
-            origin,
+            finalUrl,
             Safelist.relaxed()
                 .addTags("table", "thead", "tbody", "tr", "th", "td")
                 .addAttributes(":all", "class")
                 .removeAttributes(":all", "style"),
         )
-        val attachmentScope = when {
-            articleBody != null -> document
-            officialBoardTable != null -> officialBoardTable
-            matchingRow != null -> matchingRow
-            else -> document
-        }
-        val attachments = attachmentScope.select("a")
-            .mapNotNull { parseAttachment(it, origin, item) }
-            .distinctBy { it.id }
-        return LmsItemDetail(item, clean, attachments)
+        val metadata = parseDetailMetadata(officialBoardTable ?: articleBody ?: body)
+        return LmsItemDetail(item, clean, attachments, metadata)
     }
+
+    private fun parseDetailMetadata(scope: Element): LmsDetailMetadata {
+        val text = scope.text()
+        val author = labeledCellValue(scope, "작성자")
+            ?: AUTHOR.find(text)?.groupValues?.get(1)?.trim()?.takeIf(String::isNotBlank)
+        val registeredAt = labeledCellValue(scope, "등록일")
+            ?.let(::parseInstantValue)
+            ?: extractInstant(text, "등록일")
+        val submissionText = labeledCellValue(scope, "제출기간", "추가 제출기간")
+        val submissionRange = submissionText?.let(::parseInstantRange)
+        val maxScore = labeledCellValue(scope, "만점")
+        return LmsDetailMetadata(
+            author = author,
+            registeredAt = registeredAt,
+            submissionStartsAt = submissionRange?.first,
+            submissionEndsAt = submissionRange?.second,
+            maxScore = maxScore,
+        )
+    }
+
+    private fun labeledCellValue(scope: Element, vararg labels: String): String? {
+        val acceptedLabels = labels.map(::normalizeLabel).toSet()
+        scope.select("tr").forEach { row ->
+            val cells = row.children().filter { it.tagName() == "th" || it.tagName() == "td" }
+            cells.forEachIndexed { index, cell ->
+                if (normalizeLabel(cell.text()) !in acceptedLabels) return@forEachIndexed
+                val value = cells.getOrNull(index + 1)?.text()?.trim()?.takeIf(String::isNotBlank)
+                if (value != null) return value
+            }
+        }
+        return null
+    }
+
+    private fun normalizeLabel(value: String): String = value.trim()
+        .removeSuffix(":")
+        .removeSuffix("：")
+        .replace(Regex("\\s+"), "")
+
+    private fun parseInstantRange(value: String): Pair<Instant?, Instant?>? {
+        val instants = DATE_TIME_VALUE.findAll(value)
+            .mapNotNull { parseInstantValue(it.value) }
+            .take(2)
+            .toList()
+        return when (instants.size) {
+            0 -> null
+            1 -> null to instants.single()
+            else -> instants[0] to instants[1]
+        }
+    }
+
+    private fun parseInstantValue(value: String): Instant? = runCatching {
+        val normalized = value.trim().replace(Regex("\\s+"), " ")
+            .let { if (it.length == 16) "$it:00" else it }
+        LocalDateTime.parse(normalized, DATE_TIME).atZone(zoneId).toInstant()
+    }.getOrNull()
 
     fun resolveLinkedDetailUrl(item: LmsItem, html: String, origin: String): String? {
         val document = Jsoup.parse(html, origin)
@@ -220,7 +309,47 @@ class LmsHtmlParser(private val zoneId: ZoneId = ZoneId.of("Asia/Seoul")) {
         return resolved.takeIf(LmsUrlPolicy::isAllowed)
     }
 
+    /**
+     * Returns only the verified LMS assignment-list action for this exact item.
+     * A missing, partial-title, or duplicate match deliberately returns null so callers can show
+     * the official LMS page instead of opening a different report.
+     */
+    fun resolveAssignmentListOnClick(item: LmsItem, html: String): String? {
+        if (item.kind != LmsItemKind.ASSIGNMENT) return null
+        val expectedTitle = normalizeComparableTitle(item.title)
+        val candidates = Jsoup.parse(html).select("a.subject[onclick*=fncModifyReport], a[onclick*=fncModifyReport]")
+            .mapNotNull { link ->
+                val match = FNC_MODIFY_REPORT.find(link.attr("onclick")) ?: return@mapNotNull null
+                val values = match.groupValues.drop(1)
+                if (values.firstOrNull() != item.id) return@mapNotNull null
+                val structuredTitles = link.select(".ellipsis, .title, .subject-title, strong")
+                    .eachText()
+                val visibleTitles = buildList {
+                    link.textNodes().firstOrNull { it.text().isNotBlank() }
+                        ?.text()
+                        ?.let(::add)
+                    link.ownText().takeIf(String::isNotBlank)?.let(::add)
+                    structuredTitles.filter(String::isNotBlank).forEach(::add)
+                    if (structuredTitles.isEmpty()) {
+                        link.text().takeIf(String::isNotBlank)?.let(::add)
+                    }
+                }
+                if (visibleTitles.none { normalizeComparableTitle(it) == expectedTitle }) {
+                    return@mapNotNull null
+                }
+                values
+            }
+        val values = candidates.singleOrNull() ?: return null
+        return "fncModifyReport(${values.joinToString(",") { "'$it'" }})"
+    }
+
+    private fun normalizeComparableTitle(value: String): String = value
+        .replace('\u00a0', ' ')
+        .trim()
+        .replace(Regex("\\s+"), " ")
+
     fun isLoginPage(html: String, url: String): Boolean {
+        if (isOfficialLmsCredentialPage(url)) return true
         if (URI.create(url).path.startsWith("/login/")) return true
         val document = Jsoup.parse(html, url)
         if (document.selectFirst("#id") != null && document.selectFirst("#pass") != null) return true
@@ -313,8 +442,8 @@ class LmsHtmlParser(private val zoneId: ZoneId = ZoneId.of("Asia/Seoul")) {
                 "mnid" to "201008604579", "course_id" to courseId, "class_no" to classNo,
                 "boarditem_no" to itemId, "board_no" to "5", "dataType" to "C",
             )
-            "3" -> "/lms/class/report/stud/doListView.dunet" to listOf(
-                "mnid" to "201008840336", "course_id" to courseId, "class_no" to classNo,
+            "3" -> ASSIGNMENT_LIST_PATH to listOf(
+                "mnid" to ASSIGNMENT_MNID, "course_id" to courseId, "class_no" to classNo,
                 "dataType" to "C",
             )
             "4" -> "/lms/class/discuss/stud/doListView.dunet" to listOf(
@@ -343,51 +472,162 @@ class LmsHtmlParser(private val zoneId: ZoneId = ZoneId.of("Asia/Seoul")) {
         return resolve(origin, "${pathAndFields.first}?$query")
     }
 
-    private fun parseAttachment(link: Element, origin: String, item: LmsItem): LmsAttachment? {
+    private fun parseAttachment(link: Element, finalUrl: String): LmsAttachment? {
         val action = link.attr("href") + " " + link.attr("onclick")
-        FNC_FILE_DOWN.find(action)?.groupValues?.get(1)?.let { attachNo ->
-            val boardNo = when (item.kind) {
-                LmsItemKind.NOTICE -> "7"
-                LmsItemKind.MATERIAL -> "6"
-                LmsItemKind.QUESTION -> "5"
-                else -> return@let
+        val enclosingForm = link.closest("form")
+        val enclosingFields = linkedMapOf<String, String>().apply {
+            enclosingForm?.select("input[name]")?.forEach { input ->
+                val name = input.attr("name")
+                if (name in ATTACHMENT_FIELD_NAMES) put(name, input.attr("value"))
             }
-            val url = "$origin/lms/class/boardItem/doDownloadFile.dunet" +
-                "?boarditem_attach_file_no=${encode(attachNo)}&board_no=$boardNo" +
-                "&boarditem_no=${encode(item.id)}&learning_design_yn=N&time_flag=OK"
+        }
+        val enclosingMethod = if (enclosingForm?.attr("method").equals("post", ignoreCase = true)) {
+            LmsHttpMethod.POST
+        } else {
+            LmsHttpMethod.GET
+        }
+        enclosingForm?.let { form ->
+            val requestUrl = form.absUrl("action").ifBlank { resolve(finalUrl, form.attr("action")) }
+            val path = runCatching { URI.create(requestUrl).path.orEmpty() }.getOrDefault("")
+            if (isLmsAttachmentUrl(requestUrl) && DOWNLOAD_PATH.containsMatchIn(path)) {
+                return LmsAttachment(
+                    id = stableId(
+                        enclosingMethod.name,
+                        requestUrl,
+                        enclosingFields.entries.joinToString("&") { "${it.key}=${it.value}" },
+                    ),
+                    fileName = link.text().trim().ifBlank { "첨부파일" },
+                    downloadUrl = if (enclosingMethod == LmsHttpMethod.GET && enclosingFields.isNotEmpty()) {
+                        withQuery(requestUrl, enclosingFields)
+                    } else {
+                        requestUrl
+                    },
+                    sizeBytes = parseAttachmentSize(link.parent()?.text().orEmpty()),
+                    request = LmsAttachmentRequest(
+                        method = enclosingMethod,
+                        url = requestUrl,
+                        fields = enclosingFields,
+                        refererUrl = finalUrl,
+                    ),
+                )
+            }
+        }
+        FNC_DOWN_ATTACH_FILE.find(action)?.groupValues?.get(1)?.let { attachNo ->
+            val fields = linkedMapOf<String, String>().apply {
+                putAll(enclosingFields)
+                putIfAbsent("report_attach_file_no", attachNo)
+            }
+            val reportNo = fields["report_no"] ?: scopedFieldValue(link, "report_no") ?: return@let
+            fields.putIfAbsent("report_no", reportNo)
+            val actualAttachNo = fields.getValue("report_attach_file_no")
+            val requestUrl = resolve(finalUrl, "/lms/class/report/stud/doDownloadAttachFile.dunet")
+            if (!isLmsAttachmentUrl(requestUrl)) return@let
             return LmsAttachment(
-                id = "$boardNo:${item.id}:$attachNo",
+                id = "report:$reportNo:$actualAttachNo",
                 fileName = link.text().trim().ifBlank { "첨부파일" },
-                downloadUrl = url,
+                downloadUrl = if (enclosingMethod == LmsHttpMethod.GET) withQuery(requestUrl, fields) else requestUrl,
                 sizeBytes = parseAttachmentSize(link.parent()?.text().orEmpty()),
+                request = LmsAttachmentRequest(
+                    method = enclosingMethod,
+                    url = requestUrl,
+                    fields = fields,
+                    refererUrl = finalUrl,
+                ),
+            )
+        }
+        FNC_FILE_DOWN.find(action)?.let { match ->
+            val attachNo = match.groupValues[1]
+            val fields = linkedMapOf<String, String>().apply {
+                putAll(enclosingFields)
+                putIfAbsent("boarditem_attach_file_no", attachNo)
+            }
+            val boardNo = fields["board_no"] ?: scopedFieldValue(link, "board_no") ?: return@let
+            val boardItemNo = fields["boarditem_no"] ?: scopedFieldValue(link, "boarditem_no") ?: return@let
+            val learningDesign = fields["learning_design_yn"]
+                ?: scopedFieldValue(link, "learning_design_yn")
+                ?: return@let
+            fields.putIfAbsent("board_no", boardNo)
+            fields.putIfAbsent("boarditem_no", boardItemNo)
+            fields.putIfAbsent("learning_design_yn", learningDesign)
+            match.groups[2]?.value?.let { timeFlag -> fields.putIfAbsent("time_flag", timeFlag) }
+            val actualAttachNo = fields.getValue("boarditem_attach_file_no")
+            val requestUrl = resolve(finalUrl, "/lms/class/boardItem/doDownloadFile.dunet")
+            if (!isLmsAttachmentUrl(requestUrl)) return@let
+            return LmsAttachment(
+                id = "$boardNo:$boardItemNo:$actualAttachNo",
+                fileName = link.text().trim().ifBlank { "첨부파일" },
+                downloadUrl = if (enclosingMethod == LmsHttpMethod.GET) withQuery(requestUrl, fields) else requestUrl,
+                sizeBytes = parseAttachmentSize(link.parent()?.text().orEmpty()),
+                request = LmsAttachmentRequest(
+                    method = enclosingMethod,
+                    url = requestUrl,
+                    fields = fields,
+                    refererUrl = finalUrl,
+                ),
             )
         }
         DOWNLOAD.find(action)?.groupValues?.let { values ->
             val attachNo = values[1]
             val boardNo = values[2]
             val itemNo = values[3]
-            val learningDesign = values.getOrNull(4).orEmpty().ifBlank { "N" }
-            val url = "$origin/lms/class/boardItem/doDownloadFile.dunet" +
-                "?boarditem_attach_file_no=${encode(attachNo)}&board_no=${encode(boardNo)}" +
-                "&boarditem_no=${encode(itemNo)}&learning_design_yn=${encode(learningDesign)}&time_flag="
+            val fields = linkedMapOf<String, String>().apply {
+                putAll(enclosingFields)
+                putIfAbsent("boarditem_attach_file_no", attachNo)
+                putIfAbsent("board_no", boardNo)
+                putIfAbsent("boarditem_no", itemNo)
+                values.getOrNull(4)?.takeIf(String::isNotBlank)?.let { putIfAbsent("learning_design_yn", it) }
+            }
+            val actualBoardNo = fields.getValue("board_no")
+            val actualItemNo = fields.getValue("boarditem_no")
+            val actualAttachNo = fields.getValue("boarditem_attach_file_no")
+            val requestUrl = resolve(finalUrl, "/lms/class/boardItem/doDownloadFile.dunet")
+            if (!isLmsAttachmentUrl(requestUrl)) return@let
             return LmsAttachment(
-                id = "$boardNo:$itemNo:$attachNo",
+                id = "$actualBoardNo:$actualItemNo:$actualAttachNo",
                 fileName = link.text().trim().ifBlank { "첨부파일" },
-                downloadUrl = url,
+                downloadUrl = if (enclosingMethod == LmsHttpMethod.GET) withQuery(requestUrl, fields) else requestUrl,
                 sizeBytes = parseAttachmentSize(link.parent()?.text().orEmpty()),
+                request = LmsAttachmentRequest(
+                    method = enclosingMethod,
+                    url = requestUrl,
+                    fields = fields,
+                    refererUrl = finalUrl,
+                ),
             )
         }
         val rawHref = link.attr("href").trim()
-        val directUrl = link.absUrl("href").ifBlank { resolve(origin, rawHref) }
+        val directUrl = link.absUrl("href").ifBlank { resolve(finalUrl, rawHref) }
         val path = runCatching { URI.create(directUrl).path.orEmpty() }.getOrDefault("")
-        if (!LmsUrlPolicy.isAllowed(directUrl) || !DOWNLOAD_PATH.containsMatchIn(path)) return null
+        if (!isLmsAttachmentUrl(directUrl) || !DOWNLOAD_PATH.containsMatchIn(path)) return null
         return LmsAttachment(
             id = stableId(directUrl),
             fileName = link.text().trim().ifBlank { "첨부파일" },
             downloadUrl = directUrl,
             sizeBytes = parseAttachmentSize(link.parent()?.text().orEmpty()),
+            request = LmsAttachmentRequest(
+                method = LmsHttpMethod.GET,
+                url = directUrl,
+                refererUrl = finalUrl,
+            ),
         )
     }
+
+    private fun scopedFieldValue(link: Element, fieldName: String): String? {
+        link.closest("form")?.let { form ->
+            return form.selectFirst("input[name=$fieldName], input#$fieldName")?.attr("value")
+        }
+        val candidates = link.ownerDocument()
+            ?.select("input[name=$fieldName], input#$fieldName")
+            .orEmpty()
+        return candidates.singleOrNull()?.attr("value")
+    }
+
+    private fun withQuery(url: String, fields: Map<String, String>): String = url +
+        (if ('?' in url) "&" else "?") +
+        fields.entries.joinToString("&") { (name, value) -> "${encode(name)}=${encode(value)}" }
+
+    private fun isLmsAttachmentUrl(value: String): Boolean = LmsUrlPolicy.isAllowed(value) &&
+        runCatching { URI.create(value).host == "lms.dima.ac.kr" }.getOrDefault(false)
 
     private fun parseAttachmentSize(text: String): Long? {
         val match = FILE_SIZE.find(text) ?: return null
@@ -455,12 +695,10 @@ class LmsHtmlParser(private val zoneId: ZoneId = ZoneId.of("Asia/Seoul")) {
     }
 
     private fun extractInstant(text: String, label: String): Instant? {
-        val match = Regex("$label\\s*[:：]?\\s*(\\d{4}\\.\\d{2}\\.\\d{2}\\s+\\d{2}:\\d{2}:\\d{2})")
+        val match = Regex("$label\\s*[:：]?\\s*(${DATE_TIME_VALUE.pattern})")
             .find(text)
             ?: return null
-        return runCatching {
-            LocalDateTime.parse(match.groupValues[1], DATE_TIME).atZone(zoneId).toInstant()
-        }.getOrNull()
+        return parseInstantValue(match.groupValues[1])
     }
 
     private fun queryValue(url: String, name: String): String? = runCatching {
@@ -488,15 +726,43 @@ class LmsHtmlParser(private val zoneId: ZoneId = ZoneId.of("Asia/Seoul")) {
         val COURSE_PREFIX = Regex("^\\[[^]]+]\\s*")
         val LOGIN_REDIRECT_LOCATION = Regex("(?:top\\.)?(?:window\\.)?location(?:\\.href)?\\s*=", RegexOption.IGNORE_CASE)
         val PROFESSOR = Regex("교수(?:명)?\\s*[:：]\\s*([^·|\\n]+)")
+        val AUTHOR = Regex("작성자\\s*[:：]\\s*([^|·\\n]+?)(?=\\s*(?:\\||등록일|조회수|$))")
         val DOWNLOAD = Regex("(?:doDownloadFile|fn_fileDown)\\(['\"]([^'\"]+)['\"]\\s*,\\s*['\"]([^'\"]+)['\"]\\s*,\\s*['\"]([^'\"]+)['\"](?:\\s*,\\s*['\"]([^'\"]*)['\"])?")
-        val FNC_FILE_DOWN = Regex("fncFileDown\\(\\s*['\"]([^'\"]+)['\"]")
+        val FNC_FILE_DOWN = Regex(
+            "fncFileDown\\(\\s*['\"]([^'\"]+)['\"](?:\\s*,\\s*['\"]([^'\"]*)['\"])?",
+        )
+        val FNC_DOWN_ATTACH_FILE = Regex("fncDownAttachFile\\(\\s*['\"]([^'\"]+)['\"]")
         val DOWNLOAD_PATH = Regex("(?:download|filedown)", RegexOption.IGNORE_CASE)
         val YEAR = Regex("(\\d{4})년?")
         val CHANGE_YEAR_TERM = Regex("changeYearTerm\\(\\s*['\"]([^'\"]+)['\"]\\s*,\\s*['\"]([^'\"]+)['\"]\\s*,\\s*['\"]([^'\"]+)['\"]")
         val VIEW_BOARD_ITEM = Regex("(?:fncViewBoardItem|fnViewBoardItem|doViewBoardItem)\\(\\s*['\"]([^'\"]+)['\"]")
         val PAGE_ACTION = Regex("(?:fncPage|goPage|fnPage)\\(\\s*['\"]?(\\d+)['\"]?")
         val STATUS_ARGUMENT = Regex("['\"]([A-Za-z0-9_-]{1,64})['\"]")
+        val STATUS_JAVASCRIPT_LINK = Regex(
+            """^javascript:\s*changeToDoList\(\s*(['\"])(complete|incomplete)\1\s*\)\s*;?\s*$""",
+            RegexOption.IGNORE_CASE,
+        )
+        val FNC_MODIFY_REPORT = Regex(
+            "fncModifyReport\\(\\s*['\"]?([A-Za-z0-9_-]{1,128})['\"]?\\s*," +
+                "\\s*['\"]([A-Za-z0-9_-]{1,32})['\"]\\s*," +
+                "\\s*['\"]([A-Za-z0-9_-]{1,32})['\"]\\s*," +
+                "\\s*['\"]([A-Za-z0-9_-]{1,32})['\"]\\s*," +
+                "\\s*['\"]([A-Za-z0-9_-]{1,32})['\"]\\s*\\)",
+        )
         val FILE_SIZE = Regex("(\\d+(?:\\.\\d+)?)\\s*(B|KB|MB|GB)\\b", RegexOption.IGNORE_CASE)
+        val DATE_TIME_VALUE = Regex("\\d{4}\\.\\d{2}\\.\\d{2}\\s+\\d{2}:\\d{2}(?::\\d{2})?")
         val PAGE_FIELD_NAMES = setOf("current_page", "page", "pageIndex", "pageNo")
+        val DETAIL_BODY_LABELS = setOf("내용", "과제내용")
+        val ATTACHMENT_FIELD_NAMES = setOf(
+            "boarditem_attach_file_no",
+            "board_no",
+            "boarditem_no",
+            "learning_design_yn",
+            "time_flag",
+            "report_attach_file_no",
+            "report_no",
+        )
+        const val ASSIGNMENT_LIST_PATH = "/lms/class/report/stud/doListView.dunet"
+        const val ASSIGNMENT_MNID = "201008840336"
     }
 }

@@ -163,4 +163,56 @@ class LmsHistoryScreenTest {
         composeRule.onNodeWithText("완료한 학습").performClick()
         composeRule.onNodeWithText("완료한 콘텐츠").assertExists()
     }
+
+    @Test
+    fun videoCardsDistinguishCourseCompletionFromReadState() {
+        composeRule.setContent {
+            DIMANowTheme {
+                LmsItemsScreen(
+                    snapshot = LmsSnapshot(
+                        courses = listOf(LmsCourse("audio", "음향기초실습")),
+                        items = listOf(
+                            LmsItem(
+                                id = "video-complete",
+                                courseId = "audio",
+                                courseName = "음향기초실습",
+                                kind = LmsItemKind.CONTENT,
+                                title = "사운드디자인 기초(1)",
+                                detailUrl = "https://lms.dima.ac.kr/item/video-complete",
+                                isRead = false,
+                                completionState = LmsCompletionState.COMPLETE,
+                            ),
+                            LmsItem(
+                                id = "video-incomplete",
+                                courseId = "audio",
+                                courseName = "음향기초실습",
+                                kind = LmsItemKind.CONTENT,
+                                title = "사운드디자인 기초(2)",
+                                detailUrl = "https://lms.dima.ac.kr/item/video-incomplete",
+                                isRead = true,
+                                completionState = LmsCompletionState.INCOMPLETE,
+                            ),
+                        ),
+                        syncState = LmsSyncState.READY,
+                    ),
+                    sessionState = LmsSessionState.ACTIVE,
+                    selectedCourse = null,
+                    selectedKind = null,
+                    selectedRead = null,
+                    onCourseChange = {},
+                    onKindChange = {},
+                    onReadChange = {},
+                    onRefresh = {},
+                    onOpenItem = {},
+                    now = Instant.parse("2026-09-01T03:00:00Z"),
+                )
+            }
+        }
+
+        composeRule.onNodeWithTag("lms_mode_all").performClick()
+        composeRule.onNodeWithText("사운드디자인 기초(1)").assertExists()
+        composeRule.onNodeWithText("사운드디자인 기초(2)").assertExists()
+        composeRule.onNodeWithText("수강 완료").assertExists()
+        composeRule.onNodeWithText("미수강").assertExists()
+    }
 }

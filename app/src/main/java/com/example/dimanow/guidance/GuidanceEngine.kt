@@ -26,6 +26,44 @@ enum class ShuttleBoardPurpose {
     RETURN,
 }
 
+enum class ShuttleServicePattern {
+    DAY_A,
+    DAY_B,
+    EVENING_LOOP,
+    FIELD_OVERRIDE,
+    SUNDAY,
+    OTHER,
+}
+
+data class ShuttleStopCall(
+    val id: String,
+    val sequence: Int,
+    val zone: CampusZoneId,
+    val stopId: String,
+    val expectedTime: java.time.LocalTime,
+)
+
+data class ShuttleVehicleRun(
+    val id: String,
+    val serviceDay: DayOfWeek,
+    val pattern: ShuttleServicePattern,
+    val stopCalls: List<ShuttleStopCall>,
+)
+
+data class ShuttleTopology(val runs: List<ShuttleVehicleRun>)
+
+data class ShuttleReportAggregate(
+    val runId: String,
+    val stopCallId: String,
+    val stopSequence: Int,
+    val count: Int,
+)
+
+data class ShuttleReportableEvent(
+    val run: ShuttleVehicleRun,
+    val stopCall: ShuttleStopCall,
+)
+
 data class ShuttleCountdown(
     val departure: ShuttleDeparture,
     val remainingMinutes: Long,
@@ -72,6 +110,165 @@ data class AnnotatedServiceDeparture(
 }
 
 class GuidanceEngine {
+    fun reportableMissedEvents(
+        now: ZonedDateTime,
+        zone: CampusZoneId,
+        topology: ShuttleTopology,
+    ): List<ShuttleReportableEvent> = topology.runs.asSequence()
+        .filter { it.serviceDay == now.dayOfWeek }
+        .flatMap { run -> run.stopCalls.asSequence().map { ShuttleReportableEvent(run, it) } }
+        .filter { it.stopCall.zone == zone && canReportMissedShuttle(now, it.run, it.stopCall, topology) }
+        .sortedByDescending { it.stopCall.expectedTime }
+        .toList()
+
+    fun stopCallForDeparture(
+        topology: ShuttleTopology,
+        departure: ShuttleDeparture,
+    ): ShuttleReportableEvent? {
+        val candidates = topology.runs.asSequence()
+            .filter { it.serviceDay == departure.serviceDay }
+            .flatMap { run -> run.stopCalls.asSequence().map { ShuttleReportableEvent(run, it) } }
+            .filter { event ->
+                event.stopCall.zone == departure.originZone &&
+                    event.stopCall.expectedTime == departure.time &&
+                    event.stopCall.stopId == departure.sourceStopId
+            }
+            .toList()
+        return when {
+            departure.sourceRouteId == "B-evening" && departure.originZone == CampusZoneId.YEIN -> candidates.firstOrNull { it.run.pattern == ShuttleServicePattern.EVENING_LOOP && it.stopCall.sequence == 0 }
+            departure.sourceRouteId.endsWith("-evening") && departure.originZone == CampusZoneId.ONE_ROOM -> candidates.firstOrNull { it.run.pattern == ShuttleServicePattern.EVENING_LOOP && it.stopCall.sequence == 2 }
+            departure.sourceRouteId.endsWith("-evening") && departure.originZone == CampusZoneId.MAIN -> candidates.firstOrNull { it.run.pattern == ShuttleServicePattern.EVENING_LOOP && it.stopCall.sequence == 3 }
+            else -> candidates.firstOrNull { it.run.pattern != ShuttleServicePattern.EVENING_LOOP && it.stopCall.sequence == 0 }
+        }
+    }
+
+    fun affectedReportCount(
+        run: ShuttleVehicleRun,
+        stopCall: ShuttleStopCall,
+        reports: List<ShuttleReportAggregate>,
+    ): Int = reports.asSequence()
+        .filter { it.runId == run.id && it.stopSequence <= stopCall.sequence }
+        .sumOf { it.count }
+
+    fun canReportMissedShuttle(
+        now: ZonedDateTime,
+        run: ShuttleVehicleRun,
+        stopCall: ShuttleStopCall,
+        topology: ShuttleTopology,
+    ): Boolean {
+        if (now.dayOfWeek != run.serviceDay) return false
+        val expectedAt = now.toLocalDate().atTime(stopCall.expectedTime).atZone(now.zone)
+        if (now.isBefore(expectedAt)) return false
+        val nextSameStop = topology.runs.asSequence()
+            .filter { it.serviceDay == run.serviceDay }
+            .flatMap { candidate -> candidate.stopCalls.asSequence() }
+            .filter { candidate ->
+                candidate.id != stopCall.id &&
+                    candidate.stopId == stopCall.stopId &&
+                    candidate.expectedTime.isAfter(stopCall.expectedTime)
+            }
+            .minByOrNull { it.expectedTime }
+            ?.let { now.toLocalDate().atTime(it.expectedTime).atZone(now.zone) }
+        val closesAt = listOfNotNull(expectedAt.plusMinutes(15), nextSameStop).minOrNull()!!
+        return now.isBefore(closesAt)
+    }
+
+    /**
+     * Builds the physical-run projection used by delay reporting. Raw official rows remain intact.
+     * Daytime A/B rows are separate services; the A/B evening rows are one three-stop loop.
+     */
+    fun prepareShuttleTopology(departures: List<ShuttleDeparture>): ShuttleTopology {
+        val daytime = departures.asSequence()
+            .filterNot { it.sourceRouteId.endsWith("-evening") }
+            .map { departure ->
+                val pattern = when (departure.sourceRouteId) {
+                    "A" -> ShuttleServicePattern.DAY_A
+                    "B" -> ShuttleServicePattern.DAY_B
+                    "A-field-extra" -> ShuttleServicePattern.FIELD_OVERRIDE
+                    "C" -> ShuttleServicePattern.SUNDAY
+                    else -> ShuttleServicePattern.OTHER
+                }
+                val runId = listOf(
+                    pattern.name.lowercase(),
+                    departure.serviceDay.name.lowercase(),
+                    departure.time.toString().replace(":", ""),
+                    departure.originZone.name.lowercase(),
+                ).joinToString("-")
+                val calls = buildList {
+                    add(
+                        ShuttleStopCall(
+                            id = "$runId:0",
+                            sequence = 0,
+                            zone = departure.originZone,
+                            stopId = departure.sourceStopId,
+                            expectedTime = departure.time,
+                        ),
+                    )
+                    departure.arrivalTime?.let { arrival ->
+                        val destination = requireNotNull(departure.destinationZone)
+                        add(
+                            ShuttleStopCall(
+                                id = "$runId:1",
+                                sequence = 1,
+                                zone = destination,
+                                stopId = defaultStopId(destination),
+                                expectedTime = arrival,
+                            ),
+                        )
+                    }
+                }
+                ShuttleVehicleRun(runId, departure.serviceDay, pattern, calls)
+            }
+            .toList()
+
+        val evening = departures.asSequence()
+            .filter {
+                it.sourceRouteId == "A-evening" &&
+                    it.originZone == CampusZoneId.ONE_ROOM &&
+                    it.destinationZone == CampusZoneId.MAIN
+            }
+            .mapNotNull { oneRoom ->
+                val firstMainTime = oneRoom.time.minusMinutes(5)
+                val firstLeg = departures.firstOrNull {
+                    it.serviceDay == oneRoom.serviceDay &&
+                        it.sourceRouteId == "B-evening" &&
+                        it.originZone == CampusZoneId.YEIN &&
+                        it.destinationZone == CampusZoneId.MAIN &&
+                        it.arrivalTime == firstMainTime
+                } ?: return@mapNotNull null
+                val secondMainTime = oneRoom.arrivalTime ?: return@mapNotNull null
+                val finalLeg = departures.firstOrNull {
+                    it.serviceDay == oneRoom.serviceDay &&
+                        it.sourceRouteId.endsWith("-evening") &&
+                        it.originZone == CampusZoneId.MAIN &&
+                        it.destinationZone == CampusZoneId.YEIN &&
+                        it.time == secondMainTime
+                } ?: return@mapNotNull null
+                val finalYeinTime = finalLeg.arrivalTime ?: return@mapNotNull null
+                val runId = "evening-loop-${oneRoom.serviceDay.name.lowercase()}-${oneRoom.time.toString().replace(":", "")}"
+                val callData = listOf(
+                    Triple(CampusZoneId.YEIN, firstLeg.sourceStopId, firstLeg.time),
+                    Triple(CampusZoneId.MAIN, STADIUM_STOP_ID, firstMainTime),
+                    Triple(CampusZoneId.ONE_ROOM, oneRoom.sourceStopId, oneRoom.time),
+                    Triple(CampusZoneId.MAIN, STADIUM_STOP_ID, secondMainTime),
+                    Triple(CampusZoneId.YEIN, defaultStopId(CampusZoneId.YEIN), finalYeinTime),
+                )
+                ShuttleVehicleRun(
+                    id = runId,
+                    serviceDay = oneRoom.serviceDay,
+                    pattern = ShuttleServicePattern.EVENING_LOOP,
+                    stopCalls = callData.mapIndexed { sequence, (zone, stopId, time) ->
+                        ShuttleStopCall("$runId:$sequence", sequence, zone, stopId, time)
+                    },
+                )
+            }
+            .toList()
+
+        return ShuttleTopology(
+            (daytime + evening).sortedWith(compareBy<ShuttleVehicleRun> { it.serviceDay.value }.thenBy { it.stopCalls.first().expectedTime }),
+        )
+    }
+
     fun prepareShuttleSchedule(departures: List<ShuttleDeparture>): ShuttleScheduleIndex {
         val grouped = departures
             .filter { it.destinationZone != null }
@@ -397,6 +594,13 @@ class GuidanceEngine {
                 if (departures[middle].time.isBefore(time)) low = middle + 1 else high = middle
             }
             return low
+        }
+
+        fun defaultStopId(zone: CampusZoneId): String = when (zone) {
+            CampusZoneId.YEIN -> "yein"
+            CampusZoneId.MAIN -> "university-headquarters"
+            CampusZoneId.ONE_ROOM -> "one-room"
+            CampusZoneId.OUTSIDE -> error("OUTSIDE에는 셔틀 정류장이 없습니다.")
         }
     }
 }

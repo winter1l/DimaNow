@@ -1,6 +1,7 @@
 package com.example.dimanow.ui
 
 import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
@@ -25,6 +26,12 @@ import com.example.dimanow.meal.DormitoryMealSection
 import com.example.dimanow.shuttle.ShuttleData
 import com.example.dimanow.shuttle.ShuttleRefreshResult
 import com.example.dimanow.shuttle.ShuttleSource
+import com.example.dimanow.shuttle.ShuttleReportSource
+import com.example.dimanow.shuttle.ShuttleReportState
+import com.example.dimanow.shuttle.ShuttleReportActionResult
+import com.example.dimanow.shuttle.ShuttleReportEventKey
+import com.example.dimanow.guidance.ShuttleReportAggregate
+import com.example.dimanow.location.LocationMode
 import com.example.dimanow.theme.DIMANowTheme
 import java.time.DayOfWeek
 import java.time.Instant
@@ -39,6 +46,41 @@ import org.junit.Test
 
 class DataSourceScreenTest {
     @get:Rule val composeRule = createComposeRule()
+
+    @Test
+    fun currentStopShowsAnonymousMissedShuttleReportsButTestModeCannotSubmit() {
+        val now = ZonedDateTime.of(2026, 9, 2, 18, 55, 1, 0, ZoneId.of("Asia/Seoul"))
+        val departures = listOf(
+            ShuttleDeparture("B-evening", "yein", "TO_MAIN", now.dayOfWeek, LocalTime.of(18, 40), CampusZoneId.YEIN, CampusZoneId.MAIN, LocalTime.of(18, 45)),
+            ShuttleDeparture("A-evening", "one-room", "TO_MAIN", now.dayOfWeek, LocalTime.of(18, 50), CampusZoneId.ONE_ROOM, CampusZoneId.MAIN, LocalTime.of(18, 55)),
+            ShuttleDeparture("A-evening", "stadium-stop", "TO_YEIN", now.dayOfWeek, LocalTime.of(18, 55), CampusZoneId.MAIN, CampusZoneId.YEIN, LocalTime.of(19, 0)),
+            ShuttleDeparture("B-evening", "stadium-stop", "TO_YEIN", now.dayOfWeek, LocalTime.of(18, 55), CampusZoneId.MAIN, CampusZoneId.YEIN, LocalTime.of(19, 0)),
+        )
+        val shuttleSource = FakeShuttleSource(departures).also {
+            it.data.value = it.data.value.copy(serverRevision = 9)
+        }
+        val reportSource = FakeReportSource(
+            ShuttleReportState(
+                serviceDate = now.toLocalDate(),
+                scheduleRevision = 9,
+                reports = listOf(ShuttleReportAggregate("evening-loop-wednesday-1850", "evening-loop-wednesday-1850:0", 0, 2)),
+            ),
+        )
+        composeRule.setContent {
+            ShuttleScreen(
+                shuttleSource = shuttleSource,
+                currentZone = CampusZoneId.MAIN,
+                reportSource = reportSource,
+                locationMode = LocationMode.TEST,
+                now = now,
+            )
+        }
+
+        composeRule.onNodeWithText("18:55 셔틀이 오지 않나요?").assertExists()
+        composeRule.onNodeWithText("2명이 이 운행을 신고했어요").assertExists()
+        composeRule.onNodeWithText("테스트 모드에서는 현황만 볼 수 있어요").assertExists()
+        composeRule.onNodeWithText("신고").assertIsNotEnabled()
+    }
 
     @Test
     fun nearestNormalDepartureUsesTheSolidPrimaryColorInLightTheme() {
@@ -371,6 +413,13 @@ class DataSourceScreenTest {
             ),
         )
         override suspend fun refresh() = ShuttleRefreshResult.Success(data.value.departures.size, Instant.parse("2026-08-26T12:00:10Z"))
+    }
+
+    private class FakeReportSource(initial: ShuttleReportState) : ShuttleReportSource {
+        override val state = MutableStateFlow(initial)
+        override suspend fun refresh(serviceDate: LocalDate, scheduleRevision: Long) = ShuttleReportActionResult.Success
+        override suspend fun report(event: ShuttleReportEventKey) = ShuttleReportActionResult.Success
+        override suspend fun revoke(event: ShuttleReportEventKey) = ShuttleReportActionResult.Success
     }
 
     private class FakeMealSource(

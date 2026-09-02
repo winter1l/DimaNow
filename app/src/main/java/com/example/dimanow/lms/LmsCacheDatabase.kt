@@ -42,6 +42,11 @@ data class LmsDetailEntity(
     @PrimaryKey val itemKey: String,
     val sanitizedHtml: String,
     val fetchedAtMillis: Long,
+    val author: String? = null,
+    val registeredAtMillis: Long? = null,
+    val submissionStartsAtMillis: Long? = null,
+    val submissionEndsAtMillis: Long? = null,
+    val maxScore: String? = null,
 )
 
 @Entity(tableName = "lms_attachments")
@@ -52,6 +57,9 @@ data class LmsAttachmentEntity(
     val fileName: String,
     val downloadUrl: String,
     val sizeBytes: Long?,
+    val requestMethod: String? = null,
+    val requestFieldsJson: String? = null,
+    val refererUrl: String? = null,
 )
 
 @Entity(tableName = "lms_sync")
@@ -178,7 +186,7 @@ interface LmsCacheDao {
         LmsAttachmentEntity::class,
         LmsSyncEntity::class,
     ],
-    version = 4,
+    version = 5,
     exportSchema = false,
 )
 abstract class LmsCacheDatabase : RoomDatabase() {
@@ -201,5 +209,18 @@ val LMS_CACHE_MIGRATION_3_4 = object : Migration(3, 4) {
     override fun migrate(db: SupportSQLiteDatabase) {
         db.execSQL("ALTER TABLE lms_items ADD COLUMN completionState TEXT NOT NULL DEFAULT 'UNKNOWN'")
         db.execSQL("ALTER TABLE lms_items ADD COLUMN changeState TEXT NOT NULL DEFAULT 'NONE'")
+    }
+}
+
+val LMS_CACHE_MIGRATION_4_5 = object : Migration(4, 5) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE lms_details ADD COLUMN author TEXT")
+        db.execSQL("ALTER TABLE lms_details ADD COLUMN registeredAtMillis INTEGER")
+        db.execSQL("ALTER TABLE lms_details ADD COLUMN submissionStartsAtMillis INTEGER")
+        db.execSQL("ALTER TABLE lms_details ADD COLUMN submissionEndsAtMillis INTEGER")
+        db.execSQL("ALTER TABLE lms_details ADD COLUMN maxScore TEXT")
+        db.execSQL("ALTER TABLE lms_attachments ADD COLUMN requestMethod TEXT")
+        db.execSQL("ALTER TABLE lms_attachments ADD COLUMN requestFieldsJson TEXT")
+        db.execSQL("ALTER TABLE lms_attachments ADD COLUMN refererUrl TEXT")
     }
 }

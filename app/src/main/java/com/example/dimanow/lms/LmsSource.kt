@@ -3,6 +3,7 @@ package com.example.dimanow.lms
 import android.webkit.CookieManager
 import java.io.File
 import java.io.FileOutputStream
+import java.io.IOException
 import java.net.HttpURLConnection
 import java.net.URI
 import java.net.URL
@@ -11,12 +12,14 @@ import java.nio.charset.Charset
 import java.time.Clock
 import java.time.Duration
 import java.time.Instant
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import org.json.JSONObject
 
 sealed interface LmsRefreshResult {
     data object Success : LmsRefreshResult
@@ -36,11 +39,23 @@ sealed interface LmsDetailLoadResult {
 
 private class RenderedLmsSessionExpiredException : Exception()
 
+private class OfficialCoursePageRequiredException : Exception()
+
+private class RejectedLmsAttachmentException(
+    val sessionExpired: Boolean,
+    message: String,
+) : IOException(message)
+
 interface LmsSource {
     val snapshot: Flow<LmsSnapshot>
     suspend fun refresh(force: Boolean = false): LmsRefreshResult
     suspend fun loadDetail(item: LmsItem): LmsDetailLoadResult
-    suspend fun downloadAttachment(attachment: LmsAttachment, destination: File, onProgress: (Long, Long?) -> Unit = { _, _ -> }): LmsRefreshResult
+    suspend fun downloadAttachment(
+        attachment: LmsAttachment,
+        destination: File,
+        onProgress: (Long, Long?) -> Unit = { _, _ -> },
+    ): LmsAttachmentDownloadResult
+    suspend fun markItemOpened(item: LmsItem) = Unit
     suspend fun clearPrivateData()
     suspend fun storeRenderedCourses(courses: List<LmsCourse>)
 }
@@ -58,7 +73,13 @@ interface LmsHttpTransport {
     suspend fun postForm(url: String, fields: Map<String, String>, maxBytes: Long = 2L * 1024 * 1024): LmsHttpResponse
     suspend fun postAjax(url: String, fields: Map<String, String>, maxBytes: Long = 2L * 1024 * 1024): LmsHttpResponse =
         postForm(url, fields, maxBytes)
-    suspend fun download(url: String, destination: File, maxBytes: Long, onProgress: (Long, Long?) -> Unit): LmsHttpResponse
+    suspend fun downloadAttachment(
+        request: LmsAttachmentRequest,
+        destination: File,
+        suggestedFileName: String,
+        maxBytes: Long,
+        onProgress: (Long, Long?) -> Unit,
+    ): LmsAttachmentDownloadResult
 }
 
 class UrlConnectionLmsTransport(
@@ -177,15 +198,84 @@ class UrlConnectionLmsTransport(
         error("Too many LMS redirects")
     }
 
-    override suspend fun download(
+    override suspend fun downloadAttachment(
+        request: LmsAttachmentRequest,
+        destination: File,
+        suggestedFileName: String,
+        maxBytes: Long,
+        onProgress: (Long, Long?) -> Unit,
+    ): LmsAttachmentDownloadResult {
+        if (destination.exists()) {
+            return LmsAttachmentDownloadResult.Failure("첨부파일 캐시가 이미 존재합니다")
+        }
+        return try {
+            require(!request.refererUrl.isNullOrBlank()) { "첨부파일 Referer가 없습니다" }
+            requireOfficialAttachmentUrl(request.url)
+            requireOfficialAttachmentUrl(requireNotNull(request.refererUrl))
+            val requestUrl = if (request.method == LmsHttpMethod.GET) {
+                appendQueryFields(request.url, request.fields)
+            } else {
+                request.url
+            }
+            val response = downloadToFile(
+                url = requestUrl,
+                destination = destination,
+                maxBytes = maxBytes,
+                onProgress = onProgress,
+                refererUrl = request.refererUrl,
+                method = request.method,
+                fields = request.fields,
+            )
+            val bytesWritten = destination.length()
+            val declaredLength = response.headerValue("Content-Length")?.toLongOrNull()
+            when {
+                bytesWritten == 0L -> {
+                    destination.delete()
+                    LmsAttachmentDownloadResult.Failure("빈 첨부파일 응답입니다")
+                }
+                declaredLength != null && declaredLength != bytesWritten -> {
+                    destination.delete()
+                    LmsAttachmentDownloadResult.Failure("첨부파일 길이가 응답과 일치하지 않습니다")
+                }
+                else -> LmsAttachmentDownloadResult.Success(
+                    bytesWritten = bytesWritten,
+                    fileName = LmsAttachmentNaming.fromContentDisposition(
+                        response.headerValue("Content-Disposition"),
+                        suggestedFileName,
+                    ),
+                    contentType = response.contentType?.substringBefore(';')?.trim(),
+                )
+            }
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (error: Throwable) {
+            if (error is RejectedLmsAttachmentException && error.sessionExpired) {
+                LmsAttachmentDownloadResult.SessionExpired
+            } else {
+                LmsAttachmentDownloadResult.Failure(error.message ?: "첨부파일을 저장하지 못했습니다")
+            }
+        }
+    }
+
+    private suspend fun downloadToFile(
         url: String,
         destination: File,
         maxBytes: Long,
         onProgress: (Long, Long?) -> Unit,
+        refererUrl: String?,
+        method: LmsHttpMethod = LmsHttpMethod.GET,
+        fields: Map<String, String> = emptyMap(),
     ): LmsHttpResponse = withContext(Dispatchers.IO) {
         val part = File(destination.parentFile, destination.name + ".part")
         try {
-            val response = execute(url, maxBytes) { connection, total ->
+            val response = execute(
+                initialUrl = url,
+                maxBytes = maxBytes,
+                refererUrl = refererUrl,
+                requireAttachmentHost = true,
+                requestMethod = method,
+                formFields = fields,
+            ) { connection, total ->
                 FileOutputStream(part).use { output ->
                     connection.inputStream.use { input ->
                         val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
@@ -198,11 +288,32 @@ class UrlConnectionLmsTransport(
                             output.write(buffer, 0, read)
                             onProgress(count, total)
                         }
+                        check(total == null || count == total) {
+                            "첨부파일 길이가 응답과 일치하지 않습니다"
+                        }
                     }
                 }
                 ByteArray(0) to total
             }.first
-            check(!response.contentType.orEmpty().contains("text/html", ignoreCase = true)) { "로그인 세션이 만료되었습니다" }
+            val prefix = part.readPrefix(HTML_SNIFF_BYTES)
+            val prefixText = normalizeMarkupPrefix(prefix)
+            val scriptRedirectsToLogin = isLoginRedirectScript(prefixText)
+            val declaredMarkup = response.contentType
+                ?.substringBefore(';')
+                ?.trim()
+                ?.lowercase() in setOf("text/html", "application/xhtml+xml")
+            val isHtml = declaredMarkup ||
+                HTML_DOCUMENT_START_REGEX.containsMatchIn(prefixText) ||
+                scriptRedirectsToLogin
+            if (isHtml) {
+                val sessionExpired = isOfficialLmsCredentialPage(response.finalUrl) ||
+                    scriptRedirectsToLogin ||
+                    containsLoginForm(prefixText)
+                throw RejectedLmsAttachmentException(
+                    sessionExpired = sessionExpired,
+                    message = if (sessionExpired) "로그인 세션이 만료되었습니다" else "첨부파일 대신 HTML 오류가 반환되었습니다",
+                )
+            }
             check(part.renameTo(destination)) { "첨부파일을 확정하지 못했습니다" }
             response
         } catch (error: Throwable) {
@@ -214,24 +325,51 @@ class UrlConnectionLmsTransport(
     private fun <T> execute(
         initialUrl: String,
         maxBytes: Long,
+        refererUrl: String? = null,
+        requireAttachmentHost: Boolean = false,
+        requestMethod: LmsHttpMethod = LmsHttpMethod.GET,
+        formFields: Map<String, String> = emptyMap(),
         consume: (HttpURLConnection, Long?) -> Pair<T, Long?>,
     ): Pair<LmsHttpResponse, T> {
         var current = initialUrl
+        var sendPostBody = requestMethod == LmsHttpMethod.POST
+        val encodedForm = encodeFields(formFields).toByteArray(Charsets.UTF_8)
         repeat(MAX_REDIRECTS + 1) { redirectCount ->
-            val uri = validateUrl(current)
+            val uri = if (requireAttachmentHost) requireOfficialAttachmentUrl(current) else validateUrl(current)
             val connection = connectionFactory(URL(uri.toString()))
             connection.instanceFollowRedirects = false
             connection.connectTimeout = 15_000
             connection.readTimeout = 30_000
             connection.setRequestProperty("Accept", "text/html,application/xhtml+xml,application/octet-stream;q=0.9,*/*;q=0.8")
             connection.setRequestProperty("User-Agent", userAgent)
+            refererUrl?.let { connection.setRequestProperty("Referer", it) }
             cookieProvider(current)?.takeIf { it.isNotBlank() }?.let { connection.setRequestProperty("Cookie", it) }
+            if (sendPostBody) {
+                connection.requestMethod = "POST"
+                connection.doOutput = true
+                connection.setRequestProperty("Origin", "${uri.scheme}://${uri.authority}")
+                connection.setRequestProperty("Content-Type", "application/x-www-form-urlencoded")
+                connection.setFixedLengthStreamingMode(encodedForm.size)
+                connection.outputStream.use { it.write(encodedForm) }
+            }
             val status = connection.responseCode
             if (status in 300..399) {
                 storeResponseCookies(current, connection)
                 val location = connection.getHeaderField("Location") ?: error("LMS redirect has no location")
                 check(redirectCount < MAX_REDIRECTS) { "Too many LMS redirects" }
-                current = uri.resolve(location).toString()
+                val redirectUrl = uri.resolve(location).toString()
+                if (
+                    requireAttachmentHost &&
+                    (isExactOfficialLmsSessionConflictUrl(redirectUrl) || isOfficialLmsCredentialPage(redirectUrl))
+                ) {
+                    connection.disconnect()
+                    throw RejectedLmsAttachmentException(
+                        sessionExpired = true,
+                        message = "로그인 세션이 만료되었습니다",
+                    )
+                }
+                current = redirectUrl
+                if (status in 301..303) sendPostBody = false
                 connection.disconnect()
                 return@repeat
             }
@@ -254,6 +392,79 @@ class UrlConnectionLmsTransport(
     }
 
     private fun validateUrl(value: String): URI = LmsUrlPolicy.requireAllowed(value)
+
+    private fun requireOfficialAttachmentUrl(value: String): URI = URI.create(value).also { uri ->
+        require(
+            uri.scheme == "https" &&
+                uri.host.equals(LMS_HOST, ignoreCase = true) &&
+                uri.userInfo == null &&
+                uri.port in setOf(-1, 443),
+        ) { "허용되지 않은 LMS 첨부파일 주소입니다" }
+    }
+
+    private fun appendQueryFields(url: String, fields: Map<String, String>): String {
+        if (fields.isEmpty()) return url
+        val fragmentIndex = url.indexOf('#')
+        val base = if (fragmentIndex >= 0) url.substring(0, fragmentIndex) else url
+        val fragment = if (fragmentIndex >= 0) url.substring(fragmentIndex) else ""
+        val separator = if (URI.create(base).rawQuery.isNullOrEmpty()) "?" else "&"
+        return "$base$separator${encodeFields(fields)}$fragment"
+    }
+
+    private fun encodeFields(fields: Map<String, String>): String = fields.entries.joinToString("&") { (key, value) ->
+            "${java.net.URLEncoder.encode(key, Charsets.UTF_8.name())}=" +
+                java.net.URLEncoder.encode(value, Charsets.UTF_8.name())
+    }
+
+    private fun LmsHttpResponse.headerValue(name: String): String? = headers.entries
+        .firstOrNull { it.key.equals(name, ignoreCase = true) }
+        ?.value
+        ?.firstOrNull()
+
+    private fun File.readPrefix(limit: Int): ByteArray = inputStream().use { input ->
+        val output = java.io.ByteArrayOutputStream()
+        val buffer = ByteArray(minOf(DEFAULT_BUFFER_SIZE, limit))
+        while (output.size() < limit) {
+            val read = input.read(buffer, 0, minOf(buffer.size, limit - output.size()))
+            if (read < 0) break
+            output.write(buffer, 0, read)
+        }
+        output.toByteArray()
+    }
+
+    private fun normalizeMarkupPrefix(bytes: ByteArray): String {
+        var text = bytes.toString(Charsets.UTF_8).removePrefix("\uFEFF").trimStart()
+        while (true) {
+            text = when {
+                text.startsWith("<?xml", ignoreCase = true) -> {
+                    val end = text.indexOf("?>")
+                    if (end < 0) return text.lowercase()
+                    text.substring(end + 2).trimStart()
+                }
+                text.startsWith("<!--") -> {
+                    val end = text.indexOf("-->")
+                    if (end < 0) return text.lowercase()
+                    text.substring(end + 3).trimStart()
+                }
+                else -> return text.lowercase()
+            }
+        }
+    }
+
+    private fun isLoginRedirectScript(prefixText: String): Boolean {
+        if (!prefixText.startsWith("<script")) return false
+        val navigates = SCRIPT_NAVIGATION_REGEX.containsMatchIn(prefixText)
+        val targetsLogin = prefixText.contains("/login/dologinpage.dunet") ||
+            prefixText.contains("portal.dima.ac.kr")
+        return navigates && targetsLogin
+    }
+
+    private fun containsLoginForm(prefixText: String): Boolean {
+        if (!prefixText.contains("<form")) return false
+        if (prefixText.contains("/login/dologin")) return true
+        return LOGIN_ID_INPUT_REGEX.containsMatchIn(prefixText) &&
+            LOGIN_PASSWORD_INPUT_REGEX.containsMatchIn(prefixText)
+    }
 
     private fun storeResponseCookies(url: String, connection: HttpURLConnection) {
         connection.headerFields.entries
@@ -282,11 +493,21 @@ class UrlConnectionLmsTransport(
 
     private companion object {
         const val MAX_REDIRECTS = 5
+        const val HTML_SNIFF_BYTES = 64 * 1024
+        const val LMS_HOST = "lms.dima.ac.kr"
         const val LMS_DASHBOARD_REFERER =
             "https://lms.dima.ac.kr/lms/myLecture/doListView.dunet?mnid=201008840728"
         const val DEFAULT_BROWSER_USER_AGENT =
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 " +
                 "(KHTML, like Gecko) Chrome/140.0 Safari/537.36"
+        val SCRIPT_NAVIGATION_REGEX = Regex(
+            """(?:window\.|top\.)?location(?:\.href\s*=|\s*=|\.(?:replace|assign)\s*\()""",
+        )
+        val LOGIN_ID_INPUT_REGEX = Regex("""<input\b[^>]*(?:id|name)\s*=\s*["']id["']""")
+        val LOGIN_PASSWORD_INPUT_REGEX = Regex("""<input\b[^>]*(?:id|name)\s*=\s*["']pass["']""")
+        val HTML_DOCUMENT_START_REGEX = Regex(
+            """^<(?:!doctype\s+html\b|html\b|head\b|body\b|meta\b|title\b|link\b|style\b|script\b|form\b)""",
+        )
     }
 }
 
@@ -424,8 +645,7 @@ class RoomLmsSource(
 
     override suspend fun loadDetail(item: LmsItem): LmsDetailLoadResult = refreshMutex.withLock {
         val key = itemKey(item)
-        if (item.kind == LmsItemKind.CONTENT) {
-            dao.markItemOpened(key)
+        if (!canRenderLmsItemNatively(item.kind)) {
             return@withLock LmsDetailLoadResult.OfficialCoursePage
         }
         val cachedEntity = dao.getDetail(key)
@@ -433,9 +653,16 @@ class RoomLmsSource(
         val openedItem = item.copy(isRead = true, changeState = LmsChangeState.NONE)
         val cachedDetail = cachedEntity?.let { cached ->
             LmsItemDetail(
-                openedItem,
-                cached.sanitizedHtml,
-                cachedAttachments.map { LmsAttachment(it.sourceId, it.fileName, it.downloadUrl, it.sizeBytes) },
+                item = openedItem,
+                sanitizedHtml = cached.sanitizedHtml,
+                attachments = cachedAttachments.map(::toAttachmentModel),
+                metadata = LmsDetailMetadata(
+                    author = cached.author,
+                    registeredAt = cached.registeredAtMillis?.let(Instant::ofEpochMilli),
+                    submissionStartsAt = cached.submissionStartsAtMillis?.let(Instant::ofEpochMilli),
+                    submissionEndsAt = cached.submissionEndsAtMillis?.let(Instant::ofEpochMilli),
+                    maxScore = cached.maxScore,
+                ),
             )
         }
         try {
@@ -445,7 +672,9 @@ class RoomLmsSource(
                 val loader = renderedPageLoader ?: throw RenderedLmsSessionExpiredException()
                 val renderedCourse = courseModel ?: throw RenderedLmsSessionExpiredException()
                 return when (val rendered = loader.load(openedItem, renderedCourse)) {
-                    is LmsRenderedPageResult.Success -> parser.parseDetail(openedItem, rendered.html, LMS_ORIGIN)
+                    is LmsRenderedPageResult.Success ->
+                        parser.parseDetail(openedItem, rendered.html, rendered.finalUrl)
+                    LmsRenderedPageResult.OfficialCoursePage -> throw OfficialCoursePageRequiredException()
                     LmsRenderedPageResult.SessionExpired -> throw RenderedLmsSessionExpiredException()
                     is LmsRenderedPageResult.Failure -> throw InvalidLmsDetailException(rendered.message)
                 }
@@ -465,7 +694,7 @@ class RoomLmsSource(
                 detail = loadFromRenderedSession()
             }
             if (detail == null) {
-                parser.resolveLinkedDetailUrl(item, html, LMS_ORIGIN)?.let { nestedUrl ->
+                parser.resolveLinkedDetailUrl(item, html, response.finalUrl)?.let { nestedUrl ->
                     response = transport.get(nestedUrl)
                     html = response.htmlText()
                     if (parser.isLoginPage(html, response.finalUrl)) {
@@ -474,7 +703,7 @@ class RoomLmsSource(
                 }
                 if (detail == null) {
                     detail = try {
-                        parser.parseDetail(openedItem, html, LMS_ORIGIN)
+                        parser.parseDetail(openedItem, html, response.finalUrl)
                     } catch (invalid: InvalidLmsDetailException) {
                         if (renderedPageLoader == null || courseModel == null) throw invalid
                         loadFromRenderedSession()
@@ -482,16 +711,37 @@ class RoomLmsSource(
                 }
             }
             val loadedDetail = requireNotNull(detail)
-            val oldSignature = cachedAttachments.map { Triple(it.sourceId, it.fileName, it.sizeBytes) }
-                .sortedBy { it.first }
-            val newSignature = loadedDetail.attachments.map { Triple(it.id, it.fileName, it.sizeBytes) }
-                .sortedBy { it.first }
+            val oldSignature = cachedAttachments.map { attachmentSignature(it) }.sorted()
+            val newSignature = loadedDetail.attachments.map { attachmentSignature(it) }.sorted()
             val attachmentsChanged = cachedEntity != null && oldSignature != newSignature
             dao.replaceDetailAndOpen(
-                LmsDetailEntity(key, loadedDetail.sanitizedHtml, clock.millis()),
-                loadedDetail.attachments.map { LmsAttachmentEntity("$key:${it.id}", key, it.id, it.fileName, it.downloadUrl, it.sizeBytes) },
+                LmsDetailEntity(
+                    itemKey = key,
+                    sanitizedHtml = loadedDetail.sanitizedHtml,
+                    fetchedAtMillis = clock.millis(),
+                    author = loadedDetail.metadata.author,
+                    registeredAtMillis = loadedDetail.metadata.registeredAt?.toEpochMilli(),
+                    submissionStartsAtMillis = loadedDetail.metadata.submissionStartsAt?.toEpochMilli(),
+                    submissionEndsAtMillis = loadedDetail.metadata.submissionEndsAt?.toEpochMilli(),
+                    maxScore = loadedDetail.metadata.maxScore,
+                ),
+                loadedDetail.attachments.map { attachment ->
+                    LmsAttachmentEntity(
+                        key = "$key:${attachment.id}",
+                        itemKey = key,
+                        sourceId = attachment.id,
+                        fileName = attachment.fileName,
+                        downloadUrl = attachment.request?.url ?: attachment.downloadUrl,
+                        sizeBytes = attachment.sizeBytes,
+                        requestMethod = attachment.request?.method?.name,
+                        requestFieldsJson = attachment.request?.fields?.let(::encodeRequestFields),
+                        refererUrl = attachment.request?.refererUrl,
+                    )
+                },
             )
             LmsDetailLoadResult.Fresh(loadedDetail, attachmentsChanged)
+        } catch (_: OfficialCoursePageRequiredException) {
+            LmsDetailLoadResult.OfficialCoursePage
         } catch (_: RenderedLmsSessionExpiredException) {
             sessionController.transition(LmsSessionState.EXPIRED)
             LmsDetailLoadResult.SessionExpired
@@ -511,11 +761,28 @@ class RoomLmsSource(
         attachment: LmsAttachment,
         destination: File,
         onProgress: (Long, Long?) -> Unit,
-    ): LmsRefreshResult = try {
-        transport.download(attachment.downloadUrl, destination, MAX_ATTACHMENT_BYTES, onProgress)
-        LmsRefreshResult.Success
+    ): LmsAttachmentDownloadResult = try {
+        val request = attachment.request ?: LmsAttachmentRequest(
+            method = LmsHttpMethod.GET,
+            url = attachment.downloadUrl,
+            refererUrl = DASHBOARD_URL,
+        )
+        transport.downloadAttachment(
+            request = request,
+            destination = destination,
+            suggestedFileName = attachment.fileName,
+            maxBytes = MAX_ATTACHMENT_BYTES,
+            onProgress = onProgress,
+        )
+    } catch (cancelled: CancellationException) {
+        destination.delete()
+        throw cancelled
     } catch (error: Throwable) {
-        LmsRefreshResult.Failure(error.message ?: "첨부파일을 저장하지 못했습니다")
+        LmsAttachmentDownloadResult.Failure(error.message ?: "첨부파일을 저장하지 못했습니다")
+    }
+
+    override suspend fun markItemOpened(item: LmsItem) {
+        refreshMutex.withLock { dao.markItemOpened(itemKey(item)) }
     }
 
     override suspend fun clearPrivateData() {
@@ -565,6 +832,61 @@ class RoomLmsSource(
         changeState = runCatching { LmsChangeState.valueOf(item.changeState) }
             .getOrDefault(LmsChangeState.NONE),
     )
+
+    private fun toAttachmentModel(entity: LmsAttachmentEntity): LmsAttachment {
+        val method = entity.requestMethod?.let { stored ->
+            runCatching { LmsHttpMethod.valueOf(stored) }.getOrNull()
+        }
+        val request = method?.let {
+            LmsAttachmentRequest(
+                method = it,
+                url = entity.downloadUrl,
+                fields = decodeRequestFields(entity.requestFieldsJson),
+                refererUrl = entity.refererUrl,
+            )
+        }
+        return LmsAttachment(
+            id = entity.sourceId,
+            fileName = entity.fileName,
+            downloadUrl = entity.downloadUrl,
+            sizeBytes = entity.sizeBytes,
+            request = request,
+        )
+    }
+
+    private fun attachmentSignature(entity: LmsAttachmentEntity): String = listOf(
+        entity.sourceId,
+        entity.fileName,
+        entity.sizeBytes?.toString().orEmpty(),
+        entity.requestMethod.orEmpty(),
+        entity.downloadUrl,
+        entity.requestFieldsJson.orEmpty(),
+        entity.refererUrl.orEmpty(),
+    ).joinToString("\u0000")
+
+    private fun attachmentSignature(attachment: LmsAttachment): String = listOf(
+        attachment.id,
+        attachment.fileName,
+        attachment.sizeBytes?.toString().orEmpty(),
+        attachment.request?.method?.name.orEmpty(),
+        (attachment.request?.url ?: attachment.downloadUrl),
+        attachment.request?.fields?.let(::encodeRequestFields).orEmpty(),
+        attachment.request?.refererUrl.orEmpty(),
+    ).joinToString("\u0000")
+
+    private fun encodeRequestFields(fields: Map<String, String>): String = JSONObject().apply {
+        fields.toSortedMap().forEach { (name, value) -> put(name, value) }
+    }.toString()
+
+    private fun decodeRequestFields(value: String?): Map<String, String> {
+        if (value.isNullOrBlank()) return emptyMap()
+        return runCatching {
+            val json = JSONObject(value)
+            buildMap {
+                json.keys().forEach { name -> put(name, json.optString(name)) }
+            }
+        }.getOrDefault(emptyMap())
+    }
 
     private fun itemKey(item: LmsItem) = "${item.kind}:${item.courseId}:${item.id}"
 

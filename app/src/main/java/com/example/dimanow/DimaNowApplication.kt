@@ -1,12 +1,15 @@
 package com.example.dimanow
 
 import android.app.Application
+import android.Manifest
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.content.pm.PackageManager
 import android.os.Build
 import androidx.room.Room
+import androidx.core.content.ContextCompat
 import com.example.dimanow.data.AppPreferences
 import com.example.dimanow.data.DimaDatabase
 import com.example.dimanow.data.RoomCampusDataRepository
@@ -18,6 +21,8 @@ import kotlinx.coroutines.flow.collectLatest
 import com.example.dimanow.location.CampusGeofenceManager
 import com.example.dimanow.shuttle.ShuttleSource
 import com.example.dimanow.shuttle.StaticShuttleSource
+import com.example.dimanow.shuttle.HttpShuttleReportSource
+import com.example.dimanow.shuttle.ShuttleReportSource
 import com.example.dimanow.work.RefreshScheduler
 import com.example.dimanow.live.GuidanceOrchestrator
 import com.example.dimanow.live.GuidanceRuntimeCoordinator
@@ -42,6 +47,16 @@ import com.example.dimanow.notice.StaticNoticeSource
 import com.example.dimanow.sync.UrlConnectionStaticDataTransport
 import com.example.dimanow.sync.CachingStaticDataTransport
 import com.example.dimanow.location.LocationMode
+import com.example.dimanow.location.LocationResolver
+import com.example.dimanow.location.LocationSample
+import com.example.dimanow.domain.CampusZoneId
+import com.example.dimanow.domain.GeoPoint
+import com.google.android.gms.location.LocationServices
+import com.google.android.gms.location.Priority
+import com.google.android.gms.tasks.CancellationTokenSource
+import kotlinx.coroutines.tasks.await
+import kotlinx.coroutines.withTimeoutOrNull
+import java.time.Instant
 import com.example.dimanow.update.AndroidAppUpdateInstaller
 import com.example.dimanow.update.AppUpdateCoordinator
 import com.example.dimanow.update.GitHubAppUpdateSource
@@ -70,6 +85,12 @@ class DimaNowApplication : Application() {
     val preferences: AppPreferences by lazy { AppPreferences(this) }
     private val staticDataTransport by lazy { CachingStaticDataTransport(UrlConnectionStaticDataTransport()) }
     val shuttleSource: ShuttleSource by lazy { StaticShuttleSource(database, staticDataTransport) }
+    val shuttleReportSource: ShuttleReportSource by lazy {
+        HttpShuttleReportSource(
+            rootUrl = getString(R.string.shuttle_report_api_url),
+            reporterTokenProvider = { preferences.getOrCreateShuttleReporterToken() },
+        )
+    }
     private val dormitoryMealSubmissionService by lazy {
         DormitoryMealSubmissionService(
             gateway = AnonymousDormitoryMealApi(
@@ -91,6 +112,7 @@ class DimaNowApplication : Application() {
                 com.example.dimanow.lms.LMS_CACHE_MIGRATION_1_2,
                 com.example.dimanow.lms.LMS_CACHE_MIGRATION_2_3,
                 com.example.dimanow.lms.LMS_CACHE_MIGRATION_3_4,
+                com.example.dimanow.lms.LMS_CACHE_MIGRATION_4_5,
             )
             .build()
     }
@@ -188,6 +210,30 @@ class DimaNowApplication : Application() {
                     }
                 }
             }
+    }
+
+    suspend fun isAtShuttleReportZone(expectedZone: CampusZoneId): Boolean {
+        if (preferences.locationMode.first() != LocationMode.GPS) return false
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) return false
+        val cancellation = CancellationTokenSource()
+        val location = runCatching {
+            withTimeoutOrNull(10_000) {
+                LocationServices.getFusedLocationProviderClient(this@DimaNowApplication)
+                    .getCurrentLocation(Priority.PRIORITY_HIGH_ACCURACY, cancellation.token)
+                    .await()
+            }
+        }.getOrNull().also { if (it == null) cancellation.cancel() } ?: return false
+        val sample = LocationSample(
+            point = GeoPoint(location.latitude, location.longitude),
+            accuracyMeters = location.accuracy,
+            capturedAt = Instant.ofEpochMilli(location.time),
+        )
+        return LocationResolver().isFreshSampleAtZone(
+            sample = sample,
+            now = Instant.now(),
+            configuredZones = repository.zones.first(),
+            expectedZone = expectedZone,
+        )
     }
 
     private companion object {

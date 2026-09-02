@@ -8,6 +8,7 @@ import kotlin.math.cos
 import kotlin.math.sin
 import kotlin.math.sqrt
 import java.time.Instant
+import java.time.Duration
 import com.example.dimanow.domain.ZoneGeometry
 
 data class LocationSample(
@@ -22,6 +23,26 @@ enum class LocationMode {
 }
 
 class LocationResolver {
+    fun isFreshSampleAtZone(
+        sample: LocationSample?,
+        now: Instant,
+        configuredZones: List<CampusZone>,
+        expectedZone: CampusZoneId,
+        maxAge: Duration = Duration.ofMinutes(2),
+        maxAccuracyMeters: Float = 100f,
+    ): Boolean {
+        if (sample == null || expectedZone == CampusZoneId.OUTSIDE) return false
+        val age = Duration.between(sample.capturedAt, now)
+        if (age.isNegative || age > maxAge || sample.accuracyMeters > maxAccuracyMeters) return false
+        return resolve(
+            sample = sample,
+            configuredZones = configuredZones,
+            lastResolvedZone = CampusZoneId.OUTSIDE,
+            explicitExitFromAll = false,
+            mode = LocationMode.GPS,
+        ) == expectedZone
+    }
+
     fun resolve(
         sample: LocationSample?,
         configuredZones: List<CampusZone>,

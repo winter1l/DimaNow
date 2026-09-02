@@ -7,6 +7,7 @@ import kotlinx.coroutines.flow.asStateFlow
 
 sealed interface LmsRenderedPageResult {
     data class Success(val finalUrl: String, val html: String) : LmsRenderedPageResult
+    data object OfficialCoursePage : LmsRenderedPageResult
     data object SessionExpired : LmsRenderedPageResult
     data class Failure(val message: String) : LmsRenderedPageResult
 }

@@ -8,7 +8,8 @@ object LmsUrlPolicy {
 
     fun isAllowed(value: String): Boolean = runCatching {
         val uri = URI.create(value)
-        uri.scheme == "https" && uri.host in allowedHosts && uri.userInfo == null
+        uri.scheme == "https" && uri.host in allowedHosts && uri.userInfo == null &&
+            uri.port in setOf(-1, 443)
     }.getOrDefault(false)
 
     fun isAllowedLoginNavigation(value: String): Boolean = isAllowed(value) || runCatching {
@@ -34,20 +35,64 @@ object LmsUrlPolicy {
 
 object LmsAttachmentNaming {
     fun fromContentDisposition(header: String?, fallback: String): String {
-        val extended = header?.let { FILENAME_STAR.find(it)?.groupValues?.get(1) }
-            ?.substringAfter("''", missingDelimiterValue = "")
+        val extended = header
+            ?.let { FILENAME_STAR.find(it)?.groupValues?.get(1) }
+            ?.let(::decodeExtendedName)
+        val basic = header
+            ?.let { FILENAME.find(it)?.groupValues?.get(1) }
+            ?.let(::unquote)
             ?.takeIf { it.isNotBlank() }
-            ?.let { runCatching { URLDecoder.decode(it, "UTF-8") }.getOrNull() }
-        val basic = header?.let { FILENAME.find(it)?.groupValues?.get(1) }
+            ?.let { decodeOnce(it, plusAsSpace = shouldDecodePlusAsSpace(it)) }
         return sanitize(extended ?: basic ?: fallback)
     }
 
-    private fun sanitize(value: String): String = value
-        .replace(Regex("[\\\\/:*?\"<>|\\p{Cc}]"), "_")
+    private fun decodeExtendedName(raw: String): String? {
+        val value = unquote(raw)
+        val charsetEnd = value.indexOf('\'')
+        val languageEnd = value.indexOf('\'', startIndex = charsetEnd + 1)
+        if (charsetEnd <= 0 || languageEnd < 0) return null
+        if (!value.substring(0, charsetEnd).equals("UTF-8", ignoreCase = true)) return null
+        return value.substring(languageEnd + 1)
+            .takeIf { it.isNotBlank() }
+            ?.let { decodeOnce(it, plusAsSpace = false) }
+    }
+
+    private fun decodeOnce(value: String, plusAsSpace: Boolean): String = runCatching {
+        URLDecoder.decode(
+            if (plusAsSpace) value else value.replace("+", "%2B"),
+            Charsets.UTF_8.name(),
+        )
+    }.getOrDefault(value)
+
+    private fun shouldDecodePlusAsSpace(value: String): Boolean = PERCENT_ESCAPE.containsMatchIn(value)
+
+    private fun unquote(value: String): String {
+        val trimmed = value.trim()
+        return if (trimmed.length >= 2 && trimmed.first() == '"' && trimmed.last() == '"') {
+            trimmed.substring(1, trimmed.lastIndex)
+        } else {
+            trimmed
+        }
+    }
+
+    private fun sanitize(value: String): String = buildString(value.length) {
+        var replacingUnsafeRun = false
+        value.forEach { character ->
+            val unsafe = character in PATH_CHARACTERS || character.isISOControl()
+            if (unsafe) {
+                if (!replacingUnsafeRun) append('_')
+            } else {
+                append(character)
+            }
+            replacingUnsafeRun = unsafe
+        }
+    }
         .trim(' ', '.')
         .take(160)
         .ifBlank { "첨부파일" }
 
-    private val FILENAME_STAR = Regex("filename\\*\\s*=\\s*([^;]+)", RegexOption.IGNORE_CASE)
-    private val FILENAME = Regex("filename\\s*=\\s*\"?([^\";]+)", RegexOption.IGNORE_CASE)
+    private const val PATH_CHARACTERS = "\\/:*?\"<>|"
+    private val PERCENT_ESCAPE = Regex("%[0-9a-fA-F]{2}")
+    private val FILENAME_STAR = Regex("filename\\*\\s*=\\s*(\"[^\"]*\"|[^;]+)", RegexOption.IGNORE_CASE)
+    private val FILENAME = Regex("(?:^|;)\\s*filename\\s*=\\s*(\"[^\"]*\"|[^;]+)", RegexOption.IGNORE_CASE)
 }

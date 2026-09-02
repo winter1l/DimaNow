@@ -45,9 +45,12 @@ class StaticShuttleSourceTest {
         )
 
         assertEquals(ShuttleRefreshResult.Success(1, Instant.parse("2026-08-28T02:00:00Z")), source.refresh())
-        val row = source.data.first().departures.single()
+        val departures = source.data.first().departures
+        assertEquals(21, departures.size)
+        val row = departures.single { it.sourceRouteId == "B" }
         assertEquals("B", row.sourceRouteId)
         assertEquals("university-headquarters", row.sourceStopId)
         assertEquals("08:10", row.time.toString())
+        assertEquals(20, departures.count { it.sourceRouteId == "A-field-extra" })
     }
 }

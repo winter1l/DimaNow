@@ -3,6 +3,7 @@ package com.example.dimanow.lms
 import java.time.ZoneId
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -28,6 +29,35 @@ class LmsHtmlParserTest {
                 LmsStatusPageRequest(
                     completionState = LmsCompletionState.INCOMPLETE,
                     url = "https://lms.dima.ac.kr/lms/myLecture/doListView.dunet?to_do_type=incomplete",
+                ),
+            ),
+            parser.parseDashboard(html, "https://lms.dima.ac.kr").statusPageRequests,
+        )
+    }
+
+    @Test
+    fun completionStatusRequestsFollowTheActualRenderedJavascriptLinks() {
+        val html = """
+            <nav class="todo-tabs">
+              <a href="javascript:changeToDoList('complete')">완료한 학습</a>
+              <a href="javascript:changeToDoList('incomplete')">미완료한 학습</a>
+            </nav>
+            <script>
+              function changeToDoList(type) {
+                location.href = '/lms/myLecture/doListView.dunet?to_do_type=' + type;
+              }
+            </script>
+        """.trimIndent()
+
+        assertEquals(
+            listOf(
+                LmsStatusPageRequest(
+                    LmsCompletionState.COMPLETE,
+                    "https://lms.dima.ac.kr/lms/myLecture/doListView.dunet?to_do_type=complete",
+                ),
+                LmsStatusPageRequest(
+                    LmsCompletionState.INCOMPLETE,
+                    "https://lms.dima.ac.kr/lms/myLecture/doListView.dunet?to_do_type=incomplete",
                 ),
             ),
             parser.parseDashboard(html, "https://lms.dima.ac.kr").statusPageRequests,
@@ -219,7 +249,7 @@ class LmsHtmlParserTest {
     }
 
     @Test
-    fun dashboardParsesCurrentJavascriptTodoAssignmentIntoAllowedStudentUrl() {
+    fun dashboardPreservesTheOfficialAssignmentListActionBeforeExactRowSelection() {
         val html = """
             <li class="box"><div class="top offline">
               <a href="javascript:fncGoClassroom('202620UN00017391401401D','D','3');">
@@ -244,9 +274,91 @@ class LmsHtmlParserTest {
         assertEquals("2026-09-25T14:59:00Z", item.dueAt.toString())
         assertEquals(
             "https://lms.dima.ac.kr/lms/class/report/stud/doListView.dunet" +
-                "?mnid=201008840336&course_id=202620UN00017391401401D&class_no=D&dataType=C",
+                "?mnid=201008840336&course_id=202620UN00017391401401D&class_no=D" +
+                "&dataType=C",
             item.detailUrl,
         )
+    }
+
+    @Test
+    fun assignmentListResolvesOnlyTheUniqueExactOfficialModifyAction() {
+        val item = LmsItem(
+            id = "42",
+            courseId = "course-alpha",
+            courseName = "실습 과목",
+            kind = LmsItemKind.ASSIGNMENT,
+            title = "2주차 분석 과제",
+            detailUrl = "https://lms.dima.ac.kr/lms/class/report/stud/doListView.dunet",
+        )
+        val html = """
+            <form name="list_frm_form" method="post" action="/lms/class/report/stud/doFormReport.dunet">
+              <input type="hidden" name="mode" value="">
+              <input type="hidden" name="report_no" value="">
+              <a class="subject" href="#"
+                 onclick="fncModifyReport('report-other', 'N', '1', 'Y', 'Y')">2주차 분석 과제</a>
+              <a class="subject" href="#"
+                 onclick="fncModifyReport(42, 'N', '1', 'Y', 'Y')">
+                <span class="ellipsis">2주차 분석 과제</span>
+                <span class="learning-meta">2주차 · 1회 · 2026.09.01 ~ 2026.09.08</span>
+              </a>
+            </form>
+        """.trimIndent()
+
+        assertEquals(
+            "fncModifyReport('42','N','1','Y','Y')",
+            parser.resolveAssignmentListOnClick(item, html),
+        )
+    }
+
+    @Test
+    fun assignmentListUsesOnlyTheFirstDirectTextSegmentAsTheExactTitle() {
+        val item = LmsItem(
+            id = "42",
+            courseId = "course-alpha",
+            courseName = "실습 과목",
+            kind = LmsItemKind.ASSIGNMENT,
+            title = "2주차 분석 과제",
+            detailUrl = "https://lms.dima.ac.kr/lms/class/report/stud/doListView.dunet",
+        )
+        val html = """
+            <form name="list_frm_form">
+              <a class="subject" href="#" onclick="fncModifyReport('42', 'N', '1', 'Y','Y')">2주차 분석 과제<br><br>
+                2주 3회차 | 인정시간 : 30분<br>
+                26/09/01 16:00 ~ 26/09/08 15:59
+              </a>
+            </form>
+        """.trimIndent()
+
+        assertEquals(
+            "fncModifyReport('42','N','1','Y','Y')",
+            parser.resolveAssignmentListOnClick(item, html),
+        )
+    }
+
+    @Test
+    fun assignmentListDoesNotGuessWhenTheExactOfficialActionIsDuplicatedOrMissing() {
+        val item = LmsItem(
+            id = "report-alpha",
+            courseId = "course-alpha",
+            courseName = "실습 과목",
+            kind = LmsItemKind.ASSIGNMENT,
+            title = "2주차 분석 과제",
+            detailUrl = "https://lms.dima.ac.kr/lms/class/report/stud/doListView.dunet",
+        )
+        val duplicate = """
+            <form name="list_frm_form">
+              <a class="subject" href="#" onclick="fncModifyReport('report-alpha','N','1','Y','Y')">2주차 분석 과제</a>
+              <a class="subject" href="#" onclick="fncModifyReport('report-alpha','N','1','Y','Y')">2주차 분석 과제</a>
+            </form>
+        """.trimIndent()
+        val partialOnly = """
+            <form name="list_frm_form">
+              <a class="subject" href="#" onclick="fncModifyReport('report-alpha','N','1','Y','Y')">2주차 분석 과제 보충</a>
+            </form>
+        """.trimIndent()
+
+        assertNull(parser.resolveAssignmentListOnClick(item, duplicate))
+        assertNull(parser.resolveAssignmentListOnClick(item, partialOnly))
     }
 
     @Test
@@ -262,6 +374,29 @@ class LmsHtmlParserTest {
             parser.isLoginPage(
                 html,
                 "https://lms.dima.ac.kr/lms/myLecture/doListView.dunet?mnid=201008840728",
+            ),
+        )
+    }
+
+    @Test
+    fun officialPortalCredentialPageIsRecognizedAsExpiredLmsSession() {
+        val html = """
+            <form>
+              <input id="txtID" name="txtID">
+              <input id="txtPwd" name="txtPwd" type="password">
+            </form>
+        """.trimIndent()
+
+        assertTrue(
+            parser.isLoginPage(
+                html,
+                "https://portal.dima.ac.kr/?r=https://lms.dima.ac.kr/sso/index.jsp",
+            ),
+        )
+        assertFalse(
+            parser.isLoginPage(
+                html,
+                "https://portal.dima.ac.kr.evil.example/",
             ),
         )
     }
@@ -362,6 +497,62 @@ class LmsHtmlParserTest {
     }
 
     @Test
+    fun noticeListSummaryRowIsNotAcceptedAsNativeDetail() {
+        val item = LmsItem(
+            id = "91",
+            courseId = "COURSE-A",
+            courseName = "음향기초실습(D반)",
+            kind = LmsItemKind.NOTICE,
+            title = "1주차 수업안내 자료",
+            detailUrl = "https://lms.dima.ac.kr/lms/class/boardItem/doViewBoardItem.dunet?boarditem_no=91",
+        )
+        val listHtml = """
+            <table class="table_list_basic"><tbody>
+              <tr>
+                <td>1주차</td>
+                <td><a href="/lms/class/boardItem/doViewBoardItem.dunet?boarditem_no=91">1주차 수업안내 자료</a></td>
+                <td>비공개</td>
+                <td>2026.08.30</td>
+              </tr>
+            </tbody></table>
+        """.trimIndent()
+
+        val error = assertThrows(IllegalArgumentException::class.java) {
+            parser.parseDetail(item, listHtml, item.detailUrl)
+        }
+
+        assertEquals("정확한 게시글 내용을 찾지 못했습니다", error.message)
+    }
+
+    @Test
+    fun materialListSummaryRowIsNotAcceptedAsNativeDetail() {
+        val item = LmsItem(
+            id = "32258",
+            courseId = "COURSE-A",
+            courseName = "음향기초실습(D반)",
+            kind = LmsItemKind.MATERIAL,
+            title = "1주차 수업안내 자료",
+            detailUrl = "https://lms.dima.ac.kr/lms/class/boardItem/doViewBoardItem.dunet?boarditem_no=32258",
+        )
+        val listHtml = """
+            <table class="table_list_basic"><tbody>
+              <tr>
+                <td>1주차</td>
+                <td><a href="/lms/class/boardItem/doViewBoardItem.dunet?boarditem_no=32258">1주차 수업안내 자료</a></td>
+                <td>비공개</td>
+                <td>2026.08.30</td>
+              </tr>
+            </tbody></table>
+        """.trimIndent()
+
+        val error = assertThrows(IllegalArgumentException::class.java) {
+            parser.parseDetail(item, listHtml, item.detailUrl)
+        }
+
+        assertEquals("정확한 게시글 내용을 찾지 못했습니다", error.message)
+    }
+
+    @Test
     fun listBackedLearningItemResolvesItsMatchingInternalDetailLink() {
         val item = LmsItem(
             id = "301",
@@ -412,26 +603,28 @@ class LmsHtmlParserTest {
 
     @Test
     fun detailKeepsOfficialDirectDownloadLinksAsAttachments() {
+        val finalUrl = "https://lms.dima.ac.kr/lms/class/report/stud/detail/view.dunet?report_no=301"
         val item = LmsItem(
             id = "301",
             courseId = "COURSE-A",
             courseName = "음향기초실습(D반)",
             kind = LmsItemKind.ASSIGNMENT,
             title = "프로툴 사전진단",
-            detailUrl = "https://lms.dima.ac.kr/detail",
+            detailUrl = finalUrl,
         )
         val html = """
             <div class="report-content"><p>제출 안내</p></div>
-            <a href="/lms/class/report/stud/doDownloadFile.dunet?report_attach_no=77">진단 양식.pdf</a>
+            <a href="../doDownloadFile.dunet?report_attach_no=77">진단 양식.pdf</a>
         """.trimIndent()
 
-        val detail = parser.parseDetail(item, html, "https://lms.dima.ac.kr")
+        val detail = parser.parseDetail(item, html, finalUrl)
 
         assertEquals("진단 양식.pdf", detail.attachments.single().fileName)
         assertEquals(
             "https://lms.dima.ac.kr/lms/class/report/stud/doDownloadFile.dunet?report_attach_no=77",
             detail.attachments.single().downloadUrl,
         )
+        assertEquals(finalUrl, detail.attachments.single().request?.refererUrl)
     }
 
     @Test
@@ -445,6 +638,9 @@ class LmsHtmlParserTest {
             detailUrl = "https://lms.dima.ac.kr/lms/class/boardItem/doViewBoardItem.dunet",
         )
         val html = """
+            <input type="hidden" id="board_no" name="board_no" value="6">
+            <input type="hidden" id="boarditem_no" name="boarditem_no" value="32258">
+            <input type="hidden" id="learning_design_yn" name="learning_design_yn" value="N">
             <table class="table_view_basic">
               <thead><tr><th class="ta_l pd_l10 end">방송제작 수업 자료</th></tr></thead>
               <tbody>
@@ -462,8 +658,333 @@ class LmsHtmlParserTest {
         assertEquals(listOf("2주자료.pdf"), detail.attachments.map { it.fileName })
         assertEquals(
             "https://lms.dima.ac.kr/lms/class/boardItem/doDownloadFile.dunet?" +
-                "boarditem_attach_file_no=30379&board_no=6&boarditem_no=32258&learning_design_yn=N&time_flag=OK",
+                "boarditem_attach_file_no=30379&board_no=6&boarditem_no=32258&learning_design_yn=N&time_flag=",
             detail.attachments.single().downloadUrl,
+        )
+    }
+
+    @Test
+    fun officialBoardDetailParsesAuthorAndDetailedRegistrationTime() {
+        val item = LmsItem(
+            id = "32258",
+            courseId = "COURSE-A",
+            courseName = "음향기초실습(D반)",
+            kind = LmsItemKind.MATERIAL,
+            title = "방송제작 수업 자료",
+            detailUrl = "https://lms.dima.ac.kr/lms/class/boardItem/doViewBoardItem.dunet",
+        )
+        val html = """
+            <table class="table_view_basic">
+              <thead><tr><th class="ta_l">방송제작 수업 자료</th></tr></thead>
+              <tbody>
+                <tr><td class="ta_l">작성자 : 담당교수 | 등록일 : 2026.08.30 15:12 | 조회수 : 8</td></tr>
+                <tr><td class="ta_l"><p>방송제작 강의자료입니다</p></td></tr>
+              </tbody>
+            </table>
+        """.trimIndent()
+
+        val detail = parser.parseDetail(
+            item,
+            html,
+            "https://lms.dima.ac.kr/lms/class/boardItem/doViewBoardItem.dunet?boarditem_no=32258",
+        )
+
+        assertEquals("담당교수", detail.metadata.author)
+        assertEquals("2026-08-30T06:12:00Z", detail.metadata.registeredAt.toString())
+    }
+
+    @Test
+    fun officialBoardAttachmentPreservesRenderedRequestAndDetailReferer() {
+        val finalUrl = "https://lms.dima.ac.kr/lms/class/boardItem/doViewBoardItem.dunet?boarditem_no=32258"
+        val item = LmsItem(
+            id = "32258",
+            courseId = "COURSE-A",
+            courseName = "음향기초실습(D반)",
+            kind = LmsItemKind.MATERIAL,
+            title = "방송제작 수업 자료",
+            detailUrl = finalUrl,
+        )
+        val html = """
+            <input type="hidden" id="board_no" name="board_no" value="6">
+            <input type="hidden" id="boarditem_no" name="boarditem_no" value="32258">
+            <input type="hidden" id="learning_design_yn" name="learning_design_yn" value="Y">
+            <table class="table_view_basic"><tbody>
+              <tr><td class="ta_l"><p>강의자료입니다.</p></td></tr>
+              <tr><td>첨부파일 : <a href="javascript:fncFileDown('30379', '')">2주자료.pdf</a></td></tr>
+            </tbody></table>
+        """.trimIndent()
+
+        val attachment = parser.parseDetail(item, html, finalUrl).attachments.single()
+
+        assertEquals(
+            LmsAttachmentRequest(
+                method = LmsHttpMethod.GET,
+                url = "https://lms.dima.ac.kr/lms/class/boardItem/doDownloadFile.dunet",
+                fields = linkedMapOf(
+                    "boarditem_attach_file_no" to "30379",
+                    "board_no" to "6",
+                    "boarditem_no" to "32258",
+                    "learning_design_yn" to "Y",
+                    "time_flag" to "",
+                ),
+                refererUrl = finalUrl,
+            ),
+            attachment.request,
+        )
+    }
+
+    @Test
+    fun officialAssignmentDetailParsesSubmissionWindowAndMaximumScore() {
+        val item = LmsItem(
+            id = "5553",
+            courseId = "COURSE-A",
+            courseName = "카메라기초및실습(D반)",
+            kind = LmsItemKind.ASSIGNMENT,
+            title = "자기소개서 작성",
+            dueAt = java.time.Instant.parse("2026-09-25T14:59:00Z"),
+            detailUrl = "https://lms.dima.ac.kr/lms/class/report/stud/doViewReportStudent.dunet?report_no=5553",
+        )
+        val html = """
+            <table class="table_view_basic">
+              <tbody>
+                <tr><th>과제명</th><td colspan="3">자기소개서 작성</td></tr>
+                <tr><th>추가 제출기간</th><td colspan="3">2026.09.01 10:00:00 ~ 2026.09.25 23:59:00</td></tr>
+                <tr><th>만점</th><td colspan="3">100점</td></tr>
+                <tr><th>과제내용</th><td class="ta_l" colspan="3"><p>자기소개서를 PDF로 제출하세요.</p></td></tr>
+              </tbody>
+            </table>
+        """.trimIndent()
+
+        val detail = parser.parseDetail(item, html, item.detailUrl)
+
+        assertEquals("2026-09-01T01:00:00Z", detail.metadata.submissionStartsAt.toString())
+        assertEquals("2026-09-25T14:59:00Z", detail.metadata.submissionEndsAt.toString())
+        assertEquals("100점", detail.metadata.maxScore)
+        assertEquals("자기소개서를 PDF로 제출하세요.", org.jsoup.Jsoup.parse(detail.sanitizedHtml).text())
+    }
+
+    @Test
+    fun assignmentOverviewWithoutAnAssignmentBodyIsNotAcceptedAsTheExactReport() {
+        val item = LmsItem(
+            id = "5553",
+            courseId = "COURSE-A",
+            courseName = "음향기초실습(D반)",
+            kind = LmsItemKind.ASSIGNMENT,
+            title = "2주차 과제 - 영상사운드 구성 분석",
+            detailUrl = "https://lms.dima.ac.kr/lms/class/report/stud/doFormReport.dunet",
+        )
+        val intermediateHtml = """
+            <table class="table_view_basic"><tbody>
+              <tr><th>과제</th><td class="ta_l">2주차 과제 - 영상사운드 구성 분석 · 10 점</td></tr>
+              <tr><th>제출기간</th><td>2026.09.01 09:00:00 ~ 2026.09.08 15:59:00</td></tr>
+            </tbody></table>
+        """.trimIndent()
+
+        assertThrows(IllegalArgumentException::class.java) {
+            parser.parseDetail(item, intermediateHtml, item.detailUrl)
+        }
+    }
+
+    @Test
+    fun officialAssignmentAttachmentPreservesExactDownloadFieldsAndDetailReferer() {
+        val finalUrl = "https://lms.dima.ac.kr/lms/class/report/stud/doViewReportStudent.dunet?report_no=5553"
+        val item = LmsItem(
+            id = "5553",
+            courseId = "COURSE-A",
+            courseName = "카메라기초및실습(D반)",
+            kind = LmsItemKind.ASSIGNMENT,
+            title = "자기소개서 작성",
+            detailUrl = finalUrl,
+        )
+        val html = """
+            <input type="hidden" id="report_no" name="report_no" value="5553">
+            <input type="hidden" id="report_seq" name="report_seq" value="2">
+            <table class="table_view_basic"><tbody>
+              <tr><th>과제내용</th><td class="ta_l"><p>PDF로 제출하세요.</p></td></tr>
+              <tr><th>첨부파일</th><td><a href="javascript:fncDownAttachFile('1')">자기소개서 양식.pdf</a></td></tr>
+            </tbody></table>
+        """.trimIndent()
+
+        val attachment = parser.parseDetail(item, html, finalUrl).attachments.single()
+
+        assertEquals(
+            LmsAttachmentRequest(
+                method = LmsHttpMethod.GET,
+                url = "https://lms.dima.ac.kr/lms/class/report/stud/doDownloadAttachFile.dunet",
+                fields = linkedMapOf(
+                    "report_attach_file_no" to "1",
+                    "report_no" to "5553",
+                ),
+                refererUrl = finalUrl,
+            ),
+            attachment.request,
+        )
+        assertEquals("자기소개서 양식.pdf", attachment.fileName)
+    }
+
+    @Test
+    fun attachmentFormPreservesPostMethodFieldsAndFinalDetailUrlAsReferer() {
+        val finalUrl = "https://lms.dima.ac.kr/lms/class/report/stud/view/detail.dunet?report_no=5553"
+        val item = LmsItem(
+            id = "5553",
+            courseId = "COURSE-A",
+            courseName = "카메라기초및실습(D반)",
+            kind = LmsItemKind.ASSIGNMENT,
+            title = "자기소개서 작성",
+            detailUrl = finalUrl,
+        )
+        val html = """
+            <table class="table_view_basic"><tbody>
+              <tr><th>과제내용</th><td class="ta_l"><p>PDF로 제출하세요.</p></td></tr>
+              <tr><th>첨부파일</th><td>
+                <form method="post" action="../doDownloadAttachFile.dunet">
+                  <input type="hidden" name="report_attach_file_no" value="1">
+                  <input type="hidden" name="report_no" value="5553">
+                  <input type="hidden" name="SAMLResponse" value="must-not-be-cached">
+                  <a href="javascript:this.closest('form').submit()">자기소개서 양식.pdf</a>
+                </form>
+              </td></tr>
+            </tbody></table>
+        """.trimIndent()
+
+        val attachment = parser.parseDetail(item, html, finalUrl).attachments.single()
+
+        assertEquals(
+            LmsAttachmentRequest(
+                method = LmsHttpMethod.POST,
+                url = "https://lms.dima.ac.kr/lms/class/report/stud/doDownloadAttachFile.dunet",
+                fields = linkedMapOf(
+                    "report_attach_file_no" to "1",
+                    "report_no" to "5553",
+                ),
+                refererUrl = finalUrl,
+            ),
+            attachment.request,
+        )
+    }
+
+    @Test
+    fun enclosingDownloadFormWinsOverJavascriptArgumentsAndSurvivesBodySanitizing() {
+        val finalUrl = "https://lms.dima.ac.kr/lms/class/boardItem/doViewBoardItem.dunet?boarditem_no=91"
+        val item = LmsItem(
+            id = "91",
+            courseId = "COURSE-A",
+            courseName = "음향기초실습(D반)",
+            kind = LmsItemKind.NOTICE,
+            title = "수업안내",
+            detailUrl = finalUrl,
+        )
+        val html = """
+            <div id="board_contents">
+              <p>준비물을 확인하세요.</p>
+              <form method="post" action="/lms/class/boardItem/doDownloadFile.dunet">
+                <input type="hidden" name="boarditem_attach_file_no" value="700">
+                <input type="hidden" name="board_no" value="7">
+                <input type="hidden" name="boarditem_no" value="91">
+                <input type="hidden" name="learning_design_yn" value="N">
+                <a href="javascript:fncFileDown('999', 'guessed')">준비물.pdf</a>
+              </form>
+            </div>
+        """.trimIndent()
+
+        val detail = parser.parseDetail(item, html, finalUrl)
+
+        assertEquals(
+            LmsAttachmentRequest(
+                method = LmsHttpMethod.POST,
+                url = "https://lms.dima.ac.kr/lms/class/boardItem/doDownloadFile.dunet",
+                fields = linkedMapOf(
+                    "boarditem_attach_file_no" to "700",
+                    "board_no" to "7",
+                    "boarditem_no" to "91",
+                    "learning_design_yn" to "N",
+                ),
+                refererUrl = finalUrl,
+            ),
+            detail.attachments.single().request,
+        )
+        assertEquals("준비물.pdf", detail.attachments.single().fileName)
+        assertFalse(detail.sanitizedHtml.contains("form"))
+    }
+
+    @Test
+    fun javascriptBoardDownloadUsesOnlyItsEnclosingFormFieldsAndMethod() {
+        val finalUrl = "https://lms.dima.ac.kr/lms/class/boardItem/doViewBoardItem.dunet?boarditem_no=91"
+        val item = LmsItem(
+            id = "91",
+            courseId = "COURSE-A",
+            courseName = "음향기초실습(D반)",
+            kind = LmsItemKind.NOTICE,
+            title = "수업안내",
+            detailUrl = finalUrl,
+        )
+        val html = """
+            <form method="post" action="/lms/class/boardItem/doViewBoardItem.dunet">
+              <input type="hidden" name="boarditem_attach_file_no" value="unrelated">
+              <input type="hidden" name="board_no" value="99">
+              <input type="hidden" name="boarditem_no" value="999">
+            </form>
+            <div id="board_contents"><p>준비물을 확인하세요.</p></div>
+            <form method="post" action="/lms/class/boardItem/doViewBoardItem.dunet">
+              <input type="hidden" name="boarditem_attach_file_no" value="700">
+              <input type="hidden" name="board_no" value="7">
+              <input type="hidden" name="boarditem_no" value="91">
+              <input type="hidden" name="learning_design_yn" value="Y">
+              <a href="javascript:fncFileDown('guessed')">준비물.pdf</a>
+            </form>
+        """.trimIndent()
+
+        val attachment = parser.parseDetail(item, html, finalUrl).attachments.single()
+
+        assertEquals(
+            LmsAttachmentRequest(
+                method = LmsHttpMethod.POST,
+                url = "https://lms.dima.ac.kr/lms/class/boardItem/doDownloadFile.dunet",
+                fields = linkedMapOf(
+                    "boarditem_attach_file_no" to "700",
+                    "board_no" to "7",
+                    "boarditem_no" to "91",
+                    "learning_design_yn" to "Y",
+                ),
+                refererUrl = finalUrl,
+            ),
+            attachment.request,
+        )
+    }
+
+    @Test
+    fun javascriptAssignmentDownloadUsesItsEnclosingFormInsteadOfGuessedArguments() {
+        val finalUrl = "https://lms.dima.ac.kr/lms/class/report/stud/doViewReportStudent.dunet?report_no=5553"
+        val item = LmsItem(
+            id = "5553",
+            courseId = "COURSE-A",
+            courseName = "카메라기초및실습(D반)",
+            kind = LmsItemKind.ASSIGNMENT,
+            title = "자기소개서 작성",
+            detailUrl = finalUrl,
+        )
+        val html = """
+            <div class="report-content"><p>PDF로 제출하세요.</p></div>
+            <form method="post" action="/lms/class/report/stud/doViewReportStudent.dunet">
+              <input type="hidden" name="report_attach_file_no" value="8">
+              <input type="hidden" name="report_no" value="5553">
+              <a href="javascript:fncDownAttachFile('1')">제출 양식.pdf</a>
+            </form>
+        """.trimIndent()
+
+        val attachment = parser.parseDetail(item, html, finalUrl).attachments.single()
+
+        assertEquals(
+            LmsAttachmentRequest(
+                method = LmsHttpMethod.POST,
+                url = "https://lms.dima.ac.kr/lms/class/report/stud/doDownloadAttachFile.dunet",
+                fields = linkedMapOf(
+                    "report_attach_file_no" to "8",
+                    "report_no" to "5553",
+                ),
+                refererUrl = finalUrl,
+            ),
+            attachment.request,
         )
     }
 

@@ -2,7 +2,8 @@
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "dima-now-meal-upload",
   "main": "src/index.mjs",
-  "compatibility_date": "2026-08-31",
+  "compatibility_date": "2026-09-02",
+  "compatibility_flags": ["nodejs_compat"],
   "observability": {
     "enabled": true
   },
@@ -17,6 +18,24 @@
     {
       "binding": "RATE_LIMIT",
       "id": "998a2ec4b4084ac9aa4632cd5b2777d6"
+    }
+  ],
+  "d1_databases": [
+    {
+      "binding": "SHUTTLE_REPORTS",
+      "database_name": "dima-now-shuttle-reports",
+      "database_id": "95ba29ac-6838-40cc-bb74-04a36dd9e32d",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "ratelimits": [
+    {
+      "name": "SHUTTLE_REPORT_RATE_LIMIT",
+      "namespace_id": "1001",
+      "simple": {
+        "limit": 6,
+        "period": 60
+      }
     }
   ]
 }

@@ -284,3 +284,35 @@ The official detail navigation is a two-step JavaScript/AJAX plus temporary-form
 Live inspection of the authenticated official LMS confirmed that notices and materials use `table.table_view_basic`: the article is in the content row and attachments are exposed through `fncFileDown(attachNo)`. DIMA Now parses that verified structure into the native Compose detail and constructs only the corresponding authenticated same-host download request. It never persists or logs session values.
 
 Video CONTENT entries are not articles. The official list may give multiple sessions in one course the same `<course>_V` content identifier, and `학습시작` opens the official course-schedule/player flow. DIMA Now therefore assigns title-qualified internal list identities so these rows do not collapse, but opens CONTENT in an explicit, visible, same-session in-app official LMS course page rather than fabricating a native article. Notices, materials, and assignments retain native viewing; external browser sessions are not created. Learning start remains a user action, and the app does not automatically complete, submit, or mark coursework.
+
+→ superseded by D-052 (2026-09-02)
+
+## D-052 - Native LMS detail, verified attachment handoff, and bounded 3045 takeover - 2026-09-02 (user-approved implementation; supersedes D-051 only for CONTENT launch and clarifies D-050 session-conflict handling)
+
+The official `전체 학습` page remains the sole LMS list source; the app does not add per-course history rows. NOTICE, MATERIAL, and ASSIGNMENT open as structured native details with available course, title, author, registration time, body, submission period, score, and attachment fields. CONTENT first asks exactly `학습 시작을 하실건가요?`, then enters the uniquely matched official same-session player inside the app. A missing or ambiguous target, and unsupported types such as discussion, team project, quiz, or exam, fall back to the corresponding official same-session LMS screen instead of guessing a native article or action.
+
+Every attachment preserves its actual method, form/query fields, final detail URL, and Referer in a structured request; an enclosing official form takes precedence over JavaScript argument guesses. A typed download result rejects zero bytes, length mismatches, login/error HTML, and non-LMS redirects. The complete response is validated in app-owned temporary cache before the Android document destination is opened, and a failed or partial destination copy is not reported as success.
+
+Only the exact HTTPS portal URL `/sso/error.aspx?errorCode=3045` is treated as a duplicate-session conflict. The app may verify and submit the official page's own takeover action once; a repeated 3045, an unavailable action, another host, CAPTCHA, or OTP terminates safely without guessing or looping. Credentials, cookies, form values, SAML data, and private HTML remain excluded from logs and fixtures. LMS Room schema v5 adds detail metadata and attachment-request columns through an additive migration that preserves existing items, local read/completion state, cached bodies, and attachments.
+
+sweep: `README.md`, `SECURITY.md`, and `memory/PRODUCT-TRUTH.md` updated (2026-09-02)
+
+## D-053 - Video catalog and completion state before in-app playback - 2026-09-02 (user-approved; supersedes D-052 only for CONTENT priority)
+
+CONTENT rows must first make the existence of each video lecture clear and display `수강 완료` or `미수강` only when that state comes from the LMS-rendered completion lists. Unknown status remains unlabelled rather than inferred from local opens, playback time, or app read state. NOTICE, MATERIAL, and ASSIGNMENT continue to use native detail and validated attachment downloads as the primary interaction.
+
+In-app CONTENT playback is a secondary best-effort route. A user action may still show `학습 시작을 하실건가요?` and enter the uniquely matched official same-session page, but the app does not claim playback success, mark completion, or manipulate progress. Physical Galaxy observation reached the exact official player shell while its central media area stayed blank, so visible media playback remains unaccepted until separately verified. All attachment-validation, native-detail, unsupported-item fallback, and bounded 3045 takeover clauses of D-052 remain in force.
+
+sweep: `README.md`, `SECURITY.md`, and `memory/PRODUCT-TRUTH.md` updated (2026-09-02)
+
+## D-054 - Portrait-only app surface on phones and Android 16 tablets - 2026-09-02 (user-requested)
+
+`MainActivity` is portrait-only on supported phones and tablets. Because targetSdk 36 normally ignores `screenOrientation` on displays with `sw600dp` or greater, the activity also declares the Android 16 `android.window.PROPERTY_COMPAT_ALLOW_RESTRICTED_RESIZABILITY` compatibility property. This is an API 36 compatibility measure, not a claim that the current phone-first Compose layout is tablet-adaptive; Android 17 removes this opt-out for apps targeting API 37 or higher and will require a future adaptive-layout migration.
+
+## D-055 - Physical shuttle runs and advisory missed-arrival reports - 2026-09-02 (user-approved implementation)
+
+The published 605-row shuttle cache remains an exact official-source cache. A verified physical-stop photo adds only the handwritten weekday 14:30, 15:30, 16:30, and 17:30 ONE_ROOM-to-MAIN departures as a separate idempotent `A-field-extra` projection: 20 rows across Monday through Friday, with no invented arrival or return times. Daytime A and B remain separate ONE_ROOM↔MAIN and MAIN↔YEIN services. Evening A/B rows are projected as one physical run with ordered calls YEIN → MAIN stadium → ONE_ROOM → MAIN stadium → YEIN.
+
+`셔틀이 오지 않나요?` is an advisory, reversible report available only from the scheduled stop time until the earlier of the next same-stop vehicle or 15 minutes. Production submission requires a fresh, sufficiently accurate GPS sample at that stop; TEST mode can inspect counts but cannot submit. Counts propagate only downstream within the same physical run, so a missing report at an upstream stop can warn later riders without contaminating another route. The compact widget and Live Update payload remain unchanged.
+
+Reports use an install-scoped random token, but the Cloudflare Worker stores only its server-secret HMAC with the service date, current schedule revision, run, and stop-call IDs. Server validation rejects unknown or stale schedule events, a D1 primary key makes each install/stop-call idempotent, rate limiting bounds abuse, and rows expire after seven days. Coordinates, LMS identity, timetable, raw reporter token, and a claim that a shuttle is officially cancelled are all outside this feature.

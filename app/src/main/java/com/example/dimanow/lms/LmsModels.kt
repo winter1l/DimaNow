@@ -80,17 +80,36 @@ data class LmsItem(
     val changeState: LmsChangeState = LmsChangeState.NONE,
 )
 
+enum class LmsHttpMethod { GET, POST }
+
+data class LmsAttachmentRequest(
+    val method: LmsHttpMethod = LmsHttpMethod.GET,
+    val url: String,
+    val fields: Map<String, String> = emptyMap(),
+    val refererUrl: String? = null,
+)
+
 data class LmsAttachment(
     val id: String,
     val fileName: String,
     val downloadUrl: String,
     val sizeBytes: Long? = null,
+    val request: LmsAttachmentRequest? = null,
+)
+
+data class LmsDetailMetadata(
+    val author: String? = null,
+    val registeredAt: Instant? = null,
+    val submissionStartsAt: Instant? = null,
+    val submissionEndsAt: Instant? = null,
+    val maxScore: String? = null,
 )
 
 data class LmsItemDetail(
     val item: LmsItem,
     val sanitizedHtml: String,
     val attachments: List<LmsAttachment> = emptyList(),
+    val metadata: LmsDetailMetadata = LmsDetailMetadata(),
 )
 
 data class LmsSnapshot(

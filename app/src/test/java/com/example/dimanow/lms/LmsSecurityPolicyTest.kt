@@ -11,9 +11,13 @@ class LmsSecurityPolicyTest {
     fun onlyExactOfficialHttpsHostsAreAllowed() {
         assertTrue(LmsUrlPolicy.isAllowed("https://lms.dima.ac.kr/lms/myLecture/doListView.dunet"))
         assertTrue(LmsUrlPolicy.isAllowed("https://portal.dima.ac.kr/"))
+        assertTrue(LmsUrlPolicy.isAllowed("https://lms.dima.ac.kr:443/lms/myLecture/doListView.dunet"))
+        assertTrue(LmsUrlPolicy.isAllowed("https://portal.dima.ac.kr:443/"))
         assertFalse(LmsUrlPolicy.isAllowed("http://lms.dima.ac.kr/login"))
         assertFalse(LmsUrlPolicy.isAllowed("https://lms.dima.ac.kr.evil.example/login"))
         assertFalse(LmsUrlPolicy.isAllowed("https://user@lms.dima.ac.kr/login"))
+        assertFalse(LmsUrlPolicy.isAllowed("https://lms.dima.ac.kr:8443/login"))
+        assertFalse(LmsUrlPolicy.isAllowed("https://portal.dima.ac.kr:9443/"))
     }
 
     @Test
@@ -55,5 +59,51 @@ class LmsSecurityPolicyTest {
         val header = "attachment; filename*=UTF-8''%EC%88%98%EC%97%85%2F%EC%95%88%EB%82%B4.pdf"
 
         assertEquals("수업_안내.pdf", LmsAttachmentNaming.fromContentDisposition(header, "첨부파일"))
+    }
+
+    @Test
+    fun percentAndPlusEncodedBasicFilenameIsDecodedForTheSaveDialog() {
+        val header = "attachment; filename=\"%EC%88%98%EC%97%85+%EC%95%88%EB%82%B4.pdf\""
+
+        assertEquals("수업 안내.pdf", LmsAttachmentNaming.fromContentDisposition(header, "fallback.pdf"))
+    }
+
+    @Test
+    fun encodedFilenameIsDecodedExactlyOnceAndUnsafeCharactersAreRemoved() {
+        assertEquals(
+            "%2E%2E%2Fnotes.pdf",
+            LmsAttachmentNaming.fromContentDisposition(
+                "attachment; filename=\"%252E%252E%252Fnotes.pdf\"",
+                "fallback.pdf",
+            ),
+        )
+        assertEquals(
+            "_report.pdf",
+            LmsAttachmentNaming.fromContentDisposition(
+                "attachment; filename=\"%2E%2E%2F%00report.pdf\"",
+                "fallback.pdf",
+            ),
+        )
+        assertEquals(
+            "lecture-notes.pdf",
+            LmsAttachmentNaming.fromContentDisposition(
+                "attachment; filename=\"lecture-notes.pdf\"",
+                "fallback.pdf",
+            ),
+        )
+        assertEquals(
+            "C++-notes.pdf",
+            LmsAttachmentNaming.fromContentDisposition(
+                "attachment; filename=\"C++-notes.pdf\"",
+                "fallback.pdf",
+            ),
+        )
+        assertEquals(
+            "A+B.pdf",
+            LmsAttachmentNaming.fromContentDisposition(
+                "attachment; filename=\"A+B.pdf\"",
+                "fallback.pdf",
+            ),
+        )
     }
 }

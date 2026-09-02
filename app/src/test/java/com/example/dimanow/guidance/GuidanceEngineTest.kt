@@ -17,6 +17,81 @@ import org.junit.Test
 
 class GuidanceEngineTest {
     @Test
+    fun `shuttle topology keeps daytime routes separate and merges the evening loop`() {
+        val departures = listOf(
+            ShuttleDeparture("A", "one-room", "TO_MAIN", DayOfWeek.MONDAY, LocalTime.of(8, 20), CampusZoneId.ONE_ROOM, CampusZoneId.MAIN, LocalTime.of(8, 25)),
+            ShuttleDeparture("B", "university-headquarters", "TO_YEIN", DayOfWeek.MONDAY, LocalTime.of(8, 25), CampusZoneId.MAIN, CampusZoneId.YEIN, LocalTime.of(8, 30)),
+            ShuttleDeparture("B-evening", "yein", "TO_MAIN", DayOfWeek.MONDAY, LocalTime.of(18, 40), CampusZoneId.YEIN, CampusZoneId.MAIN, LocalTime.of(18, 45)),
+            ShuttleDeparture("A-evening", "one-room", "TO_MAIN", DayOfWeek.MONDAY, LocalTime.of(18, 50), CampusZoneId.ONE_ROOM, CampusZoneId.MAIN, LocalTime.of(18, 55)),
+            ShuttleDeparture("A-evening", "stadium-stop", "TO_YEIN", DayOfWeek.MONDAY, LocalTime.of(18, 55), CampusZoneId.MAIN, CampusZoneId.YEIN, LocalTime.of(19, 0)),
+            ShuttleDeparture("B-evening", "stadium-stop", "TO_YEIN", DayOfWeek.MONDAY, LocalTime.of(18, 55), CampusZoneId.MAIN, CampusZoneId.YEIN, LocalTime.of(19, 0)),
+        )
+
+        val topology = GuidanceEngine().prepareShuttleTopology(departures)
+
+        assertEquals(listOf(ShuttleServicePattern.DAY_A, ShuttleServicePattern.DAY_B, ShuttleServicePattern.EVENING_LOOP), topology.runs.map { it.pattern })
+        val evening = topology.runs.single { it.pattern == ShuttleServicePattern.EVENING_LOOP }
+        assertEquals(
+            listOf(CampusZoneId.YEIN, CampusZoneId.MAIN, CampusZoneId.ONE_ROOM, CampusZoneId.MAIN, CampusZoneId.YEIN),
+            evening.stopCalls.map { it.zone },
+        )
+        assertEquals(listOf("18:40", "18:45", "18:50", "18:55", "19:00"), evening.stopCalls.map { it.expectedTime.toString() })
+        assertEquals(listOf("stadium-stop", "stadium-stop"), evening.stopCalls.filter { it.zone == CampusZoneId.MAIN }.map { it.stopId })
+    }
+
+    @Test
+    fun `missed shuttle reports affect only later calls in the same physical run`() {
+        val run = ShuttleVehicleRun(
+            id = "evening-loop-monday-1850",
+            serviceDay = DayOfWeek.MONDAY,
+            pattern = ShuttleServicePattern.EVENING_LOOP,
+            stopCalls = listOf(
+                ShuttleStopCall("run:0", 0, CampusZoneId.YEIN, "yein", LocalTime.of(18, 40)),
+                ShuttleStopCall("run:1", 1, CampusZoneId.MAIN, "stadium-stop", LocalTime.of(18, 45)),
+                ShuttleStopCall("run:2", 2, CampusZoneId.ONE_ROOM, "one-room", LocalTime.of(18, 50)),
+                ShuttleStopCall("run:3", 3, CampusZoneId.MAIN, "stadium-stop", LocalTime.of(18, 55)),
+                ShuttleStopCall("run:4", 4, CampusZoneId.YEIN, "yein", LocalTime.of(19, 0)),
+            ),
+        )
+        val otherRun = run.copy(id = "evening-loop-monday-1920", stopCalls = run.stopCalls.map { it.copy(id = "other:${it.sequence}") })
+        val reports = listOf(
+            ShuttleReportAggregate(run.id, "run:0", 0, 3),
+            ShuttleReportAggregate(run.id, "run:2", 2, 2),
+            ShuttleReportAggregate(otherRun.id, "other:0", 0, 9),
+        )
+
+        val engine = GuidanceEngine()
+
+        assertEquals(3, engine.affectedReportCount(run, run.stopCalls[1], reports))
+        assertEquals(5, engine.affectedReportCount(run, run.stopCalls[3], reports))
+        assertEquals(0, engine.affectedReportCount(run, run.stopCalls[0], reports.filter { it.stopCallId == "run:2" }))
+    }
+
+    @Test
+    fun `report window starts at expected time and closes at the earlier next same stop call`() {
+        val first = ShuttleVehicleRun(
+            id = "day-b-monday-0825-main",
+            serviceDay = DayOfWeek.MONDAY,
+            pattern = ShuttleServicePattern.DAY_B,
+            stopCalls = listOf(ShuttleStopCall("first:0", 0, CampusZoneId.MAIN, "university-headquarters", LocalTime.of(8, 25))),
+        )
+        val next = ShuttleVehicleRun(
+            id = "day-b-monday-0835-main",
+            serviceDay = DayOfWeek.MONDAY,
+            pattern = ShuttleServicePattern.DAY_B,
+            stopCalls = listOf(ShuttleStopCall("next:0", 0, CampusZoneId.MAIN, "university-headquarters", LocalTime.of(8, 35))),
+        )
+        val topology = ShuttleTopology(listOf(first, next))
+        val engine = GuidanceEngine()
+        val date = LocalDate.of(2026, 8, 31)
+        val zone = ZoneId.of("Asia/Seoul")
+
+        assertEquals(false, engine.canReportMissedShuttle(date.atTime(8, 24, 59).atZone(zone), first, first.stopCalls[0], topology))
+        assertEquals(true, engine.canReportMissedShuttle(date.atTime(8, 25).atZone(zone), first, first.stopCalls[0], topology))
+        assertEquals(false, engine.canReportMissedShuttle(date.atTime(8, 35).atZone(zone), first, first.stopCalls[0], topology))
+    }
+
+    @Test
     fun `guidance paused until disabled suppresses a later class without a fixed end date`() {
         val course = Course(DayOfWeek.MONDAY, LocalTime.of(10, 0), LocalTime.of(12, 0), "조명기초및실습", "덕성관 402", "이용창", CampusZoneId.MAIN)
         val pause = GuidancePause.untilDisabled(LocalDate.of(2026, 8, 27))

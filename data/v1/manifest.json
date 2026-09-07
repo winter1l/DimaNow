@@ -1,5 +1,5 @@
 {
-    "generatedAt": "2026-09-06T05:05:56.338801045Z",
+    "generatedAt": "2026-09-07T00:51:02.966160056Z",
     "datasets": {
         "shuttle": {
             "revision": 1,
@@ -29,12 +29,12 @@
             "sourceUrl": "https://www.dima.ac.kr/?p=111"
         },
         "dorm_meal": {
-            "revision": 1,
+            "revision": 2,
             "state": "READY",
-            "publishedAt": "2026-09-01T10:22:49.553823683Z",
-            "lastAttemptAt": "2026-09-01T10:22:49.553823683Z",
-            "url": "dorm-meal/00ba036477e1d7940b2a4bc0cceb66c9db1222fb1e10fde956824a3819566575.json",
-            "sha256": "00ba036477e1d7940b2a4bc0cceb66c9db1222fb1e10fde956824a3819566575",
+            "publishedAt": "2026-09-07T00:51:02.966160056Z",
+            "lastAttemptAt": "2026-09-07T00:51:02.966160056Z",
+            "url": "dorm-meal/caf2017970d317ee626a0219005d100bbca9009c47be2023f406524c111036e1.json",
+            "sha256": "caf2017970d317ee626a0219005d100bbca9009c47be2023f406524c111036e1",
             "sourceUrl": "https://github.com/winter1l/DimaNow/tree/dorm-submissions/dorm-submissions"
         }
     }

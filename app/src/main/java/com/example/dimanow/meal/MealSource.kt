@@ -150,6 +150,10 @@ interface MealSource {
     val dormitoryData: Flow<DormitoryMealData>
         get() = flowOf(DormitoryMealData(emptyList(), null, null, null))
     suspend fun refresh(): MealRefreshResult
+    suspend fun refreshIfDue(trigger: MealRefreshTrigger, now: Instant = Instant.now()): MealRefreshResult? =
+        if (MealRefreshPolicy.shouldRefresh(data.first(), trigger, now)) refresh() else null
+    suspend fun nextBackgroundCheckAt(now: Instant = Instant.now()): Instant =
+        MealRefreshPolicy.nextBackgroundCheckAt(data.first(), now)
     suspend fun refreshDormitory(): MealRefreshResult = MealRefreshResult.NotPublishedYet
     suspend fun submitDormitoryMeal(image: DormitoryMealImage): DormitoryMealSubmissionResult =
         DormitoryMealSubmissionResult.Failure("기숙사 식단 업로드 서비스가 준비되지 않았습니다.")
@@ -214,7 +218,16 @@ class StaticMealSource(
         )
     }
 
-    override suspend fun refresh(): MealRefreshResult = refreshMutex.withLock { withContext(ioDispatcher) {
+    override suspend fun refresh(): MealRefreshResult = refreshMutex.withLock { refreshLocked() }
+
+    override suspend fun refreshIfDue(trigger: MealRefreshTrigger, now: Instant): MealRefreshResult? = refreshMutex.withLock {
+        if (!MealRefreshPolicy.shouldRefresh(data.first(), trigger, now)) return@withLock null
+        // The due check and request share one lock, so launch/tab/worker checks cannot race.
+        (transport as? CachingStaticDataTransport)?.invalidateManifest()
+        refreshLocked()
+    }
+
+    private suspend fun refreshLocked(): MealRefreshResult = withContext(ioDispatcher) {
         val attempt = clock.instant()
         try {
             val manifest = json.decodeFromString<CampusDataManifest>(transport.get(MANIFEST_URL).decodeToString())
@@ -267,12 +280,12 @@ class StaticMealSource(
                     else -> MealRefreshResult.Failure(reason)
                 }
             }
-            if (previousSync?.revision == descriptor.revision && previousSync.sha256 == descriptor.sha256) {
+            val cachedDays = dao.observeMealDays().first()
+            if (previousSync?.revision == descriptor.revision && previousSync.sha256 == descriptor.sha256 &&
+                previousSync.lastImportedEpochMillis != null && cachedDays.isNotEmpty()) {
                 val previousStatus = dao.sourceStatus(SOURCE_KEY)
-                val cachedDays = dao.observeMealDays().first()
-                val week = cachedDays.firstOrNull()?.epochDay?.let(LocalDate::ofEpochDay)
-                    ?: throw IllegalStateException("식단 캐시가 비어 있습니다.")
                 val cachedLastDate = cachedDays.maxOf { LocalDate.ofEpochDay(it.epochDay) }
+                val week = cachedLastDate.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY))
                 if (cachedLastDate.isBefore(MealRefreshClock.today(clock))) {
                     database.withTransaction {
                         dao.putSyncState(previousSync.copy(lastCheckedEpochMillis = attempt.toEpochMilli(), serverState = "WAITING", error = null))
@@ -362,6 +375,8 @@ class StaticMealSource(
                 )
             }
             MealRefreshResult.Success(weekStart, attempt)
+        } catch (cancelled: kotlinx.coroutines.CancellationException) {
+            throw cancelled
         } catch (error: Exception) {
             val previous = dao.sourceStatus(SOURCE_KEY)
             val previousSync = dao.syncState(SOURCE_KEY)
@@ -384,7 +399,7 @@ class StaticMealSource(
             )
             MealRefreshResult.Failure(error.message ?: "식단 동기화 실패")
         }
-    } }
+    }
 
     override suspend fun refreshDormitory(): MealRefreshResult = refreshMutex.withLock { withContext(ioDispatcher) {
         val attempt = clock.instant()

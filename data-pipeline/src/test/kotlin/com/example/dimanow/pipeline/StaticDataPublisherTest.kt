@@ -15,6 +15,29 @@ import org.junit.Test
 
 class StaticDataPublisherTest {
     @Test
+    fun `scheduled collection stops only after the full current student meal week is published`() {
+        val publisher = StaticDataPublisher(Files.createTempDirectory("student-meal-watch"))
+        val monday = LocalDate.parse("2026-09-07")
+        assertTrue(publisher.shouldCollectStudentMeal(monday))
+        publisher.publishMeal(
+            com.example.dimanow.sync.MealPayload(
+                weekStart = "2026-09-07", weekEnd = "2026-09-13",
+                days = (0L..4L).map { offset ->
+                    com.example.dimanow.sync.MealDayPayload(
+                        monday.plusDays(offset).toString(), listOf("쌀밥", "된장국"),
+                        "11:00 ~ 14:00", "https://www.instagram.com/p/example/", "https://example.com/meal.jpg",
+                    )
+                },
+            ), 1, Instant.parse("2026-09-07T03:00:00Z"),
+        )
+        assertEquals(false, publisher.shouldCollectStudentMeal(monday))
+        assertEquals(false, publisher.shouldCollectStudentMeal(LocalDate.parse("2026-09-13")))
+        assertTrue(publisher.shouldCollectStudentMeal(LocalDate.parse("2026-09-14")))
+        publisher.recordFailure("meal", "NEEDS_REVIEW", "retry", Instant.parse("2026-09-07T04:00:00Z"))
+        assertTrue(publisher.shouldCollectStudentMeal(monday))
+    }
+
+    @Test
     fun `검증된 기숙사 식단과 제출 결과를 Pages에 게시한다`() {
         val output = Files.createTempDirectory("dima-dorm-meal")
         val publisher = StaticDataPublisher(output)

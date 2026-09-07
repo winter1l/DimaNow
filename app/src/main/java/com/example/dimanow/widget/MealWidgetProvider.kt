@@ -39,8 +39,11 @@ class MealWidgetProvider : AppWidgetProvider() {
             val pending = goAsync()
             CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
                 try {
-                    (context.applicationContext as DimaNowApplication).mealSource.refresh()
-                    updateAll(context)
+                    com.example.dimanow.work.StudentMealSync.refresh(
+                        context,
+                        (context.applicationContext as DimaNowApplication).mealSource,
+                        com.example.dimanow.meal.MealRefreshTrigger.MANUAL,
+                    )
                 } finally {
                     pending.finish()
                 }

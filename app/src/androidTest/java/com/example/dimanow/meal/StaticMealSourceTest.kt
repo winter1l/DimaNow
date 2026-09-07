@@ -10,6 +10,8 @@ import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneOffset
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.test.runTest
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -28,6 +30,69 @@ class StaticMealSourceTest {
 
     @After
     fun tearDown() = database.close()
+
+    @Test
+    fun manualRefreshBypassesTheManifestCacheThenForegroundChecksAreThrottled() = runTest {
+        val fixture = mealFixture()
+        var response = fixture.manifest.replace("\"state\":\"READY\"", "\"state\":\"WAITING\"")
+        var requests = 0
+        val now = Instant.parse("2026-08-24T02:00:00Z")
+        val source: MealSource = StaticMealSource(
+            database,
+            com.example.dimanow.sync.CachingStaticDataTransport(StaticDataTransport { url ->
+                requests++
+                if (url.endsWith("manifest.json")) response.toByteArray() else fixture.payload.toByteArray()
+            }),
+            Clock.fixed(now, ZoneOffset.UTC),
+        )
+        assertEquals(MealRefreshResult.NotPublishedYet, source.refresh())
+        response = fixture.manifest
+        assertEquals(MealRefreshResult.Success(LocalDate.parse("2026-08-24"), now), source.refreshIfDue(MealRefreshTrigger.MANUAL, now))
+        assertEquals(null, source.refreshIfDue(MealRefreshTrigger.FOREGROUND, now.plusSeconds(899)))
+        assertEquals(3, requests) // waiting manifest, fresh manifest, validated payload
+    }
+
+    @Test
+    fun concurrentForegroundAndWatchRequestsShareOneAttemptAndFailureKeepsStoredFood() = runTest {
+        val fixture = mealFixture()
+        val now = Instant.parse("2026-08-24T02:00:00Z")
+        var requests = 0
+        var fail = false
+        val source: MealSource = StaticMealSource(database, StaticDataTransport { url ->
+            requests++
+            if (fail) error("offline")
+            if (url.endsWith("manifest.json")) fixture.manifest.toByteArray() else fixture.payload.toByteArray()
+        }, Clock.fixed(now, ZoneOffset.UTC))
+        listOf(
+            async { source.refreshIfDue(MealRefreshTrigger.FOREGROUND, now) },
+            async { source.refreshIfDue(MealRefreshTrigger.PUBLICATION_WATCH, now) },
+        ).awaitAll()
+        assertEquals(2, requests) // one manifest and one payload, not two imports
+        fail = true
+        assertEquals(MealRefreshResult.Failure("offline"), source.refreshIfDue(MealRefreshTrigger.MANUAL, now))
+        assertEquals(listOf("쌀밥", "된장국"), source.data.first().days.single().menuLines)
+        assertEquals(now, source.data.first().lastSuccess)
+        assertEquals("offline", source.data.first().error)
+    }
+
+    @Test
+    fun repeatedRefreshReportsTheLatestWeekWhileKeepingOlderMenus() = runTest {
+        val old = mealFixture()
+        val now = Instant.parse("2026-09-07T02:00:00Z")
+        var payload = old.payload
+        var manifest = old.manifest
+        val source: MealSource = StaticMealSource(database, StaticDataTransport { url ->
+            if (url.endsWith("manifest.json")) manifest.toByteArray() else payload.toByteArray()
+        }, Clock.fixed(now, ZoneOffset.UTC))
+        source.refresh()
+        payload = old.payload.replace("2026-08-24", "2026-09-07").replace("2026-08-30", "2026-09-13")
+        val oldHash = MessageDigest.getInstance("SHA-256").digest(old.payload.toByteArray()).joinToString("") { "%02x".format(it) }
+        val newHash = MessageDigest.getInstance("SHA-256").digest(payload.toByteArray()).joinToString("") { "%02x".format(it) }
+        manifest = old.manifest.replace(oldHash, newHash)
+        source.refresh()
+        assertEquals(MealRefreshResult.Success(LocalDate.parse("2026-09-07"), now), source.refreshIfDue(MealRefreshTrigger.MANUAL, now))
+        assertEquals(listOf(LocalDate.parse("2026-08-24"), LocalDate.parse("2026-09-07")), source.data.first().days.map { it.date })
+    }
 
     @Test
     fun validServerMealReplacesOnlyItsValidatedWeek() = runTest {

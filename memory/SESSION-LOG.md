@@ -155,3 +155,8 @@
 - Created and migrated a dedicated Cloudflare D1 database, deployed GET/POST/DELETE `/v1/shuttle-reports`, preserved all existing Worker bindings/secrets, and live-verified revision-1 GET returning an empty report list. No production test report was inserted.
 - App JVM 186/186, pipeline 34 pass plus one gated skip, Worker 6/6, Android-test compilation, lint, debug and optimized builds passed. Physical SM-S918N API 36 rerun completed 144 classes / 147 executions with zero failures and three intentional skips after temporarily suppressing and then restoring the exact Proton Pass autofill service to prevent its save dialog from stealing test focus.
 - Optimized v1.5 (6), 5,401,105 bytes, SHA-256 `824887C4E65B12A0D6A41B649C2D17454C74500CF39F0B9A1065A44B2AECA68B`, installed on `100.112.73.34:5555`; MainActivity was top-resumed as PID 23971 with no immediate app FATAL/ANR. Instrumentation had removed the target package, so final installation was fresh and HomeBase selection was left to the user.
+
+
+## 2026-09-08 - Student cafeteria publication watch (D-062)
+
+Implemented server retry-until-published collection and Android foreground/conditional background checks, manual manifest-cache bypass, waiting/last-check UI, and widget refresh. Integration testing also fixed WAITING-to-READY import with no prior payload and completion messages incorrectly naming an older cached week. Tests/builds and physical replace-install acceptance are recorded in `meal-refresh-20260908.md` and `PRODUCT-TRUTH.md`. Unrelated existing working-tree changes are preserved; only meal-related changes are included in the commit. No remote push or release was performed.

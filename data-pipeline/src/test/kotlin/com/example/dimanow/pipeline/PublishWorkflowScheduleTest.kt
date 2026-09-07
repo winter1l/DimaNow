@@ -8,11 +8,13 @@ import org.junit.Test
 
 class PublishWorkflowScheduleTest {
     @Test
-    fun `본관 학생식당 자동 게시를 월요일 10시 15분 KST에 한 번만 실행한다`() {
+    fun `student collection retries through Monday lunch and every two hours afterwards`() {
         val workflow = Files.readString(projectRoot().resolve(".github/workflows/publish-data.yml"))
 
-        assertTrue(workflow.contains("- cron: \"15 1 * * 1\""))
-        assertFalse(workflow.contains("- cron: \"17 0,6 * * *\""))
+        assertTrue(workflow.contains("- cron: \"7,37 0-4 * * 1\"")) // Mon 09:07 through 13:37 KST
+        assertTrue(workflow.contains("- cron: \"7 5-23/2 * * 1\"")) // Mon 14:07 through Tue 08:07 KST
+        assertTrue(workflow.contains("- cron: \"7 1-23/2 * * 0,2-6\"")) // Other days, every 2h
+        assertFalse(workflow.contains("- cron: \"15 1 * * 1\""))
         assertTrue(workflow.contains("- cron: \"43 0 * * *\""))
     }
 

@@ -30,6 +30,20 @@ class StaticDataPublisher(private val outputRoot: Path) {
         publish("meal", "meal", json.encodeToString(payload).toByteArray(), revision, publishedAt, "https://www.dima.ac.kr/?p=1")
     }
 
+    /** Scheduled retries stop for a complete week; explicit publication can still import corrections. */
+    fun shouldCollectStudentMeal(today: LocalDate): Boolean = !runCatching {
+        val descriptor = readManifest()?.datasets?.get("meal") ?: return@runCatching false
+        if (descriptor.state != "READY" || !descriptor.url.matches(Regex("meal/[0-9a-f]{64}\\.json"))) return@runCatching false
+        val bytes = Files.readAllBytes(outputRoot.resolve("data/v1").resolve(descriptor.url))
+        if (bytes.sha256() != descriptor.sha256) return@runCatching false
+        val payload = json.decodeFromString<MealPayload>(bytes.decodeToString())
+        val monday = today.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY))
+        payload.schemaVersion == 1 && payload.weekStart == monday.toString() &&
+            payload.weekEnd == monday.plusDays(6).toString() &&
+            payload.days.map { it.date }.sorted() == (0L..4L).map { monday.plusDays(it).toString() } &&
+            payload.days.all { it.menuLines.size >= 2 && it.menuLines.all(String::isNotBlank) }
+    }.getOrDefault(false)
+
     fun publishDormitoryMeal(payload: DormitoryMealPayload, revision: Long, publishedAt: Instant) {
         publish(
             "dorm_meal",

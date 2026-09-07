@@ -53,6 +53,7 @@ object RefreshScheduler {
             .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 30, TimeUnit.MINUTES)
             .build()
         workManager.enqueueUniquePeriodicWork("campus-static-sync-periodic", ExistingPeriodicWorkPolicy.UPDATE, periodic)
+        StudentMealSync.schedule(context, (context.applicationContext as DimaNowApplication).mealSource)
     }
 
     private const val CURRENT_POLICY_VERSION = 2
@@ -62,7 +63,7 @@ class CampusSyncWorker(context: Context, parameters: WorkerParameters) : Corouti
     override suspend fun doWork(): Result {
         val app = applicationContext as DimaNowApplication
         val shuttle = app.shuttleSource.refresh()
-        val meal = app.mealSource.refresh()
+        val meal = app.mealSource.refreshIfDue(com.example.dimanow.meal.MealRefreshTrigger.FOREGROUND)
         if (RefreshPolicy.shouldRefreshDormitory(app.mealSource.dormitoryData.first(), ZonedDateTime.now(MinuteTicker.CAMPUS_ZONE))) {
             app.mealSource.refreshDormitory()
         }
@@ -80,5 +81,4 @@ class CampusSyncWorker(context: Context, parameters: WorkerParameters) : Corouti
     }
 }
 
-// D-038 통합 이후 개별 소스 워커(Notice/Meal/ShuttleRefreshWorker)는 어디서도 enqueue되지 않아
-// D-044 정리에서 제거되었다. 예약은 CampusSyncWorker 하나로 일원화되어 있다.
+// StudentMealWatchWorker supplements the shared 12-hour sync only while a new meal week is missing.

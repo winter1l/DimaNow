@@ -2400,6 +2400,12 @@ fun MealScreen(
     var cameraOutput by remember { mutableStateOf<Uri?>(null) }
     var refreshMessage by remember { mutableStateOf<String?>(null) }
 
+    LaunchedEffect(mealSource, venue) {
+        if (venue == MealVenue.MAIN_CAFETERIA) {
+            com.example.dimanow.work.StudentMealSync.refresh(context, mealSource, com.example.dimanow.meal.MealRefreshTrigger.FOREGROUND)
+        }
+    }
+
     fun loadImage(uri: Uri) {
         scope.launch {
             runCatching { readDormitoryMealImage(context, uri) }
@@ -2496,8 +2502,10 @@ fun MealScreen(
                         refreshMessage = null
                         scope.launch {
                             try {
-                                val result = if (venue == MealVenue.DORMITORY) mealSource.refreshDormitory() else mealSource.refresh()
+                                val result = if (venue == MealVenue.DORMITORY) mealSource.refreshDormitory() else
+                                    com.example.dimanow.work.StudentMealSync.refresh(context, mealSource, com.example.dimanow.meal.MealRefreshTrigger.MANUAL)
                                 refreshMessage = when (result) {
+                                    null -> null
                                     is com.example.dimanow.meal.MealRefreshResult.Success -> "${result.weekStart} 주간 식단 저장 완료"
                                     com.example.dimanow.meal.MealRefreshResult.NotPublishedYet -> "아직 새 식단이 올라오지 않았어요"
                                     is com.example.dimanow.meal.MealRefreshResult.NeedsReview -> "확인 필요: ${result.reason}"
@@ -2537,6 +2545,7 @@ fun MealScreen(
         if (venue == MealVenue.DORMITORY) {
             WeeklyDormitoryMealMenu(dormitoryMeal, today)
         } else {
+            StudentMealSyncStatus(meal, today)
             WeeklyMealMenu(meal = meal, today = today, nowTime = nowTime)
         }
     }

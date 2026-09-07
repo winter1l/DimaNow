@@ -15,6 +15,10 @@ fun main(args: Array<String>) {
     val site = Path.of(args[2])
     val publisher = StaticDataPublisher(site)
     val now = Clock.system(ZoneId.of("Asia/Seoul")).instant()
+    if (command == "collect-meal" && !publisher.shouldCollectStudentMeal(now.atZone(ZoneId.of("Asia/Seoul")).toLocalDate())) {
+        println("이번 주 학생식단이 이미 게시되어 수집을 건너뜁니다.")
+        return
+    }
     when (command) {
         "publish-shuttle" -> publisher.publishShuttle(Files.readString(Path.of(args[1])), publisher.nextRevision("shuttle"), now)
         "publish-notice" -> runCatching {
@@ -24,7 +28,7 @@ fun main(args: Array<String>) {
             publisher.recordFailure("notice", "ERROR", error.message ?: error.javaClass.simpleName, now)
             System.err.println("공지 게시 실패: ${error.message}")
         }
-        "publish-meal" -> runCatching {
+        "publish-meal", "collect-meal" -> runCatching {
             when (val result = MealRemotePipeline().fetchPublication()) {
                 is MealPublicationResult.Published -> publisher.publishMeal(result.payload, publisher.nextRevision("meal"), now)
                 MealPublicationResult.Waiting -> publisher.recordFailure("meal", "WAITING", "아직 새 식단이 올라오지 않았어요", now)

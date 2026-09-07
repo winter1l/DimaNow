@@ -2,6 +2,8 @@ package com.example.dimanow
 
 import android.content.Intent
 import android.os.Bundle
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.launch
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -16,6 +18,17 @@ import com.example.dimanow.theme.DIMANowTheme
 import com.example.dimanow.ui.DimaNowApp
 
 class MainActivity : ComponentActivity() {
+  override fun onStart() {
+    super.onStart()
+    lifecycleScope.launch {
+      com.example.dimanow.work.StudentMealSync.refresh(
+        this@MainActivity,
+        (application as DimaNowApplication).mealSource,
+        com.example.dimanow.meal.MealRefreshTrigger.FOREGROUND,
+      )
+    }
+  }
+
   // 값 + nonce 쌍이라 같은 위젯을 연달아 탭해도 매번 새 이벤트로 전달된다 (D-044 #7)
   private var targetPageEvent by mutableStateOf<Pair<String, Long>?>(null)
 

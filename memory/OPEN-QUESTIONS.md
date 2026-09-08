@@ -6,6 +6,7 @@
 | Q-002 | Do all three fixed centers produce correct 2-minute dwell/exit transitions on campus? | 2026-08-26 | Pending physical-site observation |
 | Q-003 | Do the shuttle countdowns stay within one minute and do both widgets resize/read correctly in One UI Home? | 2026-08-26 | Pending real-trip/launcher observation |
 | Q-004 | During active production guidance, does One UI render both compact pill choices and both course/classroom lock-screen orders without unexpected truncation? | 2026-08-27 | Classroom field persisted across five screen cycles and AOD/keyguard; normal unlocked visual fit and countdown option remain pending |
+| Q-005 | How much wider is the One UI 9 status pill than One UI 8 under identical device/font/density settings? | 2026-09-08 | One UI 9 physical probe showed eight Korean syllables fully, ninth fading; controlled One UI 8 baseline remains unknown. See PRODUCT-TRUTH.md dated probe evidence. |
 
 ## Readings in force — assumed, not decided
 

@@ -5,6 +5,8 @@ import com.example.dimanow.domain.TermSchedule
 import com.example.dimanow.guidance.HomeBase
 import com.example.dimanow.guidance.ShuttleScheduleIndex
 import com.example.dimanow.shuttle.ShuttleData
+import com.example.dimanow.location.NearbyTransitStop
+import com.example.dimanow.transit.Bus4402Schedule
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.channels.Channel
@@ -22,6 +24,9 @@ data class GuidanceRuntimeSnapshot(
     val resolvedZone: CampusZoneId,
     val displayOptions: LiveDisplayOptions,
     val homeBase: HomeBase,
+    val notificationPolicy: NotificationGuidancePolicy = NotificationGuidancePolicy(),
+    val nearbyTransitStop: NearbyTransitStop? = null,
+    val bus4402Schedule: Bus4402Schedule = Bus4402Schedule.official,
 )
 
 @OptIn(FlowPreview::class)

@@ -10,6 +10,24 @@ import kotlin.math.sqrt
 import java.time.Instant
 import java.time.Duration
 import com.example.dimanow.domain.ZoneGeometry
+import com.example.dimanow.transit.Bus4402Stop
+
+data class NearbyTransitStop(
+    val stopNumber: String,
+    val displayName: String,
+)
+
+data class TransitStopProximityState(
+    val candidateStopNumber: String? = null,
+    val candidateSince: Instant? = null,
+    val activeStopNumber: String? = null,
+    val lastValidAt: Instant? = null,
+)
+
+data class TransitStopResolution(
+    val stop: NearbyTransitStop?,
+    val state: TransitStopProximityState,
+)
 
 data class LocationSample(
     val point: GeoPoint,
@@ -23,6 +41,73 @@ enum class LocationMode {
 }
 
 class LocationResolver {
+    fun shouldPollNearbyTransitStop(
+        activeGeofenceIds: Set<String>,
+        previous: TransitStopProximityState,
+        guidanceEnabled: Boolean,
+    ): Boolean = guidanceEnabled && (
+        activeGeofenceIds.any { it.startsWith(TRANSIT_GEOFENCE_PREFIX) } ||
+            previous.candidateStopNumber != null ||
+            previous.activeStopNumber != null
+        )
+
+    fun resolveNearbyTransitStop(
+        sample: LocationSample?,
+        now: Instant,
+        stops: List<Bus4402Stop>,
+        previous: TransitStopProximityState,
+        activationDistanceMeters: Double = 40.0,
+        releaseDistanceMeters: Double = 70.0,
+        dwell: Duration = Duration.ofSeconds(30),
+        maxSampleAge: Duration = Duration.ofSeconds(30),
+        maxAccuracyMeters: Float = 25f,
+        noLocationTimeout: Duration = Duration.ofMinutes(2),
+    ): TransitStopResolution {
+        val activeStop = stops.firstOrNull { it.stopNumber == previous.activeStopNumber }
+        if (sample == null) {
+            val mayKeep = activeStop != null && previous.lastValidAt?.let {
+                Duration.between(it, now) <= noLocationTimeout
+            } == true
+            return TransitStopResolution(
+                stop = activeStop?.takeIf { mayKeep }?.toNearbyTransitStop(),
+                state = if (mayKeep) previous else TransitStopProximityState(),
+            )
+        }
+
+        val age = Duration.between(sample.capturedAt, now)
+        if (age.isNegative || age > maxSampleAge || sample.accuracyMeters > maxAccuracyMeters) {
+            return TransitStopResolution(stop = null, state = previous.copy(activeStopNumber = null))
+        }
+
+        if (activeStop != null) {
+            val distance = distanceMeters(sample.point, activeStop.point)
+            if (distance <= releaseDistanceMeters) {
+                return TransitStopResolution(
+                    stop = activeStop.toNearbyTransitStop(),
+                    state = previous.copy(lastValidAt = now),
+                )
+            }
+        }
+
+        val nearest = stops
+            .map { it to distanceMeters(sample.point, it.point) }
+            .filter { (_, distance) -> distance <= activationDistanceMeters }
+            .minByOrNull { (_, distance) -> distance }
+            ?.first
+            ?: return TransitStopResolution(null, TransitStopProximityState())
+        val candidateSince = previous.candidateSince
+            ?.takeIf { previous.candidateStopNumber == nearest.stopNumber }
+            ?: now
+        val activated = Duration.between(candidateSince, now) >= dwell
+        val state = TransitStopProximityState(
+            candidateStopNumber = nearest.stopNumber,
+            candidateSince = candidateSince,
+            activeStopNumber = nearest.stopNumber.takeIf { activated },
+            lastValidAt = now,
+        )
+        return TransitStopResolution(nearest.toNearbyTransitStop().takeIf { activated }, state)
+    }
+
     fun isFreshSampleAtZone(
         sample: LocationSample?,
         now: Instant,
@@ -106,4 +191,10 @@ class LocationResolver {
             sin(longitudeDelta / 2) * sin(longitudeDelta / 2)
         return 6_371_000.0 * 2 * atan2(sqrt(a), sqrt(1 - a))
     }
+
+    private companion object {
+        const val TRANSIT_GEOFENCE_PREFIX = "BUS_4402_"
+    }
 }
+
+private fun Bus4402Stop.toNearbyTransitStop() = NearbyTransitStop(stopNumber, displayName)

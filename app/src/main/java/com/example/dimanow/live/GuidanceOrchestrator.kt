@@ -41,8 +41,18 @@ class GuidanceOrchestrator(
             preparedSchedule = runtime.shuttleIndex,
             homeBase = runtime.homeBase,
             guidancePause = schedule.guidancePause,
+            nearbyTransitStop = runtime.nearbyTransitStop.takeIf {
+                runtime.notificationPolicy.bus4402 != NotificationGuidanceMode.OFF
+            },
+            bus4402Schedule = runtime.bus4402Schedule,
         )
-        if (snapshot.phase == GuidancePhase.NONE) controller.cancel() else controller.show(snapshot, runtime.displayOptions)
+        if (snapshot.phase == GuidancePhase.NONE) {
+            controller.cancel()
+        } else {
+            val mode = runtime.notificationPolicy.modeFor(snapshot)
+            if (mode == NotificationGuidanceMode.OFF) controller.cancel()
+            else controller.show(snapshot, runtime.displayOptions, mode)
+        }
         alarmScheduler.scheduleNext(now, schedule)
     }
 }

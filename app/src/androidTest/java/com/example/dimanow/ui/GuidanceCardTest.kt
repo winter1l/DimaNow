@@ -3,6 +3,7 @@ package com.example.dimanow.ui
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import com.example.dimanow.domain.CampusZoneId
 import com.example.dimanow.domain.DefaultSchedule
@@ -15,6 +16,9 @@ import com.example.dimanow.shuttle.ShuttleData
 import com.example.dimanow.live.LiveChipContent
 import com.example.dimanow.live.LiveClassOrder
 import com.example.dimanow.live.LiveDisplayOptions
+import com.example.dimanow.live.GuidanceKind
+import com.example.dimanow.live.NotificationGuidanceMode
+import com.example.dimanow.live.NotificationGuidancePolicy
 import java.time.DayOfWeek
 import java.time.Instant
 import java.time.LocalDate
@@ -223,6 +227,55 @@ class GuidanceCardTest {
             assertEquals(LiveChipContent.CLASSROOM, selectedChip)
             assertEquals(LiveClassOrder.CLASSROOM_FIRST, selectedOrder)
         }
+    }
+
+    @Test
+    fun notificationSettingsExposeIndependentClassCampusAnd4402Modes() {
+        var changed: Pair<GuidanceKind, NotificationGuidanceMode>? = null
+        composeRule.setContent {
+            NotificationGuidanceSettings(
+                policy = NotificationGuidancePolicy(),
+                onModeChange = { kind, mode -> changed = kind to mode },
+            )
+        }
+
+        composeRule.onNodeWithText("수업 안내").assertIsDisplayed()
+        composeRule.onNodeWithText("교내 셔틀").assertIsDisplayed()
+        composeRule.onNodeWithText("4402 강남행").assertIsDisplayed()
+        composeRule.onNodeWithTag("notification_mode_BUS_4402_STANDARD").performClick()
+
+        composeRule.runOnIdle {
+            assertEquals(GuidanceKind.BUS_4402 to NotificationGuidanceMode.STANDARD, changed)
+        }
+    }
+
+    @Test
+    fun testLocationControlsCanSelectEither4402Stop() {
+        var selected: String? = null
+        composeRule.setContent {
+            TransitStopTestControls(testStopNumber = null, onChange = { selected = it })
+        }
+
+        composeRule.onNodeWithText("4402 정류장").assertIsDisplayed()
+        composeRule.onNodeWithText("대학 셔틀 정류장").assertIsDisplayed()
+        composeRule.onNodeWithText("원룸촌 앞").performClick()
+        composeRule.runOnIdle { assertEquals("33243", selected) }
+    }
+
+    @Test
+    fun bus4402ScheduleShowsBothStopsAndMarksTheEstimatedOneRoomTimes() {
+        composeRule.setContent {
+            Bus4402ScheduleContent(
+                now = ZonedDateTime.of(2026, 9, 4, 8, 42, 0, 0, ZoneId.of("Asia/Seoul")),
+                nearbyStopNumber = "34710",
+            )
+        }
+
+        composeRule.onNodeWithText("4402 강남행").assertExists()
+        composeRule.onNodeWithText("대학 셔틀 정류장").assertExists()
+        composeRule.onNodeWithText("원룸촌 앞").assertExists()
+        composeRule.onNodeWithText("강남행 · 8분 후").assertExists()
+        composeRule.onNodeWithText("정류장 33243 · 공식 기점 +1분 예정").assertExists()
     }
 
     @Test

@@ -14,8 +14,64 @@ import java.time.ZonedDateTime
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
+import com.example.dimanow.location.NearbyTransitStop
 
 class GuidanceEngineTest {
+    @Test
+    fun `nearby 4402 guidance takes priority over an upcoming class`() {
+        val now = ZonedDateTime.of(2026, 9, 4, 8, 42, 0, 0, ZoneId.of("Asia/Seoul"))
+        val snapshot = GuidanceEngine().snapshot(
+            now = now,
+            termStart = LocalDate.of(2026, 8, 24),
+            termEnd = LocalDate.of(2026, 12, 18),
+            courses = listOf(
+                Course(DayOfWeek.FRIDAY, LocalTime.of(9, 0), LocalTime.of(11, 50), "방송시스템전기", "기예관 412", "박창묵", CampusZoneId.MAIN),
+            ),
+            noClassDates = emptySet(),
+            resolvedZone = CampusZoneId.ONE_ROOM,
+            automaticClassGuidance = true,
+            nearbyTransitStop = NearbyTransitStop("34710", "대학 셔틀 정류장"),
+        )
+
+        assertEquals(com.example.dimanow.domain.GuidanceKind.BUS_4402, snapshot.kind)
+        assertEquals(listOf("대학 셔틀 정류장  8분, 48분"), snapshot.shuttleLines.map { it.text })
+        assertEquals("강남행", snapshot.shuttleLines.single().destination)
+        assertEquals(8L, snapshot.shuttleLines.single().minutes)
+    }
+
+    @Test
+    fun `4402 shows soon at departure and promotes the following bus after it leaves`() {
+        val zoneId = ZoneId.of("Asia/Seoul")
+        val engine = GuidanceEngine()
+        val stop = NearbyTransitStop("34710", "대학 셔틀 정류장")
+
+        val atDeparture = engine.snapshot(
+            now = ZonedDateTime.of(2026, 9, 4, 8, 50, 0, 0, zoneId),
+            termStart = LocalDate.of(2026, 8, 24),
+            termEnd = LocalDate.of(2026, 12, 18),
+            courses = emptyList(),
+            noClassDates = emptySet(),
+            resolvedZone = CampusZoneId.ONE_ROOM,
+            automaticClassGuidance = true,
+            nearbyTransitStop = stop,
+        )
+        val afterDeparture = engine.snapshot(
+            now = ZonedDateTime.of(2026, 9, 4, 8, 50, 1, 0, zoneId),
+            termStart = LocalDate.of(2026, 8, 24),
+            termEnd = LocalDate.of(2026, 12, 18),
+            courses = emptyList(),
+            noClassDates = emptySet(),
+            resolvedZone = CampusZoneId.ONE_ROOM,
+            automaticClassGuidance = true,
+            nearbyTransitStop = stop,
+        )
+
+        assertEquals(0L, atDeparture.shuttleLines.single().minutes)
+        assertEquals("대학 셔틀 정류장  곧, 40분", atDeparture.shuttleLines.single().text)
+        assertEquals(40L, afterDeparture.shuttleLines.single().minutes)
+        assertEquals("대학 셔틀 정류장  40분, 80분", afterDeparture.shuttleLines.single().text)
+    }
+
     @Test
     fun `shuttle topology keeps daytime routes separate and merges the evening loop`() {
         val departures = listOf(
@@ -468,6 +524,7 @@ class GuidanceEngineTest {
         )
 
         assertEquals(GuidancePhase.RETURN, snapshot.phase)
+        assertEquals(com.example.dimanow.domain.GuidanceKind.CAMPUS_SHUTTLE, snapshot.kind)
         assertEquals(null, snapshot.classContent)
         assertEquals(listOf("본관  5분, 30분"), snapshot.shuttleLines.map { it.text })
     }

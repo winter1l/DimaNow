@@ -64,6 +64,13 @@ enum class GuidancePhase {
     BEFORE_CLASS,
     IN_CLASS,
     RETURN,
+    TRANSIT,
+}
+
+enum class GuidanceKind {
+    CLASS,
+    CAMPUS_SHUTTLE,
+    BUS_4402,
 }
 
 data class ClassContent(
@@ -75,8 +82,16 @@ data class ClassContent(
     val remainingText: String? = null,
 )
 
+/**
+ * 안내 표면 한 줄.
+ *
+ * @param destination 이 줄이 향하는 목적지 표기("본관행"). 나우바 상단 칩이 쓴다 (D-058).
+ * @param minutes 가장 가까운 출발까지 남은 분. 목적지와 함께 "본관행 12분"을 만든다.
+ */
 data class ShuttleLine(
     val text: String,
+    val destination: String? = null,
+    val minutes: Long? = null,
 )
 
 enum class CountdownMeaning {
@@ -93,6 +108,7 @@ data class GuidanceSnapshot(
     val expiresAt: Instant? = null,
     val countdownMeaning: CountdownMeaning? = null,
     val requiresMinuteUpdates: Boolean = false,
+    val kind: GuidanceKind? = null,
 )
 
 enum class MealValidationState {

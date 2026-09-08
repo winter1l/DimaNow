@@ -24,11 +24,13 @@ class LmsItemFilterTest {
     )
 
     @Test
-    fun readFilterKeepsHistoricalItemsAndSeparatesUnreadFromRead() {
+    fun courseAndKindNarrowTheListWhileReadStateNeverHidesAnything() {
         val all = listOf(unreadNotice, readMaterial)
 
-        assertEquals(listOf("1주차 안내"), filterLmsItems(all, null, null, isRead = false).map { it.title })
-        assertEquals(listOf("지난 수업 자료"), filterLmsItems(all, null, null, isRead = true).map { it.title })
-        assertEquals(2, filterLmsItems(all, "audio", null, isRead = null).size)
+        // D-058: 읽음/안읽음 필터는 제거됐다. 읽은 항목도 목록에서 사라지지 않는다.
+        assertEquals(2, filterLmsItems(all, "audio", null).size)
+        assertEquals(listOf("1주차 안내"), filterLmsItems(all, null, LmsItemKind.NOTICE).map { it.title })
+        assertEquals(listOf("지난 수업 자료"), filterLmsItems(all, "audio", LmsItemKind.MATERIAL).map { it.title })
+        assertEquals(emptyList<String>(), filterLmsItems(all, "video", null).map { it.title })
     }
 }

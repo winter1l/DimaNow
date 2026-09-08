@@ -47,8 +47,17 @@ class LiveMinuteUpdateService : Service() {
                     preparedSchedule = runtime.shuttleIndex,
                     homeBase = runtime.homeBase,
                     guidancePause = schedule.guidancePause,
+                    nearbyTransitStop = runtime.nearbyTransitStop.takeIf {
+                        runtime.notificationPolicy.bus4402 != NotificationGuidanceMode.OFF
+                    },
+                    bus4402Schedule = runtime.bus4402Schedule,
                 )
-                if (snapshot.phase == GuidancePhase.NONE || !snapshot.requiresMinuteUpdates) {
+                val mode = runtime.notificationPolicy.modeFor(snapshot)
+                if (
+                    snapshot.phase == GuidancePhase.NONE ||
+                    !snapshot.requiresMinuteUpdates ||
+                    mode != NotificationGuidanceMode.LIVE_UPDATE
+                ) {
                     stopSelf()
                     break
                 }

@@ -144,7 +144,7 @@ jobs:
             echo "changed=false" >> "$GITHUB_OUTPUT"
           fi
           rm -f site/.git
-      - uses: actions/configure-pages@983d7736d9b0ae728b81ab479565c72886d7745b
+      - uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d
         if: steps.generated.outputs.changed == 'true' || github.event_name == 'workflow_dispatch'
       - name: Pages 아티팩트 생성
         if: steps.generated.outputs.changed == 'true' || github.event_name == 'workflow_dispatch'

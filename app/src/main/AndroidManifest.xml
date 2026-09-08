@@ -99,7 +99,7 @@
             android:foregroundServiceType="specialUse">
             <property
                 android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
-                android:value="Updates user-enabled campus-shuttle or 4402 destination countdown text once per minute while live guidance is active" />
+                android:value="Updates user-enabled class remaining-time and shuttle or 4402 countdown text once per minute while live guidance is active" />
         </service>
     </application>
 

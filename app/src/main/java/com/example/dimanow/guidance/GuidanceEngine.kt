@@ -545,7 +545,7 @@ class GuidanceEngine {
             !now.toLocalTime().isBefore(it.start) && now.toLocalTime().isBefore(classGuidanceCutoff)
         } ?: todayCourses.firstOrNull {
             val startsAt = now.toLocalDate().atTime(it.start).atZone(now.zone)
-            Duration.between(now, startsAt).toMinutes() in 1L..60L
+            remainingMinutes(now, startsAt) in 1L..60L
         }
             ?: return GuidanceSnapshot(null, emptyList(), GuidancePhase.NONE)
         val startsAt = now.toLocalDate().atTime(course.start).atZone(now.zone)
@@ -602,7 +602,8 @@ class GuidanceEngine {
             countdownTarget = if (isInClass) null else startsAt.toInstant(),
             expiresAt = if (isInClass) classGuidanceEnd.toInstant() else startsAt.toInstant(),
             countdownMeaning = if (!isInClass) CountdownMeaning.CLASS_START else null,
-            requiresMinuteUpdates = false,
+            // The system chronometer only animates the timer; class/shuttle text still needs reposting.
+            requiresMinuteUpdates = !isInClass,
             kind = GuidanceKind.CLASS,
         )
     }

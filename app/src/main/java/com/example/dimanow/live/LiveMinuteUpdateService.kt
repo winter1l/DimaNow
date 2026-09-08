@@ -30,7 +30,7 @@ class LiveMinuteUpdateService : Service() {
             controller.buildNotification(
                 GuidanceSnapshot(
                     classContent = null,
-                    shuttleLines = listOf(ShuttleLine("셔틀 시간 계산 중")),
+                    shuttleLines = listOf(ShuttleLine("안내 시간 계산 중")),
                     phase = GuidancePhase.RETURN,
                 ),
                 requestPromotion = false,
@@ -58,6 +58,11 @@ class LiveMinuteUpdateService : Service() {
                     !snapshot.requiresMinuteUpdates ||
                     mode != NotificationGuidanceMode.LIVE_UPDATE
                 ) {
+                    // Detach before handing off the final static notification so stopping this
+                    // service cannot remove the newly posted "수업 중" card.
+                    stopForeground(STOP_FOREGROUND_DETACH)
+                    if (snapshot.phase == GuidancePhase.NONE) controller.cancel()
+                    else controller.show(snapshot, runtime.displayOptions, mode)
                     stopSelf()
                     break
                 }
@@ -75,6 +80,8 @@ class LiveMinuteUpdateService : Service() {
 
     override fun onDestroy() {
         scope.cancel()
+        // The controller may already have replaced the foreground card with static guidance.
+        stopForeground(STOP_FOREGROUND_DETACH)
         super.onDestroy()
     }
 

@@ -6,10 +6,101 @@ import com.example.dimanow.domain.DefaultCampusZones
 import com.example.dimanow.domain.GeoPoint
 import com.example.dimanow.domain.ZoneGeometry
 import java.time.Instant
+import com.example.dimanow.transit.Bus4402Schedule
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class LocationResolverTest {
+    @Test
+    fun `an active 4402 wake geofence keeps precise stop sampling alive before the inner radius`() {
+        val resolver = LocationResolver()
+
+        assertTrue(
+            resolver.shouldPollNearbyTransitStop(
+                activeGeofenceIds = setOf("BUS_4402_33243"),
+                previous = TransitStopProximityState(),
+                guidanceEnabled = true,
+            ),
+        )
+        assertTrue(
+            resolver.shouldPollNearbyTransitStop(
+                activeGeofenceIds = emptySet(),
+                previous = TransitStopProximityState(candidateStopNumber = "33243"),
+                guidanceEnabled = true,
+            ),
+        )
+        assertFalse(
+            resolver.shouldPollNearbyTransitStop(
+                activeGeofenceIds = setOf("BUS_4402_33243"),
+                previous = TransitStopProximityState(activeStopNumber = "33243"),
+                guidanceEnabled = false,
+            ),
+        )
+    }
+
+    @Test
+    fun `a 4402 stop activates only after an accurate thirty second dwell and releases beyond seventy meters`() {
+        val resolver = LocationResolver()
+        val stop = Bus4402Schedule.official.stops.first { it.stopNumber == "33243" }
+        val enteredAt = Instant.parse("2026-09-04T00:00:00Z")
+
+        val entering = resolver.resolveNearbyTransitStop(
+            sample = LocationSample(stop.point, 12f, enteredAt),
+            now = enteredAt,
+            stops = listOf(stop),
+            previous = TransitStopProximityState(),
+        )
+        val active = resolver.resolveNearbyTransitStop(
+            sample = LocationSample(stop.point, 12f, enteredAt.plusSeconds(31)),
+            now = enteredAt.plusSeconds(31),
+            stops = listOf(stop),
+            previous = entering.state,
+        )
+        val released = resolver.resolveNearbyTransitStop(
+            sample = LocationSample(GeoPoint(37.0556667, 127.3659000), 12f, enteredAt.plusSeconds(40)),
+            now = enteredAt.plusSeconds(40),
+            stops = listOf(stop),
+            previous = active.state,
+        )
+
+        assertEquals(null, entering.stop)
+        assertEquals("33243", active.stop?.stopNumber)
+        assertEquals(null, released.stop)
+        assertEquals(
+            CampusZoneId.ONE_ROOM,
+            resolver.resolve(stop.point, DefaultCampusZones.all, CampusZoneId.OUTSIDE, false),
+        )
+    }
+
+    @Test
+    fun `an inaccurate sample suppresses the 4402 override and missing location expires after two minutes`() {
+        val resolver = LocationResolver()
+        val stop = Bus4402Schedule.official.stops.first { it.stopNumber == "34710" }
+        val lastValid = Instant.parse("2026-09-04T00:00:00Z")
+        val activeState = TransitStopProximityState(
+            candidateStopNumber = stop.stopNumber,
+            candidateSince = lastValid.minusSeconds(40),
+            activeStopNumber = stop.stopNumber,
+            lastValidAt = lastValid,
+        )
+
+        val inaccurate = resolver.resolveNearbyTransitStop(
+            LocationSample(stop.point, 30f, lastValid.plusSeconds(10)),
+            lastValid.plusSeconds(10),
+            listOf(stop),
+            activeState,
+        )
+        val grace = resolver.resolveNearbyTransitStop(null, lastValid.plusSeconds(119), listOf(stop), activeState)
+        val expired = resolver.resolveNearbyTransitStop(null, lastValid.plusSeconds(121), listOf(stop), activeState)
+
+        assertEquals(null, inaccurate.stop)
+        assertEquals(null, inaccurate.state.activeStopNumber)
+        assertEquals("34710", grace.stop?.stopNumber)
+        assertEquals(null, expired.stop)
+    }
+
     @Test
     fun `shuttle report location requires a fresh accurate gps sample at the actual stop zone`() {
         val now = Instant.parse("2026-09-02T09:00:00Z")

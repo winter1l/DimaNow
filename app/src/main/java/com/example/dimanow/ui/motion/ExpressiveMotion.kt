@@ -131,9 +131,21 @@ fun Modifier.pulseBreath(
 private val EmphasizedDecelerate = CubicBezierEasing(0.05f, 0.7f, 0.1f, 1f)
 
 /**
+ * 화면 진입 시 카드가 한꺼번에 아래에서 떠오르는 입장 애니메이션 (D-058).
+ *
+ * 셔틀 화면을 뺀 모든 탭이 쓰는 기본 입장 모션이다. [staggeredEntrance]와 달리
+ * index 기반 지연이 없어 화면 전체가 동시에 자리를 잡는다. 카드 수가 많은 화면에서
+ * 위에서부터 순차적으로 밀려 들어오는 느낌이 느리게 읽혔기 때문이다.
+ */
+@Composable
+fun Modifier.entrance(): Modifier = staggeredEntrance(index = 0)
+
+/**
  * 화면 진입 시 카드가 순서대로(index 기반 지연) 아래에서 떠오르며 나타나는
  * M3 Expressive 스태거드 입장 애니메이션. 지연을 포함한 전 구간이 컴포즈
  * 프레임 클록으로 구동되어 UI 테스트의 idle 대기와도 호환된다.
+ *
+ * 셔틀 화면 전용이다. 다른 탭은 [entrance]를 쓴다 (D-058).
  */
 @Composable
 fun Modifier.staggeredEntrance(index: Int): Modifier {

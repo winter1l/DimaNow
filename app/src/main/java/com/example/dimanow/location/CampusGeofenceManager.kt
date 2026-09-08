@@ -10,9 +10,7 @@ import androidx.core.content.ContextCompat
 import com.example.dimanow.DimaNowApplication
 import com.example.dimanow.data.AppPreferences
 import com.example.dimanow.domain.CampusZone
-import com.example.dimanow.domain.CampusZoneId
 import com.example.dimanow.domain.GeoPoint
-import com.example.dimanow.domain.ZoneGeometry
 import com.google.android.gms.location.Geofence
 import com.google.android.gms.location.GeofencingEvent
 import com.google.android.gms.location.GeofencingRequest
@@ -28,6 +26,7 @@ import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withTimeoutOrNull
 import java.time.Instant
 import com.example.dimanow.location.LocationMode
+import com.example.dimanow.transit.Bus4402Schedule
 
 class CampusGeofenceManager(private val context: Context) {
     private val client = LocationServices.getGeofencingClient(context)
@@ -40,21 +39,21 @@ class CampusGeofenceManager(private val context: Context) {
         )
     }
 
-    fun sync(zones: List<CampusZone>) {
+    fun sync(zones: List<CampusZone>, includeBus4402: Boolean = false) {
         if (zones.isEmpty()) return
         if (ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) return
         if (ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_BACKGROUND_LOCATION) != PackageManager.PERMISSION_GRANTED) return
-        val geofences = zones.map { zone ->
-            val wakeRadius = when (val geometry = zone.geometry) {
-                is ZoneGeometry.Circle -> geometry.radiusMeters
-                is ZoneGeometry.Polygon -> geometry.wakeRadiusMeters
-            }
+        val geofences = CampusGeofencePlanner.plan(
+            zones = zones,
+            transitStops = Bus4402Schedule.official.stops,
+            includeBus4402 = includeBus4402,
+        ).map { spec ->
             Geofence.Builder()
-                .setRequestId(zone.id.name)
-                .setCircularRegion(zone.center.latitude, zone.center.longitude, wakeRadius.toFloat())
+                .setRequestId(spec.id)
+                .setCircularRegion(spec.center.latitude, spec.center.longitude, spec.radiusMeters)
                 .setExpirationDuration(Geofence.NEVER_EXPIRE)
                 .setTransitionTypes(Geofence.GEOFENCE_TRANSITION_ENTER or Geofence.GEOFENCE_TRANSITION_EXIT or Geofence.GEOFENCE_TRANSITION_DWELL)
-                .setLoiteringDelay(120_000)
+                .setLoiteringDelay(spec.dwellMillis)
                 .build()
         }
         val request = GeofencingRequest.Builder()
@@ -108,10 +107,12 @@ class CampusGeofenceReceiver : BroadcastReceiver() {
             Geofence.GEOFENCE_TRANSITION_EXIT -> active -= triggered
             else -> return
         }
-        if (active.isEmpty() && event.geofenceTransition == Geofence.GEOFENCE_TRANSITION_EXIT) {
-            preferences.setLocationState(CampusZoneId.OUTSIDE, emptySet())
-            return
-        }
+        val triggeredTransit = triggered.filter { it.startsWith(TRANSIT_PREFIX) }
+        val triggeredCampus = triggered - triggeredTransit.toSet()
+        val activeCampus = active.filter { !it.startsWith(TRANSIT_PREFIX) }.toSet()
+        val explicitCampusExit = activeCampus.isEmpty() &&
+            triggeredCampus.isNotEmpty() &&
+            event.geofenceTransition == Geofence.GEOFENCE_TRANSITION_EXIT
         val last = preferences.lastResolvedZone.first()
         val sample = try {
             if (ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
@@ -134,8 +135,25 @@ class CampusGeofenceReceiver : BroadcastReceiver() {
         } catch (_: Exception) {
             null
         }
-        val activeZones = zones.filter { it.id.name in active }
-        val resolved = LocationResolver().resolve(sample, activeZones, last, explicitExitFromAll = false)
+        val resolver = LocationResolver()
+        if (triggeredTransit.isNotEmpty()) {
+            val transitState = if (event.geofenceTransition == Geofence.GEOFENCE_TRANSITION_EXIT) {
+                TransitStopProximityState()
+            } else {
+                resolver.resolveNearbyTransitStop(
+                    sample = sample,
+                    now = Instant.now(),
+                    stops = Bus4402Schedule.official.stops,
+                    previous = preferences.transitStopProximityState.first(),
+                ).state
+            }
+            preferences.setTransitStopProximityState(transitState)
+        }
+        val resolved = resolver.resolve(sample, zones, last, explicitExitFromAll = explicitCampusExit)
         preferences.setLocationState(resolved, active)
+    }
+
+    private companion object {
+        const val TRANSIT_PREFIX = "BUS_4402_"
     }
 }

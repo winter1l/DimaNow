@@ -4,9 +4,13 @@ import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.example.dimanow.live.LiveChipContent
 import com.example.dimanow.live.LiveClassOrder
+import com.example.dimanow.live.GuidanceKind
+import com.example.dimanow.live.NotificationGuidanceMode
 import com.example.dimanow.guidance.HomeBase
 import com.example.dimanow.domain.CampusZoneId
 import com.example.dimanow.location.LocationMode
+import com.example.dimanow.location.TransitStopProximityState
+import java.time.Instant
 import com.example.dimanow.update.AppUpdateRelease
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
@@ -17,6 +21,47 @@ import org.junit.runner.RunWith
 
 @RunWith(AndroidJUnit4::class)
 class AppPreferencesUpgradeTest {
+    @Test
+    fun notificationGuidanceModesPersistIndependently() = runTest {
+        val preferences = AppPreferences(ApplicationProvider.getApplicationContext())
+
+        preferences.setNotificationGuidanceMode(GuidanceKind.CLASS, NotificationGuidanceMode.OFF)
+        preferences.setNotificationGuidanceMode(GuidanceKind.CAMPUS_SHUTTLE, NotificationGuidanceMode.STANDARD)
+        preferences.setNotificationGuidanceMode(GuidanceKind.BUS_4402, NotificationGuidanceMode.LIVE_UPDATE)
+
+        val saved = preferences.notificationGuidancePolicy.first()
+        assertEquals(NotificationGuidanceMode.OFF, saved.classGuidance)
+        assertEquals(NotificationGuidanceMode.STANDARD, saved.campusShuttle)
+        assertEquals(NotificationGuidanceMode.LIVE_UPDATE, saved.bus4402)
+    }
+
+    @Test
+    fun testModeCanSelectA4402StopWithoutChangingTheCampusZone() = runTest {
+        val preferences = AppPreferences(ApplicationProvider.getApplicationContext())
+
+        preferences.setTestLocationMode(true, CampusZoneId.ONE_ROOM)
+        preferences.setTestTransitStop("33243")
+
+        assertEquals(CampusZoneId.ONE_ROOM, preferences.effectiveZone.first())
+        assertEquals("33243", preferences.effectiveTransitStopNumber.first())
+    }
+
+    @Test
+    fun transitStopDwellStateSurvivesAReceiverProcessBoundary() = runTest {
+        val preferences = AppPreferences(ApplicationProvider.getApplicationContext())
+        val state = TransitStopProximityState(
+            candidateStopNumber = "34710",
+            candidateSince = Instant.parse("2026-09-04T01:00:00Z"),
+            activeStopNumber = "34710",
+            lastValidAt = Instant.parse("2026-09-04T01:00:31Z"),
+        )
+
+        preferences.setTransitStopProximityState(state)
+
+        assertEquals(state, preferences.transitStopProximityState.first())
+        assertEquals("34710", preferences.activeTransitStopNumber.first())
+    }
+
     @Test
     fun nowBarSetupGuideRemainsCompletedAfterTheUserFinishesIt() = runTest {
         val preferences = AppPreferences(ApplicationProvider.getApplicationContext())

@@ -18,6 +18,7 @@ import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import com.example.dimanow.MainActivity
 import com.example.dimanow.R
+import com.example.dimanow.domain.CountdownMeaning
 import com.example.dimanow.domain.GuidanceSnapshot
 
 enum class LiveSurfaceResult {
@@ -71,7 +72,11 @@ data class LiveSurfaceDiagnostics(
 )
 
 interface LiveSurfaceController {
-    fun show(snapshot: GuidanceSnapshot, presentation: LiveDisplayOptions = LiveDisplayOptions()): LiveSurfaceResult
+    fun show(
+        snapshot: GuidanceSnapshot,
+        presentation: LiveDisplayOptions = LiveDisplayOptions(),
+        deliveryMode: NotificationGuidanceMode = NotificationGuidanceMode.LIVE_UPDATE,
+    ): LiveSurfaceResult
     fun cancel(): LiveSurfaceResult
     fun openPromotionSettings(): LiveSettingsDestination
     fun diagnostics(): LiveSurfaceDiagnostics
@@ -86,16 +91,46 @@ interface LiveSurfaceController {
             false
         }
 
+        /**
+         * 나우바 상단 칩에 들어갈 짧은 텍스트.
+         *
+         * 수업 countdown은 `null`을 반환해 `when` 기반 시스템 크로노미터가 흐르게 한다.
+         * 셔틀은 목적지가 반드시 보여야 하므로 `본관행 8분`처럼 정적 텍스트를 사용하고
+         * 활성 Live 안내 서비스가 분 경계마다 다시 게시한다. 강의실 모드는 선택한 방을 유지한다.
+         */
         @Suppress("UNUSED_PARAMETER")
         fun statusChipText(
             snapshot: GuidanceSnapshot,
             presentation: LiveDisplayOptions,
             deviceLocked: Boolean,
         ): String? {
-            if (presentation.chipContent != LiveChipContent.CLASSROOM) return null
-            val classContent = snapshot.classContent ?: return null
-            return classContent.room
+            if (snapshot.countdownMeaning == CountdownMeaning.SHUTTLE_DEPARTURE) {
+                val first = snapshot.shuttleLines.firstOrNull()
+                val destination = first?.destination?.takeIf(String::isNotBlank) ?: return null
+                val minutes = first.minutes ?: return null
+                return if (minutes <= 0) "$destination 곧" else "$destination ${minutes}분"
+            }
+            return if (presentation.chipContent == LiveChipContent.CLASSROOM) {
+                snapshot.classContent?.room
+            } else {
+                null
+            }
         }
+
+        /**
+         * 안내 성격에 맞는 상태바/나우바 아이콘 (D-058).
+         *
+         * 셔틀 안내에는 버스를, 수업 안내에는 학사 아이콘을 쓴다. 둘 다 아니면 앱 기본 아이콘.
+         */
+        fun smallIcon(snapshot: GuidanceSnapshot): Int = when {
+            snapshot.countdownMeaning == CountdownMeaning.SHUTTLE_DEPARTURE -> R.drawable.ic_stat_shuttle
+            snapshot.classContent != null -> R.drawable.ic_stat_class
+            snapshot.shuttleLines.isNotEmpty() -> R.drawable.ic_stat_shuttle
+            else -> R.drawable.ic_stat_dima
+        }
+
+        fun usesSystemChronometer(snapshot: GuidanceSnapshot): Boolean =
+            snapshot.countdownTarget != null && snapshot.countdownMeaning != CountdownMeaning.SHUTTLE_DEPARTURE
     }
 }
 
@@ -141,24 +176,30 @@ object LiveSurfacePlanner {
 class AndroidLiveSurfaceController(private val context: Context) : LiveSurfaceController {
     private val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
 
-    override fun show(snapshot: GuidanceSnapshot, presentation: LiveDisplayOptions): LiveSurfaceResult {
+    override fun show(
+        snapshot: GuidanceSnapshot,
+        presentation: LiveDisplayOptions,
+        deliveryMode: NotificationGuidanceMode,
+    ): LiveSurfaceResult {
+        val delivery = LiveDeliveryPlanner.plan(deliveryMode, snapshot.requiresMinuteUpdates)
+        if (!delivery.shouldPost) return cancel()
         if (!hasNotificationPermission()) {
             NotificationManagerCompat.from(context).cancel(NOTIFICATION_ID)
             stopUpdater()
             return LiveSurfaceResult.NOTIFICATION_PERMISSION_DENIED
         }
         ensureChannel()
-        val promotionAllowed = Build.VERSION.SDK_INT >= 36 && notificationManager.canPostPromotedNotifications()
+        val promotionAllowed = delivery.requestPromotion && Build.VERSION.SDK_INT >= 36 && notificationManager.canPostPromotedNotifications()
         try {
             NotificationManagerCompat.from(context).notify(
                 NOTIFICATION_ID,
-                buildNotification(snapshot, requestPromotion = Build.VERSION.SDK_INT >= 36, presentation = presentation),
+                buildNotification(snapshot, requestPromotion = delivery.requestPromotion && Build.VERSION.SDK_INT >= 36, presentation = presentation),
             )
         } catch (_: SecurityException) {
             stopUpdater()
             return LiveSurfaceResult.NOTIFICATION_PERMISSION_DENIED
         }
-        if (promotionAllowed && snapshot.requiresMinuteUpdates) startUpdater() else stopUpdater()
+        if (delivery.startMinuteUpdater) startUpdater() else stopUpdater()
         return LiveSurfacePlanner.plan(Build.VERSION.SDK_INT, notificationsAllowed = true, promotedEligible = promotionAllowed)
     }
 
@@ -266,7 +307,7 @@ class AndroidLiveSurfaceController(private val context: Context) : LiveSurfaceCo
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
         val builder = NotificationCompat.Builder(context, CHANNEL_ID)
-            .setSmallIcon(R.drawable.ic_stat_dima)
+            .setSmallIcon(LiveSurfaceController.smallIcon(snapshot))
             .setColor(0xFFEC268FL.toInt())
             .setContentTitle(title)
             .setContentText(detail.lineSequence().firstOrNull().orEmpty())
@@ -276,11 +317,12 @@ class AndroidLiveSurfaceController(private val context: Context) : LiveSurfaceCo
             .setOnlyAlertOnce(true)
             .setSilent(true)
             .setCategory(NotificationCompat.CATEGORY_NAVIGATION)
-            .setShowWhen(snapshot.countdownTarget != null)
-        snapshot.countdownTarget?.let {
+            .setShowWhen(LiveSurfaceController.usesSystemChronometer(snapshot))
+        snapshot.countdownTarget?.takeIf { LiveSurfaceController.usesSystemChronometer(snapshot) }?.let {
             builder.setWhen(it.toEpochMilli()).setUsesChronometer(true).setChronometerCountDown(true)
         }
-        if (Build.VERSION.SDK_INT >= 36 && presentation.chipContent == LiveChipContent.CLASSROOM) {
+        if (Build.VERSION.SDK_INT >= 36) {
+            // 수업 countdown은 시스템 chronometer, 셔틀 countdown은 목적지 포함 분 단위 텍스트를 쓴다.
             val criticalText = LiveSurfaceController.statusChipText(snapshot, presentation, deviceLocked)
             criticalText?.takeIf(String::isNotBlank)?.let(builder::setShortCriticalText)
             snapshot.classContent?.remainingText?.takeIf(String::isNotBlank)?.let(builder::setSubText)

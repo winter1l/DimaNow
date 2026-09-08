@@ -1,6 +1,7 @@
 package com.example.dimanow.ui
 
 import androidx.compose.ui.test.assertCountEquals
+import org.junit.Assert.assertEquals
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.junit4.createComposeRule
@@ -9,6 +10,8 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.swipeDown
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.toPixelMap
@@ -146,25 +149,33 @@ class DataSourceScreenTest {
     }
 
     @Test
-    fun shuttleRefreshShowsDisabledLoadingControlUntilTheSingleRefreshFinishes() {
+    fun pullingTheShuttleListRefreshesOnceAndReportsTheResult() {
         val source = BlockingShuttleSource()
         composeRule.setContent {
             ShuttleScreen(shuttleSource = source, currentZone = CampusZoneId.OUTSIDE)
         }
 
-        composeRule.onNodeWithContentDescription("셔틀 새로고침").performClick()
+        // D-058: 새로고침은 상단 아이콘이 아니라 M3 당겨서 새로고침이다
+        composeRule.onNodeWithContentDescription("셔틀 새로고침").assertDoesNotExist()
+        composeRule.onNodeWithTag("shuttle_list").performTouchInput {
+            swipeDown(startY = centerY, endY = centerY + 600f)
+        }
+
         composeRule.waitUntil(5_000) { source.started.isCompleted }
-        composeRule.onNodeWithContentDescription("셔틀 새로고침 중").assertExists()
+        // 새로고침이 도는 동안 두 번째 당김은 또 다른 요청을 만들지 않는다
+        composeRule.onNodeWithTag("shuttle_list").performTouchInput {
+            swipeDown(startY = centerY, endY = centerY + 600f)
+        }
 
         source.release.complete(Unit)
         composeRule.waitUntil(5_000) {
             composeRule.onAllNodesWithText("2건 저장 완료").fetchSemanticsNodes().isNotEmpty()
         }
-        composeRule.onNodeWithContentDescription("셔틀 새로고침").assertExists()
+        assertEquals(1, source.refreshCount)
     }
 
     @Test
-    fun shuttleUsesOnlyATopRefreshActionAndMovesDataDetailsOutOfTheScreen() {
+    fun shuttleKeepsDataDetailsOutOfTheScreenAndHasNoTopRefreshButton() {
         val serviceDay = ZonedDateTime.now(ZoneId.of("Asia/Seoul")).dayOfWeek
         composeRule.setContent {
             ShuttleScreen(
@@ -177,7 +188,7 @@ class DataSourceScreenTest {
             )
         }
 
-        composeRule.onNodeWithContentDescription("셔틀 새로고침").assertExists()
+        composeRule.onNodeWithContentDescription("셔틀 새로고침").assertDoesNotExist()
         composeRule.onNodeWithText("셔틀 데이터 상태").assertDoesNotExist()
         composeRule.onNodeWithText("셔틀 데이터 관리").assertDoesNotExist()
         composeRule.onNodeWithText("요일 선택").assertDoesNotExist()
@@ -241,7 +252,7 @@ class DataSourceScreenTest {
     }
 
     @Test
-    fun userSeesTheWholeCurrentWeekMealWithoutChoosingADay() {
+    fun mealOpensOnTodayAndTheHeaderDaySelectorSwitchesTheDayWithoutScrolling() {
         val meals = listOf(
             mealDay("2026-08-21", "이전 식단"),
             mealDay("2026-08-24", "제육볶음", "미역국"),
@@ -256,11 +267,18 @@ class DataSourceScreenTest {
             )
         }
 
-        composeRule.onNodeWithText("이번 주 식단 (월 ~ 금)").assertDoesNotExist()
-        composeRule.onNodeWithText("8/24 (월)").assertExists()
-        composeRule.onNodeWithText("제육볶음 · 미역국").assertExists()
-        composeRule.onNodeWithText("8/28 (금)").assertExists()
-        composeRule.onAllNodesWithText("등록된 식단 없음").assertCountEquals(2)
+        // D-057: 주간 5일을 한 화면에 밀어 넣는 대신 오늘 하루부터 보여준다
+        composeRule.onNodeWithText("8월 27일 목요일").assertExists()
+        composeRule.onNodeWithText("등록된 식단이 없어요").assertExists()
+
+        // 요일 선택기는 헤더에 고정돼 스크롤 없이 닿는다
+        composeRule.onNodeWithTag("meal_day_MONDAY").performClick()
+        composeRule.onNodeWithText("8월 24일 월요일").assertExists()
+        // 메뉴는 " · "로 이어붙인 한 줄이 아니라 항목별 줄로 읽힌다
+        composeRule.onNodeWithText("제육볶음").assertExists()
+        composeRule.onNodeWithText("미역국").assertExists()
+
+        // 이번 주 바깥 날짜는 요일 선택기로 닿을 수 없다
         composeRule.onAllNodesWithText("이전 식단").assertCountEquals(0)
         composeRule.onAllNodesWithText("다음 식단").assertCountEquals(0)
     }
@@ -277,7 +295,11 @@ class DataSourceScreenTest {
         composeRule.onNodeWithText("본관 학생식당").assertExists()
         composeRule.onNodeWithText("기숙사").performClick()
         composeRule.onNodeWithText("사진 올리기").assertExists()
-        composeRule.onAllNodesWithText("등록된 식단 없음").assertCountEquals(5)
+        // D-056: 주간 전체가 비면 같은 빈 카드 5장 대신 이유와 본문 CTA가 있는 안내 카드 하나만 남는다
+        composeRule.onNodeWithTag("dormitory_week_empty").assertExists()
+        composeRule.onNodeWithText("이번 주 기숙사 식단이 아직 없어요").assertExists()
+        composeRule.onNodeWithTag("dormitory_week_empty_upload").assertExists()
+        composeRule.onAllNodesWithText("등록된 식단 없음").assertCountEquals(0)
     }
 
     @Test
@@ -287,6 +309,7 @@ class DataSourceScreenTest {
                 date = LocalDate.parse("2026-08-24"),
                 sections = listOf(
                     DormitoryMealSection("조식", "08:00~09:30", listOf("떡국", "쌀밥")),
+                    DormitoryMealSection("간편식", null, listOf("시리얼")),
                     DormitoryMealSection("중식", "12:00~14:00", listOf("미역국", "오징어무침")),
                     DormitoryMealSection("석식", "18:00~19:30", listOf("콩나물불고기")),
                 ),
@@ -301,10 +324,18 @@ class DataSourceScreenTest {
         }
 
         composeRule.onNodeWithText("기숙사").performClick()
-        composeRule.onNodeWithText("조식 · 08:00~09:30").assertExists()
-        composeRule.onNodeWithText("떡국 · 쌀밥").assertExists()
-        composeRule.onNodeWithText("중식 · 12:00~14:00").assertExists()
-        composeRule.onNodeWithText("석식 · 18:00~19:30").assertExists()
+        composeRule.onNodeWithTag("meal_day_MONDAY").performClick()
+
+        // D-057: 식사 시간대별 카드 — 이름과 운영시간이 한 문자열로 붙어 있지 않다
+        composeRule.onNodeWithText("조식").assertExists()
+        composeRule.onNodeWithText("08:00~09:30").assertExists()
+        composeRule.onNodeWithText("떡국").assertExists()
+        composeRule.onNodeWithText("쌀밥").assertExists()
+        composeRule.onNodeWithText("중식").assertExists()
+        composeRule.onNodeWithText("석식").assertExists()
+        // 운영시간이 없는 코너는 앞선 식사 카드 안에 남아 사라지지 않는다
+        composeRule.onNodeWithText("간편식").assertExists()
+        composeRule.onNodeWithText("시리얼").assertExists()
         composeRule.onNodeWithText("사진 올리기").assertDoesNotExist()
     }
 
@@ -353,7 +384,7 @@ class DataSourceScreenTest {
     }
 
     @Test
-    fun mealUsesOnlyATopRefreshActionAndMovesDataDetailsOutOfTheScreen() {
+    fun mealKeepsDataDetailsOutOfTheScreenAndHasNoTopRefreshButton() {
         composeRule.setContent {
             MealScreen(
                 mealSource = FakeMealSource(listOf(mealDay("2026-08-24", "제육볶음"))),
@@ -361,7 +392,7 @@ class DataSourceScreenTest {
             )
         }
 
-        composeRule.onNodeWithContentDescription("식단 새로고침").assertExists()
+        composeRule.onNodeWithContentDescription("식단 새로고침").assertDoesNotExist()
         composeRule.onNodeWithText("식단 데이터 상태").assertDoesNotExist()
         composeRule.onNodeWithText("식단 데이터 관리").assertDoesNotExist()
     }
@@ -378,8 +409,13 @@ class DataSourceScreenTest {
             )
         }
 
-        composeRule.onNodeWithContentDescription("식단 새로고침").performClick()
-        composeRule.onNodeWithText("아직 새 식단이 올라오지 않았어요").assertExists()
+        composeRule.onNodeWithTag("meal_list").performTouchInput {
+            swipeDown(startY = centerY, endY = centerY + 600f)
+        }
+
+        composeRule.waitUntil(5_000) {
+            composeRule.onAllNodesWithText("아직 새 식단이 올라오지 않았어요").fetchSemanticsNodes().isNotEmpty()
+        }
     }
 
     private fun departure(
@@ -451,10 +487,12 @@ class DataSourceScreenTest {
     private class BlockingShuttleSource : ShuttleSource {
         val started = CompletableDeferred<Unit>()
         val release = CompletableDeferred<Unit>()
+        var refreshCount = 0
         override val data = MutableStateFlow(
             ShuttleData(emptyList(), null, null, null, "https://www.dima.ac.kr/?p=97", null),
         )
         override suspend fun refresh(): ShuttleRefreshResult {
+            refreshCount++
             started.complete(Unit)
             release.await()
             return ShuttleRefreshResult.Success(2, Instant.parse("2026-08-26T12:00:10Z"))

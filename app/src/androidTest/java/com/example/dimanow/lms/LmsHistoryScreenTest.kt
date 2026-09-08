@@ -1,8 +1,10 @@
 package com.example.dimanow.lms
 
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -41,10 +43,8 @@ class LmsHistoryScreenTest {
                     sessionState = LmsSessionState.ACTIVE,
                     selectedCourse = null,
                     selectedKind = null,
-                    selectedRead = null,
                     onCourseChange = {},
                     onKindChange = {},
-                    onReadChange = {},
                     onRefresh = {},
                     onOpenItem = { openedId = it.id },
                     now = Instant.parse("2026-09-01T03:00:00Z"),
@@ -58,7 +58,7 @@ class LmsHistoryScreenTest {
     }
 
     @Test
-    fun allReadFiltersAreVisibleAndADeepHistoryItemCanBeReached() {
+    fun theAllModeGroupsByCourseAndKeepsADeepHistoryItemReachable() {
         val history = (0 until 80).map { index ->
             LmsItem(
                 id = index.toString(),
@@ -88,10 +88,8 @@ class LmsHistoryScreenTest {
                     sessionState = LmsSessionState.ACTIVE,
                     selectedCourse = null,
                     selectedKind = null,
-                    selectedRead = null,
                     onCourseChange = {},
                     onKindChange = {},
-                    onReadChange = {},
                     onRefresh = {},
                     onOpenItem = {},
                     now = Instant.parse("2026-09-01T03:00:00Z"),
@@ -100,10 +98,15 @@ class LmsHistoryScreenTest {
         }
 
         composeRule.onNodeWithTag("lms_mode_all").performClick()
-        composeRule.onNodeWithTag("lms_read_all").assertExists()
-        composeRule.onNodeWithTag("lms_read_unread").assertExists()
-        composeRule.onNodeWithTag("lms_read_read").assertExists()
+
+        // D-058: 읽음/안읽음 칩은 사라지고, 종류·과목은 짧은 드롭다운 칩 두 개로 접혔다
+        composeRule.onAllNodesWithText("안읽음").assertCountEquals(0)
+        composeRule.onNodeWithTag("lms_course_filter").assertExists()
+        composeRule.onNodeWithTag("lms_kind_filter").performClick()
         composeRule.onNodeWithTag("lms_kind_CONTENT").assertExists()
+        androidx.test.espresso.Espresso.pressBack()
+
+        // 과목 머리글 아래로 항목이 묶이고, 목록 끝까지 스크롤로 닿는다
         composeRule.onNodeWithTag("lms_history").performScrollToNode(hasText("지난 공지 79"))
         composeRule.onNodeWithText("지난 공지 79").assertExists()
     }
@@ -143,10 +146,8 @@ class LmsHistoryScreenTest {
                     sessionState = LmsSessionState.ACTIVE,
                     selectedCourse = null,
                     selectedKind = null,
-                    selectedRead = null,
                     onCourseChange = {},
                     onKindChange = {},
-                    onReadChange = {},
                     onRefresh = {},
                     onOpenItem = {},
                     now = Instant.parse("2026-09-01T03:00:00Z"),
@@ -165,7 +166,7 @@ class LmsHistoryScreenTest {
     }
 
     @Test
-    fun videoCardsDistinguishCourseCompletionFromReadState() {
+    fun theAllModeKeepsCompletedVideosOutOfTheCourseGroupUntilExpanded() {
         composeRule.setContent {
             DIMANowTheme {
                 LmsItemsScreen(
@@ -198,10 +199,8 @@ class LmsHistoryScreenTest {
                     sessionState = LmsSessionState.ACTIVE,
                     selectedCourse = null,
                     selectedKind = null,
-                    selectedRead = null,
                     onCourseChange = {},
                     onKindChange = {},
-                    onReadChange = {},
                     onRefresh = {},
                     onOpenItem = {},
                     now = Instant.parse("2026-09-01T03:00:00Z"),
@@ -210,9 +209,19 @@ class LmsHistoryScreenTest {
         }
 
         composeRule.onNodeWithTag("lms_mode_all").performClick()
-        composeRule.onNodeWithText("사운드디자인 기초(1)").assertExists()
+
+        // D-058: 전체도 오늘과 똑같이 과목 묶음에는 미완료만 두고 완료는 아래로 접어 둔다
+        composeRule.onNodeWithText("음향기초실습 · 1").assertExists()
         composeRule.onNodeWithText("사운드디자인 기초(2)").assertExists()
-        composeRule.onNodeWithText("수강 완료").assertExists()
         composeRule.onNodeWithText("미수강").assertExists()
+        composeRule.onNodeWithText("사운드디자인 기초(1)").assertDoesNotExist()
+
+        composeRule.onNodeWithTag("lms_completed_toggle").performClick()
+        composeRule.onNodeWithText("사운드디자인 기초(1)").assertExists()
+        composeRule.onNodeWithText("수강 완료").assertExists()
+
+        // D-058: 카드에서 읽음/안읽음 배지는 완전히 사라졌다. 읽지 않은 항목도 표시되지 않는다.
+        composeRule.onAllNodesWithText("읽음").assertCountEquals(0)
+        composeRule.onAllNodesWithText("안읽음").assertCountEquals(0)
     }
 }

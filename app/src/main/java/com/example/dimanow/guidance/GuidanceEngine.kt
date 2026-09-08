@@ -6,6 +6,7 @@ import com.example.dimanow.domain.Course
 import com.example.dimanow.domain.CountdownMeaning
 import com.example.dimanow.domain.GuidancePhase
 import com.example.dimanow.domain.GuidanceSnapshot
+import com.example.dimanow.domain.GuidanceKind
 import com.example.dimanow.domain.GuidancePause
 import com.example.dimanow.domain.ShuttleDeparture
 import com.example.dimanow.domain.ShuttleLine
@@ -15,6 +16,9 @@ import java.time.DayOfWeek
 import java.time.LocalDate
 import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
+import com.example.dimanow.location.NearbyTransitStop
+import com.example.dimanow.transit.Bus4402Schedule
+import com.example.dimanow.transit.Bus4402ServiceCalendar
 
 enum class HomeBase(val zone: CampusZoneId) {
     YEIN(CampusZoneId.YEIN),
@@ -408,7 +412,12 @@ class GuidanceEngine {
         preparedSchedule: ShuttleScheduleIndex? = null,
         homeBase: HomeBase = HomeBase.YEIN,
         guidancePause: GuidancePause? = null,
+        nearbyTransitStop: NearbyTransitStop? = null,
+        bus4402Schedule: Bus4402Schedule = Bus4402Schedule.official,
     ): GuidanceSnapshot {
+        nearbyTransitStop?.let { stop ->
+            bus4402Snapshot(now, stop, bus4402Schedule)?.let { return it }
+        }
         if (
             !automaticClassGuidance ||
             now.toLocalDate() !in termStart..termEnd ||
@@ -451,13 +460,18 @@ class GuidanceEngine {
                 return GuidanceSnapshot(
                     classContent = null,
                     shuttleLines = listOf(
-                        ShuttleLine("$boardingOrigin  ${returnRow.departures.joinToString(", ") { "${it.remainingMinutes}분" }}"),
+                        ShuttleLine(
+                            text = "$boardingOrigin  ${returnRow.departures.joinToString(", ") { "${it.remainingMinutes}분" }}",
+                            destination = DisplayVocabulary.destinationName(returnRow.destinationZone),
+                            minutes = returnRow.departures.first().remainingMinutes,
+                        ),
                     ),
                     phase = GuidancePhase.RETURN,
                     countdownTarget = firstTarget,
                     expiresAt = now.toLocalDate().atTime(returnRow.departures.last().departure.time).atZone(now.zone).toInstant(),
                     countdownMeaning = CountdownMeaning.SHUTTLE_DEPARTURE,
-                    requiresMinuteUpdates = returnRow.departures.size == 2,
+                    requiresMinuteUpdates = true,
+                    kind = GuidanceKind.CAMPUS_SHUTTLE,
                 )
             }
         }
@@ -500,11 +514,19 @@ class GuidanceEngine {
                     remainingMinutes(now, now.toLocalDate().atTime(it.time).atZone(now.zone))
                 }
                 val lines = mutableListOf(
-                    ShuttleLine("${DisplayVocabulary.originName(resolvedZone)}  ${firstRemaining.joinToString(", ") { "${it}분" }}"),
+                    ShuttleLine(
+                        text = "${DisplayVocabulary.originName(resolvedZone)}  ${firstRemaining.joinToString(", ") { "${it}분" }}",
+                        destination = DisplayVocabulary.destinationName(CampusZoneId.MAIN),
+                        minutes = firstRemaining.first(),
+                    ),
                 )
                 if (connections.isNotEmpty()) {
                     val connectionOrigin = boardingOriginName(CampusZoneId.MAIN, connectionDepartures)
-                    lines += ShuttleLine("$connectionOrigin  ${connections.joinToString(", ") { "${it}분" }}")
+                    lines += ShuttleLine(
+                        text = "$connectionOrigin  ${connections.joinToString(", ") { "${it}분" }}",
+                        destination = DisplayVocabulary.destinationName(homeBase.zone),
+                        minutes = connections.first(),
+                    )
                 }
                 return GuidanceSnapshot(
                     classContent = null,
@@ -513,7 +535,8 @@ class GuidanceEngine {
                     countdownTarget = now.toLocalDate().atTime(firstLegs.first().time).atZone(now.zone).toInstant(),
                     expiresAt = now.toLocalDate().atTime(shuttleDepartures.maxOf { it.time }).atZone(now.zone).toInstant(),
                     countdownMeaning = CountdownMeaning.SHUTTLE_DEPARTURE,
-                    requiresMinuteUpdates = firstLegs.size == 2 || connections.size == 2,
+                    requiresMinuteUpdates = true,
+                    kind = GuidanceKind.CAMPUS_SHUTTLE,
                 )
             }
         }
@@ -556,7 +579,13 @@ class GuidanceEngine {
                 .toList()
             val origin = DisplayVocabulary.originName(resolvedZone)
             if (remaining.isEmpty()) emptyList()
-            else listOf(ShuttleLine("$origin  ${remaining.joinToString(", ") { "${it}분" }}"))
+            else listOf(
+                ShuttleLine(
+                    text = "$origin  ${remaining.joinToString(", ") { "${it}분" }}",
+                    destination = DisplayVocabulary.destinationName(course.zone),
+                    minutes = remaining.first(),
+                ),
+            )
         }
 
         return GuidanceSnapshot(
@@ -574,6 +603,45 @@ class GuidanceEngine {
             expiresAt = if (isInClass) classGuidanceEnd.toInstant() else startsAt.toInstant(),
             countdownMeaning = if (!isInClass) CountdownMeaning.CLASS_START else null,
             requiresMinuteUpdates = false,
+            kind = GuidanceKind.CLASS,
+        )
+    }
+
+    fun bus4402Snapshot(
+        now: ZonedDateTime,
+        nearbyStop: NearbyTransitStop,
+        schedule: Bus4402Schedule = Bus4402Schedule.official,
+    ): GuidanceSnapshot? {
+        val serviceType = Bus4402ServiceCalendar.serviceType(now.toLocalDate())
+        val departures = schedule.departures(serviceType, nearbyStop.stopNumber)
+            .asSequence()
+            .filterNot { it.time.isBefore(now.toLocalTime()) }
+            .take(2)
+            .toList()
+        if (departures.isEmpty()) return null
+        val countdowns = departures.map { departure ->
+            val target = now.toLocalDate().atTime(departure.time).atZone(now.zone)
+            val millis = Duration.between(now, target).toMillis()
+            (millis.coerceAtLeast(0L) + 59_999L) / 60_000L
+        }
+        val firstTarget = now.toLocalDate().atTime(departures.first().time).atZone(now.zone).toInstant()
+        return GuidanceSnapshot(
+            classContent = null,
+            shuttleLines = listOf(
+                ShuttleLine(
+                    text = "${nearbyStop.displayName}  ${countdowns.joinToString(", ") { minutes ->
+                        if (minutes == 0L) "곧" else "${minutes}분"
+                    }}",
+                    destination = "강남행",
+                    minutes = countdowns.first(),
+                ),
+            ),
+            phase = GuidancePhase.TRANSIT,
+            countdownTarget = firstTarget,
+            expiresAt = now.toLocalDate().atTime(departures.last().time).atZone(now.zone).toInstant(),
+            countdownMeaning = CountdownMeaning.SHUTTLE_DEPARTURE,
+            requiresMinuteUpdates = true,
+            kind = GuidanceKind.BUS_4402,
         )
     }
 

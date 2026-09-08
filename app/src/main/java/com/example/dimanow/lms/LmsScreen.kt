@@ -22,9 +22,12 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.LocalActivity
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.background
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -37,11 +40,12 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.Button
@@ -50,6 +54,8 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -91,10 +97,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.dimanow.ui.ScreenColumn
-import com.example.dimanow.ui.ScreenLazyColumn
+import com.example.dimanow.ui.ScreenScaffold
 import com.example.dimanow.ui.motion.expressiveBounceClick
 import com.example.dimanow.ui.motion.pulseBreath
-import com.example.dimanow.ui.motion.staggeredEntrance
+import com.example.dimanow.ui.motion.entrance
 import java.io.File
 import java.io.ByteArrayInputStream
 import java.time.Clock
@@ -146,7 +152,6 @@ fun LmsRoute(
     val snackbar = remember { SnackbarHostState() }
     var selectedCourse by remember { mutableStateOf<String?>(null) }
     var selectedKind by remember { mutableStateOf<LmsItemKind?>(null) }
-    var selectedRead by remember { mutableStateOf<Boolean?>(null) }
     var selectedDetail by remember { mutableStateOf<LmsPresentedDetail?>(null) }
     var officialCoursePage by remember { mutableStateOf<LmsOfficialCoursePage?>(null) }
     var pendingOfficialCoursePage by remember { mutableStateOf<LmsOfficialCoursePage?>(null) }
@@ -281,10 +286,8 @@ fun LmsRoute(
                 sessionState = sessionState,
                 selectedCourse = selectedCourse,
                 selectedKind = selectedKind,
-                selectedRead = selectedRead,
                 onCourseChange = { selectedCourse = it },
                 onKindChange = { selectedKind = it },
-                onReadChange = { selectedRead = it },
                 onRefresh = { scope.launch { loginAndRefresh(force = true) } },
                 onOpenItem = { item ->
                     scope.launch {
@@ -338,7 +341,7 @@ fun LmsRoute(
                 modifier = Modifier.fillMaxSize(),
             )
         }
-        SnackbarHost(snackbar, Modifier.align(Alignment.BottomCenter))
+        SnackbarHost(snackbar, Modifier.align(Alignment.BottomCenter).navigationBarsPadding())
         pendingOfficialCoursePage?.let { pendingPage ->
             AlertDialog(
                 onDismissRequest = { pendingOfficialCoursePage = null },
@@ -370,31 +373,11 @@ private fun LmsOfficialCourseWebView(
 ) {
     val context = LocalContext.current
     var ready by remember(page) { mutableStateOf(false) }
-    Column(
-        modifier
-            .testTag("lms_official_course_screen")
-            .statusBarsPadding()
-            .navigationBarsPadding(),
+    LmsFullScreenPane(
+        title = page.item.title,
+        onBack = onBack,
+        modifier = modifier.testTag("lms_official_course_screen"),
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(start = 4.dp, end = 16.dp, top = 4.dp, bottom = 4.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(4.dp),
-        ) {
-            IconButton(onClick = onBack) {
-                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "뒤로")
-            }
-            Text(
-                text = page.item.title,
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.weight(1f),
-            )
-        }
         Box(Modifier.weight(1f).fillMaxWidth()) {
             AndroidView(
                 factory = {
@@ -765,7 +748,7 @@ private fun LmsLoginScreen(
         ElevatedCard(
             modifier = Modifier
                 .fillMaxWidth()
-                .staggeredEntrance(0),
+                .entrance(),
             shape = RoundedCornerShape(24.dp),
             colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
         ) {
@@ -822,54 +805,168 @@ private fun LmsLoginScreen(
     }
 }
 
+/**
+ * 종류·과목을 각각 드롭다운 칩 하나로 접은 고정 필터 바 (D-058).
+ *
+ * D-057에서 세 줄을 한 줄로 줄였지만, 종류 칩을 전부 펼치니 그 한 줄이 화면 폭을 훌쩍
+ * 넘겨 결국 가로로 계속 밀어야 했다. 이제 선택값을 그대로 라벨에 담은 칩 두 개만 남기고
+ * 선택지는 메뉴로 내린다. 읽음/안읽음 필터는 제거했다 — 목록은 과목과 완료 여부로 읽는다.
+ */
+@Composable
+private fun LmsFilterRow(
+    courses: List<LmsCourse>,
+    kinds: List<LmsItemKind>,
+    selectedCourse: String?,
+    selectedKind: LmsItemKind?,
+    filterActive: Boolean,
+    onCourseChange: (String?) -> Unit,
+    onKindChange: (LmsItemKind?) -> Unit,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        LmsFilterMenuChip(
+            label = selectedKind?.let(::kindLabel) ?: "전체 종류",
+            selected = selectedKind != null,
+            tag = "lms_kind_filter",
+            options = listOf<Pair<String, LmsItemKind?>>("전체 종류" to null) + kinds.map { kindLabel(it) to it },
+            optionTag = { kind -> kind?.let { "lms_kind_${it.name}" } },
+            onSelect = onKindChange,
+            modifier = Modifier.weight(1f),
+        )
+        LmsFilterMenuChip(
+            label = selectedCourse?.let { id -> courses.firstOrNull { it.id == id }?.name } ?: "전체 과목",
+            selected = selectedCourse != null,
+            tag = "lms_course_filter",
+            options = listOf<Pair<String, String?>>("전체 과목" to null) + courses.map { it.name to it.id },
+            optionTag = { null },
+            onSelect = onCourseChange,
+            modifier = Modifier.weight(1f),
+        )
+        if (filterActive) {
+            IconButton(
+                onClick = { onCourseChange(null); onKindChange(null) },
+                modifier = Modifier.testTag("lms_filter_clear"),
+            ) {
+                Icon(Icons.Default.Close, contentDescription = "필터 해제")
+            }
+        }
+    }
+}
+
+/** 선택값을 라벨로 보여주고 누르면 선택지를 메뉴로 펼치는 필터 칩 (D-058). */
+@Composable
+private fun <T> LmsFilterMenuChip(
+    label: String,
+    selected: Boolean,
+    tag: String,
+    options: List<Pair<String, T>>,
+    optionTag: (T) -> String?,
+    onSelect: (T) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    var expanded by remember { mutableStateOf(false) }
+    Box(modifier = modifier) {
+        FilterChip(
+            selected = selected,
+            onClick = { expanded = true },
+            label = {
+                Text(label, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            },
+            trailingIcon = {
+                Icon(Icons.Default.ArrowDropDown, contentDescription = null, modifier = Modifier.size(18.dp))
+            },
+            shape = RoundedCornerShape(10.dp),
+            modifier = Modifier.fillMaxWidth().testTag(tag),
+        )
+        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            options.forEach { (optionLabel, value) ->
+                DropdownMenuItem(
+                    text = { Text(optionLabel) },
+                    onClick = {
+                        expanded = false
+                        onSelect(value)
+                    },
+                    modifier = optionTag(value)?.let { Modifier.testTag(it) } ?: Modifier,
+                )
+            }
+        }
+    }
+}
+
+/** 오늘 탭의 날짜 머리글과 전체 탭의 과목 머리글이 함께 쓰는 구분선 (D-058). */
+@Composable
+private fun LmsSectionHeader(title: String) {
+    Text(
+        text = title,
+        style = MaterialTheme.typography.titleSmall,
+        fontWeight = FontWeight.Bold,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
+        modifier = Modifier.padding(top = 8.dp),
+    )
+}
+
+/** 완료한 학습을 접었다 펴는 머리글. 오늘·전체 두 모드가 같은 것을 쓴다 (D-058). */
+@Composable
+private fun LmsCompletedHeader(count: Int, expanded: Boolean, onToggle: () -> Unit) {
+    TextButton(
+        onClick = onToggle,
+        modifier = Modifier.fillMaxWidth().testTag("lms_completed_toggle"),
+    ) {
+        Text(
+            "완료한 학습",
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.weight(1f),
+        )
+        Text("${count}개")
+        Spacer(Modifier.size(8.dp))
+        Text(if (expanded) "접기" else "보기")
+    }
+}
+
 @Composable
 internal fun LmsItemsScreen(
     snapshot: LmsSnapshot,
     sessionState: LmsSessionState,
     selectedCourse: String?,
     selectedKind: LmsItemKind?,
-    selectedRead: Boolean?,
     onCourseChange: (String?) -> Unit,
     onKindChange: (LmsItemKind?) -> Unit,
-    onReadChange: (Boolean?) -> Unit,
     onRefresh: () -> Unit,
     onOpenItem: (LmsItem) -> Unit,
     now: Instant,
     modifier: Modifier = Modifier,
 ) {
-    val filtered = filterLmsItems(snapshot.items, selectedCourse, selectedKind, selectedRead)
-    val filterActive = selectedCourse != null || selectedKind != null || selectedRead != null
+    val filtered = filterLmsItems(snapshot.items, selectedCourse, selectedKind)
+    val filterActive = selectedCourse != null || selectedKind != null
     val syncing = snapshot.syncState == LmsSyncState.SYNCING
     val hasError = sessionState == LmsSessionState.ERROR || snapshot.syncState == LmsSyncState.ERROR
     var todayMode by rememberSaveable { mutableStateOf(true) }
     var completedExpanded by rememberSaveable { mutableStateOf(false) }
-    val agenda = remember(snapshot.items, now) {
-        LmsAgendaPlanner(Clock.fixed(now, SEOUL)).plan(snapshot.items, now)
+    // 오늘 모드에서도 선택한 필터를 그대로 적용한다 (이전에는 칩이 조용히 무시됐다)
+    val agenda = remember(filtered, now) {
+        LmsAgendaPlanner(Clock.fixed(now, SEOUL)).plan(filtered, now)
     }
+    // 전체 모드는 과목 순서로 묶고 완료한 학습을 아래로 내린다 (D-058)
+    val coursePlan = remember(filtered, snapshot.courses) { planLmsByCourse(filtered, snapshot.courses) }
     val visibleEmpty = if (todayMode) agenda.groups.isEmpty() else filtered.isEmpty()
 
-    ScreenLazyColumn(
+    ScreenScaffold(
         title = "수업",
         modifier = modifier,
         listTag = "lms_history",
-        topAction = {
-            IconButton(onClick = onRefresh, enabled = !syncing) {
-                if (syncing) {
-                    CircularProgressIndicator(
-                        Modifier.size(22.dp).pulseBreath(),
-                        strokeWidth = 2.5.dp,
-                        strokeCap = StrokeCap.Round,
-                    )
-                } else {
-                    Icon(Icons.Default.Refresh, contentDescription = "새로고침")
-                }
-            }
-        },
-    ) {
-        item {
-            SingleChoiceSegmentedButtonRow(
-                modifier = Modifier.fillMaxWidth().staggeredEntrance(0),
-            ) {
+        // 새로고침은 목록을 당겨서 실행한다 (D-058)
+        onRefresh = onRefresh,
+        refreshing = syncing,
+        // 모드 전환과 필터는 목록을 아무리 내려도 항상 닿을 수 있어야 한다 (D-057).
+        // 이전에는 목록의 첫 항목이라 스크롤과 함께 사라졌고, 필터가 세 줄을 차지했다.
+        subHeader = {
+            SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
                 listOf(true to "오늘", false to "전체").forEachIndexed { index, (isToday, label) ->
                     SegmentedButton(
                         selected = todayMode == isToday,
@@ -880,37 +977,28 @@ internal fun LmsItemsScreen(
                     )
                 }
             }
-        }
-
-        if (!todayMode) {
-            item {
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.staggeredEntrance(1)) {
-                    item { FilterChip(selected = selectedCourse == null, onClick = { onCourseChange(null) }, label = { Text("전체") }, shape = RoundedCornerShape(10.dp)) }
-                    items(snapshot.courses, key = { it.id }) { course ->
-                        FilterChip(selected = selectedCourse == course.id, onClick = { onCourseChange(course.id) }, label = { Text(course.name) }, shape = RoundedCornerShape(10.dp))
-                    }
-                }
+            if (!todayMode) {
+                LmsFilterRow(
+                    courses = snapshot.courses,
+                    kinds = LmsItemKind.entries.filter { kind -> snapshot.items.any { it.kind == kind } },
+                    selectedCourse = selectedCourse,
+                    selectedKind = selectedKind,
+                    filterActive = filterActive,
+                    onCourseChange = onCourseChange,
+                    onKindChange = onKindChange,
+                )
             }
+        },
+    ) {
+        // 캐시된 목록 위에서 갱신이 실패하면 스낵바가 사라진 뒤에도 상태를 알 수 있게 배너로 남긴다 (D-056)
+        if (hasError && !visibleEmpty) {
             item {
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.staggeredEntrance(2)) {
-                    item { FilterChip(selected = selectedKind == null, onClick = { onKindChange(null) }, label = { Text("전체") }, shape = RoundedCornerShape(10.dp)) }
-                    items(LmsItemKind.entries.filter { kind -> snapshot.items.any { it.kind == kind } }) { kind ->
-                        FilterChip(
-                            selected = selectedKind == kind,
-                            onClick = { onKindChange(kind) },
-                            label = { Text(kindLabel(kind)) },
-                            shape = RoundedCornerShape(10.dp),
-                            modifier = Modifier.testTag("lms_kind_${kind.name}"),
-                        )
-                    }
-                }
-            }
-            item {
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.staggeredEntrance(3)) {
-                    item { FilterChip(selected = selectedRead == null, onClick = { onReadChange(null) }, label = { Text("모두") }, shape = RoundedCornerShape(10.dp), modifier = Modifier.testTag("lms_read_all")) }
-                    item { FilterChip(selected = selectedRead == false, onClick = { onReadChange(false) }, label = { Text("안읽음") }, shape = RoundedCornerShape(10.dp), modifier = Modifier.testTag("lms_read_unread")) }
-                    item { FilterChip(selected = selectedRead == true, onClick = { onReadChange(true) }, label = { Text("읽음") }, shape = RoundedCornerShape(10.dp), modifier = Modifier.testTag("lms_read_read")) }
-                }
+                LmsRefreshErrorBanner(
+                    message = snapshot.errorMessage ?: "최신 정보를 불러오지 못했습니다",
+                    lastSuccessAt = snapshot.lastSuccessAt,
+                    onRetry = onRefresh,
+                    modifier = Modifier.entrance(),
+                )
             }
         }
 
@@ -921,7 +1009,7 @@ internal fun LmsItemsScreen(
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(vertical = 48.dp)
-                            .staggeredEntrance(3),
+                            .entrance(),
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.spacedBy(14.dp),
                     ) {
@@ -935,7 +1023,7 @@ internal fun LmsItemsScreen(
                     ElevatedCard(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .staggeredEntrance(3),
+                            .entrance(),
                         shape = RoundedCornerShape(20.dp),
                         colors = CardDefaults.elevatedCardColors(
                             containerColor = MaterialTheme.colorScheme.errorContainer,
@@ -960,18 +1048,22 @@ internal fun LmsItemsScreen(
                     ElevatedCard(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .staggeredEntrance(3),
+                            .entrance(),
                         shape = RoundedCornerShape(20.dp),
                         colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
                     ) {
                         Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                             Text(
-                                text = if (todayMode) "오늘 확인할 학습이 없습니다" else if (filterActive) "필터에 해당하는 항목이 없습니다" else "표시할 항목이 없습니다",
+                                text = when {
+                                    filterActive -> "필터에 해당하는 항목이 없습니다"
+                                    todayMode -> "오늘 확인할 학습이 없습니다"
+                                    else -> "표시할 항목이 없습니다"
+                                },
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
-                            if (!todayMode && filterActive) {
-                                TextButton(onClick = { onCourseChange(null); onKindChange(null); onReadChange(null) }) {
+                            if (filterActive) {
+                                TextButton(onClick = { onCourseChange(null); onKindChange(null) }) {
                                     Text("필터 해제", fontWeight = FontWeight.Bold)
                                 }
                             }
@@ -979,46 +1071,140 @@ internal fun LmsItemsScreen(
                     }
                 }
             }
-            else -> {
-                if (todayMode) {
-                    agenda.groups.forEach { group ->
-                        item(key = "agenda-${group.key}-${group.date}") {
-                            if (group.key == LmsAgendaGroupKey.COMPLETED) {
-                                TextButton(
-                                    onClick = { completedExpanded = !completedExpanded },
-                                    modifier = Modifier.fillMaxWidth(),
-                                ) {
-                                    Text(
-                                        group.title,
-                                        style = MaterialTheme.typography.titleSmall,
-                                        fontWeight = FontWeight.Bold,
-                                        modifier = Modifier.weight(1f),
-                                    )
-                                    Text("${group.items.size}개")
-                                    Spacer(Modifier.size(8.dp))
-                                    Text(if (completedExpanded) "접기" else "보기")
-                                }
-                            } else {
-                                Text(
-                                    text = agendaGroupTitle(group),
-                                    style = MaterialTheme.typography.titleSmall,
-                                    fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    modifier = Modifier.padding(top = 8.dp),
-                                )
-                            }
-                        }
-                        if (group.key != LmsAgendaGroupKey.COMPLETED || completedExpanded) {
-                            items(group.items, key = { item -> "today-${item.kind}-${item.courseId}-${item.id}" }) { item ->
-                                LmsItemCard(item, onOpenItem)
-                            }
+            todayMode -> {
+                agenda.groups.forEach { group ->
+                    item(key = "agenda-${group.key}-${group.date}") {
+                        if (group.key == LmsAgendaGroupKey.COMPLETED) {
+                            LmsCompletedHeader(
+                                count = group.items.size,
+                                expanded = completedExpanded,
+                                onToggle = { completedExpanded = !completedExpanded },
+                            )
+                        } else {
+                            LmsSectionHeader(agendaGroupTitle(group))
                         }
                     }
-                } else {
-                    items(filtered, key = { item -> "${item.kind}:${item.courseId}:${item.id}" }) { item ->
-                        LmsItemCard(item, onOpenItem)
+                    if (group.key != LmsAgendaGroupKey.COMPLETED || completedExpanded) {
+                        group.items.forEach { groupItem ->
+                            item(key = "today-${groupItem.kind}-${groupItem.courseId}-${groupItem.id}") {
+                                LmsItemCard(groupItem, onOpenItem)
+                            }
+                        }
                     }
                 }
+            }
+            else -> {
+                // 전체 모드: 과목 순서대로 묶고, 완료한 학습은 오늘 탭과 똑같이 맨 아래에 접어 둔다 (D-058)
+                coursePlan.groups.forEach { group ->
+                    item(key = "course-${group.courseId}") {
+                        LmsSectionHeader("${group.courseName} · ${group.items.size}")
+                    }
+                    group.items.forEach { courseItem ->
+                        item(key = "all-${courseItem.kind}-${courseItem.courseId}-${courseItem.id}") {
+                            LmsItemCard(courseItem, onOpenItem)
+                        }
+                    }
+                }
+                if (coursePlan.completed.isNotEmpty()) {
+                    item(key = "all-completed-header") {
+                        LmsCompletedHeader(
+                            count = coursePlan.completed.size,
+                            expanded = completedExpanded,
+                            onToggle = { completedExpanded = !completedExpanded },
+                        )
+                    }
+                    if (completedExpanded) {
+                        coursePlan.completed.forEach { completedItem ->
+                            item(key = "all-done-${completedItem.kind}-${completedItem.courseId}-${completedItem.id}") {
+                                LmsItemCard(completedItem, onOpenItem)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * 수업 탭의 전체화면 페인(공식 강의·글 상세·로그인·렌더링) 공용 셸 (D-056).
+ *
+ * 네 화면이 각자 복사해 쓰던 인셋·헤더 패딩·뒤로가기 아이콘을 한곳으로 모아
+ * 같은 상단 문법과 창 인셋을 쓰게 한다.
+ */
+@Composable
+private fun LmsFullScreenPane(
+    title: String,
+    onBack: () -> Unit,
+    modifier: Modifier = Modifier,
+    backDescription: String = "뒤로",
+    titleMaxLines: Int = 1,
+    trailing: (@Composable () -> Unit)? = null,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    Column(
+        modifier = modifier
+            .fillMaxSize()
+            .statusBarsPadding()
+            .navigationBarsPadding(),
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(start = 4.dp, end = 16.dp, top = 4.dp, bottom = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            IconButton(onClick = onBack) {
+                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = backDescription)
+            }
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                maxLines = titleMaxLines,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f),
+            )
+            trailing?.invoke()
+        }
+        content()
+    }
+}
+
+/** 캐시된 목록 위에 남는 갱신 실패 배너. 마지막 성공 시각을 함께 알려준다 (D-056). */
+@Composable
+private fun LmsRefreshErrorBanner(
+    message: String,
+    lastSuccessAt: Instant?,
+    onRetry: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    ElevatedCard(
+        modifier = modifier.fillMaxWidth().testTag("lms_refresh_error_banner"),
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.elevatedCardColors(
+            containerColor = MaterialTheme.colorScheme.errorContainer,
+            contentColor = MaterialTheme.colorScheme.onErrorContainer,
+        ),
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text(message, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+                Text(
+                    text = lastSuccessAt
+                        ?.let { "마지막 갱신 ${LMS_DETAIL_TIME.format(it.atZone(SEOUL))}" }
+                        ?: "저장된 목록을 보여주고 있어요",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onErrorContainer.copy(alpha = 0.8f),
+                )
+            }
+            FilledTonalButton(onClick = onRetry, shape = RoundedCornerShape(12.dp)) {
+                Text("다시 시도", fontWeight = FontWeight.Bold)
             }
         }
     }
@@ -1028,7 +1214,7 @@ internal fun LmsItemsScreen(
 private fun LmsItemCard(item: LmsItem, onOpenItem: (LmsItem) -> Unit) {
     ElevatedCard(
         onClick = { onOpenItem(item) },
-        modifier = Modifier.fillMaxWidth().staggeredEntrance(4).expressiveBounceClick(),
+        modifier = Modifier.fillMaxWidth().expressiveBounceClick(),
         shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
     ) {
@@ -1044,7 +1230,7 @@ private fun LmsItemCard(item: LmsItem, onOpenItem: (LmsItem) -> Unit) {
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f),
                 )
-                LmsStatusBadge(if (item.isRead) "읽음" else "안읽음", prominent = !item.isRead)
+                // 읽음/안읽음 배지는 제거했다 — 새 항목·완료 여부만 남긴다 (D-058)
             }
             val badges = buildList {
                 when (item.changeState) {
@@ -1102,15 +1288,13 @@ private fun agendaGroupTitle(group: LmsAgendaGroup): String = when (group.key) {
     else -> group.title
 }
 
+/** 과목과 종류로만 거른다. 읽음/안읽음 필터는 제거했다 (D-058). */
 internal fun filterLmsItems(
     items: List<LmsItem>,
     courseId: String?,
     kind: LmsItemKind?,
-    isRead: Boolean?,
 ): List<LmsItem> = items.filter { item ->
-    (courseId == null || item.courseId == courseId) &&
-        (kind == null || item.kind == kind) &&
-        (isRead == null || item.isRead == isRead)
+    (courseId == null || item.courseId == courseId) && (kind == null || item.kind == kind)
 }
 
 @Composable
@@ -1127,7 +1311,8 @@ private fun LmsDetailScreen(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var pendingDocument by remember { mutableStateOf<LmsPendingDocument?>(null) }
-    var downloading by remember { mutableStateOf(false) }
+    // 어떤 첨부가 내려받는 중인지 추적해, 한 항목을 눌러도 나머지가 함께 비활성화되지 않게 한다 (D-056)
+    var downloadingAttachment by remember { mutableStateOf<String?>(null) }
     var activeDownloadCache by remember { mutableStateOf<File?>(null) }
     val activeDownloadCacheOnDispose by rememberUpdatedState(activeDownloadCache)
     DisposableEffect(Unit) {
@@ -1141,7 +1326,7 @@ private fun LmsDetailScreen(
         if (uri == null || verified == null) {
             verified?.cache?.delete()
             activeDownloadCache = null
-            downloading = false
+            downloadingAttachment = null
             return@rememberLauncherForActivityResult
         }
         scope.launch {
@@ -1162,29 +1347,15 @@ private fun LmsDetailScreen(
                 is LmsDocumentWriteResult.Failure -> onMessage(result.message)
             }
             activeDownloadCache = null
-            downloading = false
+            downloadingAttachment = null
         }
     }
-    Column(modifier.statusBarsPadding().navigationBarsPadding()) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(start = 4.dp, end = 16.dp, top = 4.dp, bottom = 4.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(4.dp),
-        ) {
-            IconButton(onClick = onBack) {
-                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "뒤로")
-            }
-            Text(
-                text = detail.item.title,
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.weight(1f),
-            )
-        }
+    LmsFullScreenPane(
+        title = detail.item.title,
+        onBack = onBack,
+        modifier = modifier,
+        titleMaxLines = 2,
+    ) {
         if (presented.attachmentsChanged) {
             Surface(
                 color = MaterialTheme.colorScheme.tertiaryContainer,
@@ -1259,15 +1430,16 @@ private fun LmsDetailScreen(
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text("첨부파일", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
                     detail.attachments.forEach { attachment ->
+                        val attachmentKey = "${attachment.id}|${attachment.fileName}"
                         OutlinedButton(
                             onClick = {
-                                if (downloading) return@OutlinedButton
-                                downloading = true
+                                if (downloadingAttachment != null) return@OutlinedButton
+                                downloadingAttachment = attachmentKey
                                 scope.launch {
                                     val cache = runCatching {
                                         createLmsAttachmentCacheFile(context.cacheDir)
                                     }.getOrElse { error ->
-                                        downloading = false
+                                        downloadingAttachment = null
                                         onMessage(error.message ?: "첨부파일 임시 경로를 만들지 못했습니다")
                                         return@launch
                                     }
@@ -1284,7 +1456,7 @@ private fun LmsDetailScreen(
                                             if (result.bytesWritten <= 0L || cache.length() != result.bytesWritten) {
                                                 cache.delete()
                                                 activeDownloadCache = null
-                                                downloading = false
+                                                downloadingAttachment = null
                                                 onMessage("첨부파일 크기를 확인하지 못했습니다")
                                             } else {
                                                 pendingDocument = LmsPendingDocument(cache, result.bytesWritten)
@@ -1294,24 +1466,24 @@ private fun LmsDetailScreen(
                                         LmsAttachmentDownloadResult.SessionExpired -> {
                                             cache.delete()
                                             activeDownloadCache = null
-                                            downloading = false
+                                            downloadingAttachment = null
                                             onMessage("로그인이 필요합니다")
                                         }
                                         is LmsAttachmentDownloadResult.Failure -> {
                                             cache.delete()
                                             activeDownloadCache = null
-                                            downloading = false
+                                            downloadingAttachment = null
                                             onMessage(result.message)
                                         }
                                     }
                                 }
                             },
-                            enabled = !downloading,
+                            enabled = downloadingAttachment == null,
                             shape = RoundedCornerShape(12.dp),
                             modifier = Modifier.fillMaxWidth(),
                         ) {
-                            if (downloading) {
-                                CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+                            if (downloadingAttachment == attachmentKey) {
+                                CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp, strokeCap = StrokeCap.Round)
                             } else {
                                 Icon(Icons.Default.Download, null)
                             }
@@ -1363,29 +1535,19 @@ private fun LmsAuthenticationWebView(
         activity?.window?.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
         onDispose { activity?.window?.clearFlags(WindowManager.LayoutParams.FLAG_SECURE) }
     }
-    Column(modifier.statusBarsPadding().navigationBarsPadding()) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(start = 4.dp, end = 16.dp, top = 4.dp, bottom = 4.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(4.dp),
-        ) {
-            IconButton(onClick = onCancel) {
-                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "로그인 취소")
-            }
-            Text(
-                text = "공식 포털에서 로그인 중",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier.weight(1f),
-            )
+    LmsFullScreenPane(
+        title = "공식 포털에서 로그인 중",
+        onBack = onCancel,
+        modifier = modifier,
+        backDescription = "로그인 취소",
+        trailing = {
             CircularProgressIndicator(
                 Modifier.size(20.dp).pulseBreath(),
                 strokeWidth = 2.5.dp,
                 strokeCap = StrokeCap.Round,
             )
-        }
+        },
+    ) {
         Box(
             modifier = Modifier
                 .weight(1f)
@@ -1664,29 +1826,19 @@ private fun LmsRenderedPageWebView(
 ) {
     val context = LocalContext.current
     val parser = remember { LmsHtmlParser() }
-    Column(modifier.statusBarsPadding().navigationBarsPadding()) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(start = 4.dp, end = 16.dp, top = 4.dp, bottom = 4.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(4.dp),
-        ) {
-            IconButton(onClick = onCancel) {
-                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "불러오기 취소")
-            }
-            Text(
-                text = "글 불러오는 중",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier.weight(1f),
-            )
+    LmsFullScreenPane(
+        title = "글 불러오는 중",
+        onBack = onCancel,
+        modifier = modifier,
+        backDescription = "불러오기 취소",
+        trailing = {
             CircularProgressIndicator(
                 Modifier.size(20.dp).pulseBreath(),
                 strokeWidth = 2.5.dp,
                 strokeCap = StrokeCap.Round,
             )
-        }
+        },
+    ) {
         Box(
             modifier = Modifier
                 .weight(1f)

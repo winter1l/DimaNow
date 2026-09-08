@@ -38,6 +38,8 @@ import com.example.dimanow.widget.ShuttleWidgetProvider
 import com.example.dimanow.widget.CampusSummaryWidgetProvider
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.delay
 import com.example.dimanow.meal.MealSource
 import com.example.dimanow.meal.StaticMealSource
 import com.example.dimanow.meal.DormitoryMealSubmissionService
@@ -66,6 +68,10 @@ import com.example.dimanow.lms.LmsCacheDatabase
 import com.example.dimanow.lms.LmsLoginBridge
 import com.example.dimanow.lms.MutableLmsSessionController
 import com.example.dimanow.lms.RoomLmsSource
+import com.example.dimanow.location.NearbyTransitStop
+import com.example.dimanow.location.TransitStopProximityState
+import com.example.dimanow.transit.Bus4402Schedule
+import com.example.dimanow.live.NotificationGuidanceMode
 
 class DimaNowApplication : Application() {
     private val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -154,6 +160,7 @@ class DimaNowApplication : Application() {
         )
     }
     private val geofenceManager: CampusGeofenceManager by lazy { CampusGeofenceManager(this) }
+    private val locationResolver: LocationResolver by lazy { LocationResolver() }
 
     override fun onCreate() {
         super.onCreate()
@@ -176,29 +183,73 @@ class DimaNowApplication : Application() {
             }
         }
         applicationScope.launch {
-            combine(repository.zones, preferences.locationMode) { zones, mode -> zones to mode }
-                .collectLatest { (zones, mode) ->
-                    if (mode == LocationMode.TEST) geofenceManager.clear() else geofenceManager.sync(zones)
+            combine(
+                repository.zones,
+                preferences.locationMode,
+                preferences.notificationGuidancePolicy,
+            ) { zones, mode, policy -> Triple(zones, mode, policy) }
+                .collectLatest { (zones, mode, policy) ->
+                    val includeBus4402 = policy.bus4402 != NotificationGuidanceMode.OFF
+                    if (!includeBus4402) {
+                        preferences.setTransitStopProximityState(TransitStopProximityState())
+                        val activeCampusGeofences = preferences.activeGeofenceIds.first()
+                            .filterNot { it.startsWith(BUS_4402_GEOFENCE_PREFIX) }
+                            .toSet()
+                        preferences.setLocationState(preferences.lastResolvedZone.first(), activeCampusGeofences)
+                    }
+                    if (mode == LocationMode.TEST) geofenceManager.clear()
+                    else geofenceManager.sync(zones, includeBus4402)
+                }
+        }
+        applicationScope.launch {
+            combine(
+                preferences.activeGeofenceIds,
+                preferences.transitStopProximityState,
+                preferences.notificationGuidancePolicy,
+            ) { activeGeofences, proximity, policy ->
+                locationResolver.shouldPollNearbyTransitStop(
+                    activeGeofenceIds = activeGeofences,
+                    previous = proximity,
+                    guidanceEnabled = policy.bus4402 != NotificationGuidanceMode.OFF,
+                )
+            }
+                .distinctUntilChanged()
+                .collectLatest { shouldPoll ->
+                    if (!shouldPoll) return@collectLatest
+                    while (true) {
+                        delay(30_000)
+                        refreshTransitStopProximity()
+                    }
                 }
         }
         applicationScope.launch { RefreshScheduler.schedule(this@DimaNowApplication, preferences) }
         applicationScope.launch {
             val widgetRefreshPlanner = RuntimeWidgetRefreshPlanner()
             var previousWidgetZone: com.example.dimanow.domain.CampusZoneId? = null
-            combine(
-                repository.schedule,
-                shuttleSource.data,
+            val scheduleAndShuttle = combine(repository.schedule, shuttleSource.data) { schedule, shuttle ->
+                schedule to shuttle
+            }
+            val runtimePreferences = combine(
                 preferences.effectiveZone,
                 preferences.liveDisplayOptions,
                 preferences.homeBase,
-            ) { schedule, shuttle, zone, displayOptions, homeBase ->
+                preferences.notificationGuidancePolicy,
+                preferences.effectiveTransitStopNumber,
+            ) { zone, displayOptions, homeBase, notificationPolicy, transitStopNumber ->
+                RuntimePreferences(zone, displayOptions, homeBase, notificationPolicy, transitStopNumber)
+            }
+            combine(scheduleAndShuttle, runtimePreferences) { (schedule, shuttle), settings ->
+                val transitStop = Bus4402Schedule.official.stops
+                    .firstOrNull { it.stopNumber == settings.transitStopNumber }
                 GuidanceRuntimeSnapshot(
                     schedule = schedule,
                     shuttle = shuttle,
                     shuttleIndex = shuttleIndexCache.get(shuttle.departures),
-                    resolvedZone = zone,
-                    displayOptions = displayOptions,
-                    homeBase = homeBase,
+                    resolvedZone = settings.zone,
+                    displayOptions = settings.displayOptions,
+                    homeBase = settings.homeBase,
+                    notificationPolicy = settings.notificationPolicy,
+                    nearbyTransitStop = transitStop?.let { NearbyTransitStop(it.stopNumber, it.displayName) },
                 )
             }
                 .collectLatest { snapshot ->
@@ -236,10 +287,52 @@ class DimaNowApplication : Application() {
         )
     }
 
+    private suspend fun refreshTransitStopProximity() {
+        if (preferences.locationMode.first() != LocationMode.GPS) return
+        if (preferences.notificationGuidancePolicy.first().bus4402 == NotificationGuidanceMode.OFF) return
+        val state = preferences.transitStopProximityState.first()
+        val cancellation = CancellationTokenSource()
+        val location = if (
+            ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
+        ) {
+            runCatching {
+                withTimeoutOrNull(10_000) {
+                    LocationServices.getFusedLocationProviderClient(this@DimaNowApplication)
+                        .getCurrentLocation(Priority.PRIORITY_HIGH_ACCURACY, cancellation.token)
+                        .await()
+                }
+            }.getOrNull()
+        } else null
+        if (location == null) cancellation.cancel()
+        val sample = location?.let {
+            LocationSample(
+                point = GeoPoint(it.latitude, it.longitude),
+                accuracyMeters = it.accuracy,
+                capturedAt = Instant.ofEpochMilli(it.time),
+            )
+        }
+        val result = locationResolver.resolveNearbyTransitStop(
+            sample = sample,
+            now = Instant.now(),
+            stops = Bus4402Schedule.official.stops,
+            previous = state,
+        )
+        preferences.setTransitStopProximityState(result.state)
+    }
+
     private companion object {
         val LOCK_STATE_ACTIONS = setOf(Intent.ACTION_SCREEN_ON, Intent.ACTION_USER_PRESENT)
+        const val BUS_4402_GEOFENCE_PREFIX = "BUS_4402_"
     }
 }
+
+private data class RuntimePreferences(
+    val zone: CampusZoneId,
+    val displayOptions: com.example.dimanow.live.LiveDisplayOptions,
+    val homeBase: com.example.dimanow.guidance.HomeBase,
+    val notificationPolicy: com.example.dimanow.live.NotificationGuidancePolicy,
+    val transitStopNumber: String?,
+)
 
 private class ShuttleIndexCache(private val engine: GuidanceEngine) {
     private var departures: List<ShuttleDeparture>? = null

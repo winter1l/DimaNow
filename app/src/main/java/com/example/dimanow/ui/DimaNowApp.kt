@@ -27,10 +27,17 @@ import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
+import com.example.dimanow.ui.meal.groupDormitorySections
 import com.example.dimanow.ui.motion.AnimatedCountText
 import com.example.dimanow.ui.motion.expressiveBounceClick
 import com.example.dimanow.ui.motion.pulseBreath
+import androidx.compose.material.icons.filled.PhotoCamera
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
+import com.example.dimanow.ui.motion.entrance
 import com.example.dimanow.ui.motion.staggeredEntrance
+import com.example.dimanow.ui.onboarding.OnboardingRoute
+import com.example.dimanow.ui.onboarding.shouldShowOnboarding
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.horizontalScroll
@@ -40,10 +47,12 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -55,6 +64,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -67,7 +77,9 @@ import androidx.compose.material.icons.filled.DirectionsBus
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.LocationOn
+import androidx.compose.material.icons.filled.NightsStay
 import androidx.compose.material.icons.filled.Restaurant
+import androidx.compose.material.icons.filled.WbSunny
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.School
 import androidx.compose.material.icons.filled.Settings
@@ -90,6 +102,7 @@ import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.activity.compose.BackHandler
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
@@ -112,6 +125,7 @@ import androidx.compose.material3.rememberTimePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -159,6 +173,9 @@ import com.example.dimanow.live.LiveClassOrder
 import com.example.dimanow.live.LiveDisplayOptions
 import com.example.dimanow.live.LiveSettingsDestination
 import com.example.dimanow.live.LiveSurfaceController
+import com.example.dimanow.live.GuidanceKind
+import com.example.dimanow.live.NotificationGuidanceMode
+import com.example.dimanow.live.NotificationGuidancePolicy
 import com.example.dimanow.meal.MealData
 import com.example.dimanow.meal.DormitoryMealData
 import com.example.dimanow.meal.DormitoryMealImage
@@ -264,8 +281,8 @@ fun DimaNowApp(
     // 수업 탭이 로그인 WebView/글 상세를 전체화면으로 띄우는 동안 하단 내비를 숨긴다 (D-044)
     var lmsFullScreen by remember { mutableStateOf(false) }
     val primaryPages = remember { primaryAppPages }
-    val homeBaseConfirmed by preferences.homeBaseSelectionConfirmed.collectAsStateWithLifecycle(initialValue = false)
-    val nowBarSetupCompleted by preferences.nowBarSetupCompleted.collectAsStateWithLifecycle(initialValue = false)
+    val homeBaseConfirmed by preferences.homeBaseSelectionConfirmed.collectAsStateWithLifecycle(initialValue = true)
+    val onboardingCompleted by preferences.onboardingCompleted.collectAsStateWithLifecycle(initialValue = true)
     var showNowBarSetup by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     val appContext = LocalContext.current.applicationContext
@@ -290,6 +307,17 @@ fun DimaNowApp(
 
     BackHandler(enabled = page != AppPage.DASHBOARD) {
         page = if (page == AppPage.SETTINGS) settingsReturnPage else AppPage.DASHBOARD
+    }
+
+    // D-056: 최초 설치에는 앱 셸 대신 전체화면 온보딩이 권한을 순서대로 설명하고 요청한다.
+    // 온보딩이 끝나기 전에는 셸과 다른 다이얼로그를 아예 구성하지 않는다.
+    // 귀가 기준지가 이미 확정된 기존 설치는 업데이트만으로 온보딩을 다시 보지 않는다.
+    if (shouldShowOnboarding(onboardingCompleted, homeBaseConfirmed)) {
+        OnboardingRoute(
+            onSelectHomeBase = { scope.launch { preferences.setHomeBase(it) } },
+            onComplete = { scope.launch { preferences.setOnboardingCompleted() } },
+        )
+        return
     }
 
     Scaffold(
@@ -406,22 +434,6 @@ fun DimaNowApp(
         }
     }
 
-    if (!homeBaseConfirmed) {
-        AlertDialog(
-            onDismissRequest = {},
-            title = { Text("귀가 기준지 선택") },
-            text = { Text("수업 중·수업 후 본관에서 안내할 셔틀 방향을 선택하세요. 설정에서 언제든 바꿀 수 있습니다.") },
-            confirmButton = {
-                Button(
-                    onClick = { scope.launch { preferences.setHomeBase(HomeBase.YEIN) } },
-                    modifier = Modifier.testTag("home_base_yein"),
-                ) { Text("예인관") }
-            },
-            dismissButton = {
-                OutlinedButton(onClick = { scope.launch { preferences.setHomeBase(HomeBase.ONE_ROOM) } }) { Text("원룸촌") }
-            },
-        )
-    }
     if (updateState.promptVersion != null) {
         AlertDialog(
             onDismissRequest = { appUpdateCoordinator?.dismissPrompt() },
@@ -435,7 +447,7 @@ fun DimaNowApp(
             },
         )
     }
-    if (showNowBarSetup || (homeBaseConfirmed && !nowBarSetupCompleted)) {
+    if (showNowBarSetup) {
         NowBarSetupDialog(
             onOpenLockScreenNotifications = { liveSurfaceController.openPromotionSettings() },
             onOpenDeveloperOptions = { openDeveloperOptions(appContext) },
@@ -503,8 +515,11 @@ private fun DashboardRoute(
             val first = row.departures.firstOrNull()?.departure ?: return@mapNotNull null
             val event = reportEngine.stopCallForDeparture(reportTopology, first) ?: return@mapNotNull null
             val count = reportEngine.affectedReportCount(event.run, event.stopCall, reportState.reports)
-            count.takeIf { it > 0 }?.let { "${DisplayVocabulary.originName(row.destinationZone)}행 · ${it}명이 미도착 신고" }
-        }.firstOrNull()
+            count.takeIf { it > 0 }?.let { "${DisplayVocabulary.originName(row.destinationZone)}행 ${it}명" }
+        }
+            // 영향받는 목적지를 전부 보여준다 (이전에는 첫 건만 남기고 나머지를 버렸다)
+            .takeIf { it.isNotEmpty() }
+            ?.let { "미도착 신고 · ${it.joinToString(" · ")}" }
     }
     LaunchedEffect(shuttleReportSource, shuttle.serverRevision, now.toLocalDate()) {
         val revision = shuttle.serverRevision
@@ -547,11 +562,13 @@ private fun ShuttleRoute(
 ) {
     val resolvedZone by preferences.effectiveZone.collectAsStateWithLifecycle(initialValue = CampusZoneId.OUTSIDE)
     val locationMode by preferences.locationMode.collectAsStateWithLifecycle(initialValue = LocationMode.GPS)
+    val nearbyTransitStopNumber by preferences.effectiveTransitStopNumber.collectAsStateWithLifecycle(initialValue = null)
     ShuttleScreen(
         shuttleSource = shuttleSource,
         currentZone = resolvedZone,
         reportSource = shuttleReportSource,
         locationMode = locationMode,
+        nearbyTransitStopNumber = nearbyTransitStopNumber,
         verifyReportLocation = verifyShuttleReportLocation,
         modifier = modifier,
         now = now,
@@ -596,8 +613,12 @@ private fun SettingsRoute(
     val scope = rememberCoroutineScope()
     val locationMode by preferences.locationMode.collectAsStateWithLifecycle(initialValue = LocationMode.GPS)
     val testZone by preferences.testZone.collectAsStateWithLifecycle(initialValue = CampusZoneId.OUTSIDE)
+    val testTransitStopNumber by preferences.testTransitStopNumber.collectAsStateWithLifecycle(initialValue = null)
     val resolvedZone by preferences.effectiveZone.collectAsStateWithLifecycle(initialValue = CampusZoneId.OUTSIDE)
     val displayOptions by preferences.liveDisplayOptions.collectAsStateWithLifecycle(initialValue = LiveDisplayOptions())
+    val notificationPolicy by preferences.notificationGuidancePolicy.collectAsStateWithLifecycle(
+        initialValue = NotificationGuidancePolicy(),
+    )
     val homeBase by preferences.homeBase.collectAsStateWithLifecycle(initialValue = HomeBase.YEIN)
     val shuttle by shuttleSource.data.collectAsStateWithLifecycle(
         initialValue = ShuttleData(emptyList(), null, null, null, OFFICIAL_SHUTTLE_SOURCE_URL, null),
@@ -614,10 +635,16 @@ private fun SettingsRoute(
             scope.launch { preferences.setTestLocationMode(enabled, if (enabled) resolvedZone else testZone) }
         },
         onTestZone = { scope.launch { preferences.setTestZone(it) } },
+        testTransitStopNumber = testTransitStopNumber,
+        onTestTransitStop = { scope.launch { preferences.setTestTransitStop(it) } },
         liveSurfaceController = liveSurfaceController,
         displayOptions = displayOptions,
         onChipContentChange = { scope.launch { preferences.setLiveChipContent(it) } },
         onClassOrderChange = { scope.launch { preferences.setLiveClassOrder(it) } },
+        notificationPolicy = notificationPolicy,
+        onNotificationModeChange = { kind, mode ->
+            scope.launch { preferences.setNotificationGuidanceMode(kind, mode) }
+        },
         homeBase = homeBase,
         onHomeBaseChange = { scope.launch { preferences.setHomeBase(it) } },
         shuttleData = shuttle,
@@ -703,8 +730,6 @@ internal fun DashboardScreen(
     val useDormitoryMeal = zone == CampusZoneId.YEIN
     val mealStatusNow = meal.serviceStatusAt(now)
     val originName = DisplayVocabulary.originName(zone)
-    // 테스트 배너가 없을 때 히어로가 60ms 죽은 지연 없이 0번부터 시작하도록 러닝 인덱스 사용 (#21)
-    var cardIndex = 0
 
     ScreenColumn(
         modifier = modifier,
@@ -744,7 +769,7 @@ internal fun DashboardScreen(
             Surface(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .staggeredEntrance(cardIndex++),
+                    .entrance(),
                 shape = RoundedCornerShape(12.dp),
                 color = MaterialTheme.colorScheme.errorContainer,
             ) {
@@ -762,7 +787,7 @@ internal fun DashboardScreen(
         ElevatedCard(
             modifier = Modifier
                 .fillMaxWidth()
-                .staggeredEntrance(cardIndex++)
+                .entrance()
                 .expressiveBounceClick { onNavigateToPage(AppPage.TIMETABLE) },
             shape = RoundedCornerShape(28.dp),
             colors = CardDefaults.elevatedCardColors(
@@ -815,49 +840,16 @@ internal fun DashboardScreen(
                             fontWeight = FontWeight.SemiBold,
                             color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.9f),
                         )
-                        guidanceSnapshot.shuttleLines.forEach { line ->
-                            Text(
-                                text = line.text,
-                                style = MaterialTheme.typography.bodyMedium,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.primary,
-                            )
-                        }
+                        // 셔틀 출발 정보는 바로 아래 셔틀 카드가 캡슐로 보여주므로
+                        // 히어로 카드에서 같은 내용을 문장으로 반복하지 않는다 (D-056)
                     }
 
                     // 오늘의 다음 수업 표시 (있을 경우)
                     if (upcomingAfterCourse != null) {
-                        Surface(
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(12.dp),
-                            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.5f),
-                        ) {
-                            Row(
-                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            ) {
-                                Surface(
-                                    shape = RoundedCornerShape(6.dp),
-                                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.2f),
-                                ) {
-                                    Text(
-                                        text = "다음 수업 · ${upcomingAfterCourse.start.format(TIME)}",
-                                        style = MaterialTheme.typography.labelSmall,
-                                        fontWeight = FontWeight.Bold,
-                                        color = MaterialTheme.colorScheme.primary,
-                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-                                    )
-                                }
-                                Text(
-                                    text = "${upcomingAfterCourse.name} (${upcomingAfterCourse.room})",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = MaterialTheme.colorScheme.onPrimaryContainer,
-                                    maxLines = 1,
-                                )
-                            }
-                        }
+                        HeroClassPreviewRow(
+                            label = "다음 수업 · ${upcomingAfterCourse.start.format(TIME)}",
+                            detail = "${upcomingAfterCourse.name} (${upcomingAfterCourse.room})",
+                        )
                     }
                 } else {
                     // 다음 수업일(내일부터 최대 7일, 휴강일 제외)의 첫 수업 미리보기
@@ -889,37 +881,10 @@ internal fun DashboardScreen(
                             } else {
                                 "${koreanWeekdayLabel(date.dayOfWeek)} 첫 수업"
                             }
-                            Surface(
-                                modifier = Modifier.fillMaxWidth(),
-                                shape = RoundedCornerShape(12.dp),
-                                color = MaterialTheme.colorScheme.surface.copy(alpha = 0.5f),
-                            ) {
-                                Row(
-                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                ) {
-                                    Surface(
-                                        shape = RoundedCornerShape(6.dp),
-                                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.2f),
-                                    ) {
-                                        Text(
-                                            text = "$dayLabel · ${course.start.format(TIME)}",
-                                            style = MaterialTheme.typography.labelSmall,
-                                            fontWeight = FontWeight.Bold,
-                                            color = MaterialTheme.colorScheme.primary,
-                                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-                                        )
-                                    }
-                                    Text(
-                                        text = "${course.name} (${course.room})",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        fontWeight = FontWeight.SemiBold,
-                                        color = MaterialTheme.colorScheme.onPrimaryContainer,
-                                        maxLines = 1,
-                                    )
-                                }
-                            }
+                            HeroClassPreviewRow(
+                                label = "$dayLabel · ${course.start.format(TIME)}",
+                                detail = "${course.name} (${course.room})",
+                            )
                         }
                     }
                 }
@@ -950,7 +915,7 @@ internal fun DashboardScreen(
         ElevatedCard(
             modifier = Modifier
                 .fillMaxWidth()
-                .staggeredEntrance(cardIndex++)
+                .entrance()
                 .expressiveBounceClick { onNavigateToPage(AppPage.SHUTTLE) },
             shape = RoundedCornerShape(24.dp),
             colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
@@ -989,7 +954,8 @@ internal fun DashboardScreen(
                         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                             destinations.forEach { destZone ->
                                 val destName = DisplayVocabulary.originName(destZone)
-                                val annotated = GuidanceEngine().annotatedServiceDepartures(
+                                // 목적지 루프 안에서 엔진을 새로 만들지 않고 위에서 remember한 것을 쓴다
+                                val annotated = guidanceEngine.annotatedServiceDepartures(
                                     serviceDay = now.dayOfWeek,
                                     originZone = zone,
                                     destinationZone = destZone,
@@ -1141,7 +1107,7 @@ internal fun DashboardScreen(
         ElevatedCard(
             modifier = Modifier
                 .fillMaxWidth()
-                .staggeredEntrance(cardIndex++)
+                .entrance()
                 .expressiveBounceClick { onNavigateToPage(AppPage.MEAL) },
             shape = RoundedCornerShape(24.dp),
             colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
@@ -1206,7 +1172,7 @@ internal fun DashboardScreen(
         ElevatedCard(
             modifier = Modifier
                 .fillMaxWidth()
-                .staggeredEntrance(cardIndex++),
+                .entrance(),
             shape = RoundedCornerShape(24.dp),
             colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
         ) {
@@ -1269,7 +1235,7 @@ internal fun DashboardScreen(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .staggeredEntrance(cardIndex),
+                .entrance(),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             FilledTonalButton(
@@ -1293,6 +1259,46 @@ internal fun DashboardScreen(
             }
         }
 
+    }
+}
+
+/**
+ * 히어로 수업 카드 안의 보조 수업 줄(오늘의 다음 수업 / 다음 수업일 첫 수업).
+ * 두 분기가 같은 문법을 쓰도록 하나로 모은다 (D-056).
+ */
+@Composable
+private fun HeroClassPreviewRow(label: String, detail: String) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(12.dp),
+        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.5f),
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Surface(
+                shape = RoundedCornerShape(6.dp),
+                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.2f),
+            ) {
+                Text(
+                    text = label,
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                )
+            }
+            Text(
+                text = detail,
+                style = MaterialTheme.typography.bodySmall,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onPrimaryContainer,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
     }
 }
 
@@ -1327,7 +1333,7 @@ private fun TimetableScreen(repository: CampusDataRepository, schedule: TermSche
         ElevatedCard(
             modifier = Modifier
                 .fillMaxWidth()
-                .staggeredEntrance(0),
+                .entrance(),
             shape = RoundedCornerShape(20.dp),
             colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
         ) {
@@ -1352,7 +1358,7 @@ private fun TimetableScreen(repository: CampusDataRepository, schedule: TermSche
             onClick = { editing = null; showEditor = true },
             modifier = Modifier
                 .fillMaxWidth()
-                .staggeredEntrance(1),
+                .entrance(),
             shape = RoundedCornerShape(14.dp),
             contentPadding = ButtonDefaults.ButtonWithIconContentPadding,
         ) {
@@ -1365,13 +1371,11 @@ private fun TimetableScreen(repository: CampusDataRepository, schedule: TermSche
             .sortedWith(compareBy<Course> { it.weekday.value }.thenBy { it.start })
             .groupBy { it.weekday }
 
-        // 요일 헤더·수업 카드·휴강 카드까지 순차 입장하도록 실행 인덱스를 이어간다
-        var entranceIndex = 2
         if (grouped.isEmpty()) {
             OutlinedCard(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .staggeredEntrance(entranceIndex++),
+                    .entrance(),
                 shape = RoundedCornerShape(16.dp),
             ) {
                 Text(text = "등록된 수업이 없습니다", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(24.dp))
@@ -1385,14 +1389,14 @@ private fun TimetableScreen(repository: CampusDataRepository, schedule: TermSche
                     color = MaterialTheme.colorScheme.primary,
                     modifier = Modifier
                         .padding(top = 8.dp, start = 4.dp)
-                        .staggeredEntrance(entranceIndex++),
+                        .entrance(),
                 )
                 courses.forEach { course ->
                     CourseSummaryCard(
                         course = course,
                         onEdit = { editing = course; showEditor = true },
                         onDelete = { pendingDelete = course },
-                        modifier = Modifier.staggeredEntrance(entranceIndex++),
+                        modifier = Modifier.entrance(),
                     )
                 }
             }
@@ -1404,7 +1408,7 @@ private fun TimetableScreen(repository: CampusDataRepository, schedule: TermSche
         ElevatedCard(
             modifier = Modifier
                 .fillMaxWidth()
-                .staggeredEntrance(entranceIndex++),
+                .entrance(),
             shape = RoundedCornerShape(18.dp),
         ) {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -1437,7 +1441,7 @@ private fun TimetableScreen(repository: CampusDataRepository, schedule: TermSche
         if (schedule.noClassDates.isNotEmpty()) {
             Column(
                 verticalArrangement = Arrangement.spacedBy(6.dp),
-                modifier = Modifier.staggeredEntrance(entranceIndex),
+                modifier = Modifier.entrance(),
             ) {
                 schedule.noClassDates.sorted().forEach { date ->
                     Surface(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp), color = MaterialTheme.colorScheme.surfaceContainerLow) {
@@ -1798,12 +1802,15 @@ private fun CourseTimePickerDialog(title: String, initial: LocalTime, onDismiss:
 // -----------------------------------------------------------------------------
 // 3. 셔틀 전용 화면 (Shuttle)
 // -----------------------------------------------------------------------------
+private enum class ShuttleView { CAMPUS, BUS_4402 }
+
 @Composable
 fun ShuttleScreen(
     shuttleSource: ShuttleSource,
     currentZone: CampusZoneId,
     reportSource: ShuttleReportSource? = null,
     locationMode: LocationMode = LocationMode.GPS,
+    nearbyTransitStopNumber: String? = null,
     verifyReportLocation: suspend (CampusZoneId) -> Boolean = { false },
     modifier: Modifier = Modifier,
     now: ZonedDateTime = ZonedDateTime.now(MinuteTicker.CAMPUS_ZONE),
@@ -1825,6 +1832,7 @@ fun ShuttleScreen(
     var refreshMessage by remember { mutableStateOf<String?>(null) }
     // 날짜가 바뀌면(자정) 선택 요일도 새 오늘로 재설정된다 (#14)
     var selectedDay by remember(now.toLocalDate()) { mutableStateOf(now.dayOfWeek) }
+    var shuttleView by rememberSaveable { mutableStateOf(ShuttleView.CAMPUS) }
     val nowTime = now.toLocalTime()
 
     LaunchedEffect(reportSource, shuttle.serverRevision, now.toLocalDate()) {
@@ -1841,40 +1849,47 @@ fun ShuttleScreen(
         }
     }
 
+    fun refreshShuttle() {
+        if (refreshing) return
+        refreshing = true
+        refreshMessage = null
+        scope.launch {
+            try {
+                refreshMessage = when (val result = shuttleSource.refresh()) {
+                    is com.example.dimanow.shuttle.ShuttleRefreshResult.Success -> "${result.departureCount}건 저장 완료"
+                    is com.example.dimanow.shuttle.ShuttleRefreshResult.Failure -> "실패: ${result.message}"
+                }
+            } finally {
+                refreshing = false
+            }
+        }
+    }
+
     Box(modifier = modifier.fillMaxSize()) {
     ScreenColumn(
         title = "셔틀버스",
         modifier = Modifier.fillMaxSize(),
-        topAction = {
-            IconButton(
-                enabled = !refreshing,
-                onClick = {
-                    refreshing = true
-                    refreshMessage = null
-                    scope.launch {
-                        try {
-                            refreshMessage = when (val result = shuttleSource.refresh()) {
-                                is com.example.dimanow.shuttle.ShuttleRefreshResult.Success -> "${result.departureCount}건 저장 완료"
-                                is com.example.dimanow.shuttle.ShuttleRefreshResult.Failure -> "실패: ${result.message}"
-                            }
-                        } finally {
-                            refreshing = false
-                        }
-                    }
-                },
-            ) {
-                if (refreshing) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(24.dp).semantics { contentDescription = "셔틀 새로고침 중" },
-                        strokeWidth = 2.5.dp,
-                        strokeCap = androidx.compose.ui.graphics.StrokeCap.Round,
-                    )
-                } else {
-                    Icon(Icons.Default.Refresh, contentDescription = "셔틀 새로고침")
-                }
-            }
-        },
+        // 새로고침은 목록을 당겨서 실행한다 (D-058)
+        onRefresh = ::refreshShuttle,
+        refreshing = refreshing,
+        listTag = "shuttle_list",
     ) {
+        SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
+            SegmentedButton(
+                selected = shuttleView == ShuttleView.CAMPUS,
+                onClick = { shuttleView = ShuttleView.CAMPUS },
+                shape = SegmentedButtonDefaults.itemShape(0, 2),
+            ) { Text("교내 셔틀") }
+            SegmentedButton(
+                selected = shuttleView == ShuttleView.BUS_4402,
+                onClick = { shuttleView = ShuttleView.BUS_4402 },
+                shape = SegmentedButtonDefaults.itemShape(1, 2),
+            ) { Text("4402") }
+        }
+        if (shuttleView == ShuttleView.BUS_4402) {
+            Bus4402ScheduleContent(now = now, nearbyStopNumber = nearbyTransitStopNumber)
+            return@ScreenColumn
+        }
         // M3 Expressive Connected Button Group (월~일 요일 선택)
         Row(
             modifier = Modifier
@@ -2400,12 +2415,6 @@ fun MealScreen(
     var cameraOutput by remember { mutableStateOf<Uri?>(null) }
     var refreshMessage by remember { mutableStateOf<String?>(null) }
 
-    LaunchedEffect(mealSource, venue) {
-        if (venue == MealVenue.MAIN_CAFETERIA) {
-            com.example.dimanow.work.StudentMealSync.refresh(context, mealSource, com.example.dimanow.meal.MealRefreshTrigger.FOREGROUND)
-        }
-    }
-
     fun loadImage(uri: Uri) {
         scope.launch {
             runCatching { readDormitoryMealImage(context, uri) }
@@ -2468,87 +2477,124 @@ fun MealScreen(
         }
     }
 
-    Box(modifier = modifier.fillMaxSize()) {
-    ScreenColumn(
-        title = "식단표",
-        modifier = Modifier.fillMaxSize(),
-        topAction = {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                if (venue == MealVenue.DORMITORY && !dormitoryMeal.hasCurrentWeek(today)) {
-                    TextButton(
-                        enabled = !refreshing && !uploadPreflight && !uploadingDormitoryMeal,
-                        onClick = {
-                            uploadPreflight = true
-                            scope.launch {
-                                try {
-                                    val result = mealSource.refreshDormitory()
-                                    val currentWeekExists = mealSource.dormitoryData.first().hasCurrentWeek(today)
-                                    if (result is com.example.dimanow.meal.MealRefreshResult.Success && currentWeekExists) {
-                                        refreshMessage = "이번 주 기숙사 식단을 불러왔어요"
-                                    } else {
-                                        showDormitoryPhotoSource = true
-                                    }
-                                } finally {
-                                    uploadPreflight = false
-                                }
-                            }
-                        },
-                    ) { Text("사진 올리기") }
+    fun refreshMeal() {
+        if (refreshing) return
+        refreshing = true
+        refreshMessage = null
+        scope.launch {
+            try {
+                val result = if (venue == MealVenue.DORMITORY) mealSource.refreshDormitory() else
+                    com.example.dimanow.work.StudentMealSync.refresh(context, mealSource, com.example.dimanow.meal.MealRefreshTrigger.MANUAL)
+                refreshMessage = when (result) {
+                    null -> null
+                    is com.example.dimanow.meal.MealRefreshResult.Success -> "${result.weekStart} 주간 식단 저장 완료"
+                    com.example.dimanow.meal.MealRefreshResult.NotPublishedYet -> "아직 새 식단이 올라오지 않았어요"
+                    is com.example.dimanow.meal.MealRefreshResult.NeedsReview -> "확인 필요: ${result.reason}"
+                    is com.example.dimanow.meal.MealRefreshResult.Failure -> "실패: ${result.message}"
                 }
-                IconButton(
-                    enabled = !refreshing,
-                    onClick = {
-                        refreshing = true
-                        refreshMessage = null
+            } finally {
+                refreshing = false
+            }
+        }
+    }
+
+    LaunchedEffect(mealSource, venue) {
+        if (venue == MealVenue.MAIN_CAFETERIA) {
+            com.example.dimanow.work.StudentMealSync.refresh(context, mealSource, com.example.dimanow.meal.MealRefreshTrigger.FOREGROUND)
+        }
+    }
+
+    // 주간 5일 중 보고 있는 하루. 날짜가 바뀌면 오늘로 다시 맞춘다 (D-057)
+    val weekStart = today.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY))
+    var selectedDay by remember(today) {
+        mutableStateOf(if (today.dayOfWeek.value in 1..5) today else weekStart)
+    }
+
+    Box(modifier = modifier.fillMaxSize()) {
+        ScreenScaffold(
+            title = "식단",
+            modifier = Modifier.fillMaxSize(),
+            topAction = {
+                    if (venue == MealVenue.DORMITORY && !dormitoryMeal.hasCurrentWeek(today)) {
+                        TextButton(
+                            enabled = !refreshing && !uploadPreflight && !uploadingDormitoryMeal,
+                            onClick = {
+                                uploadPreflight = true
+                                scope.launch {
+                                    try {
+                                        val result = mealSource.refreshDormitory()
+                                        val currentWeekExists = mealSource.dormitoryData.first().hasCurrentWeek(today)
+                                        if (result is com.example.dimanow.meal.MealRefreshResult.Success && currentWeekExists) {
+                                            refreshMessage = "이번 주 기숙사 식단을 불러왔어요"
+                                        } else {
+                                            showDormitoryPhotoSource = true
+                                        }
+                                    } finally {
+                                        uploadPreflight = false
+                                    }
+                                }
+                            },
+                        ) { Text("사진 올리기") }
+                    }
+            },
+            // 새로고침은 목록을 당겨서 실행한다 — 상단 아이콘 버튼은 제거했다 (D-058)
+            onRefresh = ::refreshMeal,
+            refreshing = refreshing,
+            listTag = "meal_list",
+            // 식당 전환과 요일 선택은 스크롤해도 항상 닿을 수 있도록 헤더에 고정한다 (D-057)
+            subHeader = {
+                SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
+                    SegmentedButton(
+                        selected = venue == MealVenue.MAIN_CAFETERIA,
+                        onClick = { userVenue = MealVenue.MAIN_CAFETERIA.name },
+                        shape = SegmentedButtonDefaults.itemShape(0, 2),
+                    ) { Text("본관 학생식당") }
+                    SegmentedButton(
+                        selected = venue == MealVenue.DORMITORY,
+                        onClick = { userVenue = MealVenue.DORMITORY.name },
+                        shape = SegmentedButtonDefaults.itemShape(1, 2),
+                    ) { Text("기숙사") }
+                }
+                WeekdaySelector(
+                    weekStart = weekStart,
+                    selected = selectedDay,
+                    today = today,
+                    onSelect = { selectedDay = it },
+                )
+            },
+        ) {
+            if (venue == MealVenue.DORMITORY) {
+                // 업로드는 15분까지 폴링되므로 진행 상태를 상시 카드로 보여준다 (D-056)
+                if (uploadingDormitoryMeal) {
+                    item { DormitoryUploadProgressCard() }
+                }
+                dormitoryDayContent(
+                    meal = dormitoryMeal,
+                    date = selectedDay,
+                    today = today,
+                    onUpload = {
+                        uploadPreflight = true
                         scope.launch {
                             try {
-                                val result = if (venue == MealVenue.DORMITORY) mealSource.refreshDormitory() else
-                                    com.example.dimanow.work.StudentMealSync.refresh(context, mealSource, com.example.dimanow.meal.MealRefreshTrigger.MANUAL)
-                                refreshMessage = when (result) {
-                                    null -> null
-                                    is com.example.dimanow.meal.MealRefreshResult.Success -> "${result.weekStart} 주간 식단 저장 완료"
-                                    com.example.dimanow.meal.MealRefreshResult.NotPublishedYet -> "아직 새 식단이 올라오지 않았어요"
-                                    is com.example.dimanow.meal.MealRefreshResult.NeedsReview -> "확인 필요: ${result.reason}"
-                                    is com.example.dimanow.meal.MealRefreshResult.Failure -> "실패: ${result.message}"
+                                val result = mealSource.refreshDormitory()
+                                val currentWeekExists = mealSource.dormitoryData.first().hasCurrentWeek(today)
+                                if (result is com.example.dimanow.meal.MealRefreshResult.Success && currentWeekExists) {
+                                    refreshMessage = "이번 주 기숙사 식단을 불러왔어요"
+                                } else {
+                                    showDormitoryPhotoSource = true
                                 }
                             } finally {
-                                refreshing = false
+                                uploadPreflight = false
                             }
                         }
                     },
-                ) {
-                    if (refreshing) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(24.dp).semantics { contentDescription = "식단 새로고침 중" },
-                            strokeWidth = 2.5.dp,
-                            strokeCap = androidx.compose.ui.graphics.StrokeCap.Round,
-                        )
-                    } else {
-                        Icon(Icons.Default.Refresh, contentDescription = "식단 새로고침")
-                    }
-                }
+                    uploadEnabled = !refreshing && !uploadPreflight && !uploadingDormitoryMeal,
+                )
+            } else {
+                item { StudentMealSyncStatus(meal, today) }
+                mainCafeteriaDayContent(meal = meal, date = selectedDay, today = today, nowTime = nowTime)
             }
-        },
-    ) {
-        SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
-            SegmentedButton(
-                selected = venue == MealVenue.MAIN_CAFETERIA,
-                onClick = { userVenue = MealVenue.MAIN_CAFETERIA.name },
-                shape = SegmentedButtonDefaults.itemShape(0, 2),
-            ) { Text("본관 학생식당") }
-            SegmentedButton(
-                selected = venue == MealVenue.DORMITORY,
-                onClick = { userVenue = MealVenue.DORMITORY.name },
-                shape = SegmentedButtonDefaults.itemShape(1, 2),
-            ) { Text("기숙사") }
         }
-        if (venue == MealVenue.DORMITORY) {
-            WeeklyDormitoryMealMenu(dormitoryMeal, today)
-        } else {
-            StudentMealSyncStatus(meal, today)
-            WeeklyMealMenu(meal = meal, today = today, nowTime = nowTime)
-        }
-    }
     SnackbarHost(
         snackbarHostState,
         Modifier
@@ -2583,6 +2629,9 @@ fun MealScreen(
                 }
             },
             confirmButton = {},
+            dismissButton = {
+                TextButton(onClick = { showDormitoryPhotoSource = false }) { Text("취소") }
+            },
         )
     }
     pendingImage?.let { image ->
@@ -2634,77 +2683,79 @@ private fun InputStream.readWithLimit(maxBytes: Int): ByteArray {
     return output.toByteArray()
 }
 
+/**
+ * 월~금 요일 선택기 (D-057). 셔틀 화면의 커넥티드 버튼 문법을 그대로 써서
+ * 앱 안에서 요일을 고르는 방식이 한 가지로 유지된다. 오늘에는 점 표식이 붙는다.
+ */
 @Composable
-internal fun WeeklyDormitoryMealMenu(
-    meal: DormitoryMealData,
+private fun WeekdaySelector(
+    weekStart: LocalDate,
+    selected: LocalDate,
     today: LocalDate,
+    onSelect: (LocalDate) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val weekStart = today.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY))
-    val validDays = meal.days
-        .filter { it.date in weekStart..weekStart.plusDays(4) }
-        .associateBy { it.date }
-    val dateFormat = DateTimeFormatter.ofPattern("M/d")
-    Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .height(44.dp),
+        horizontalArrangement = Arrangement.spacedBy(3.dp),
+    ) {
         (0L..4L).forEach { offset ->
             val date = weekStart.plusDays(offset)
-            val day = validDays[date]
-            val isToday = date == today
-            val isPast = date.isBefore(today)
-            // 본관 주간 뷰와 동일한 지난날 딤·오늘 뱃지 문법을 적용한다 (D-044 대칭화)
-            ElevatedCard(
+            val isSelected = date == selected
+            val innerRadius by animateDpAsState(
+                targetValue = if (isSelected) 18.dp else 4.dp,
+                animationSpec = spring(dampingRatio = Spring.DampingRatioLowBouncy, stiffness = Spring.StiffnessMedium),
+                label = "meal_day_shape_$offset",
+            )
+            val itemShape = when (offset) {
+                0L -> RoundedCornerShape(topStart = 18.dp, bottomStart = 18.dp, topEnd = innerRadius, bottomEnd = innerRadius)
+                4L -> RoundedCornerShape(topStart = innerRadius, bottomStart = innerRadius, topEnd = 18.dp, bottomEnd = 18.dp)
+                else -> RoundedCornerShape(innerRadius)
+            }
+            val bgColor by animateColorAsState(
+                targetValue = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceContainerHigh,
+                animationSpec = spring(stiffness = Spring.StiffnessMedium),
+                label = "meal_day_bg_$offset",
+            )
+            val contentColor by animateColorAsState(
+                targetValue = if (isSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
+                animationSpec = spring(stiffness = Spring.StiffnessMedium),
+                label = "meal_day_content_$offset",
+            )
+            Surface(
+                onClick = { onSelect(date) },
+                shape = itemShape,
+                color = bgColor,
+                contentColor = contentColor,
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .staggeredEntrance(offset.toInt())
-                    .alpha(if (isPast) 0.5f else 1f),
-                shape = RoundedCornerShape(20.dp),
-                colors = CardDefaults.elevatedCardColors(
-                    containerColor = when {
-                        isToday -> MaterialTheme.colorScheme.primaryContainer
-                        isPast -> MaterialTheme.colorScheme.surfaceContainerLowest
-                        else -> MaterialTheme.colorScheme.surfaceContainerLow
-                    },
-                ),
+                    .weight(1f)
+                    .fillMaxHeight()
+                    .testTag("meal_day_${date.dayOfWeek.name}"),
             ) {
-                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Text(
-                            "${date.format(dateFormat)} (${koreanWeekdayLabel(date.dayOfWeek).take(1)})",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = if (isToday) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface,
+                            text = koreanWeekdayLabel(date.dayOfWeek).take(1),
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = if (isSelected) FontWeight.ExtraBold else FontWeight.Medium,
                         )
-                        if (isToday) {
-                            Surface(
-                                shape = RoundedCornerShape(6.dp),
-                                color = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.pulseBreath(minAlpha = 0.75f),
-                            ) {
-                                Text(
-                                    text = "오늘",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.onPrimary,
-                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-                                )
-                            }
-                        }
+                        Text(
+                            text = "${date.dayOfMonth}",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = contentColor.copy(alpha = 0.75f),
+                        )
                     }
-                    if (day == null || day.sections.isEmpty()) {
-                        Text("등록된 식단 없음", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    } else {
-                        day.sections.forEach { section ->
-                            Text(
-                                listOfNotNull(section.name, section.hours?.takeIf(String::isNotBlank)).joinToString(" · "),
-                                style = MaterialTheme.typography.labelLarge,
-                                fontWeight = FontWeight.Bold,
-                            )
-                            Text(
-                                section.menuLines.joinToString(" · "),
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
+                    if (date == today) {
+                        Box(
+                            modifier = Modifier
+                                .align(Alignment.BottomCenter)
+                                .padding(bottom = 3.dp)
+                                .size(4.dp)
+                                .clip(CircleShape)
+                                .background(if (isSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.primary),
+                        )
                     }
                 }
             }
@@ -2712,89 +2763,299 @@ internal fun WeeklyDormitoryMealMenu(
     }
 }
 
+/** 선택한 날짜의 메뉴 줄을 읽기 쉬운 목록으로 그린다 (D-057). */
 @Composable
-fun WeeklyMealMenu(
-    meal: MealData,
-    today: LocalDate,
-    nowTime: LocalTime = LocalTime.now(MinuteTicker.CAMPUS_ZONE),
-    modifier: Modifier = Modifier,
-) {
-    val weekStart = today.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY))
-    val weekEnd = weekStart.plusDays(4) // 금요일까지
-    val validDays = meal.days
-        .filter { it.validationState == MealValidationState.VALID && !it.date.isBefore(weekStart) && !it.date.isAfter(weekEnd) }
-        .associateBy { it.date }
-    val dateFormat = DateTimeFormatter.ofPattern("M/d")
+private fun MenuLineList(lines: List<String>, modifier: Modifier = Modifier) {
+    Column(modifier = modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        lines.filter { it.isNotBlank() }.forEach { line ->
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                Box(
+                    modifier = Modifier
+                        .padding(top = 7.dp)
+                        .size(4.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)),
+                )
+                Text(
+                    text = line,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+            }
+        }
+    }
+}
 
-    Column(modifier = modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        // 0부터 4까지 5일간만 반복 (월~금)
-        (0L..4L).forEach { offset ->
-            val date = weekStart.plusDays(offset)
-            val day = validDays[date]
-            val isToday = date == today
-            val isPast = date.isBefore(today)
-            ElevatedCard(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .staggeredEntrance(offset.toInt())
-                    .alpha(if (isPast) 0.5f else 1f),
-                shape = RoundedCornerShape(20.dp),
-                colors = CardDefaults.elevatedCardColors(
-                    containerColor = when {
-                        isToday -> MaterialTheme.colorScheme.primaryContainer
-                        isPast -> MaterialTheme.colorScheme.surfaceContainerLowest
-                        else -> MaterialTheme.colorScheme.surfaceContainerLow
-                    },
-                ),
-            ) {
-                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        ) {
-                            Text(
-                                text = "${date.format(dateFormat)} (${koreanWeekdayLabel(date.dayOfWeek).take(1)})",
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold,
-                                color = if (isToday) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface,
-                            )
-                            if (isToday) {
-                                Surface(
-                                    shape = RoundedCornerShape(6.dp),
-                                    color = MaterialTheme.colorScheme.primary,
-                                    modifier = Modifier.pulseBreath(minAlpha = 0.75f),
-                                ) {
-                                    Text(
-                                        text = "오늘",
-                                        style = MaterialTheme.typography.labelSmall,
-                                        fontWeight = FontWeight.Bold,
-                                        color = MaterialTheme.colorScheme.onPrimary,
-                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-                                    )
-                                }
-                            }
-                        }
-                        if (day != null) {
-                            Text(
-                                text = if (isToday) mealServiceStatus(day, nowTime).label else day.hours,
-                                style = MaterialTheme.typography.labelSmall,
-                                fontWeight = FontWeight.SemiBold,
-                                color = if (isToday) MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f) else MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
-                    }
+/** 날짜 제목 + 상태 배지를 담은 하루 머리글 (D-057). */
+@Composable
+private fun MealDayHeading(date: LocalDate, today: LocalDate, trailing: String?) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(
+                text = "${date.monthValue}월 ${date.dayOfMonth}일 ${koreanWeekdayLabel(date.dayOfWeek)}",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+            )
+            if (date == today) {
+                Surface(
+                    shape = RoundedCornerShape(6.dp),
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.pulseBreath(minAlpha = 0.75f),
+                ) {
                     Text(
-                        text = if (day == null || day.menuLines.isEmpty()) "등록된 식단 없음" else day.menuLines.joinToString(" · "),
-                        style = MaterialTheme.typography.bodyMedium,
-                        fontWeight = if (isToday) FontWeight.SemiBold else FontWeight.Normal,
-                        color = if (isToday) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
+                        text = "오늘",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onPrimary,
+                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
                     )
                 }
+            }
+        }
+        trailing?.let {
+            Text(
+                text = it,
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}
+
+/** 본관 학생식당의 선택한 하루. */
+private fun androidx.compose.foundation.lazy.LazyListScope.mainCafeteriaDayContent(
+    meal: MealData,
+    date: LocalDate,
+    today: LocalDate,
+    nowTime: LocalTime,
+) {
+    val day = meal.days.firstOrNull { it.date == date && it.validationState == MealValidationState.VALID }
+    item(key = "main-heading-$date") {
+        MealDayHeading(
+            date = date,
+            today = today,
+            trailing = day?.let { if (date == today) mealServiceStatus(it, nowTime).label else it.hours },
+        )
+    }
+    if (day == null || day.menuLines.isEmpty()) {
+        item(key = "main-empty-$date") { MealEmptyDayCard("등록된 식단이 없어요") }
+    } else {
+        item(key = "main-menu-$date") {
+            ElevatedCard(
+                modifier = Modifier.fillMaxWidth().entrance(),
+                shape = RoundedCornerShape(20.dp),
+                colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+            ) {
+                Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Icon(Icons.Default.Restaurant, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
+                        Text("중식", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                        MealHoursChip(day.hours)
+                    }
+                    MenuLineList(day.menuLines)
+                }
+            }
+        }
+    }
+}
+
+/** 기숙사의 선택한 하루. 식사 시간대별 카드로 나눠 긴 목록을 끊어 읽게 한다 (D-057). */
+private fun androidx.compose.foundation.lazy.LazyListScope.dormitoryDayContent(
+    meal: DormitoryMealData,
+    date: LocalDate,
+    today: LocalDate,
+    onUpload: (() -> Unit)?,
+    uploadEnabled: Boolean,
+) {
+    val weekStart = date.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY))
+    val week = meal.days.filter { it.date in weekStart..weekStart.plusDays(4) }
+    val day = week.firstOrNull { it.date == date }
+    val blocks = day?.sections?.let(::groupDormitorySections).orEmpty()
+
+    item(key = "dorm-heading-$date") { MealDayHeading(date = date, today = today, trailing = null) }
+
+    if (blocks.isEmpty()) {
+        if (week.none { it.sections.isNotEmpty() }) {
+            // 주간 전체가 비었을 때만 이유와 업로드 CTA를 담은 안내 카드를 보여준다 (D-056)
+            item(key = "dorm-week-empty") {
+                DormitoryWeekEmptyCard(onUpload = onUpload, uploadEnabled = uploadEnabled)
+            }
+        } else {
+            item(key = "dorm-empty-$date") { MealEmptyDayCard("이 날은 등록된 식단이 없어요") }
+        }
+        return
+    }
+
+    itemsIndexed(blocks, key = { _, block -> "dorm-$date-${block.name}-${block.hours}" }) { index, block ->
+        ElevatedCard(
+            modifier = Modifier.fillMaxWidth().entrance(),
+            shape = RoundedCornerShape(20.dp),
+            colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+        ) {
+            Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Icon(
+                        dormitoryBlockIcon(block.name),
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(20.dp),
+                    )
+                    Text(block.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    MealHoursChip(block.hours)
+                }
+                MenuLineList(block.menuLines)
+                block.extras.forEach { extra ->
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text(
+                            text = extra.name,
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        MenuLineList(extra.menuLines)
+                    }
+                }
+            }
+        }
+    }
+}
+
+private fun dormitoryBlockIcon(name: String): ImageVector = when {
+    name.contains("조식") -> Icons.Default.WbSunny
+    name.contains("석식") -> Icons.Default.NightsStay
+    else -> Icons.Default.Restaurant
+}
+
+@Composable
+private fun MealHoursChip(hours: String?) {
+    val text = hours?.takeIf { it.isNotBlank() } ?: return
+    Surface(shape = RoundedCornerShape(8.dp), color = MaterialTheme.colorScheme.secondaryContainer) {
+        Text(
+            text = text,
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onSecondaryContainer,
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+        )
+    }
+}
+
+@Composable
+private fun MealEmptyDayCard(message: String) {
+    ElevatedCard(
+        modifier = Modifier.fillMaxWidth().entrance(),
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+    ) {
+        Text(
+            text = message,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(20.dp),
+        )
+    }
+}
+
+/** 이번 주 기숙사 식단이 하나도 없을 때의 단일 안내 카드 (D-056). */
+@Composable
+private fun DormitoryWeekEmptyCard(
+    modifier: Modifier = Modifier,
+    onUpload: (() -> Unit)? = null,
+    uploadEnabled: Boolean = true,
+) {
+    ElevatedCard(
+        modifier = modifier
+            .fillMaxWidth()
+            .entrance()
+            .testTag("dormitory_week_empty"),
+        shape = RoundedCornerShape(24.dp),
+        colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+    ) {
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Surface(
+                shape = CircleShape,
+                color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                modifier = Modifier.size(56.dp),
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(
+                        Icons.Default.Restaurant,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(28.dp),
+                    )
+                }
+            }
+            Text(
+                text = "이번 주 기숙사 식단이 아직 없어요",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+            )
+            Text(
+                text = "기숙사 식단표는 학생이 올린 사진으로 만들어집니다. 식당에 붙은 이번 주 식단표를 찍어 올리면 모두가 함께 볼 수 있어요.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center,
+            )
+            if (onUpload != null) {
+                FilledTonalButton(
+                    onClick = onUpload,
+                    enabled = uploadEnabled,
+                    shape = RoundedCornerShape(14.dp),
+                    modifier = Modifier.testTag("dormitory_week_empty_upload"),
+                ) {
+                    Icon(Icons.Default.PhotoCamera, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text("식단표 사진 올리기", fontWeight = FontWeight.Bold)
+                }
+            }
+        }
+    }
+}
+
+/** 사진 업로드 후 서버 확인이 끝날 때까지 남아 있는 진행 카드 (D-056). */
+@Composable
+private fun DormitoryUploadProgressCard(modifier: Modifier = Modifier) {
+    ElevatedCard(
+        modifier = modifier
+            .fillMaxWidth()
+            .testTag("dormitory_upload_progress"),
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer),
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(18.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(14.dp),
+        ) {
+            CircularProgressIndicator(
+                modifier = Modifier.size(24.dp).pulseBreath(),
+                strokeWidth = 2.5.dp,
+                strokeCap = androidx.compose.ui.graphics.StrokeCap.Round,
+                color = MaterialTheme.colorScheme.onSecondaryContainer,
+            )
+            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text(
+                    text = "식단표를 확인하는 중이에요",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSecondaryContainer,
+                )
+                Text(
+                    text = "보통 1~2분, 늦어도 15분 안에 끝나요. 앱을 닫아도 계속 진행됩니다.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.8f),
+                )
             }
         }
     }
@@ -2809,10 +3070,14 @@ private fun SettingsScreen(
     testZone: CampusZoneId,
     onTestModeChange: (Boolean) -> Unit,
     onTestZone: (CampusZoneId) -> Unit,
+    testTransitStopNumber: String?,
+    onTestTransitStop: (String?) -> Unit,
     liveSurfaceController: LiveSurfaceController,
     displayOptions: LiveDisplayOptions,
     onChipContentChange: (LiveChipContent) -> Unit,
     onClassOrderChange: (LiveClassOrder) -> Unit,
+    notificationPolicy: NotificationGuidancePolicy,
+    onNotificationModeChange: (GuidanceKind, NotificationGuidanceMode) -> Unit,
     homeBase: HomeBase,
     onHomeBaseChange: (HomeBase) -> Unit,
     shuttleData: ShuttleData,
@@ -2858,7 +3123,7 @@ private fun SettingsScreen(
         ElevatedCard(
             modifier = Modifier
                 .fillMaxWidth()
-                .staggeredEntrance(0),
+                .entrance(),
             shape = RoundedCornerShape(20.dp),
             colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
         ) {
@@ -2885,15 +3150,21 @@ private fun SettingsScreen(
             options = displayOptions,
             onChipContentChange = onChipContentChange,
             onClassOrderChange = onClassOrderChange,
-            modifier = Modifier.staggeredEntrance(1),
+            modifier = Modifier.entrance(),
             onShowNowBarSetup = onShowNowBarSetup,
+        )
+
+        NotificationGuidanceSettings(
+            policy = notificationPolicy,
+            onModeChange = onNotificationModeChange,
+            modifier = Modifier.entrance(),
         )
 
         // 3) GPS 비반영 테스트 모드
         ElevatedCard(
             modifier = Modifier
                 .fillMaxWidth()
-                .staggeredEntrance(2),
+                .entrance(),
             shape = RoundedCornerShape(20.dp),
             colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
         ) {
@@ -2933,6 +3204,12 @@ private fun SettingsScreen(
                         )
                     }
                 }
+                if (locationMode == LocationMode.TEST) {
+                    TransitStopTestControls(
+                        testStopNumber = testTransitStopNumber,
+                        onChange = onTestTransitStop,
+                    )
+                }
             }
         }
 
@@ -2940,7 +3217,7 @@ private fun SettingsScreen(
         ElevatedCard(
             modifier = Modifier
                 .fillMaxWidth()
-                .staggeredEntrance(3),
+                .entrance(),
             shape = RoundedCornerShape(20.dp),
             colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
         ) {
@@ -3004,11 +3281,11 @@ private fun SettingsScreen(
             onDownload = onDownloadUpdate,
             onContinueInstall = onContinueInstall,
             onCancelDownload = onCancelDownload,
-            modifier = Modifier.staggeredEntrance(4),
+            modifier = Modifier.entrance(),
         )
-        DataAndSourcesCard(shuttleData, mealData, modifier = Modifier.staggeredEntrance(5))
+        DataAndSourcesCard(shuttleData, mealData, modifier = Modifier.entrance())
         ElevatedCard(
-            modifier = Modifier.fillMaxWidth().staggeredEntrance(6),
+            modifier = Modifier.fillMaxWidth().entrance(),
             shape = RoundedCornerShape(20.dp),
             colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
         ) {
@@ -3347,122 +3624,51 @@ fun LiveDisplaySettings(
     }
 }
 
+/**
+ * 제목 행과 선택 컨트롤을 화면 상단에 고정하는 스캐폴드 (D-057).
+ *
+ * 기존 [ScreenColumn]은 헤더를 리스트의 첫 항목으로 넣어, 긴 목록을 스크롤하면 제목과
+ * 새로고침·설정은 물론 탭 전환 컨트롤까지 함께 사라졌다. 이 스캐폴드는 헤더와 `subHeader`를
+ * 리스트 밖에 두고, 내용이 스크롤되면 헤더에 컨테이너 배경과 경계선을 입혀 분리를 만든다.
+ */
 @Composable
-internal fun ScreenColumn(
-    modifier: Modifier = Modifier,
-    title: String? = null,
-    topAction: (@Composable () -> Unit)? = null,
-    customTopBar: (@Composable () -> Unit)? = null,
-    content: @Composable ColumnScope.() -> Unit,
-) {
-    val openSettings = LocalOpenSettings.current
-    val statusBarTop = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
-    val surfaceColor = MaterialTheme.colorScheme.surface
-
-    Box(modifier = modifier.fillMaxSize()) {
-        LazyColumn(
-            modifier = Modifier.fillMaxSize(),
-            // 상태바 높이를 contentPadding으로 주면 스크롤 시 콘텐츠가 상태바 뒤로 지나가
-            // 상단에 죽은 여백이 생기지 않는다
-            contentPadding = PaddingValues(
-                start = 16.dp,
-                end = 16.dp,
-                top = statusBarTop + 8.dp,
-                bottom = 8.dp,
-            ),
-            verticalArrangement = Arrangement.spacedBy(14.dp),
-        ) {
-            item {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(48.dp),
-                    contentAlignment = Alignment.CenterStart,
-                ) {
-                    if (customTopBar != null) {
-                        customTopBar()
-                        openSettings?.let { open ->
-                            IconButton(
-                                onClick = open,
-                                modifier = Modifier.align(Alignment.CenterEnd).testTag("open_settings"),
-                            ) {
-                                Icon(Icons.Default.Settings, contentDescription = "설정")
-                            }
-                        }
-                    } else if (title != null) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Text(
-                                text = title,
-                                style = MaterialTheme.typography.headlineMedium,
-                                fontWeight = FontWeight.Bold,
-                            )
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                topAction?.invoke()
-                                openSettings?.let { open ->
-                                    IconButton(onClick = open, modifier = Modifier.testTag("open_settings")) {
-                                        Icon(Icons.Default.Settings, contentDescription = "설정")
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-            item { Column(verticalArrangement = Arrangement.spacedBy(14.dp), content = content) }
-            item { Spacer(Modifier.height(16.dp)) }
-        }
-
-        // 상단 시스템 상태바 영역 반투명 그라데이션 스크림 (스크롤 시 텍스트/아이콘 겹침 방지 및 부드러운 페이드)
-        // 헤더 행(콘텐츠 시작 statusBarTop+8dp)과 겹치지 않도록 스크림은 8dp까지만 내려온다 (#5)
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(statusBarTop + 8.dp)
-                .background(
-                    Brush.verticalGradient(
-                        0.0f to surfaceColor.copy(alpha = 0.95f),
-                        0.6f to surfaceColor.copy(alpha = 0.70f),
-                        1.0f to surfaceColor.copy(alpha = 0.0f),
-                    ),
-                ),
-        )
-    }
-}
-
-@Composable
-internal fun ScreenLazyColumn(
-    modifier: Modifier = Modifier,
+internal fun ScreenScaffold(
     title: String,
-    topAction: (@Composable () -> Unit)? = null,
+    modifier: Modifier = Modifier,
+    listState: LazyListState = rememberLazyListState(),
+    topAction: (@Composable RowScope.() -> Unit)? = null,
+    subHeader: (@Composable ColumnScope.() -> Unit)? = null,
     listTag: String? = null,
+    onRefresh: (() -> Unit)? = null,
+    refreshing: Boolean = false,
     content: androidx.compose.foundation.lazy.LazyListScope.() -> Unit,
 ) {
     val openSettings = LocalOpenSettings.current
-    val statusBarTop = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
-    val surfaceColor = MaterialTheme.colorScheme.surface
+    val scrolled by remember {
+        derivedStateOf { listState.firstVisibleItemIndex > 0 || listState.firstVisibleItemScrollOffset > 0 }
+    }
+    val headerColor by animateColorAsState(
+        targetValue = if (scrolled) {
+            MaterialTheme.colorScheme.surfaceContainer
+        } else {
+            MaterialTheme.colorScheme.surface
+        },
+        animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
+        label = "screen_header_color",
+    )
 
-    Box(modifier = modifier.fillMaxSize()) {
-        LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .then(if (listTag == null) Modifier else Modifier.testTag(listTag)),
-            contentPadding = PaddingValues(
-                start = 16.dp,
-                end = 16.dp,
-                top = statusBarTop + 8.dp,
-                bottom = 8.dp,
-            ),
-            verticalArrangement = Arrangement.spacedBy(14.dp),
-        ) {
-            item {
+    Column(modifier = modifier.fillMaxSize()) {
+        Surface(color = headerColor) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .statusBarsPadding(),
+            ) {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(48.dp),
+                        .height(56.dp)
+                        .padding(start = 16.dp, end = 4.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
@@ -3472,7 +3678,7 @@ internal fun ScreenLazyColumn(
                         fontWeight = FontWeight.Bold,
                     )
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        topAction?.invoke()
+                        topAction?.invoke(this)
                         openSettings?.let { open ->
                             IconButton(onClick = open, modifier = Modifier.testTag("open_settings")) {
                                 Icon(Icons.Default.Settings, contentDescription = "설정")
@@ -3480,11 +3686,139 @@ internal fun ScreenLazyColumn(
                         }
                     }
                 }
+                subHeader?.let { pinned ->
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(start = 16.dp, end = 16.dp, bottom = 10.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp),
+                        content = pinned,
+                    )
+                }
+                if (scrolled) {
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                }
             }
-            content()
-            item { Spacer(Modifier.height(16.dp)) }
+        }
+        // 새로고침은 아이콘 버튼이 아니라 M3 당겨서 새로고침이 1차 동작이다 (D-058)
+        PullToRefresh(onRefresh = onRefresh, refreshing = refreshing, modifier = Modifier.fillMaxSize()) {
+            LazyColumn(
+                state = listState,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .then(if (listTag != null) Modifier.testTag(listTag) else Modifier),
+                contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 24.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+                content = content,
+            )
+        }
+    }
+}
+
+/**
+ * M3 당겨서 새로고침 래퍼 (D-058).
+ *
+ * [onRefresh]가 없으면 인디케이터와 제스처 처리를 아예 붙이지 않고 [content]만 그린다.
+ * 새로고침이 없는 화면에까지 중첩 스크롤 노드를 추가하지 않기 위해서다.
+ */
+@Composable
+private fun PullToRefresh(
+    onRefresh: (() -> Unit)?,
+    refreshing: Boolean,
+    modifier: Modifier = Modifier,
+    content: @Composable () -> Unit,
+) {
+    if (onRefresh == null) {
+        Box(modifier = modifier) { content() }
+        return
+    }
+    PullToRefreshBox(
+        isRefreshing = refreshing,
+        onRefresh = onRefresh,
+        modifier = modifier,
+    ) {
+        content()
+    }
+}
+
+@Composable
+internal fun ScreenColumn(
+    modifier: Modifier = Modifier,
+    title: String? = null,
+    topAction: (@Composable () -> Unit)? = null,
+    customTopBar: (@Composable () -> Unit)? = null,
+    onRefresh: (() -> Unit)? = null,
+    refreshing: Boolean = false,
+    listTag: String? = null,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    val openSettings = LocalOpenSettings.current
+    val statusBarTop = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
+    val surfaceColor = MaterialTheme.colorScheme.surface
+
+    Box(modifier = modifier.fillMaxSize()) {
+        PullToRefresh(onRefresh = onRefresh, refreshing = refreshing, modifier = Modifier.fillMaxSize()) {
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .then(if (listTag != null) Modifier.testTag(listTag) else Modifier),
+                // 상태바 높이를 contentPadding으로 주면 스크롤 시 콘텐츠가 상태바 뒤로 지나가
+                // 상단에 죽은 여백이 생기지 않는다
+                contentPadding = PaddingValues(
+                    start = 16.dp,
+                    end = 16.dp,
+                    top = statusBarTop + 8.dp,
+                    bottom = 8.dp,
+                ),
+                verticalArrangement = Arrangement.spacedBy(14.dp),
+            ) {
+                item {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(48.dp),
+                        contentAlignment = Alignment.CenterStart,
+                    ) {
+                        if (customTopBar != null) {
+                            customTopBar()
+                            openSettings?.let { open ->
+                                IconButton(
+                                    onClick = open,
+                                    modifier = Modifier.align(Alignment.CenterEnd).testTag("open_settings"),
+                                ) {
+                                    Icon(Icons.Default.Settings, contentDescription = "설정")
+                                }
+                            }
+                        } else if (title != null) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Text(
+                                    text = title,
+                                    style = MaterialTheme.typography.headlineMedium,
+                                    fontWeight = FontWeight.Bold,
+                                )
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    topAction?.invoke()
+                                    openSettings?.let { open ->
+                                        IconButton(onClick = open, modifier = Modifier.testTag("open_settings")) {
+                                            Icon(Icons.Default.Settings, contentDescription = "설정")
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                item { Column(verticalArrangement = Arrangement.spacedBy(14.dp), content = content) }
+                item { Spacer(Modifier.height(16.dp)) }
+            }
         }
 
+        // 상단 시스템 상태바 영역 반투명 그라데이션 스크림 (스크롤 시 텍스트/아이콘 겹침 방지 및 부드러운 페이드)
+        // 헤더 행(콘텐츠 시작 statusBarTop+8dp)과 겹치지 않도록 스크림은 8dp까지만 내려온다 (#5)
         Box(
             modifier = Modifier
                 .fillMaxWidth()

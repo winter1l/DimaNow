@@ -84,3 +84,59 @@ Verification: app JVM 179/179, data-pipeline 33 pass plus one gated skip, Androi
 Current state: the optimized v1.5 install on exact `SM-X710` serial `R54W703V2TZ` has now passed real five-tab navigation and visual portrait smoke. Home, Timetable, Shuttle, Meal, and Classes each rendered the expected installed state; the new tablet has no saved LMS account, so Classes stopped at the native login surface and no credential was entered.
 
 Verification: Settings back returned to Meal, the next back returned directly to Home, and Home back returned to Samsung launcher without replaying older tab actions. The app stayed alive as PID 9028. A 90-degree rotation request still left the app at 1600 x 2560/rotation 0 and the original `wm user-rotation lock 0` was restored. Installed package is v1.5 (6), and no DIMA Now FATAL/ANR was found. Remaining device-specific acceptance is limited to features not exercised on this tablet: authenticated LMS/download, widgets, real geofence transitions, Samsung Now Bar, lock screen, and AOD.
+
+# Update - 2026-09-02 (D-056 first-run onboarding and frontend reunification)
+
+Current state: on branch `codex/wip`, a fresh install now opens a full-screen permission onboarding instead of two stacked forced dialogs. It explains and requests notifications, precise location, background location (staged after precise), and exact alarm, then takes the home-base choice; every permission step is skippable. Home drops the duplicated shuttle prose and the copy-pasted class-preview block, lists all missed-arrival destinations, and stops allocating a GuidanceEngine per destination. The dormitory meal week shows one explanatory empty card with an in-body upload CTA instead of five identical empty cards, and keeps a progress card for the whole submission poll. The Classes tab shares one full-screen pane shell across its four panes, cascades item cards, applies filters in agenda mode, keeps an inline refresh-error banner over cached items, and tracks downloads per attachment.
+
+Verification: app JVM 189/189 (including three new `OnboardingStepsTest` cases), `compileDebugAndroidTestKotlin`, `lintDebug`, and `assembleDebug` pass; the API 36 emulator instrumentation finished `OK (144 tests)` with no failures. Emulator `medium_phone` API 36 only - no physical device was attached this session. A fresh install walked the whole onboarding on device: the system notification and location dialogs appeared, `ACCESS_FINE_LOCATION` ended `granted=true`, the background-location step changed its copy only after precise location was granted, and finishing home-base selection entered the Dashboard with an empty crash buffer.
+
+Next action: nothing is committed - the work sits uncommitted on `codex/wip` on top of `8bb1e44`. Re-run the full emulator instrumentation after any further edits, and note that physical Galaxy acceptance (Now Bar, widgets, geofence, authenticated LMS) is untouched by this session and still stands where D-054/D-055 left it.
+
+# Update - 2026-09-02 (D-056 phone install and upgrade-path fix)
+
+Upgrade-path fix: the first D-056 gate used `!onboardingCompleted || !homeBaseConfirmed`, which would have replayed the whole onboarding for every existing install because `onboardingCompleted` is a new key that reads false on upgrade. The gate is now the pure `shouldShowOnboarding(onboardingCompleted, homeBaseConfirmed)` = `!onboardingCompleted && !homeBaseConfirmed`, so onboarding is a first-install-only surface and an update keeps the user where they were. A JVM case pins all three states.
+
+Verification on exact serial `R3CW203NFSL` (SM-S918N, Android 16, wireless adb `100.112.73.34:5555`): optimized v1.5 (6) is 5,417,489 bytes, SHA-256 `4622DC9BF0441395F402B65C1612149C17469AE8B87B7AE32D9127D25C42A13D`, replace-installed over the previous v1.5 (6). Cold launch stayed resumed as PID 28836 with an empty crash buffer and no FATAL/ANR. Onboarding correctly did not appear. Durable state survived: campus zone `본관`, `공식 주간 시간표 605행 · 현장 추가 20행 · 사용자 출발 슬롯 595개`, the published dormitory week, and the real 9.2 notices.
+
+Observed on the phone: Home renders the unified `HeroClassPreviewRow` with no duplicated shuttle prose, and its shuttle card shows both destinations. The Classes tab exercised the new inline banner for real - the saved LMS session had expired, so the list shows `로그인이 필요합니다` with `마지막 갱신 2026년 9월 2일 19:21` and a `다시 시도` action over the cached agenda instead of a snackbar that disappears. Retry was deliberately not tapped, so live authenticated LMS refresh remains unverified this session.
+
+App JVM is 190/190 with the new upgrade-path case; lint and `assembleOptimized` pass. The emulator instrumentation `OK (144 tests)` was run before this fix; the fix is a pure-function gate change covered by JVM tests.
+
+# Update - 2026-09-02 (D-057 pinned headers, one-day meal view, single-row Classes filter)
+
+Current state: still uncommitted on `codex/wip` on top of `8bb1e44`, now including D-057. `ScreenScaffold` pins each screen's header (title, refresh, gear, plus a per-screen sub-header) above the list, and `ScreenLazyColumn` is deleted. The Meal tab shows one day at a time behind a pinned Mon–Fri selector and renders dormitory days as 조식/중식/석식 cards with hourless corners attached, one menu item per line. The Classes tab pins 오늘/전체 and collapses its three chip rows into a single scrollable filter row with a `필터 해제` chip.
+
+Verification: `testDebugUnitTest` (now including three `DormitoryMealBlocksTest` cases), `lintDebug`, `assembleDebug`, and `assembleOptimized` pass. The instrumented suite ran on user-authorised wireless `SM-S918N` (`100.112.73.34:5555`) after the API 36 emulator's system server crashed and its launcher held a focus-stealing ANR dialog through a reboot: 144 tests, 3 intentional skips, 3 environmental focus failures that all passed on rerun (10/10) with Proton Pass autofill temporarily disabled and then restored. Optimized v1.5 (6) is 5,433,873 bytes, SHA-256 `2C9B5D68C043809618C60AB3642E3C5FE527BB1996426B30B3AF6646DF12A441`, installed on the phone and a cold-booted emulator with empty crash buffers on both. The emulator screenshots confirm the grouped dormitory cards and the header staying pinned through two full-screen scrolls.
+
+Next action: the phone's install is fresh (instrumentation removed the package) and sits on the onboarding welcome step, so home-base selection is waiting on the user. The redesigned Classes filter bar has no on-device visual evidence because a fresh install has no LMS session and no credentials were entered - `LmsHistoryScreenTest` is its only proof so far. Nothing from D-056 or D-057 is committed yet.
+
+# Update - 2026-09-03 (D-058 entrance motion, Now Bar chip, Classes rework, pull-to-refresh)
+
+Current state: still uncommitted on `codex/wip` on top of `8bb1e44`, now including D-057 and D-058. Only the shuttle screen staggers its entrance; every other tab settles at once and lazy-list cards no longer re-animate on scroll. The Now Bar chip reads `본관행 12분` with a bus or mortarboard icon chosen by guidance kind. The Classes tab has no read/unread filter or badge, orders 전체 by official course order with completed learning collapsed at the bottom, and compresses 종류/과목 into two dropdown chips. Refresh across 식단, 셔틀 and 수업 is M3 pull-to-refresh instead of a top icon button.
+
+Verification: JVM tests, lint, debug and optimized assembly pass; the instrumented suite on wireless `SM-S918N` finished 144 tests, 0 failures, 3 intentional skips. Optimized v1.5 (6) SHA-256 `908976C50D554F69A30B4F95E22D66A9AE847954D8403839C24088F5E6966C08` is installed on the phone and the emulator with empty crash buffers.
+
+Next action: the phone is on the onboarding welcome step again because instrumentation removed the package - home-base selection is the user's. Two D-058 changes still lack device evidence: the removed 읽음/안읽음 card badge (screenshot predates the edit) and the Now Bar countdown chip (needs a live class or shuttle window). Nothing from D-056, D-057 or D-058 is committed.
+
+# Update - 2026-09-03 (D-059 onboarding resume re-check)
+
+Current state: uncommitted on `codex/wip` on top of `8bb1e44`, now covering D-056 through D-059. The first-run exact-alarm step no longer hangs: onboarding re-reads every permission on `ON_RESUME` and advances only when the settings-only exact-alarm permission flips off→on while that step is showing.
+
+Verification: JVM tests, lint and optimized assembly pass; instrumented suite on wireless `SM-S918N` is 144 tests, 0 failures, 3 intentional skips. Optimized v1.5 (6) SHA-256 `E01098B5D68058E51AE7DF48ADDB65BE799D7B3EF173D756977F90D9C48530E3` is installed on the phone, crash buffer empty. The emulator reproduced both the grant and the no-grant return paths end to end.
+
+Next action: still nothing committed from D-056 through D-059. The two previously open D-058 items are now closed by instrumented assertions run on both devices — the card asserts zero 읽음/안읽음 nodes, and the built `Notification` asserts `ic_stat_shuttle`/`ic_stat_class` plus `본관행 12분` as its short critical text. Suites are 145 tests, 0 failures, 3 intentional skips on wireless `SM-S918N` and on the API 36 emulator. What remains unobserved is only the Now Bar chip as the system itself renders it, which needs a real class or shuttle window; the emulator's app data is cleared and mid-onboarding from the D-059 reproduction.
+
+# Update - 2026-09-04 (D-060 moving Now Bar countdown)
+
+Current state: uncommitted on `codex/wip` on top of `8bb1e44`, now covering D-056 through D-060. Countdown-mode notifications no longer set static `shortCriticalText`; Android's existing `when` count-down chronometer owns the compact chip, so the displayed time can move between the app's minute-boundary payload refreshes. The D-058 shuttle/class icons, route metadata, and the explicitly static classroom chip option remain.
+
+Verification: red before green at `LiveSurfaceController`; focused JVM 11/11, full JVM 202/202, and Android-test compilation pass. No device is connected, so a real One UI 8 Now Bar observation is the next acceptance step and must check that the countdown visibly advances between two app minute boundaries. Nothing from D-056 through D-060 is committed.
+
+Physical follow-up: wireless ADB connected to the user's SM-S918N at `100.112.73.34:5555`. Optimized SHA-256 `80536603427D3A2C056264B1D9549FBDFAE96220766F372A9DDED338B32F2267` replace-installed without changing the original first-install time. The active promoted notification changed from static `shortCriticalText=본관행 21분` before install to null afterward while retaining the count-down chronometer. The One UI 8 Home status chip visibly moved `23:44` -> `23:16` during wall-clock minute `9:36`; PID 23807 stayed alive with no filtered AndroidRuntime crash. The collapsed lock-screen Now Bar showed only the DIMA Now label, so status-chip motion is accepted but a countdown inside that separate collapsed card is not claimed.
+
+## Update - 2026-09-08 (reviewed commit and push batch)
+
+Current implementation commits are `11679c8` (completed onboarding/screen/4402 work) and `4023ecd` (D-063 minute refresh), on top of student-meal commit `39035df`. The user explicitly authorized publication to the existing repository after checking the other DIMA Now conversation. App source matches the version validated with 220 JVM tests, ten Android notification tests, lint/builds, and direct One UI 9 screenshots. Installed optimized APK SHA-256 is `7d1cb4c1f192ee7c6378c5acdcfc27d2eb99bfcb33d3404be523a9a0ec642266`.
+
+The publication target is `origin/main`, using a fast-forward from its fetched head. Local binary/screenshot evidence stays under ignored `artifacts/`; this batch does not create a GitHub Release or change app version 1.5 (6). Actual outdoor 4402 proximity and prolonged deep-idle behavior remain separate acceptance work.

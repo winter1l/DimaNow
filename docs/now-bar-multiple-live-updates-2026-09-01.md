@@ -55,4 +55,3 @@ R8 optimized 앱에 debug 계측 APK를 바로 연결한 첫 시도는 테스트
 ## 참고
 
 - [Android 공식 Live Update 문서](https://developer.android.com/develop/ui/views/notifications/live-update)
-

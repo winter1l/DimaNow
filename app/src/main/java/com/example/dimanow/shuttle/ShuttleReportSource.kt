@@ -5,11 +5,14 @@ import java.net.HttpURLConnection
 import java.net.URL
 import java.net.URLEncoder
 import java.time.LocalDate
+import java.time.Instant
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
@@ -62,36 +65,30 @@ fun interface ShuttleReportTransport {
 
 class HttpShuttleReportSource(
     rootUrl: String,
-    private val reporterTokenProvider: suspend () -> String,
     private val transport: ShuttleReportTransport = UrlConnectionShuttleReportTransport(),
 ) : ShuttleReportSource {
     private val endpoint = "${rootUrl.trimEnd('/')}/v1/shuttle-reports"
+    private val reporterTokenEndpoint = "${rootUrl.trimEnd('/')}/v1/shuttle-reporter-token"
     private val json = Json { ignoreUnknownKeys = true }
     private val mutableState = MutableStateFlow(ShuttleReportState())
+    private val reporterTokenMutex = Mutex()
+    private var reporterToken: IssuedReporterToken? = null
     override val state: StateFlow<ShuttleReportState> = mutableState.asStateFlow()
 
     init {
         require(rootUrl.startsWith("https://") || rootUrl.startsWith("http://127.0.0.1:"))
     }
 
-    constructor(
-        rootUrl: String,
-        reporterToken: String,
-        transport: ShuttleReportTransport = UrlConnectionShuttleReportTransport(),
-    ) : this(rootUrl, { reporterToken }, transport) {
-        require(reporterToken.matches(Regex("[A-Za-z0-9_-]{20,128}")))
-    }
-
     override suspend fun refresh(serviceDate: LocalDate, scheduleRevision: Long): ShuttleReportActionResult {
         mutableState.value = mutableState.value.copy(isLoading = true, error = null)
         return runCatching {
-            val response = transport.execute(
+            val response = executeWithReporterToken { token ->
                 ShuttleReportHttpRequest(
                     method = "GET",
                     url = "$endpoint?serviceDate=${encode(serviceDate.toString())}&scheduleRevision=$scheduleRevision",
-                    headers = headers(),
-                ),
-            )
+                    headers = headers(token),
+                )
+            }
             require(response.status in 200..299) { response.messageOrDefault("신고 현황을 불러오지 못했습니다.") }
             val payload = json.parseToJsonElement(response.body).jsonObject
             require(payload.getValue("serviceDate").jsonPrimitive.content == serviceDate.toString())
@@ -131,19 +128,19 @@ class HttpShuttleReportSource(
     private suspend fun mutate(method: String, event: ShuttleReportEventKey): ShuttleReportActionResult {
         mutableState.value = mutableState.value.copy(isLoading = true, error = null)
         return runCatching {
-            val response = transport.execute(
+            val response = executeWithReporterToken { token ->
                 ShuttleReportHttpRequest(
                     method = method,
                     url = endpoint,
-                    headers = headers() + ("Content-Type" to "application/json"),
+                    headers = headers(token) + ("Content-Type" to "application/json"),
                     body = buildJsonObject {
                         put("serviceDate", event.serviceDate.toString())
                         put("scheduleRevision", event.scheduleRevision)
                         put("runId", event.runId)
                         put("stopCallId", event.stopCallId)
                     }.toString(),
-                ),
-            )
+                )
+            }
             require(response.status in 200..299 || (method == "DELETE" && response.status == 204)) {
                 response.messageOrDefault(if (method == "POST") "신고하지 못했습니다." else "신고를 취소하지 못했습니다.")
             }
@@ -155,13 +152,42 @@ class HttpShuttleReportSource(
         }
     }
 
-    private suspend fun headers(): Map<String, String> {
-        val reporterToken = reporterTokenProvider()
-        require(reporterToken.matches(Regex("[A-Za-z0-9_-]{20,128}")))
+    private fun headers(token: String): Map<String, String> {
         return mapOf(
             "Accept" to "application/json",
-            "X-Dima-Reporter" to reporterToken,
+            "X-Dima-Reporter" to token,
         )
+    }
+
+    private suspend fun executeWithReporterToken(
+        request: (String) -> ShuttleReportHttpRequest,
+    ): ShuttleReportHttpResponse {
+        val firstToken = getOrIssueReporterToken()
+        val firstResponse = transport.execute(request(firstToken))
+        if (firstResponse.status != 401) return firstResponse
+        reporterTokenMutex.withLock {
+            if (reporterToken?.value == firstToken) reporterToken = null
+        }
+        return transport.execute(request(getOrIssueReporterToken()))
+    }
+
+    private suspend fun getOrIssueReporterToken(): String = reporterTokenMutex.withLock {
+        val now = Instant.now().epochSecond
+        reporterToken?.takeIf { it.expiresAt > now + TOKEN_EXPIRY_SKEW_SECONDS }?.value?.let { return@withLock it }
+        val response = transport.execute(
+            ShuttleReportHttpRequest(
+                method = "POST",
+                url = reporterTokenEndpoint,
+                headers = mapOf("Accept" to "application/json"),
+            ),
+        )
+        require(response.status == 201) { response.messageOrDefault("신고 신원을 발급하지 못했습니다.") }
+        val payload = json.parseToJsonElement(response.body).jsonObject
+        val value = payload.getValue("token").jsonPrimitive.content
+        val expiresAt = payload.getValue("expiresAt").jsonPrimitive.content.toLong()
+        require(value.matches(Regex("[A-Za-z0-9_.-]{20,256}"))) { "신고 신원 형식이 올바르지 않습니다." }
+        require(expiresAt > now + TOKEN_EXPIRY_SKEW_SECONDS) { "신고 신원이 이미 만료되었습니다." }
+        IssuedReporterToken(value, expiresAt).also { reporterToken = it }.value
     }
 
     private fun ShuttleReportHttpResponse.messageOrDefault(default: String): String = runCatching {
@@ -169,6 +195,12 @@ class HttpShuttleReportSource(
     }.getOrNull()?.takeIf(String::isNotBlank) ?: default
 
     private fun encode(value: String): String = URLEncoder.encode(value, Charsets.UTF_8.name())
+
+    private data class IssuedReporterToken(val value: String, val expiresAt: Long)
+
+    private companion object {
+        const val TOKEN_EXPIRY_SKEW_SECONDS = 30L
+    }
 }
 
 class UrlConnectionShuttleReportTransport : ShuttleReportTransport {

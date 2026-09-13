@@ -31,7 +31,7 @@ The emulator numbers are comparative development evidence, not a claim about phy
 - Current post-D-035 size: 48,676,281 bytes (46.42 MiB); the optimized build remains substantially smaller than debug.
 - Current SHA-256: `693CD96CE71BCDEE341254CC530691B9FECA11533D7915B96FF97A4D20F8C816`
 - Both APKs use signing certificate SHA-256 `A8FBB7A36627A4E986241EB22E67E71E8255D616B67AEF6EBEB3215CEA2B5136`.
-- `adb install -r` succeeded on exact physical serial `test-device-private` (`SM-S918N`, API 36). Cold launch reported 324 ms; the process remained alive while all five tabs were opened.
+- `adb install -r` succeeded on exact physical serial `test-device-galaxy-api36-a` (`SM-S918N`, API 36). Cold launch reported 324 ms; the process remained alive while all five tabs were opened.
 - Existing course, shuttle, validated meal, notices, and effective zone were visible after the replace install. No immediate DIMA Now FATAL/ANR was found.
 - Current AlarmManager state contained one shared `UPDATE_ALL_WIDGETS_MINUTE` alarm and the independent next guidance boundary. Legacy per-provider minute alarms appeared only in historical statistics, not the active alarm list.
 - OEM-controlled Now Bar/AOD rendering, physical geofence transitions, and one-day battery behavior were not re-certified by this optimization smoke.

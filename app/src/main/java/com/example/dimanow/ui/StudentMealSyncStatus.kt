@@ -14,6 +14,7 @@ import java.time.LocalDate
 
 @Composable
 internal fun StudentMealSyncStatus(meal: MealData, today: LocalDate) {
+    if (meal.hasCurrentStudentWeek(today) && meal.error == null) return
     Column(Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
         if (!meal.hasCurrentStudentWeek(today)) {
             Text("이번 주 식단 게시를 기다리고 있어요", style = MaterialTheme.typography.bodyMedium)
@@ -21,10 +22,5 @@ internal fun StudentMealSyncStatus(meal: MealData, today: LocalDate) {
         if (meal.error != null) {
             Text("식단을 확인하지 못했어요. 잠시 후 다시 확인할게요.", style = MaterialTheme.typography.bodySmall)
         }
-        Text(
-            "마지막 확인: ${meal.lastAttempt?.let(::formatSourceSuccessTime) ?: "아직 확인하지 않았어요"}",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
     }
 }

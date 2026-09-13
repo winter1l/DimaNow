@@ -10,13 +10,35 @@ import com.example.dimanow.sync.DormitoryMealSubmissionStatus
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.StandardCopyOption
+import java.net.URI
 import java.security.MessageDigest
 import java.time.Instant
 import java.time.LocalDate
 import java.time.DayOfWeek
+import java.time.ZoneId
 import java.time.temporal.TemporalAdjusters
+import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+
+@Serializable
+internal data class DormitoryMealReviewCandidate(
+    val schemaVersion: Int = 1,
+    val submissionId: String,
+    val sourceImageUrl: String,
+    val sourceImageSha256: String,
+    val createdAt: String,
+    val payload: DormitoryMealPayload,
+)
+
+@Serializable
+internal data class DormitoryMealApprovalRecord(
+    val schemaVersion: Int = 1,
+    val submissionId: String,
+    val candidateSha256: String,
+    val approvedBy: String,
+    val approvedAt: String,
+)
 
 class StaticDataPublisher(private val outputRoot: Path) {
     private val json = Json { prettyPrint = true }
@@ -44,7 +66,98 @@ class StaticDataPublisher(private val outputRoot: Path) {
             payload.days.all { it.menuLines.size >= 2 && it.menuLines.all(String::isNotBlank) }
     }.getOrDefault(false)
 
-    fun publishDormitoryMeal(payload: DormitoryMealPayload, revision: Long, publishedAt: Instant) {
+    fun stageDormitoryMealReviewCandidate(
+        payload: DormitoryMealPayload,
+        submissionId: String,
+        sourceImageSha256: String,
+        createdAt: Instant,
+    ): String {
+        requireValidSubmissionId(submissionId)
+        require(sourceImageSha256.matches(SHA256_PATTERN)) { "잘못된 원본 이미지 해시입니다." }
+        require(payload.schemaVersion == 1) { "지원하지 않는 기숙사 식단 후보입니다." }
+        requireValidDormitorySourceImageUrl(payload.sourceImageUrl, submissionId)
+        val candidate = DormitoryMealReviewCandidate(
+            submissionId = submissionId,
+            sourceImageUrl = payload.sourceImageUrl,
+            sourceImageSha256 = sourceImageSha256,
+            createdAt = createdAt.toString(),
+            payload = payload,
+        )
+        val directory = outputRoot.resolve(DORMITORY_REVIEW_CANDIDATE_DIRECTORY)
+        Files.createDirectories(directory)
+        val target = directory.resolve("$submissionId.json")
+        if (Files.exists(target)) {
+            val existingBytes = Files.readAllBytes(target)
+            val existing = runCatching {
+                json.decodeFromString<DormitoryMealReviewCandidate>(existingBytes.decodeToString())
+            }.getOrElse { throw IllegalArgumentException("기존 기숙사 식단 후보를 확인할 수 없습니다.", it) }
+            require(
+                existing.submissionId == candidate.submissionId &&
+                    existing.sourceImageUrl == candidate.sourceImageUrl &&
+                    existing.sourceImageSha256 == candidate.sourceImageSha256 &&
+                    existing.payload == candidate.payload,
+            ) { "같은 제출 ID의 기숙사 식단 후보를 바꿀 수 없습니다." }
+            return existingBytes.sha256()
+        }
+        val bytes = json.encodeToString(candidate).toByteArray()
+        writeAtomically(target, bytes)
+        return bytes.sha256()
+    }
+
+    fun approveDormitoryMeal(
+        submissionId: String,
+        expectedCandidateSha256: String,
+        approvedBy: String,
+        approvedAt: Instant,
+    ): DormitoryMealSubmissionStatus {
+        requireValidSubmissionId(submissionId)
+        require(expectedCandidateSha256.matches(SHA256_PATTERN)) { "잘못된 기숙사 식단 후보 해시입니다." }
+        require(approvedBy.matches(GITHUB_ACTOR_PATTERN)) { "인증된 GitHub 운영자 식별자가 필요합니다." }
+        val candidatePath = outputRoot.resolve(DORMITORY_REVIEW_CANDIDATE_DIRECTORY).resolve("$submissionId.json")
+        require(Files.isRegularFile(candidatePath)) { "승인할 기숙사 식단 후보가 없습니다." }
+        val candidateBytes = Files.readAllBytes(candidatePath)
+        require(candidateBytes.sha256() == expectedCandidateSha256) { "기숙사 식단 후보 해시가 일치하지 않습니다." }
+        val candidate = runCatching {
+            json.decodeFromString<DormitoryMealReviewCandidate>(candidateBytes.decodeToString())
+        }.getOrElse { throw IllegalArgumentException("기숙사 식단 후보를 읽을 수 없습니다.", it) }
+        require(candidate.schemaVersion == 1 && candidate.submissionId == submissionId) {
+            "기숙사 식단 후보의 제출 ID가 일치하지 않습니다."
+        }
+        require(candidate.sourceImageSha256.matches(SHA256_PATTERN)) { "기숙사 식단 후보의 원본 해시가 잘못됐습니다." }
+        require(candidate.sourceImageUrl == candidate.payload.sourceImageUrl) {
+            "기숙사 식단 후보의 원본 주소가 일치하지 않습니다."
+        }
+        requireValidDormitorySourceImageUrl(candidate.sourceImageUrl, submissionId)
+        val candidateWeekStart = runCatching { LocalDate.parse(candidate.payload.weekStart) }.getOrNull()
+        val approvalDate = approvedAt.atZone(KST).toLocalDate()
+        require(candidateWeekStart == targetDormitoryWeekStart(approvalDate)) {
+            "현재 승인 대상 주차의 기숙사 식단 후보가 아닙니다."
+        }
+        require(runCatching { LocalDate.parse(candidate.payload.weekEnd) }.getOrNull() == candidateWeekStart.plusDays(6)) {
+            "기숙사 식단 후보의 주차 범위가 올바르지 않습니다."
+        }
+        val approval = DormitoryMealApprovalRecord(
+            submissionId = submissionId,
+            candidateSha256 = expectedCandidateSha256,
+            approvedBy = approvedBy,
+            approvedAt = approvedAt.toString(),
+        )
+        val approvalDirectory = outputRoot.resolve(DORMITORY_REVIEW_APPROVAL_DIRECTORY)
+        Files.createDirectories(approvalDirectory)
+        writeAtomically(
+            approvalDirectory.resolve("$submissionId.json"),
+            json.encodeToString(approval).toByteArray(),
+        )
+        publishDormitoryMeal(candidate.payload, nextRevision("dorm_meal"), approvedAt)
+        return DormitoryMealSubmissionStatus(
+            submissionId = submissionId,
+            state = "PUBLISHED",
+            message = null,
+            updatedAt = approvedAt.toString(),
+        ).also(::writeDormitorySubmissionStatus)
+    }
+
+    private fun publishDormitoryMeal(payload: DormitoryMealPayload, revision: Long, publishedAt: Instant) {
         publish(
             "dorm_meal",
             "dorm-meal",
@@ -56,14 +169,18 @@ class StaticDataPublisher(private val outputRoot: Path) {
     }
 
     fun publishDormitorySubmissionStatus(status: DormitoryMealSubmissionStatus) {
-        require(status.submissionId.matches(Regex("[A-Za-z0-9_-]{1,64}"))) { "잘못된 제출 ID입니다." }
+        require(status.state in setOf("PENDING_REVIEW", "DUPLICATE", "REJECTED", "ERROR")) {
+            "승인되지 않은 제출 상태입니다."
+        }
+        writeDormitorySubmissionStatus(status)
+    }
+
+    private fun writeDormitorySubmissionStatus(status: DormitoryMealSubmissionStatus) {
+        requireValidSubmissionId(status.submissionId)
         val directory = outputRoot.resolve("data/v1/dorm-submissions")
         Files.createDirectories(directory)
         val target = directory.resolve("${status.submissionId}.json")
-        val temporary = directory.resolve("${status.submissionId}.json.tmp")
-        Files.writeString(temporary, json.encodeToString(status))
-        runCatching { Files.move(temporary, target, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE) }
-            .getOrElse { Files.move(temporary, target, StandardCopyOption.REPLACE_EXISTING) }
+        writeAtomically(target, json.encodeToString(status).toByteArray())
     }
 
     fun hasCurrentDormitoryMeal(today: LocalDate): Boolean {
@@ -71,11 +188,7 @@ class StaticDataPublisher(private val outputRoot: Path) {
         val payloadPath = outputRoot.resolve("data/v1").resolve(descriptor.url)
         if (!Files.exists(payloadPath)) return false
         val payload = runCatching { json.decodeFromString<DormitoryMealPayload>(Files.readString(payloadPath)) }.getOrNull() ?: return false
-        val targetWeekStart = when (today.dayOfWeek) {
-            DayOfWeek.SATURDAY, DayOfWeek.SUNDAY -> today.with(TemporalAdjusters.next(DayOfWeek.MONDAY))
-            else -> today.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY))
-        }
-        return LocalDate.parse(payload.weekStart) == targetWeekStart
+        return LocalDate.parse(payload.weekStart) == targetDormitoryWeekStart(today)
     }
 
     fun publishNotices(payload: NoticePayload, revision: Long, publishedAt: Instant) {
@@ -151,8 +264,43 @@ class StaticDataPublisher(private val outputRoot: Path) {
         )
     }
 
+    private fun writeAtomically(target: Path, bytes: ByteArray) {
+        val temporary = target.resolveSibling("${target.fileName}.tmp")
+        Files.write(temporary, bytes)
+        runCatching { Files.move(temporary, target, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE) }
+            .getOrElse { Files.move(temporary, target, StandardCopyOption.REPLACE_EXISTING) }
+    }
+
+    private fun requireValidSubmissionId(submissionId: String) {
+        require(submissionId.matches(SUBMISSION_ID_PATTERN)) { "잘못된 제출 ID입니다." }
+    }
+
+    private fun targetDormitoryWeekStart(today: LocalDate): LocalDate = when (today.dayOfWeek) {
+        DayOfWeek.SATURDAY, DayOfWeek.SUNDAY -> today.with(TemporalAdjusters.next(DayOfWeek.MONDAY))
+        else -> today.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY))
+    }
+
+    private fun requireValidDormitorySourceImageUrl(value: String, submissionId: String) {
+        val valid = runCatching {
+            val uri = URI.create(value)
+            uri.scheme.equals("https", ignoreCase = true) &&
+                uri.host.equals("raw.githubusercontent.com", ignoreCase = true) &&
+                uri.userInfo == null && uri.port == -1 && uri.rawQuery == null && uri.rawFragment == null &&
+                uri.rawPath.matches(
+                    Regex("^/winter1l/DimaNow/[0-9a-f]{40}/dorm-submissions/${Regex.escape(submissionId)}\\.(?:jpg|jpeg|png|webp)$"),
+                )
+        }.getOrDefault(false)
+        require(valid) { "제출 이미지의 불변 GitHub 원본 주소가 올바르지 않습니다." }
+    }
+
     private companion object {
         const val DORMITORY_SOURCE_URL = "https://github.com/winter1l/DimaNow/tree/dorm-submissions/dorm-submissions"
+        const val DORMITORY_REVIEW_CANDIDATE_DIRECTORY = "data/v1/dorm-review-candidates"
+        const val DORMITORY_REVIEW_APPROVAL_DIRECTORY = "data/v1/dorm-review-approvals"
+        val SUBMISSION_ID_PATTERN = Regex("[A-Za-z0-9_-]{1,64}")
+        val SHA256_PATTERN = Regex("[0-9a-f]{64}")
+        val GITHUB_ACTOR_PATTERN = Regex("[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?")
+        val KST: ZoneId = ZoneId.of("Asia/Seoul")
     }
 }
 

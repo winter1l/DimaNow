@@ -71,7 +71,10 @@ data class DormitoryMealSection(
     val name: String,
     val hours: String?,
     val menuLines: List<String>,
-)
+) {
+    fun serviceStatusAt(date: LocalDate, now: ZonedDateTime): MealServiceStatus =
+        mealServiceStatus(date, hours, now)
+}
 
 data class DormitoryMealDay(
     val date: LocalDate,
@@ -89,6 +92,32 @@ data class DormitoryMealData(
     val serverPublishedAt: Instant? = null,
     val serverState: String? = null,
 ) {
+    fun homeServiceAt(now: ZonedDateTime): DormitoryMealDay? {
+        data class Service(val day: DormitoryMealDay, val opening: java.time.LocalDateTime, val state: MealServiceState)
+
+        val services = days.flatMap { day ->
+            // Untimed corners belong to the preceding timed meal, just as in the full meal view.
+            val starts = day.sections.indices.filter { !day.sections[it].hours.isNullOrBlank() }
+            starts.mapIndexedNotNull { index, start ->
+                val section = day.sections[start]
+                val state = section.serviceStatusAt(day.date, now).state
+                if (state != MealServiceState.OPEN && state != MealServiceState.BEFORE_OPEN) return@mapIndexedNotNull null
+                val opening = LocalTime.parse(MEAL_HOURS_PATTERN.matchEntire(section.hours!!.trim())!!.groupValues[1])
+                Service(
+                    day.copy(sections = day.sections.subList(start, starts.getOrNull(index + 1) ?: day.sections.size)),
+                    day.date.atTime(opening),
+                    state,
+                )
+            }
+        }
+        val open = services.filter { it.state == MealServiceState.OPEN }
+        val selected = open.ifEmpty {
+            val nextOpening = services.minOfOrNull { it.opening } ?: return null
+            services.filter { it.opening == nextOpening }
+        }.sortedBy { it.opening }
+        return selected.first().day.copy(sections = selected.flatMap { it.day.sections })
+    }
+
     fun hasCurrentWeek(today: LocalDate): Boolean {
         val weekStart = dormitoryMealWeekStart(today)
         return days.any { it.date in weekStart..weekStart.plusDays(6) }
@@ -118,6 +147,26 @@ object MealRefreshClock {
 }
 
 private val MEAL_HOURS_PATTERN = Regex("(\\d{2}:\\d{2})\\s*[~～-]\\s*(\\d{2}:\\d{2})")
+
+fun mealServiceStatus(date: LocalDate, hours: String?, now: ZonedDateTime): MealServiceStatus {
+    val campusNow = now.withZoneSameInstant(MinuteTicker.CAMPUS_ZONE)
+    val match = hours?.trim()?.let(MEAL_HOURS_PATTERN::matchEntire)
+    val times = match?.let {
+        runCatching { LocalTime.parse(it.groupValues[1]) to LocalTime.parse(it.groupValues[2]) }.getOrNull()
+    }
+    if (times == null || !times.first.isBefore(times.second)) {
+        return MealServiceStatus(MealServiceState.UNKNOWN_HOURS, hours.orEmpty())
+    }
+    val (start, end) = times
+    return when {
+        campusNow.toLocalDate().isBefore(date) ||
+            (campusNow.toLocalDate() == date && campusNow.toLocalTime().isBefore(start)) ->
+            MealServiceStatus(MealServiceState.BEFORE_OPEN, "운영 전 · ${start}부터")
+        campusNow.toLocalDate().isAfter(date) || !campusNow.toLocalTime().isBefore(end) ->
+            MealServiceStatus(MealServiceState.CLOSED, "운영 종료")
+        else -> MealServiceStatus(MealServiceState.OPEN, "운영 중 · ${end}까지")
+    }
+}
 
 fun mealServiceStatus(day: MealDay?, time: LocalTime): MealServiceStatus {
     day ?: return MealServiceStatus(MealServiceState.NO_MENU, "오늘은 제공 식단이 없습니다")

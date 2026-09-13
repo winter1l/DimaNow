@@ -36,12 +36,13 @@ class DormitoryMealSubmissionProcessor(
                 } catch (error: DormitoryMealWeekMismatchException) {
                     return publishStatus(submissionId, "REJECTED", error.message)
                 }
-                publisher.publishDormitoryMeal(
+                publisher.stageDormitoryMealReviewCandidate(
                     payload = payload,
-                    revision = publisher.nextRevision("dorm_meal"),
-                    publishedAt = clock.instant(),
+                    submissionId = submissionId,
+                    sourceImageSha256 = imageBytes.sha256(),
+                    createdAt = clock.instant(),
                 )
-                publishStatus(submissionId, "PUBLISHED", null)
+                publishStatus(submissionId, "PENDING_REVIEW", "운영자 확인을 기다리고 있어요")
             }
         }
     }

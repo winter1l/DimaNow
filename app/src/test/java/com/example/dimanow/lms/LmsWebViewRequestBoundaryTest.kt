@@ -34,14 +34,14 @@ class LmsWebViewRequestBoundaryTest {
     }
 
     @Test
-    fun loginScreenAllowsOnlyTheExistingNarrowSsoBridgeException() {
+    fun loginScreenBlocksTheLegacyCleartextSsoBridge() {
         assertFalse(
             shouldBlockLmsWebResource(
                 "https://portal.dima.ac.kr/assets/login.js",
                 loginFlow = true,
             ),
         )
-        assertFalse(
+        assertTrue(
             shouldBlockLmsWebResource(
                 "http://sso.dima.ac.kr:8080/sso/pmi-sso.jsp?ticket=fixture",
                 loginFlow = true,

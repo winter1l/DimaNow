@@ -19,16 +19,24 @@ class DormitoryMealSubmissionProcessorTest {
     fun `현재 주가 이미 게시됐으면 Gemini 호출 없이 중복 상태를 게시한다`() {
         val output = Files.createTempDirectory("dima-dorm-process-dedupe")
         val publisher = StaticDataPublisher(output)
-        publisher.publishDormitoryMeal(
-            DormitoryMealPayload(
+        val seedPayload = DormitoryMealPayload(
                 weekStart = "2026-08-24",
                 weekEnd = "2026-08-30",
-                sourceImageUrl = "https://raw.githubusercontent.com/winter1l/DimaNow/example.jpg",
+                sourceImageUrl = "https://raw.githubusercontent.com/winter1l/DimaNow/${"0".repeat(40)}/dorm-submissions/seed-current-week.jpg",
                 days = listOf(
                     DormitoryMealDayPayload("2026-08-24", listOf(DormitoryMealSectionPayload("조식", null, listOf("떡국")))),
                 ),
-            ),
-            1,
+            )
+        val seedHash = publisher.stageDormitoryMealReviewCandidate(
+            seedPayload,
+            "seed-current-week",
+            "a".repeat(64),
+            Instant.parse("2026-08-23T23:59:00Z"),
+        )
+        publisher.approveDormitoryMeal(
+            "seed-current-week",
+            seedHash,
+            "test-reviewer",
             Instant.parse("2026-08-24T00:00:00Z"),
         )
         val image = Files.createTempFile("dorm", ".jpg").also { Files.write(it, byteArrayOf(1, 2, 3)) }
@@ -91,7 +99,7 @@ class DormitoryMealSubmissionProcessorTest {
     }
 
     @Test
-    fun `검증과 OCR을 통과한 기숙사 식단을 현재 주 payload로 게시한다`() {
+    fun `검증과 OCR을 통과한 기숙사 식단은 운영자 검토 후보로만 저장한다`() {
         val output = Files.createTempDirectory("dima-dorm-process-publish")
         val image = Files.createTempFile("dorm", ".jpg").also { Files.write(it, byteArrayOf(7, 8, 9)) }
         var call = 0
@@ -121,14 +129,24 @@ class DormitoryMealSubmissionProcessorTest {
                 publisher = StaticDataPublisher(output),
                 geminiClient = GeminiDormitoryMealClient("test", "http://127.0.0.1:${server.address.port}"),
                 clock = Clock.fixed(Instant.parse("2026-08-27T03:00:00Z"), ZoneId.of("Asia/Seoul")),
-            ).process(image, "image/jpeg", "https://raw.githubusercontent.com/winter1l/DimaNow/example.jpg", "submission-3")
+            ).process(
+                image,
+                "image/jpeg",
+                "https://raw.githubusercontent.com/winter1l/DimaNow/${"0".repeat(40)}/dorm-submissions/submission-3.jpg",
+                "submission-3",
+            )
 
-            assertEquals("PUBLISHED", result.state)
+            assertEquals("PENDING_REVIEW", result.state)
             assertEquals(2, call)
-            val descriptor = Json.decodeFromString<com.example.dimanow.sync.CampusDataManifest>(
-                Files.readString(output.resolve("data/v1/manifest.json")),
-            ).datasets.getValue("dorm_meal")
-            assertEquals("READY", descriptor.state)
+            assertEquals(false, Files.exists(output.resolve("data/v1/manifest.json")))
+            assertEquals(
+                true,
+                Files.exists(output.resolve("data/v1/dorm-review-candidates/submission-3.json")),
+            )
+            val status = Json.decodeFromString<DormitoryMealSubmissionStatus>(
+                Files.readString(output.resolve("data/v1/dorm-submissions/submission-3.json")),
+            )
+            assertEquals("PENDING_REVIEW", status.state)
         } finally {
             server.stop(0)
         }

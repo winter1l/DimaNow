@@ -12,12 +12,7 @@ object LmsUrlPolicy {
             uri.port in setOf(-1, 443)
     }.getOrDefault(false)
 
-    fun isAllowedLoginNavigation(value: String): Boolean = isAllowed(value) || runCatching {
-        val uri = URI.create(value)
-        uri.scheme == "http" && uri.host == "sso.dima.ac.kr" &&
-            uri.path in setOf("/sso/pmi-sso.jsp", "/sso/pmi-sso2.jsp") &&
-            uri.userInfo == null && uri.port == 8080
-    }.getOrDefault(false)
+    fun isAllowedLoginNavigation(value: String): Boolean = isAllowed(value)
 
     fun requireAllowed(value: String): URI = URI.create(value).also {
         require(isAllowed(value)) { "허용되지 않은 LMS 주소입니다" }

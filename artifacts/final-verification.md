@@ -23,8 +23,8 @@
 
 ## Physical Galaxy verification
 
-- Target: Samsung SM-S918N, serial `test-device-private`, Android 16/API 36, authorized.
-- Install: final APK installed with explicit `adb -s test-device-private install -r`; existing app data was retained.
+- Target: Samsung SM-S918N, serial `test-device-galaxy-api36-a`, Android 16/API 36, authorized.
+- Install: final APK installed with explicit `adb -s test-device-galaxy-api36-a install -r`; existing app data was retained.
 - Read-only Room check after migration:
   - all three rows contain the exact V2 centers, polygon versions, wake radii, and 5/6/9 vertices;
   - the user's 5 current courses, 605 raw shuttle rows, and 5 validated meal days remained present.

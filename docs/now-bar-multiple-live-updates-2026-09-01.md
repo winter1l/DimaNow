@@ -8,7 +8,7 @@ DIMA Now가 서로 다른 알림 ID로 적격 Live Update 두 개를 동시에 �
 
 ## 시험 환경
 
-- 기기: Samsung Galaxy SM-S918N, ADB serial `test-device-private`
+- 기기: Samsung Galaxy SM-S918N, ADB serial `test-device-galaxy-api36-a`
 - Android API: 36
 - 빌드: `BP4A.251205.006.S918NKSS8FZG1`
 - Samsung One UI 속성 원시값: `ro.build.version.oneui=80500`

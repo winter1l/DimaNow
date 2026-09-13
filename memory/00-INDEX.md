@@ -12,6 +12,7 @@ Purpose: durable project context that survives session and context changes.
 | `PRODUCT-TRUTH.md` | Evidence-backed product state | Evidence and checked date required |
 | `goal/dima-now-android.md` | Goal map, skeleton, and done checks | Update status without erasing superseded cuts |
 | `CHECKPOINT.md` | Fast resume point and next live-device action | Replace when the project state materially changes |
+| `checkpoints/` | Append-only archive of superseded checkpoints | Add a timestamped copy before replacing `CHECKPOINT.md` |
 
 ## Operating principles
 

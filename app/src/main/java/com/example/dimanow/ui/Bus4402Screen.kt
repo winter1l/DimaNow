@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.CardDefaults
@@ -65,6 +66,12 @@ internal fun Bus4402ScheduleContent(
                 schedule.departures(serviceType, stop.stopNumber)
             }
             val upcoming = departures.filterNot { it.time.isBefore(now.toLocalTime()) }.take(2)
+            val firstUpcomingIndex = departures.indexOfFirst { !it.time.isBefore(now.toLocalTime()) }
+            // Match the campus timetable: open near now, but retain the user's manual scroll.
+            val timetableState = remember(now.toLocalDate(), serviceType, stop.stopNumber) {
+                val target = firstUpcomingIndex.takeIf { it >= 0 } ?: departures.lastIndex
+                LazyListState(firstVisibleItemIndex = (target - 1).coerceAtLeast(0))
+            }
             ElevatedCard(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(20.dp),
@@ -113,7 +120,11 @@ internal fun Bus4402ScheduleContent(
                                     color = if (index == 0) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.secondaryContainer,
                                 ) {
                                     Text(
-                                        text = if (minutes == 0L) "강남행 · 곧 출발" else "강남행 · ${minutes}분 후",
+                                        text = when {
+                                            minutes > 60 -> "강남행 · ${departure.time.format(TIME)} 출발" + if (departure.estimated) " 예정" else ""
+                                            minutes == 0L -> "강남행 · 곧 출발"
+                                            else -> "강남행 · ${minutes}분 후"
+                                        },
                                         color = if (index == 0) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSecondaryContainer,
                                         style = MaterialTheme.typography.labelLarge,
                                         fontWeight = FontWeight.Bold,
@@ -124,10 +135,13 @@ internal fun Bus4402ScheduleContent(
                         }
                     }
 
-                    Text("전체 시간표", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text("전체 시간표 · 현재 ${now.format(TIME)}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    LazyRow(state = timetableState, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         itemsIndexed(departures, key = { _, item -> item.time.toSecondOfDay() }) { index, departure ->
+                            val isPast = departure.time.isBefore(now.toLocalTime())
+                            val isNext = index == firstUpcomingIndex
                             val label = buildString {
+                                if (isNext) append("다음 · ")
                                 append(departure.time.format(TIME))
                                 when (index) {
                                     0 -> append(" (첫차)")
@@ -135,12 +149,20 @@ internal fun Bus4402ScheduleContent(
                                 }
                                 if (departure.estimated) append(" · 예정")
                             }
-                            Surface(shape = RoundedCornerShape(8.dp), color = MaterialTheme.colorScheme.surfaceContainerHigh) {
+                            Surface(
+                                shape = RoundedCornerShape(8.dp),
+                                color = if (isNext) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceContainerHigh,
+                                contentColor = when {
+                                    isNext -> MaterialTheme.colorScheme.onPrimary
+                                    isPast -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.45f)
+                                    else -> MaterialTheme.colorScheme.onSurface
+                                },
+                            ) {
                                 Text(
                                     label,
                                     modifier = Modifier.padding(horizontal = 9.dp, vertical = 6.dp),
                                     style = MaterialTheme.typography.bodySmall,
-                                    fontWeight = if (index == 0 || index == departures.lastIndex) FontWeight.Bold else FontWeight.Normal,
+                                    fontWeight = if (isNext || index == 0 || index == departures.lastIndex) FontWeight.Bold else FontWeight.Normal,
                                 )
                             }
                         }

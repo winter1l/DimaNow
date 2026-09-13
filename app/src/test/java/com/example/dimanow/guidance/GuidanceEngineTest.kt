@@ -18,6 +18,36 @@ import com.example.dimanow.location.NearbyTransitStop
 
 class GuidanceEngineTest {
     @Test
+    fun `class companion shuttle uses departure time for a distant following vehicle`() {
+        val now = ZonedDateTime.parse("2026-09-14T09:00:30+09:00[Asia/Seoul]")
+        val departures = listOf(LocalTime.of(9, 10), LocalTime.of(11, 0)).map {
+            ShuttleDeparture("A", "one-room", "TO_MAIN", DayOfWeek.MONDAY, it, CampusZoneId.ONE_ROOM, CampusZoneId.MAIN)
+        }
+        val snapshot = GuidanceEngine().snapshot(now, now.toLocalDate(), now.toLocalDate(),
+            listOf(Course(DayOfWeek.MONDAY, LocalTime.of(10, 0), LocalTime.of(11, 50), "실습", "본관", "교수", CampusZoneId.MAIN)),
+            emptySet(), CampusZoneId.ONE_ROOM, true, departures)
+        assertEquals("원룸촌  10분, 11:00 출발", snapshot.shuttleLines.single().text)
+        assertEquals(GuidancePhase.BEFORE_CLASS, snapshot.phase)
+    }
+
+    @Test
+    fun `a confirmed 4402 stop never falls back to class guidance after the last bus`() {
+        val snapshot = GuidanceEngine().snapshot(
+            now = ZonedDateTime.of(2026, 9, 4, 22, 10, 0, 0, ZoneId.of("Asia/Seoul")),
+            termStart = LocalDate.of(2026, 8, 24),
+            termEnd = LocalDate.of(2026, 12, 18),
+            courses = listOf(Course(DayOfWeek.FRIDAY, LocalTime.of(22, 30), LocalTime.of(23, 30), "야간 실습", "본관", "교수", CampusZoneId.MAIN)),
+            noClassDates = emptySet(),
+            resolvedZone = CampusZoneId.ONE_ROOM,
+            automaticClassGuidance = true,
+            nearbyTransitStop = NearbyTransitStop("34710", "대학 셔틀 정류장"),
+        )
+        assertEquals(GuidancePhase.NONE, snapshot.phase)
+        assertNull(snapshot.classContent)
+        assertEquals(emptyList<Any>(), snapshot.shuttleLines)
+    }
+
+    @Test
     fun `nearby 4402 guidance takes priority over an upcoming class`() {
         val now = ZonedDateTime.of(2026, 9, 4, 8, 42, 0, 0, ZoneId.of("Asia/Seoul"))
         val snapshot = GuidanceEngine().snapshot(
@@ -34,7 +64,7 @@ class GuidanceEngineTest {
         )
 
         assertEquals(com.example.dimanow.domain.GuidanceKind.BUS_4402, snapshot.kind)
-        assertEquals(listOf("대학 셔틀 정류장  8분, 48분"), snapshot.shuttleLines.map { it.text })
+        assertEquals(listOf("4402 · 08:50 출발"), snapshot.shuttleLines.map { it.text })
         assertEquals("강남행", snapshot.shuttleLines.single().destination)
         assertEquals(8L, snapshot.shuttleLines.single().minutes)
     }
@@ -67,9 +97,9 @@ class GuidanceEngineTest {
         )
 
         assertEquals(0L, atDeparture.shuttleLines.single().minutes)
-        assertEquals("대학 셔틀 정류장  곧, 40분", atDeparture.shuttleLines.single().text)
+        assertEquals("4402 · 08:50 출발", atDeparture.shuttleLines.single().text)
         assertEquals(40L, afterDeparture.shuttleLines.single().minutes)
-        assertEquals("대학 셔틀 정류장  40분, 80분", afterDeparture.shuttleLines.single().text)
+        assertEquals("4402 · 09:30 출발", afterDeparture.shuttleLines.single().text)
     }
 
     @Test

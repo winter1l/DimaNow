@@ -139,6 +139,14 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.lerp
+import androidx.compose.material3.LocalContentColor
+import androidx.compose.ui.semantics.stateDescription
+import com.example.dimanow.meal.MealServiceState
+import com.example.dimanow.meal.MealServiceStatus
+import com.example.dimanow.meal.hasCurrentStudentWeek
+import com.example.dimanow.ui.meal.DormitoryMealBlock
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
@@ -726,7 +734,7 @@ internal fun DashboardScreen(
     }
 
     val todayMeal = meal.days.firstOrNull { it.date == now.toLocalDate() }
-    val todayDormitoryMeal = dormitoryMeal.days.firstOrNull { it.date == now.toLocalDate() }
+    val homeDormitoryMeal = dormitoryMeal.homeServiceAt(now)
     val useDormitoryMeal = zone == CampusZoneId.YEIN
     val mealStatusNow = meal.serviceStatusAt(now)
     val originName = DisplayVocabulary.originName(zone)
@@ -1020,7 +1028,11 @@ internal fun DashboardScreen(
                                                     ) {
                                                         AnimatedCountText(
                                                             text = buildString {
-                                                                append(if (minutesLeft <= 0) "곧 출발" else "${minutesLeft}분 후")
+                                                                append(when {
+                                                                    minutesLeft > 60 -> "다음 출발"
+                                                                    minutesLeft <= 0 -> "곧 출발"
+                                                                    else -> "${minutesLeft}분 후"
+                                                                })
                                                                 serviceLabel?.let { append(" · $it") }
                                                                 boardingStopLabel?.let { append(" · $it") }
                                                             },
@@ -1135,20 +1147,23 @@ internal fun DashboardScreen(
                 }
 
                 when {
-                    useDormitoryMeal && todayDormitoryMeal != null && todayDormitoryMeal.sections.isNotEmpty() -> {
-                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                            todayDormitoryMeal.sections.forEach { section ->
-                                Text(
-                                    text = "${section.name} · ${section.menuLines.joinToString(" · ")}",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    fontWeight = FontWeight.Medium,
-                                    maxLines = 2,
-                                )
+                    useDormitoryMeal && homeDormitoryMeal != null -> {
+                        if (homeDormitoryMeal.date != now.toLocalDate()) {
+                            Text(
+                                text = "${homeDormitoryMeal.date.monthValue}월 ${homeDormitoryMeal.date.dayOfMonth}일 · 다음 식단",
+                                style = MaterialTheme.typography.labelLarge,
+                                color = MaterialTheme.colorScheme.primary,
+                            )
+                        }
+                        groupDormitorySections(homeDormitoryMeal.sections).forEach { block ->
+                            val status = mealServiceStatus(homeDormitoryMeal.date, block.hours, now)
+                            MealPeriodCard(status = status) {
+                                DormitoryMealPeriodContent(block, status)
                             }
                         }
                     }
                     useDormitoryMeal -> {
-                        Text("오늘 등록된 식단 정보가 없습니다", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text("예정된 식단 정보가 없습니다", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     todayMeal != null && todayMeal.menuLines.isNotEmpty() -> {
                         Text(
@@ -1960,6 +1975,10 @@ fun ShuttleScreen(
 
         if (selectedDay == now.dayOfWeek && reportSource != null && shuttle.serverRevision != null && reportableEvent != null) {
             val event = reportableEvent
+            val reportDepartureLabel = listOfNotNull(
+                event.stopCall.expectedTime.format(TIME),
+                event.stopCall.destinationZone?.let(DisplayVocabulary::destinationName),
+            ).joinToString(" ")
             val reportedByYou = event.stopCall.id in reportState.reportedByThisInstall
             val affectedCount = guidanceEngine.affectedReportCount(event.run, event.stopCall, reportState.reports)
             OutlinedCard(
@@ -1973,7 +1992,7 @@ fun ShuttleScreen(
                 ) {
                     Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         Text(
-                            "${event.stopCall.expectedTime.format(TIME)} 셔틀이 오지 않나요?",
+                            "$reportDepartureLabel 셔틀이 오지 않나요?",
                             style = MaterialTheme.typography.titleSmall,
                             fontWeight = FontWeight.Bold,
                         )
@@ -2220,7 +2239,11 @@ fun ShuttleScreen(
                                                 ) {
                                                     AnimatedCountText(
                                                         text = buildString {
-                                                            append(if (minutesLeft <= 0) "곧 출발" else "${minutesLeft}분 후")
+                                                            append(when {
+                                                                minutesLeft > 60 -> "다음 출발"
+                                                                minutesLeft <= 0 -> "곧 출발"
+                                                                else -> "${minutesLeft}분 후"
+                                                            })
                                                             serviceLabel?.let { append(" · $it") }
                                                             boardingStopLabel?.let { append(" · $it") }
                                                         },
@@ -2509,10 +2532,30 @@ fun MealScreen(
     var selectedDay by remember(today) {
         mutableStateOf(if (today.dayOfWeek.value in 1..5) today else weekStart)
     }
+    val listState = rememberLazyListState()
+    val now = ZonedDateTime.of(today, nowTime, MinuteTicker.CAMPUS_ZONE)
+    val dormitoryBlocks = remember(dormitoryMeal.days, selectedDay) {
+        dormitoryMeal.days.firstOrNull { it.date == selectedDay }?.sections
+            ?.let(::groupDormitorySections).orEmpty()
+    }
+    val dormitoryStates = dormitoryBlocks.map { mealServiceStatus(selectedDay, it.hours, now) }
+    val focusBlock = if (selectedDay == today) {
+        dormitoryStates.indexOfFirst { it.state == MealServiceState.OPEN }.takeIf { it >= 0 }
+            ?: dormitoryStates.indexOfFirst { it.state == MealServiceState.BEFORE_OPEN }.takeIf { it >= 0 }
+            ?: dormitoryStates.indexOfLast { it.state == MealServiceState.CLOSED }.takeIf { it >= 0 }
+    } else null
+    // Only a change of meal/venue/day moves the list; ordinary minute ticks preserve manual scrolling.
+    LaunchedEffect(venue, selectedDay, focusBlock, uploadingDormitoryMeal) {
+        val target = if (venue == MealVenue.DORMITORY && focusBlock != null) {
+            1 + focusBlock + if (uploadingDormitoryMeal) 1 else 0
+        } else 0
+        listState.scrollToItem(target)
+    }
 
     Box(modifier = modifier.fillMaxSize()) {
         ScreenScaffold(
             title = "식단",
+            listState = listState,
             modifier = Modifier.fillMaxSize(),
             topAction = {
                     if (venue == MealVenue.DORMITORY && !dormitoryMeal.hasCurrentWeek(today)) {
@@ -2572,6 +2615,8 @@ fun MealScreen(
                     meal = dormitoryMeal,
                     date = selectedDay,
                     today = today,
+                    blocks = dormitoryBlocks,
+                    statuses = dormitoryStates,
                     onUpload = {
                         uploadPreflight = true
                         scope.launch {
@@ -2591,7 +2636,9 @@ fun MealScreen(
                     uploadEnabled = !refreshing && !uploadPreflight && !uploadingDormitoryMeal,
                 )
             } else {
-                item { StudentMealSyncStatus(meal, today) }
+                if (!meal.hasCurrentStudentWeek(today) || meal.error != null) {
+                    item { StudentMealSyncStatus(meal, today) }
+                }
                 mainCafeteriaDayContent(meal = meal, date = selectedDay, today = today, nowTime = nowTime)
             }
         }
@@ -2779,7 +2826,7 @@ private fun MenuLineList(lines: List<String>, modifier: Modifier = Modifier) {
                 Text(
                     text = line,
                     style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurface,
+                    color = LocalContentColor.current,
                 )
             }
         }
@@ -2835,30 +2882,29 @@ private fun androidx.compose.foundation.lazy.LazyListScope.mainCafeteriaDayConte
     nowTime: LocalTime,
 ) {
     val day = meal.days.firstOrNull { it.date == date && it.validationState == MealValidationState.VALID }
+    val status = mealServiceStatus(date, day?.hours, ZonedDateTime.of(today, nowTime, MinuteTicker.CAMPUS_ZONE))
     item(key = "main-heading-$date") {
         MealDayHeading(
             date = date,
             today = today,
-            trailing = day?.let { if (date == today) mealServiceStatus(it, nowTime).label else it.hours },
+            trailing = null,
         )
     }
     if (day == null || day.menuLines.isEmpty()) {
         item(key = "main-empty-$date") { MealEmptyDayCard("등록된 식단이 없어요") }
     } else {
         item(key = "main-menu-$date") {
-            ElevatedCard(
-                modifier = Modifier.fillMaxWidth().entrance(),
-                shape = RoundedCornerShape(20.dp),
-                colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+            MealPeriodCard(
+                status = status,
+                modifier = Modifier.testTag("main_meal_card"),
             ) {
-                Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Icon(Icons.Default.Restaurant, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
-                        Text("중식", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                        MealHoursChip(day.hours)
-                    }
-                    MenuLineList(day.menuLines)
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Icon(Icons.Default.Restaurant, contentDescription = null, modifier = Modifier.size(20.dp))
+                    Text("중식", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    MealHoursChip(day.hours, status.state)
                 }
+                MealPeriodStatus(status)
+                MenuLineList(day.menuLines)
             }
         }
     }
@@ -2869,13 +2915,13 @@ private fun androidx.compose.foundation.lazy.LazyListScope.dormitoryDayContent(
     meal: DormitoryMealData,
     date: LocalDate,
     today: LocalDate,
+    blocks: List<DormitoryMealBlock>,
+    statuses: List<MealServiceStatus>,
     onUpload: (() -> Unit)?,
     uploadEnabled: Boolean,
 ) {
     val weekStart = date.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY))
     val week = meal.days.filter { it.date in weekStart..weekStart.plusDays(4) }
-    val day = week.firstOrNull { it.date == date }
-    val blocks = day?.sections?.let(::groupDormitorySections).orEmpty()
 
     item(key = "dorm-heading-$date") { MealDayHeading(date = date, today = today, trailing = null) }
 
@@ -2891,39 +2937,83 @@ private fun androidx.compose.foundation.lazy.LazyListScope.dormitoryDayContent(
         return
     }
 
-    itemsIndexed(blocks, key = { _, block -> "dorm-$date-${block.name}-${block.hours}" }) { index, block ->
-        ElevatedCard(
-            modifier = Modifier.fillMaxWidth().entrance(),
-            shape = RoundedCornerShape(20.dp),
-            colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+    itemsIndexed(blocks, key = { index, _ -> "dorm-$date-$index" }) { index, block ->
+        val status = statuses[index]
+        MealPeriodCard(
+            status = status,
+            modifier = Modifier.testTag("dorm_meal_card_$index"),
         ) {
-            Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Icon(
-                        dormitoryBlockIcon(block.name),
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(20.dp),
-                    )
-                    Text(block.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                    MealHoursChip(block.hours)
-                }
-                MenuLineList(block.menuLines)
-                block.extras.forEach { extra ->
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
-                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text(
-                            text = extra.name,
-                            style = MaterialTheme.typography.labelLarge,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                        MenuLineList(extra.menuLines)
-                    }
-                }
-            }
+            DormitoryMealPeriodContent(block, status)
         }
     }
+}
+
+@Composable
+private fun DormitoryMealPeriodContent(block: DormitoryMealBlock, status: MealServiceStatus) {
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Icon(dormitoryBlockIcon(block.name), contentDescription = null, modifier = Modifier.size(20.dp))
+        Text(block.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+        MealHoursChip(block.hours, status.state)
+    }
+    MealPeriodStatus(status)
+    MenuLineList(block.menuLines)
+    block.extras.forEach { extra ->
+        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(
+                text = extra.name,
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.Bold,
+                color = LocalContentColor.current,
+            )
+            MenuLineList(extra.menuLines)
+        }
+    }
+}
+
+@Composable
+private fun MealPeriodCard(
+    status: MealServiceStatus,
+    modifier: Modifier = Modifier,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    val colors = MaterialTheme.colorScheme
+    val isOpen = status.state == MealServiceState.OPEN
+    val isClosed = status.state == MealServiceState.CLOSED
+    val shape = RoundedCornerShape(20.dp)
+    val background = when {
+        isOpen -> colors.primaryContainer
+        isClosed -> lerp(colors.surfaceContainerLow, Color.Black, 0.12f)
+        else -> colors.surfaceContainerLow
+    }
+    ElevatedCard(
+        modifier = modifier.fillMaxWidth()
+            .then(if (isOpen) Modifier.border(2.dp, colors.primary, shape) else Modifier)
+            .semantics { stateDescription = status.label },
+        shape = shape,
+        colors = CardDefaults.elevatedCardColors(
+            containerColor = background,
+            contentColor = when {
+                isOpen -> colors.onPrimaryContainer
+                isClosed -> colors.onSurfaceVariant
+                else -> colors.onSurface
+            },
+        ),
+        elevation = CardDefaults.elevatedCardElevation(defaultElevation = if (isClosed) 0.dp else 1.dp),
+    ) {
+        Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp), content = content)
+    }
+}
+
+@Composable
+private fun MealPeriodStatus(status: MealServiceStatus) {
+    if (status.state == MealServiceState.UNKNOWN_HOURS) return
+    Text(
+        status.label,
+        style = MaterialTheme.typography.labelMedium,
+        fontWeight = if (status.state == MealServiceState.OPEN) FontWeight.Bold else FontWeight.Medium,
+        color = if (status.state == MealServiceState.OPEN) MaterialTheme.colorScheme.primary else LocalContentColor.current,
+    )
 }
 
 private fun dormitoryBlockIcon(name: String): ImageVector = when {
@@ -2933,14 +3023,25 @@ private fun dormitoryBlockIcon(name: String): ImageVector = when {
 }
 
 @Composable
-private fun MealHoursChip(hours: String?) {
+private fun MealHoursChip(hours: String?, state: MealServiceState = MealServiceState.UNKNOWN_HOURS) {
     val text = hours?.takeIf { it.isNotBlank() } ?: return
-    Surface(shape = RoundedCornerShape(8.dp), color = MaterialTheme.colorScheme.secondaryContainer) {
+    val colors = MaterialTheme.colorScheme
+    val background = when (state) {
+        MealServiceState.OPEN -> colors.primary
+        MealServiceState.CLOSED -> colors.surfaceContainer
+        else -> colors.secondaryContainer
+    }
+    val foreground = when (state) {
+        MealServiceState.OPEN -> colors.onPrimary
+        MealServiceState.CLOSED -> colors.onSurfaceVariant
+        else -> colors.onSecondaryContainer
+    }
+    Surface(shape = RoundedCornerShape(8.dp), color = background) {
         Text(
             text = text,
             style = MaterialTheme.typography.labelSmall,
             fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.onSecondaryContainer,
+            color = foreground,
             modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
         )
     }

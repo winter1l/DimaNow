@@ -92,6 +92,8 @@ data class ShuttleLine(
     val text: String,
     val destination: String? = null,
     val minutes: Long? = null,
+    val origin: String? = null,
+    val followingMinutes: Long? = null,
 )
 
 enum class CountdownMeaning {

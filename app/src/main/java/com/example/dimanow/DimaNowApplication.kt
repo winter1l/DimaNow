@@ -94,7 +94,6 @@ class DimaNowApplication : Application() {
     val shuttleReportSource: ShuttleReportSource by lazy {
         HttpShuttleReportSource(
             rootUrl = getString(R.string.shuttle_report_api_url),
-            reporterTokenProvider = { preferences.getOrCreateShuttleReporterToken() },
         )
     }
     private val dormitoryMealSubmissionService by lazy {

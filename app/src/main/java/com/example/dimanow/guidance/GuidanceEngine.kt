@@ -45,6 +45,8 @@ data class ShuttleStopCall(
     val zone: CampusZoneId,
     val stopId: String,
     val expectedTime: java.time.LocalTime,
+    val isBoardingDeparture: Boolean = true,
+    val destinationZone: CampusZoneId? = null,
 )
 
 data class ShuttleVehicleRun(
@@ -160,7 +162,7 @@ class GuidanceEngine {
         stopCall: ShuttleStopCall,
         topology: ShuttleTopology,
     ): Boolean {
-        if (now.dayOfWeek != run.serviceDay) return false
+        if (now.dayOfWeek != run.serviceDay || !stopCall.isBoardingDeparture) return false
         val expectedAt = now.toLocalDate().atTime(stopCall.expectedTime).atZone(now.zone)
         if (now.isBefore(expectedAt)) return false
         val nextSameStop = topology.runs.asSequence()
@@ -168,6 +170,7 @@ class GuidanceEngine {
             .flatMap { candidate -> candidate.stopCalls.asSequence() }
             .filter { candidate ->
                 candidate.id != stopCall.id &&
+                    candidate.isBoardingDeparture &&
                     candidate.stopId == stopCall.stopId &&
                     candidate.expectedTime.isAfter(stopCall.expectedTime)
             }
@@ -182,9 +185,7 @@ class GuidanceEngine {
      * Daytime A/B rows are separate services; the A/B evening rows are one three-stop loop.
      */
     fun prepareShuttleTopology(departures: List<ShuttleDeparture>): ShuttleTopology {
-        val daytime = departures.asSequence()
-            .filterNot { it.sourceRouteId.endsWith("-evening") }
-            .map { departure ->
+        fun standaloneRun(departure: ShuttleDeparture): ShuttleVehicleRun {
                 val pattern = when (departure.sourceRouteId) {
                     "A" -> ShuttleServicePattern.DAY_A
                     "B" -> ShuttleServicePattern.DAY_B
@@ -206,6 +207,7 @@ class GuidanceEngine {
                             zone = departure.originZone,
                             stopId = departure.sourceStopId,
                             expectedTime = departure.time,
+                            destinationZone = departure.destinationZone,
                         ),
                     )
                     departure.arrivalTime?.let { arrival ->
@@ -217,13 +219,14 @@ class GuidanceEngine {
                                 zone = destination,
                                 stopId = defaultStopId(destination),
                                 expectedTime = arrival,
+                                isBoardingDeparture = false,
                             ),
                         )
                     }
                 }
-                ShuttleVehicleRun(runId, departure.serviceDay, pattern, calls)
-            }
-            .toList()
+                return ShuttleVehicleRun(runId, departure.serviceDay, pattern, calls)
+        }
+        val daytime = departures.filterNot { it.sourceRouteId.endsWith("-evening") }.map(::standaloneRun)
 
         val evening = departures.asSequence()
             .filter {
@@ -232,14 +235,14 @@ class GuidanceEngine {
                     it.destinationZone == CampusZoneId.MAIN
             }
             .mapNotNull { oneRoom ->
-                val firstMainTime = oneRoom.time.minusMinutes(5)
-                val firstLeg = departures.firstOrNull {
+                val firstLeg = departures.filter {
                     it.serviceDay == oneRoom.serviceDay &&
                         it.sourceRouteId == "B-evening" &&
                         it.originZone == CampusZoneId.YEIN &&
                         it.destinationZone == CampusZoneId.MAIN &&
-                        it.arrivalTime == firstMainTime
-                } ?: return@mapNotNull null
+                        it.arrivalTime?.isBefore(oneRoom.time) == true
+                }.maxByOrNull { it.arrivalTime!! } ?: return@mapNotNull null
+                val firstMainTime = firstLeg.arrivalTime!!
                 val secondMainTime = oneRoom.arrivalTime ?: return@mapNotNull null
                 val finalLeg = departures.firstOrNull {
                     it.serviceDay == oneRoom.serviceDay &&
@@ -262,14 +265,29 @@ class GuidanceEngine {
                     serviceDay = oneRoom.serviceDay,
                     pattern = ShuttleServicePattern.EVENING_LOOP,
                     stopCalls = callData.mapIndexed { sequence, (zone, stopId, time) ->
-                        ShuttleStopCall("$runId:$sequence", sequence, zone, stopId, time)
+                        ShuttleStopCall(
+                            "$runId:$sequence", sequence, zone, stopId, time,
+                            isBoardingDeparture = sequence in setOf(0, 2, 3),
+                            destinationZone = when (sequence) {
+                                0, 2 -> CampusZoneId.MAIN
+                                3 -> CampusZoneId.YEIN
+                                else -> null
+                            },
+                        )
                     },
                 )
             }
             .toList()
 
+        val unmatchedEvening = departures.filter { departure ->
+            departure.sourceRouteId.endsWith("-evening") && evening.none { run ->
+                run.serviceDay == departure.serviceDay && run.stopCalls.any { call ->
+                    call.isBoardingDeparture && call.stopId == departure.sourceStopId && call.expectedTime == departure.time
+                }
+            }
+        }.map(::standaloneRun).distinctBy { it.id }
         return ShuttleTopology(
-            (daytime + evening).sortedWith(compareBy<ShuttleVehicleRun> { it.serviceDay.value }.thenBy { it.stopCalls.first().expectedTime }),
+            (daytime + evening + unmatchedEvening).sortedWith(compareBy<ShuttleVehicleRun> { it.serviceDay.value }.thenBy { it.stopCalls.first().expectedTime }),
         )
     }
 
@@ -416,7 +434,8 @@ class GuidanceEngine {
         bus4402Schedule: Bus4402Schedule = Bus4402Schedule.official,
     ): GuidanceSnapshot {
         nearbyTransitStop?.let { stop ->
-            bus4402Snapshot(now, stop, bus4402Schedule)?.let { return it }
+            return bus4402Snapshot(now, stop, bus4402Schedule)
+                ?: GuidanceSnapshot(null, emptyList(), GuidancePhase.NONE)
         }
         if (
             !automaticClassGuidance ||
@@ -461,9 +480,11 @@ class GuidanceEngine {
                     classContent = null,
                     shuttleLines = listOf(
                         ShuttleLine(
-                            text = "$boardingOrigin  ${returnRow.departures.joinToString(", ") { "${it.remainingMinutes}분" }}",
+                            text = "$boardingOrigin  ${returnRow.departures.joinToString(", ") { shuttleWaitText(now, it.remainingMinutes) }}",
                             destination = DisplayVocabulary.destinationName(returnRow.destinationZone),
                             minutes = returnRow.departures.first().remainingMinutes,
+                            origin = DisplayVocabulary.originName(returnRow.originZone),
+                            followingMinutes = returnRow.departures.getOrNull(1)?.remainingMinutes,
                         ),
                     ),
                     phase = GuidancePhase.RETURN,
@@ -515,17 +536,21 @@ class GuidanceEngine {
                 }
                 val lines = mutableListOf(
                     ShuttleLine(
-                        text = "${DisplayVocabulary.originName(resolvedZone)}  ${firstRemaining.joinToString(", ") { "${it}분" }}",
+                        text = "${DisplayVocabulary.originName(resolvedZone)}  ${firstRemaining.joinToString(", ") { shuttleWaitText(now, it) }}",
                         destination = DisplayVocabulary.destinationName(CampusZoneId.MAIN),
                         minutes = firstRemaining.first(),
+                        origin = DisplayVocabulary.originName(resolvedZone),
+                        followingMinutes = firstRemaining.getOrNull(1),
                     ),
                 )
                 if (connections.isNotEmpty()) {
                     val connectionOrigin = boardingOriginName(CampusZoneId.MAIN, connectionDepartures)
                     lines += ShuttleLine(
-                        text = "$connectionOrigin  ${connections.joinToString(", ") { "${it}분" }}",
+                        text = "$connectionOrigin  ${connections.joinToString(", ") { shuttleWaitText(now, it) }}",
                         destination = DisplayVocabulary.destinationName(homeBase.zone),
                         minutes = connections.first(),
+                        origin = DisplayVocabulary.originName(CampusZoneId.MAIN),
+                        followingMinutes = connections.getOrNull(1),
                     )
                 }
                 return GuidanceSnapshot(
@@ -581,9 +606,11 @@ class GuidanceEngine {
             if (remaining.isEmpty()) emptyList()
             else listOf(
                 ShuttleLine(
-                    text = "$origin  ${remaining.joinToString(", ") { "${it}분" }}",
+                    text = "$origin  ${remaining.joinToString(", ") { shuttleWaitText(now, it) }}",
                     destination = DisplayVocabulary.destinationName(course.zone),
                     minutes = remaining.first(),
+                    origin = DisplayVocabulary.originName(resolvedZone),
+                    followingMinutes = remaining.getOrNull(1),
                 ),
             )
         }
@@ -630,11 +657,12 @@ class GuidanceEngine {
             classContent = null,
             shuttleLines = listOf(
                 ShuttleLine(
-                    text = "${nearbyStop.displayName}  ${countdowns.joinToString(", ") { minutes ->
-                        if (minutes == 0L) "곧" else "${minutes}분"
-                    }}",
+                    text = "4402 · ${departures.first().time.format(TIME_FORMAT)} 출발" +
+                        if (departures.first().estimated) " 예정" else "",
                     destination = "강남행",
                     minutes = countdowns.first(),
+                    origin = nearbyStop.displayName,
+                    followingMinutes = countdowns.getOrNull(1),
                 ),
             ),
             phase = GuidancePhase.TRANSIT,
@@ -649,6 +677,11 @@ class GuidanceEngine {
     private companion object {
         const val STADIUM_STOP_ID = "stadium-stop"
         val TIME_FORMAT: DateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm")
+
+        fun shuttleWaitText(now: ZonedDateTime, minutes: Long): String =
+            if (minutes > 60) {
+                "${now.truncatedTo(java.time.temporal.ChronoUnit.MINUTES).plusMinutes(minutes).format(TIME_FORMAT)} 출발"
+            } else "${minutes}분"
 
         fun remainingMinutes(from: ZonedDateTime, to: ZonedDateTime): Long {
             val millis = Duration.between(from, to).toMillis()

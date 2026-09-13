@@ -1,5 +1,8 @@
 const MAX_IMAGE_BYTES = 15 * 1024 * 1024;
+const MAX_SHUTTLE_JSON_BYTES = 8 * 1024;
 const RATE_LIMIT_SECONDS = 10 * 60;
+const REPORTER_TOKEN_SECONDS = 24 * 60 * 60;
+const SHUTTLE_SCHEDULE_CACHE_MILLIS = 60 * 1000;
 const IMAGE_EXTENSIONS = new Map([
   ['image/jpeg', 'jpg'],
   ['image/png', 'png'],
@@ -14,131 +17,321 @@ export function createWorker(dependencies = {}) {
     ?? ((env) => createGitHubInstallationToken(env, fetchImpl, now));
   const scheduleProvider = dependencies.scheduleProvider
     ?? (() => loadCurrentShuttleSchedule(fetchImpl));
+  const cachedScheduleProvider = createCachedScheduleProvider(scheduleProvider, now);
   const reportStoreFactory = dependencies.reportStoreFactory
     ?? ((env) => createD1ReportStore(env.SHUTTLE_REPORTS));
+  const securityStoreFactory = dependencies.securityStoreFactory
+    ?? ((env) => createD1SecurityStore(env.SHUTTLE_REPORTS));
+  const dormitoryPublicationProvider = dependencies.dormitoryPublicationProvider
+    ?? ((_env, current) => hasCurrentDormitoryPublication(fetchImpl, current));
+  const bodyReader = dependencies.bodyReader ?? readBoundedRequestBody;
 
   return {
     async fetch(request, env) {
       const url = new URL(request.url);
+      if (url.pathname === '/v1/shuttle-reporter-token') {
+        return handleShuttleReporterToken(request, env, { now });
+      }
       if (url.pathname === '/v1/shuttle-reports') {
         return handleShuttleReports(request, url, env, {
           now,
-          scheduleProvider,
+          scheduleProvider: cachedScheduleProvider,
           reportStoreFactory,
+          jsonParser: dependencies.jsonParser ?? JSON.parse,
+          bodyReader,
         });
       }
-      if (url.pathname !== '/v1/dormitory-meals') {
-        return jsonResponse(404, '요청한 경로가 없습니다.');
-      }
-      if (request.method !== 'POST') {
-        return jsonResponse(405, 'POST 요청만 지원합니다.', { Allow: 'POST' });
-      }
-
-      const mimeType = request.headers.get('Content-Type')?.split(';', 1)[0]?.trim().toLowerCase();
-      const expectedExtension = IMAGE_EXTENSIONS.get(mimeType);
-      const requestedExtension = request.headers.get('X-Dima-Image-Extension')?.trim().toLowerCase();
-      if (!expectedExtension || requestedExtension !== expectedExtension) {
-        return jsonResponse(415, '지원하지 않는 식단 이미지 형식입니다.');
-      }
-
-      const contentLength = Number(request.headers.get('Content-Length'));
-      if (Number.isFinite(contentLength) && contentLength > MAX_IMAGE_BYTES) {
-        return jsonResponse(413, '식단 이미지는 15MB 이하여야 합니다.');
-      }
-
-      const image = new Uint8Array(await request.arrayBuffer());
-      if (image.byteLength === 0 || image.byteLength > MAX_IMAGE_BYTES) {
-        return jsonResponse(image.byteLength === 0 ? 400 : 413, image.byteLength === 0
-          ? '식단 사진이 비어 있습니다.'
-          : '식단 이미지는 15MB 이하여야 합니다.');
-      }
-      if (!hasExpectedImageSignature(image, mimeType)) {
-        return jsonResponse(415, '사진 파일 형식을 확인해 주세요.');
-      }
-
-      const clientAddress = request.headers.get('CF-Connecting-IP')?.trim();
-      if (!clientAddress) {
-        return jsonResponse(400, '업로드 요청을 확인할 수 없습니다.');
-      }
-      if (!env.RATE_LIMIT) {
-        return jsonResponse(503, '업로드 서비스가 준비되지 않았습니다.');
-      }
-
-      const rateLimitKey = `upload:${await sha256Hex(`${env.RATE_LIMIT_SALT ?? ''}:${clientAddress}`)}`;
-      if (await env.RATE_LIMIT.get(rateLimitKey)) {
-        return jsonResponse(429, '잠시 후 다시 시도해 주세요.', { 'Retry-After': String(RATE_LIMIT_SECONDS) });
-      }
-      await env.RATE_LIMIT.put(rateLimitKey, 'pending', { expirationTtl: RATE_LIMIT_SECONDS });
-
-      const submissionId = randomUUID();
-      const uploadedAt = now().toISOString();
-      try {
-        const token = await githubTokenProvider(env);
-        const owner = env.GITHUB_OWNER ?? 'winter1l';
-        const repository = env.GITHUB_REPOSITORY ?? 'DimaNow';
-        const branch = env.GITHUB_SUBMISSION_BRANCH ?? 'dorm-submissions';
-        const path = `dorm-submissions/${submissionId}.${expectedExtension}`;
-        const response = await fetchImpl(
-          `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repository)}/contents/${path}`,
-          {
-            method: 'PUT',
-            headers: {
-              Accept: 'application/vnd.github+json',
-              Authorization: `Bearer ${token}`,
-              'Content-Type': 'application/json',
-              'User-Agent': 'DIMA-Now-Meal-Upload',
-              'X-GitHub-Api-Version': '2022-11-28',
-            },
-            body: JSON.stringify({
-              message: `dormitory meal submission ${submissionId}`,
-              content: bytesToBase64(image),
-              branch,
-            }),
-          },
-        );
-        if (!response.ok) {
-          throw new Error(`GitHub content upload failed: ${response.status}`);
-        }
-        await env.RATE_LIMIT.put(rateLimitKey, submissionId, { expirationTtl: RATE_LIMIT_SECONDS });
-        return new Response(JSON.stringify({ submissionId, uploadedAt }), {
-          status: 202,
-          headers: jsonHeaders(),
+      if (url.pathname === '/v1/dormitory-meals') {
+        return handleDormitoryMealUpload(request, env, {
+          now,
+          randomUUID,
+          fetchImpl,
+          githubTokenProvider,
+          securityStoreFactory,
+          dormitoryPublicationProvider,
+          bodyReader,
         });
-      } catch (error) {
-        await env.RATE_LIMIT.delete(rateLimitKey);
-        console.error('Dormitory meal upload failed', error instanceof Error ? error.message : error);
-        return jsonResponse(502, '사진을 올리지 못했습니다. 잠시 후 다시 시도해 주세요.');
       }
+      return jsonResponse(404, '요청한 경로가 없습니다.');
+    },
+    scheduled(_event, env, context) {
+      context.waitUntil((async () => {
+        const store = reportStoreFactory(env);
+        await store.prune?.(dateDaysBefore(kstDate(now()), 7));
+        const securityStore = securityStoreFactory(env);
+        await securityStore.prune?.(Math.floor(now().getTime() / 1000));
+      })().catch((error) => {
+        console.error('Scheduled gateway maintenance failed', error instanceof Error ? error.message : error);
+      }));
     },
   };
+}
+
+function createCachedScheduleProvider(provider, now) {
+  let cached = null;
+  let inFlight = null;
+  return async (env) => {
+    const currentMillis = now().getTime();
+    if (cached && currentMillis - cached.loadedAtMillis < SHUTTLE_SCHEDULE_CACHE_MILLIS) return cached.schedule;
+    if (!inFlight) {
+      inFlight = Promise.resolve(provider(env)).then((schedule) => {
+        if (!Number.isSafeInteger(schedule?.revision) || schedule.revision <= 0 || !Array.isArray(schedule.events)) {
+          throw new Error('invalid shuttle schedule');
+        }
+        cached = { schedule, loadedAtMillis: now().getTime() };
+        return schedule;
+      }).finally(() => { inFlight = null; });
+    }
+    return inFlight;
+  };
+}
+
+async function handleDormitoryMealUpload(request, env, dependencies) {
+  if (request.method !== 'POST') {
+    return jsonResponse(405, 'POST 요청만 지원합니다.', { Allow: 'POST' });
+  }
+  const mimeType = request.headers.get('Content-Type')?.split(';', 1)[0]?.trim().toLowerCase();
+  const expectedExtension = IMAGE_EXTENSIONS.get(mimeType);
+  const requestedExtension = request.headers.get('X-Dima-Image-Extension')?.trim().toLowerCase();
+  if (!expectedExtension || requestedExtension !== expectedExtension) {
+    return jsonResponse(415, '지원하지 않는 식단 이미지 형식입니다.');
+  }
+  const contentLength = Number(request.headers.get('Content-Length'));
+  if (Number.isFinite(contentLength) && contentLength > MAX_IMAGE_BYTES) {
+    return jsonResponse(413, '식단 이미지는 15MB 이하여야 합니다.');
+  }
+  const clientAddress = request.headers.get('CF-Connecting-IP')?.trim();
+  if (!clientAddress) return jsonResponse(400, '업로드 요청을 확인할 수 없습니다.');
+  const rateLimitSalt = env.RATE_LIMIT_SALT?.trim();
+  if (!rateLimitSalt || rateLimitSalt.length < 32) {
+    return jsonResponse(503, '업로드 서비스가 준비되지 않았습니다.');
+  }
+
+  let securityStore;
+  try {
+    securityStore = dependencies.securityStoreFactory(env);
+  } catch {
+    return jsonResponse(503, '업로드 서비스가 준비되지 않았습니다.');
+  }
+  const current = dependencies.now();
+  const nowSeconds = Math.floor(current.getTime() / 1000);
+  const leaseOwner = dependencies.randomUUID();
+  const addressHash = await sha256Hex(`${rateLimitSalt}:${clientAddress}`);
+  const leaseScope = `upload-address:${addressHash}`;
+  try {
+    const claimed = await securityStore.claimLease(
+      leaseScope,
+      leaseOwner,
+      nowSeconds,
+      nowSeconds + RATE_LIMIT_SECONDS,
+    );
+    if (!claimed) {
+      return jsonResponse(429, '잠시 후 다시 시도해 주세요.', { 'Retry-After': String(RATE_LIMIT_SECONDS) });
+    }
+    const windows = uploadBudgetWindows(current);
+    const weeklyLimit = positiveLimit(env.UPLOAD_WEEKLY_LIMIT, 40);
+    const dailyLimit = positiveLimit(env.UPLOAD_DAILY_LIMIT, 20);
+    if (!await securityStore.consumeUploadBudgets({
+      dayScope: `upload-day:${windows.date}`,
+      dayLimit: dailyLimit,
+      dayExpiresAt: windows.dayExpiresAt,
+      weekScope: `upload-week:${windows.weekStart}`,
+      weekLimit: weeklyLimit,
+      weekExpiresAt: windows.weekExpiresAt,
+    })) {
+      return jsonResponse(429, '현재 익명 식단 처리 한도에 도달했습니다.', {
+        'Retry-After': String(Math.max(1, windows.dayExpiresAt - nowSeconds)),
+      });
+    }
+  } catch (error) {
+    console.error('Dormitory meal admission failed', error instanceof Error ? error.message : error);
+    return jsonResponse(503, '업로드 서비스가 준비되지 않았습니다.');
+  }
+
+  try {
+    if (await dependencies.dormitoryPublicationProvider(env, current)) {
+      return jsonResponse(409, '이번 주 기숙사 식단이 이미 등록되어 있습니다.');
+    }
+  } catch (error) {
+    console.error('Dormitory publication check failed', error instanceof Error ? error.message : error);
+    await securityStore.releaseLease(leaseScope, leaseOwner);
+    return jsonResponse(503, '현재 식단 게시 상태를 확인하지 못했습니다.');
+  }
+
+  let image;
+  try {
+    image = await dependencies.bodyReader(request, MAX_IMAGE_BYTES);
+  } catch (error) {
+    if (error instanceof BodyTooLargeError) return jsonResponse(413, '식단 이미지는 15MB 이하여야 합니다.');
+    return jsonResponse(400, '식단 사진을 읽지 못했습니다.');
+  }
+  if (image.byteLength === 0) return jsonResponse(400, '식단 사진이 비어 있습니다.');
+  if (!hasExpectedImageSignature(image, mimeType)) {
+    return jsonResponse(415, '사진 파일 형식을 확인해 주세요.');
+  }
+
+  const submissionId = dependencies.randomUUID();
+  const uploadedAt = current.toISOString();
+  try {
+    const token = await dependencies.githubTokenProvider(env);
+    const owner = env.GITHUB_OWNER ?? 'winter1l';
+    const repository = env.GITHUB_REPOSITORY ?? 'DimaNow';
+    const branch = env.GITHUB_SUBMISSION_BRANCH ?? 'dorm-submissions';
+    const path = `dorm-submissions/${submissionId}.${expectedExtension}`;
+    const response = await dependencies.fetchImpl(
+      `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repository)}/contents/${path}`,
+      {
+        method: 'PUT',
+        headers: {
+          Accept: 'application/vnd.github+json',
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+          'User-Agent': 'DIMA-Now-Meal-Upload',
+          'X-GitHub-Api-Version': '2022-11-28',
+        },
+        body: JSON.stringify({
+          message: `dormitory meal submission ${submissionId}`,
+          content: bytesToBase64(image),
+          branch,
+        }),
+      },
+    );
+    if (!response.ok) throw new Error(`GitHub content upload failed: ${response.status}`);
+    return new Response(JSON.stringify({ submissionId, uploadedAt }), {
+      status: 202,
+      headers: jsonHeaders(),
+    });
+  } catch (error) {
+    await securityStore.releaseLease(leaseScope, leaseOwner);
+    console.error('Dormitory meal upload failed', error instanceof Error ? error.message : error);
+    return jsonResponse(502, '사진을 올리지 못했습니다. 잠시 후 다시 시도해 주세요.');
+  }
+}
+
+function positiveLimit(value, fallback) {
+  const parsed = Number(value ?? fallback);
+  if (!Number.isSafeInteger(parsed) || parsed <= 0 || parsed > 10_000) {
+    throw new Error('invalid upload budget');
+  }
+  return parsed;
+}
+
+function uploadBudgetWindows(current) {
+  const kst = new Date(current.getTime() + 9 * 60 * 60 * 1000);
+  const date = kst.toISOString().slice(0, 10);
+  const day = kst.getUTCDay();
+  const week = new Date(kst);
+  week.setUTCDate(week.getUTCDate() - ((day + 6) % 7));
+  const weekStart = week.toISOString().slice(0, 10);
+  const nextDay = new Date(`${date}T00:00:00+09:00`);
+  nextDay.setUTCDate(nextDay.getUTCDate() + 1);
+  const nextWeek = new Date(`${weekStart}T00:00:00+09:00`);
+  nextWeek.setUTCDate(nextWeek.getUTCDate() + 7);
+  return {
+    date,
+    weekStart,
+    dayExpiresAt: Math.floor(nextDay.getTime() / 1000),
+    weekExpiresAt: Math.floor(nextWeek.getTime() / 1000),
+  };
+}
+
+async function handleShuttleReporterToken(request, env, dependencies) {
+  if (request.method !== 'POST') {
+    return jsonResponse(405, 'POST 요청만 지원합니다.', { Allow: 'POST' });
+  }
+  const routeAdmission = await enforceShuttleRouteLimits(request, env, 'TOKEN');
+  if (routeAdmission instanceof Response) return routeAdmission;
+  const hmacKey = env.SHUTTLE_REPORT_HMAC_KEY?.trim();
+  if (!hmacKey || hmacKey.length < 32) {
+    return jsonResponse(503, '셔틀 신고 서비스가 준비되지 않았습니다.');
+  }
+  const expiresAt = Math.floor(dependencies.now().getTime() / 1000) + REPORTER_TOKEN_SECONDS;
+  const subject = await hmacSha256Hex(hmacKey, `reporter:${routeAdmission.clientAddress}`);
+  const unsigned = `v1.${expiresAt}.${subject}`;
+  const signature = await hmacSha256Hex(hmacKey, unsigned);
+  return new Response(JSON.stringify({ token: `${unsigned}.${signature}`, expiresAt }), {
+    status: 201,
+    headers: jsonHeaders(),
+  });
+}
+
+async function enforceShuttleRouteLimits(request, env, routeKey) {
+  const clientAddress = request.headers.get('CF-Connecting-IP')?.trim();
+  if (!clientAddress) return jsonResponse(400, '셔틀 요청을 확인할 수 없습니다.');
+  const rateLimitSalt = env.RATE_LIMIT_SALT?.trim();
+  if (!rateLimitSalt || rateLimitSalt.length < 32 || !env.SHUTTLE_GLOBAL_RATE_LIMIT || !env.SHUTTLE_REPORT_RATE_LIMIT) {
+    return jsonResponse(503, '셔틀 신고 서비스가 준비되지 않았습니다.');
+  }
+  const globalRate = await env.SHUTTLE_GLOBAL_RATE_LIMIT.limit({ key: routeKey });
+  if (!globalRate.success) {
+    return jsonResponse(429, '잠시 후 다시 시도해 주세요.', { 'Retry-After': '60' });
+  }
+  const clientKey = await sha256Hex(`${rateLimitSalt}:${clientAddress}`);
+  const clientRate = await env.SHUTTLE_REPORT_RATE_LIMIT.limit({ key: `${routeKey}:${clientKey}` });
+  if (!clientRate.success) {
+    return jsonResponse(429, '잠시 후 다시 시도해 주세요.', { 'Retry-After': '60' });
+  }
+  return { clientAddress };
 }
 
 async function handleShuttleReports(request, url, env, dependencies) {
   if (!['GET', 'POST', 'DELETE'].includes(request.method)) {
     return jsonResponse(405, 'GET, POST, DELETE 요청만 지원합니다.', { Allow: 'GET, POST, DELETE' });
   }
-  let store;
-  try {
-    store = dependencies.reportStoreFactory(env);
-  } catch {
-    return jsonResponse(503, '셔틀 신고 서비스가 준비되지 않았습니다.');
-  }
+  const routeAdmission = await enforceShuttleRouteLimits(request, env, request.method);
+  if (routeAdmission instanceof Response) return routeAdmission;
   const current = dependencies.now();
-  const serviceDate = request.method === 'GET'
-    ? url.searchParams.get('serviceDate')
-    : (await readJsonObject(request))?.serviceDate;
+  let requestBody = null;
+  if (request.method !== 'GET') {
+    const contentType = request.headers.get('Content-Type')?.split(';', 1)[0]?.trim().toLowerCase();
+    if (contentType !== 'application/json') {
+      return jsonResponse(415, 'JSON 요청만 지원합니다.');
+    }
+    try {
+      const bytes = await dependencies.bodyReader(request, MAX_SHUTTLE_JSON_BYTES);
+      requestBody = parseJsonObject(bytes, dependencies.jsonParser);
+    } catch (error) {
+      if (error instanceof BodyTooLargeError) return jsonResponse(413, '신고 내용이 너무 큽니다.');
+      return jsonResponse(400, '신고 내용을 확인해 주세요.');
+    }
+    if (!requestBody) return jsonResponse(400, '신고 내용을 확인해 주세요.');
+  }
+
+  const serviceDate = request.method === 'GET' ? url.searchParams.get('serviceDate') : requestBody.serviceDate;
   if (!/^\d{4}-\d{2}-\d{2}$/.test(serviceDate ?? '') || serviceDate !== kstDate(current)) {
     return jsonResponse(400, '오늘 운행만 확인할 수 있습니다.');
-  }
-  const requestBody = request.method === 'GET' ? null : await readJsonObjectFromClone(request);
-  if (request.method !== 'GET' && !requestBody) {
-    return jsonResponse(400, '신고 내용을 확인해 주세요.');
   }
   const scheduleRevision = Number(request.method === 'GET'
     ? url.searchParams.get('scheduleRevision')
     : requestBody.scheduleRevision);
   if (!Number.isSafeInteger(scheduleRevision) || scheduleRevision <= 0) {
     return jsonResponse(400, '시간표 버전을 확인해 주세요.');
+  }
+
+  const hmacKey = env.SHUTTLE_REPORT_HMAC_KEY?.trim();
+  if (!hmacKey || hmacKey.length < 32) return jsonResponse(503, '셔틀 신고 서비스가 준비되지 않았습니다.');
+  const reporterToken = request.headers.get('X-Dima-Reporter')?.trim();
+  let reporterHash = null;
+  if (reporterToken) {
+    reporterHash = await verifyReporterToken(reporterToken, hmacKey, routeAdmission.clientAddress, current);
+    if (!reporterHash) return jsonResponse(401, '셔틀 신고 신원을 다시 발급해 주세요.');
+  } else if (request.method !== 'GET') {
+    return jsonResponse(401, '셔틀 신고 신원을 다시 발급해 주세요.');
+  }
+
+  const runId = request.method === 'GET' ? null : boundedIdentifier(requestBody.runId, 120);
+  const stopCallId = request.method === 'GET' ? null : boundedIdentifier(requestBody.stopCallId, 160);
+  if (request.method !== 'GET' && (!runId || !stopCallId)) {
+    return jsonResponse(400, '운행 정보를 확인해 주세요.');
+  }
+  if (request.method === 'POST') {
+    if (!env.SHUTTLE_EVENT_RATE_LIMIT) return jsonResponse(503, '셔틀 신고 서비스가 준비되지 않았습니다.');
+    const eventRate = await env.SHUTTLE_EVENT_RATE_LIMIT.limit({
+      key: `${serviceDate}:${scheduleRevision}:${runId}:${stopCallId}`,
+    });
+    if (!eventRate.success) {
+      return jsonResponse(429, '이 운행의 신고가 잠시 제한되었습니다.', { 'Retry-After': '60' });
+    }
   }
 
   let schedule;
@@ -151,16 +344,13 @@ async function handleShuttleReports(request, url, env, dependencies) {
   if (schedule.revision !== scheduleRevision) {
     return jsonResponse(409, '셔틀 시간표가 갱신되었습니다. 다시 확인해 주세요.');
   }
-  await store.prune?.(dateDaysBefore(serviceDate, 7));
+  let store;
+  try {
+    store = dependencies.reportStoreFactory(env);
+  } catch {
+    return jsonResponse(503, '셔틀 신고 서비스가 준비되지 않았습니다.');
+  }
   if (request.method === 'GET') {
-    const reporterToken = request.headers.get('X-Dima-Reporter')?.trim();
-    let reporterHash = null;
-    if (reporterToken) {
-      if (!/^[A-Za-z0-9_-]{20,128}$/.test(reporterToken)) return jsonResponse(400, '앱 식별 정보를 확인해 주세요.');
-      const hmacKey = env.SHUTTLE_REPORT_HMAC_KEY?.trim();
-      if (!hmacKey || hmacKey.length < 32) return jsonResponse(503, '셔틀 신고 서비스가 준비되지 않았습니다.');
-      reporterHash = await hmacSha256Hex(hmacKey, reporterToken);
-    }
     const reports = await store.aggregates(serviceDate, scheduleRevision, reporterHash);
     return new Response(JSON.stringify({ serviceDate, scheduleRevision, reports }), {
       status: 200,
@@ -168,26 +358,12 @@ async function handleShuttleReports(request, url, env, dependencies) {
     });
   }
 
-  const runId = boundedIdentifier(requestBody.runId, 120);
-  const stopCallId = boundedIdentifier(requestBody.stopCallId, 160);
-  if (!runId || !stopCallId) return jsonResponse(400, '운행 정보를 확인해 주세요.');
   const event = schedule.events.find((candidate) => candidate.runId === runId && candidate.stopCallId === stopCallId);
   if (!event || event.serviceDay !== dayOfWeekName(serviceDate)) {
     return jsonResponse(409, '현재 시간표에 없는 운행입니다.');
   }
   if (request.method === 'POST' && !isReportWindowOpen(current, serviceDate, event, schedule.events)) {
     return jsonResponse(409, '현재 신고할 수 있는 운행이 아닙니다.');
-  }
-  const reporterToken = request.headers.get('X-Dima-Reporter')?.trim();
-  if (!/^[A-Za-z0-9_-]{20,128}$/.test(reporterToken ?? '')) {
-    return jsonResponse(400, '앱 식별 정보를 확인해 주세요.');
-  }
-  const hmacKey = env.SHUTTLE_REPORT_HMAC_KEY?.trim();
-  if (!hmacKey || hmacKey.length < 32) return jsonResponse(503, '셔틀 신고 서비스가 준비되지 않았습니다.');
-  const reporterHash = await hmacSha256Hex(hmacKey, reporterToken);
-  if (request.method === 'POST' && env.SHUTTLE_REPORT_RATE_LIMIT) {
-    const rate = await env.SHUTTLE_REPORT_RATE_LIMIT.limit({ key: reporterHash });
-    if (!rate.success) return jsonResponse(429, '잠시 후 다시 시도해 주세요.', { 'Retry-After': '60' });
   }
   const key = { serviceDate, scheduleRevision, runId, stopCallId, reporterHash };
   if (request.method === 'DELETE') {
@@ -253,6 +429,54 @@ function createD1ReportStore(database) {
   };
 }
 
+function createD1SecurityStore(database) {
+  if (!database) throw new Error('SHUTTLE_REPORTS D1 binding is required for gateway admission');
+  return {
+    async claimLease(scope, owner, nowSeconds, expiresAtSeconds) {
+      const result = await database.prepare(`
+        INSERT INTO gateway_leases (scope, owner, expires_at)
+        VALUES (?, ?, ?)
+        ON CONFLICT(scope) DO UPDATE SET
+          owner = excluded.owner,
+          expires_at = excluded.expires_at
+        WHERE gateway_leases.expires_at <= ?
+      `).bind(scope, owner, expiresAtSeconds, nowSeconds).run();
+      return Number(result.meta?.changes ?? 0) > 0;
+    },
+    async releaseLease(scope, owner) {
+      await database.prepare('DELETE FROM gateway_leases WHERE scope = ? AND owner = ?')
+        .bind(scope, owner).run();
+    },
+    async consumeUploadBudgets(budget) {
+      const result = await database.prepare(`
+        WITH requested(scope, expires_at) AS (
+          VALUES (?, ?), (?, ?)
+        )
+        INSERT INTO gateway_budgets(scope, used, expires_at)
+        SELECT scope, 1, expires_at
+        FROM requested
+        WHERE COALESCE((SELECT used FROM gateway_budgets WHERE scope = ?), 0) < ?
+          AND COALESCE((SELECT used FROM gateway_budgets WHERE scope = ?), 0) < ?
+        ON CONFLICT(scope) DO UPDATE SET used = gateway_budgets.used + 1
+      `).bind(
+        budget.dayScope,
+        budget.dayExpiresAt,
+        budget.weekScope,
+        budget.weekExpiresAt,
+        budget.dayScope,
+        budget.dayLimit,
+        budget.weekScope,
+        budget.weekLimit,
+      ).run();
+      return Number(result.meta?.changes ?? 0) === 2;
+    },
+    async prune(nowSeconds) {
+      await database.prepare('DELETE FROM gateway_leases WHERE expires_at <= ?').bind(nowSeconds).run();
+      await database.prepare('DELETE FROM gateway_budgets WHERE expires_at <= ?').bind(nowSeconds).run();
+    },
+  };
+}
+
 async function loadCurrentShuttleSchedule(fetchImpl) {
   const root = 'https://winter1l.github.io/DimaNow/data/v1';
   const manifestResponse = await fetchImpl(`${root}/manifest.json`, { headers: { Accept: 'application/json' } });
@@ -269,10 +493,39 @@ async function loadCurrentShuttleSchedule(fetchImpl) {
   return { revision: Number(descriptor.revision), events: buildShuttleReportEvents(payload.departures) };
 }
 
+async function hasCurrentDormitoryPublication(fetchImpl, current) {
+  const root = 'https://winter1l.github.io/DimaNow/data/v1';
+  const manifestResponse = await fetchImpl(`${root}/manifest.json`, {
+    headers: { Accept: 'application/json' },
+    redirect: 'error',
+  });
+  if (!manifestResponse.ok) throw new Error(`manifest ${manifestResponse.status}`);
+  const manifest = await readBoundedResponseJson(manifestResponse, 64 * 1024);
+  const descriptor = manifest.datasets?.dorm_meal;
+  if (!descriptor || descriptor.state !== 'READY') return false;
+  if (!/^dorm-meal\/[0-9a-f]{64}\.json$/.test(descriptor.url ?? '')) {
+    throw new Error('invalid dormitory descriptor');
+  }
+  const payloadResponse = await fetchImpl(`${root}/${descriptor.url}`, {
+    headers: { Accept: 'application/json' },
+    redirect: 'error',
+  });
+  if (!payloadResponse.ok) throw new Error(`dormitory payload ${payloadResponse.status}`);
+  const payload = await readBoundedResponseJson(payloadResponse, 256 * 1024);
+  return payload.weekStart === targetDormitoryWeekStart(current);
+}
+
+function targetDormitoryWeekStart(current) {
+  const kst = new Date(current.getTime() + 9 * 60 * 60 * 1000);
+  const day = kst.getUTCDay();
+  const offset = day === 0 ? 1 : day === 6 ? 2 : -((day + 6) % 7);
+  kst.setUTCDate(kst.getUTCDate() + offset);
+  return kst.toISOString().slice(0, 10);
+}
+
 export function buildShuttleReportEvents(departures) {
   const scheduleDepartures = withFieldShuttleOverrides(departures);
-  const daytime = scheduleDepartures
-    .filter((departure) => !String(departure.routeId).endsWith('-evening'))
+  const standalone = scheduleDepartures
     .map((departure) => {
       const pattern = ({ A: 'day_a', B: 'day_b', 'A-field-extra': 'field_override', C: 'sunday' })[departure.routeId] ?? 'other';
       const runId = `${pattern}-${departure.serviceDay.toLowerCase()}-${departure.departureTime.replace(':', '')}-${departure.originZone.toLowerCase()}`;
@@ -288,12 +541,13 @@ export function buildShuttleReportEvents(departures) {
   const evening = scheduleDepartures
     .filter((departure) => departure.routeId === 'A-evening' && departure.originZone === 'ONE_ROOM' && departure.destinationZone === 'MAIN')
     .flatMap((oneRoom) => {
-      const firstMainTime = subtractMinutes(oneRoom.departureTime, 5);
-      const firstLeg = scheduleDepartures.find((candidate) => candidate.serviceDay === oneRoom.serviceDay
+      const firstLeg = scheduleDepartures.filter((candidate) => candidate.serviceDay === oneRoom.serviceDay
         && candidate.routeId === 'B-evening'
         && candidate.originZone === 'YEIN'
         && candidate.destinationZone === 'MAIN'
-        && candidate.arrivalTime === firstMainTime);
+        && candidate.arrivalTime && candidate.arrivalTime < oneRoom.departureTime)
+        .sort((left, right) => right.arrivalTime.localeCompare(left.arrivalTime))[0];
+      const firstMainTime = firstLeg?.arrivalTime;
       const finalLeg = scheduleDepartures.find((candidate) => candidate.serviceDay === oneRoom.serviceDay
         && String(candidate.routeId).endsWith('-evening')
         && candidate.originZone === 'MAIN'
@@ -314,9 +568,11 @@ export function buildShuttleReportEvents(departures) {
         serviceDay: oneRoom.serviceDay,
         stopId,
         expectedTime,
-      }));
+      })).filter((event) => [0, 2, 3].includes(event.stopSequence));
     });
-  return [...daytime, ...evening];
+  const remaining = standalone.filter(event => !evening.some(call =>
+    call.serviceDay === event.serviceDay && call.stopId === event.stopId && call.expectedTime === event.expectedTime));
+  return [...remaining, ...evening];
 }
 
 function withFieldShuttleOverrides(departures) {
@@ -385,17 +641,74 @@ function subtractMinutes(time, minutes) {
 function boundedIdentifier(value, max) {
   return typeof value === 'string' && value.length <= max && /^[a-z0-9_:-]+$/.test(value) ? value : null;
 }
-async function readJsonObject(request) {
-  const value = await readJsonObjectFromClone(request);
+class BodyTooLargeError extends Error {}
+
+async function readBoundedRequestBody(request, maxBytes) {
+  const declaredLength = Number(request.headers.get('Content-Length'));
+  if (Number.isFinite(declaredLength) && declaredLength > maxBytes) throw new BodyTooLargeError();
+  if (!request.body) return new Uint8Array();
+  const reader = request.body.getReader();
+  const chunks = [];
+  let total = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      const chunk = value instanceof Uint8Array ? value : new Uint8Array(value);
+      if (total + chunk.byteLength > maxBytes) {
+        await reader.cancel();
+        throw new BodyTooLargeError();
+      }
+      chunks.push(chunk);
+      total += chunk.byteLength;
+    }
+  } finally {
+    reader.releaseLock();
+  }
+  const result = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    result.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return result;
+}
+
+async function readBoundedResponseJson(response, maxBytes) {
+  const bytes = await readBoundedRequestBody(response, maxBytes);
+  const value = parseJsonObject(bytes, JSON.parse);
+  if (!value) throw new Error('invalid JSON response');
   return value;
 }
-async function readJsonObjectFromClone(request) {
-  try {
-    const value = await request.clone().json();
-    return value && typeof value === 'object' && !Array.isArray(value) ? value : null;
-  } catch {
+
+function parseJsonObject(bytes, parser) {
+  const text = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+  const value = parser(text);
+  return value && typeof value === 'object' && !Array.isArray(value) ? value : null;
+}
+
+async function verifyReporterToken(token, hmacKey, clientAddress, current) {
+  const parts = token?.split('.') ?? [];
+  if (parts.length !== 4 || parts[0] !== 'v1' || !/^\d{10}$/.test(parts[1]) ||
+      !/^[0-9a-f]{64}$/.test(parts[2]) || !/^[0-9a-f]{64}$/.test(parts[3])) return null;
+  const expiresAt = Number(parts[1]);
+  const nowSeconds = Math.floor(current.getTime() / 1000);
+  if (!Number.isSafeInteger(expiresAt) || expiresAt <= nowSeconds || expiresAt > nowSeconds + REPORTER_TOKEN_SECONDS) {
     return null;
   }
+  const subject = await hmacSha256Hex(hmacKey, `reporter:${clientAddress}`);
+  if (!constantTimeEqual(parts[2], subject)) return null;
+  const signature = await hmacSha256Hex(hmacKey, `${parts[0]}.${parts[1]}.${parts[2]}`);
+  return constantTimeEqual(parts[3], signature) ? subject : null;
+}
+
+function constantTimeEqual(left, right) {
+  if (left.length !== right.length) return false;
+  let difference = 0;
+  for (let index = 0; index < left.length; index += 1) {
+    difference |= left.charCodeAt(index) ^ right.charCodeAt(index);
+  }
+  return difference === 0;
 }
 
 async function hmacSha256Hex(secret, value) {

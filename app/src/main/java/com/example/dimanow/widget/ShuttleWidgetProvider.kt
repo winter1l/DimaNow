@@ -41,21 +41,6 @@ class ShuttleWidgetProvider : AppWidgetProvider() {
         )
     }
 
-    override fun onReceive(context: Context, intent: Intent) {
-        super.onReceive(context, intent)
-        if (intent.action == ACTION_REFRESH) {
-            val pending = goAsync()
-            CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
-                try {
-                    (context.applicationContext as DimaNowApplication).shuttleSource.refresh()
-                    updateAll(context)
-                } finally {
-                    pending.finish()
-                }
-            }
-        }
-    }
-
     private fun update(context: Context, manager: AppWidgetManager, ids: IntArray) {
         if (ids.isEmpty()) return
         val pending = goAsync()
@@ -161,8 +146,6 @@ class ShuttleWidgetProvider : AppWidgetProvider() {
     }
 
     companion object {
-        private const val ACTION_REFRESH = "com.example.dimanow.action.REFRESH_SHUTTLE_WIDGET"
-
         fun updateAll(context: Context) {
             val manager = AppWidgetManager.getInstance(context)
             val component = ComponentName(context, ShuttleWidgetProvider::class.java)

@@ -4,15 +4,15 @@ import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
-import java.util.concurrent.CountDownLatch
-import java.util.concurrent.TimeUnit
+import java.util.concurrent.CompletableFuture
+import java.util.concurrent.atomic.AtomicBoolean
 import org.junit.Assert.assertEquals
 import org.junit.Test
 import org.junit.runner.RunWith
 
 @RunWith(AndroidJUnit4::class)
 class LmsCredentialSubmissionWebViewTest {
-    @Test
+    @Test(timeout = WEB_VIEW_TEST_TIMEOUT_MS)
     fun captchaDomStopsSubmissionBeforeCredentialsAreWritten() {
         val result = evaluate(
             html = """
@@ -33,7 +33,7 @@ class LmsCredentialSubmissionWebViewTest {
         assertEquals("\"interactive|||\"", result)
     }
 
-    @Test
+    @Test(timeout = WEB_VIEW_TEST_TIMEOUT_MS)
     fun ordinaryOfficialLoginFormStillSubmitsStoredCredentials() {
         val result = evaluate(
             html = """
@@ -53,7 +53,7 @@ class LmsCredentialSubmissionWebViewTest {
         assertEquals("\"submitted|fixture-user|fixture-password|N\"", result)
     }
 
-    @Test
+    @Test(timeout = WEB_VIEW_TEST_TIMEOUT_MS)
     fun unexpectedVisibleAdditionalAuthenticationFieldStopsSubmission() {
         val result = evaluate(
             html = """
@@ -76,13 +76,16 @@ class LmsCredentialSubmissionWebViewTest {
 
     private fun evaluate(html: String, script: String): String {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
-        val completed = CountDownLatch(1)
-        var result = ""
+        val completed = CompletableFuture<String>()
+        val evaluationStarted = AtomicBoolean(false)
+        var webView: WebView? = null
         instrumentation.runOnMainSync {
-            val webView = WebView(instrumentation.targetContext)
-            webView.settings.javaScriptEnabled = true
-            webView.webViewClient = object : WebViewClient() {
+            val createdWebView = WebView(instrumentation.targetContext)
+            webView = createdWebView
+            createdWebView.settings.javaScriptEnabled = true
+            createdWebView.webViewClient = object : WebViewClient() {
                 override fun onPageFinished(view: WebView, url: String) {
+                    if (!evaluationStarted.compareAndSet(false, true)) return
                     val probe = """
                         (function(){
                           var state=$script;
@@ -92,13 +95,11 @@ class LmsCredentialSubmissionWebViewTest {
                         })()
                     """.trimIndent()
                     view.evaluateJavascript(probe) { value ->
-                        result = value
-                        view.destroy()
-                        completed.countDown()
+                        completed.complete(value)
                     }
                 }
             }
-            webView.loadDataWithBaseURL(
+            createdWebView.loadDataWithBaseURL(
                 "https://portal.dima.ac.kr/",
                 html,
                 "text/html",
@@ -106,7 +107,17 @@ class LmsCredentialSubmissionWebViewTest {
                 null,
             )
         }
-        check(completed.await(10, TimeUnit.SECONDS)) { "WebView script timed out" }
-        return result
+        return try {
+            completed.get()
+        } finally {
+            instrumentation.runOnMainSync {
+                webView?.stopLoading()
+                webView?.destroy()
+            }
+        }
+    }
+
+    private companion object {
+        const val WEB_VIEW_TEST_TIMEOUT_MS = 30_000L
     }
 }

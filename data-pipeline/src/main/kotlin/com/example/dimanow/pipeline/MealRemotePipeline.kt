@@ -1,11 +1,10 @@
 package com.example.dimanow.pipeline
 
 import com.example.dimanow.sync.MealPayload
-import java.net.HttpURLConnection
-import java.net.URL
 import java.time.Clock
 import java.time.LocalDate
 import java.time.ZoneId
+import java.net.URI
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
@@ -34,9 +33,10 @@ sealed interface MealPublicationResult {
     data object Waiting : MealPublicationResult
 }
 
-class MealRemotePipeline(
+internal class MealRemotePipeline(
     private val clock: Clock = Clock.system(ZoneId.of("Asia/Seoul")),
     private val geminiClient: GeminiMealOcrClient = GeminiMealOcrClient(System.getenv("GEMINI_API_KEY").orEmpty()),
+    private val httpClient: MealRemoteHttpClient = MealRemoteHttpClient(),
 ) {
     fun fetch(): MealPayload = when (val result = fetchPublication()) {
         is MealPublicationResult.Published -> result.payload
@@ -44,14 +44,14 @@ class MealRemotePipeline(
     }
 
     fun fetchPublication(): MealPublicationResult {
-        val discoveryHtml = Jsoup.connect(DISCOVERY_URL).userAgent(USER_AGENT).get().outerHtml()
+        val discoveryHtml = httpClient.getText(DISCOVERY_URL, MealRemoteEndpoint.DIMA_DISCOVERY)
         val post = MealDiscoveryParser().parse(discoveryHtml)
             ?: profilePost()
             ?: return MealPublicationResult.Waiting
-        val embedHtml = Jsoup.connect(post.embedUrl).userAgent(USER_AGENT).get().outerHtml()
+        val embedHtml = httpClient.getText(post.embedUrl, MealRemoteEndpoint.INSTAGRAM_EMBED)
         val imageUrl = InstagramCarouselParser().parse(embedHtml).imageUrls.getOrNull(1)
             ?: error("식단표 carousel 이미지를 찾지 못했습니다.")
-        val image = download(imageUrl)
+        val image = httpClient.getImage(imageUrl)
         val responseJson = geminiClient.extract(image.bytes, image.mimeType)
         val payload = GeminiMealPayloadBuilder().build(
             responseJson,
@@ -67,47 +67,20 @@ class MealRemotePipeline(
     }
 
     private fun profilePost(): MealPost? {
-        val response = Jsoup.connect(PROFILE_FEED_URL)
-            .ignoreContentType(true)
-            .userAgent(USER_AGENT)
-            .header("X-IG-App-ID", INSTAGRAM_PUBLIC_APP_ID)
-            .execute()
-        return MealProfileFeedParser().parse(response.body())
-    }
-
-    private fun download(url: String): DownloadedImage {
-        require(url.startsWith("https://")) { "식단 이미지가 HTTPS가 아닙니다." }
-        val connection = URL(url).openConnection() as HttpURLConnection
-        try {
-            connection.connectTimeout = 15_000
-            connection.readTimeout = 30_000
-            connection.instanceFollowRedirects = true
-            connection.setRequestProperty("User-Agent", USER_AGENT)
-            require(connection.responseCode == HttpURLConnection.HTTP_OK) { "식단 이미지 응답 ${connection.responseCode}" }
-            require(connection.contentLengthLong in -1L..MAX_IMAGE_BYTES) { "식단 이미지가 너무 큽니다." }
-            val bytes = connection.inputStream.use { input ->
-                val bytes = input.readNBytes(MAX_IMAGE_BYTES.toInt() + 1)
-                require(bytes.size <= MAX_IMAGE_BYTES) { "식단 이미지가 너무 큽니다." }
-                bytes
-            }
-            val mimeType = connection.contentType?.substringBefore(';')?.trim().orEmpty()
-            require(mimeType.startsWith("image/")) { "식단 파일이 이미지가 아닙니다." }
-            return DownloadedImage(bytes, mimeType)
-        } finally {
-            connection.disconnect()
-        }
+        val payload = httpClient.getText(
+            PROFILE_FEED_URL,
+            MealRemoteEndpoint.INSTAGRAM_PROFILE,
+            mapOf("X-IG-App-ID" to INSTAGRAM_PUBLIC_APP_ID),
+        )
+        return MealProfileFeedParser().parse(payload)
     }
 
     private companion object {
         const val DISCOVERY_URL = "https://www.dima.ac.kr/?p=1"
         const val PROFILE_FEED_URL = "https://www.instagram.com/api/v1/feed/user/30891067635/?count=12"
         const val INSTAGRAM_PUBLIC_APP_ID = "936619743392459"
-        const val USER_AGENT = "DIMA-Now/1.4 GitHub data pipeline"
-        const val MAX_IMAGE_BYTES = 15L * 1024 * 1024
         const val NOT_PUBLISHED_MESSAGE = "아직 새 식단이 올라오지 않았어요"
     }
-
-    private data class DownloadedImage(val bytes: ByteArray, val mimeType: String)
 }
 
 internal class MealDiscoveryParser {
@@ -116,7 +89,11 @@ internal class MealDiscoveryParser {
             val text = anchor.text().replace(Regex("\\s+"), " ").trim()
             if (!text.startsWith("[DIMA 학생식당]")) return@mapNotNull null
             val hours = HOURS.find(text)?.groupValues?.let { "${it[1]} ~ ${it[2]}" } ?: return@mapNotNull null
-            MealPost(text, anchor.absUrl("href"), hours)
+            val sourceUrl = MealRemoteUrlPolicy.canonicalInstagramPostOrNull(
+                URI.create("https://www.dima.ac.kr/?p=1").resolve(anchor.attr("href")).toString(),
+            )
+                ?: return@mapNotNull null
+            MealPost(text, sourceUrl, hours)
         }.lastOrNull()
 
     private companion object {

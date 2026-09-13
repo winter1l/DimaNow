@@ -79,7 +79,7 @@ class DataSourceScreenTest {
             )
         }
 
-        composeRule.onNodeWithText("18:55 셔틀이 오지 않나요?").assertExists()
+        composeRule.onNodeWithText("18:55 엔터관행 셔틀이 오지 않나요?").assertExists()
         composeRule.onNodeWithText("2명이 이 운행을 신고했어요").assertExists()
         composeRule.onNodeWithText("테스트 모드에서는 현황만 볼 수 있어요").assertExists()
         composeRule.onNodeWithText("신고").assertIsNotEnabled()

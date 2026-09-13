@@ -11,6 +11,15 @@ import org.junit.Test
 
 class LiveSurfacePlannerTest {
     @Test
+    fun `shuttle chip starts at sixty minutes and suppresses longer waits`() {
+        for ((minutes, expected) in listOf(120L to null, 61L to null, 60L to "강남행 60분", 1L to "강남행 1분", 0L to "강남행 곧")) {
+            val snapshot = GuidanceSnapshot(null, listOf(ShuttleLine("4402", "강남행", minutes)),
+                GuidancePhase.TRANSIT, countdownMeaning = CountdownMeaning.SHUTTLE_DEPARTURE)
+            assertEquals(expected, LiveSurfaceController.statusChipText(snapshot, LiveDisplayOptions(), false))
+        }
+    }
+
+    @Test
     fun `background foreground-service denial degrades without crashing live guidance`() {
         val started = LiveSurfaceController.startUpdaterSafely {
             throw IllegalStateException("foreground start not allowed")

@@ -108,6 +108,7 @@ interface LiveSurfaceController {
                 val first = snapshot.shuttleLines.firstOrNull()
                 val destination = first?.destination?.takeIf(String::isNotBlank) ?: return null
                 val minutes = first.minutes ?: return null
+                if (minutes > 60) return null
                 return if (minutes <= 0) "$destination 곧" else "$destination ${minutes}분"
             }
             return if (presentation.chipContent == LiveChipContent.CLASSROOM) {
@@ -175,14 +176,28 @@ object LiveSurfacePlanner {
 
 class AndroidLiveSurfaceController(private val context: Context) : LiveSurfaceController {
     private val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+    private val minuteUpdater by lazy { LiveMinuteUpdateScheduler(context.applicationContext) }
 
     override fun show(
         snapshot: GuidanceSnapshot,
         presentation: LiveDisplayOptions,
         deliveryMode: NotificationGuidanceMode,
     ): LiveSurfaceResult {
+        if (snapshot.phase == com.example.dimanow.domain.GuidancePhase.NONE ||
+            (snapshot.classContent == null && snapshot.shuttleLines.isEmpty())
+        ) return cancel()
         val delivery = LiveDeliveryPlanner.plan(deliveryMode, snapshot.requiresMinuteUpdates)
         if (!delivery.shouldPost) return cancel()
+        val visibleSnapshot = snapshot.copy(shuttleLines = snapshot.shuttleLines.filter {
+            it.minutes == null || it.minutes <= 60
+        })
+        if (visibleSnapshot.classContent == null && visibleSnapshot.shuttleLines.isEmpty()) {
+            cancel()
+            snapshot.countdownTarget?.minusSeconds(60 * 60)?.let { activation ->
+                LiveSurfaceController.startUpdaterSafely { minuteUpdater.resumeAt(activation) }
+            }
+            return LiveSurfaceResult.CANCELLED
+        }
         if (!hasNotificationPermission()) {
             NotificationManagerCompat.from(context).cancel(NOTIFICATION_ID)
             stopUpdater()
@@ -193,7 +208,7 @@ class AndroidLiveSurfaceController(private val context: Context) : LiveSurfaceCo
         try {
             NotificationManagerCompat.from(context).notify(
                 NOTIFICATION_ID,
-                buildNotification(snapshot, requestPromotion = delivery.requestPromotion && Build.VERSION.SDK_INT >= 36, presentation = presentation),
+                buildNotification(visibleSnapshot, requestPromotion = delivery.requestPromotion && Build.VERSION.SDK_INT >= 36, presentation = presentation),
             )
         } catch (_: SecurityException) {
             stopUpdater()
@@ -205,6 +220,7 @@ class AndroidLiveSurfaceController(private val context: Context) : LiveSurfaceCo
 
     override fun cancel(): LiveSurfaceResult {
         NotificationManagerCompat.from(context).cancel(NOTIFICATION_ID)
+        notificationManager.cancel(LEGACY_UPDATER_NOTIFICATION_ID)
         stopUpdater()
         return LiveSurfaceResult.CANCELLED
     }
@@ -282,7 +298,20 @@ class AndroidLiveSurfaceController(private val context: Context) : LiveSurfaceCo
     ): Notification {
         val classContent = snapshot.classContent
         val classroomFirst = presentation.classOrder == LiveClassOrder.CLASSROOM_FIRST
-        val title = if (classroomFirst && classContent?.startTime != null && classContent.room != null) {
+        val firstShuttle = snapshot.shuttleLines.firstOrNull()
+        val criticalText = LiveSurfaceController.statusChipText(snapshot, presentation, deviceLocked)
+        val complementaryShuttle = classContent == null && firstShuttle?.origin != null &&
+            snapshot.countdownMeaning == CountdownMeaning.SHUTTLE_DEPARTURE && criticalText != null
+        val title = if (snapshot.kind == com.example.dimanow.domain.GuidanceKind.BUS_4402) {
+            firstShuttle?.text ?: "4402 강남행"
+        } else if (complementaryShuttle) {
+            buildString {
+                append("${firstShuttle!!.origin} 출발")
+                firstShuttle.followingMinutes?.takeIf { it <= 60 }?.let { minutes ->
+                    append(if (minutes <= 0) " · 다음 차 곧" else " · 다음 차 ${minutes}분")
+                }
+            }
+        } else if (classroomFirst && classContent?.startTime != null && classContent.room != null) {
             "${classContent.startTime} · ${classContent.room}"
         } else {
             classContent?.title ?: snapshot.shuttleLines.firstOrNull()?.text ?: context.getString(R.string.app_name)
@@ -293,6 +322,7 @@ class AndroidLiveSurfaceController(private val context: Context) : LiveSurfaceCo
             else -> classContent?.detail
         }
         val detail = buildList {
+            if (complementaryShuttle) add(requireNotNull(criticalText))
             classDetail?.let(::add)
             addAll(
                 snapshot.shuttleLines
@@ -323,7 +353,6 @@ class AndroidLiveSurfaceController(private val context: Context) : LiveSurfaceCo
         }
         if (Build.VERSION.SDK_INT >= 36) {
             // 수업 countdown은 시스템 chronometer, 셔틀 countdown은 목적지 포함 분 단위 텍스트를 쓴다.
-            val criticalText = LiveSurfaceController.statusChipText(snapshot, presentation, deviceLocked)
             criticalText?.takeIf(String::isNotBlank)?.let(builder::setShortCriticalText)
             snapshot.classContent?.remainingText?.takeIf(String::isNotBlank)?.let(builder::setSubText)
         }
@@ -367,8 +396,15 @@ class AndroidLiveSurfaceController(private val context: Context) : LiveSurfaceCo
     }
 
     internal fun ensureChannel() {
+        notificationManager.cancel(LEGACY_UPDATER_NOTIFICATION_ID)
+        notificationManager.deleteNotificationChannel(LEGACY_SERVICE_CHANNEL_ID)
+        // Android cannot raise an existing channel's importance. Preserve an explicit block
+        // while migrating the former LOW channel for Samsung's live-update ranking.
+        val liveImportance = if (notificationManager.getNotificationChannel(LEGACY_CHANNEL_ID)?.importance ==
+            NotificationManager.IMPORTANCE_NONE
+        ) NotificationManager.IMPORTANCE_NONE else NotificationManager.IMPORTANCE_DEFAULT
         notificationManager.createNotificationChannel(
-            NotificationChannel(CHANNEL_ID, "수업·셔틀 실시간 안내", NotificationManager.IMPORTANCE_LOW).apply {
+            NotificationChannel(CHANNEL_ID, "수업·셔틀 실시간 안내", liveImportance).apply {
                 description = "사용자가 켠 수업 및 셔틀의 조용한 진행 안내"
                 setSound(null, null)
                 enableVibration(false)
@@ -377,18 +413,21 @@ class AndroidLiveSurfaceController(private val context: Context) : LiveSurfaceCo
     }
 
     private fun startUpdater(): Boolean = LiveSurfaceController.startUpdaterSafely {
-        ContextCompat.startForegroundService(context, Intent(context, LiveMinuteUpdateService::class.java))
+        minuteUpdater.start()
     }
 
     private fun stopUpdater() {
-        context.stopService(Intent(context, LiveMinuteUpdateService::class.java))
+        minuteUpdater.stop()
     }
 
     companion object {
         private const val ACTION_MANAGE_APP_PROMOTED_NOTIFICATIONS = "android.settings.MANAGE_APP_PROMOTED_NOTIFICATIONS"
         private const val PERMISSION_POST_PROMOTED_NOTIFICATIONS = "android.permission.POST_PROMOTED_NOTIFICATIONS"
         private const val EXTRA_REQUEST_PROMOTED_ONGOING = "android.requestPromotedOngoing"
-        const val CHANNEL_ID = "dima_live_guidance"
+        private const val LEGACY_CHANNEL_ID = "dima_live_guidance"
+        const val CHANNEL_ID = "dima_live_guidance_v2"
+        private const val LEGACY_SERVICE_CHANNEL_ID = "dima_guidance_service"
         const val NOTIFICATION_ID = 6201
+        private const val LEGACY_UPDATER_NOTIFICATION_ID = 6202
     }
 }

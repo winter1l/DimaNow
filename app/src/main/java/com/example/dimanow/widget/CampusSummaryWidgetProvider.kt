@@ -37,13 +37,6 @@ class CampusSummaryWidgetProvider : AppWidgetProvider() {
         )
     }
 
-    override fun onReceive(context: Context, intent: Intent) {
-        super.onReceive(context, intent)
-        if (intent.action == ACTION_REFRESH) {
-            updateAll(context)
-        }
-    }
-
     private fun update(context: Context, manager: AppWidgetManager, ids: IntArray) {
         if (ids.isEmpty()) return
         val pending = goAsync()
@@ -111,8 +104,6 @@ class CampusSummaryWidgetProvider : AppWidgetProvider() {
     }
 
     companion object {
-        const val ACTION_REFRESH = "com.example.dimanow.action.REFRESH_CAMPUS_SUMMARY_WIDGET"
-
         fun updateAll(context: Context) {
             val manager = AppWidgetManager.getInstance(context)
             val component = ComponentName(context, CampusSummaryWidgetProvider::class.java)

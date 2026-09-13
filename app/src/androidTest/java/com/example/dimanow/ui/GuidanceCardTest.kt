@@ -60,7 +60,9 @@ class GuidanceCardTest {
         }
 
         composeRule.onNodeWithText("기숙사").assertIsDisplayed()
-        composeRule.onNodeWithText("중식 · 기숙사 제육볶음").assertIsDisplayed()
+        composeRule.onNodeWithText("중식").assertIsDisplayed()
+        composeRule.onNodeWithText("기숙사 제육볶음").assertIsDisplayed()
+        composeRule.onNodeWithText("중식 · 기숙사 제육볶음").assertDoesNotExist()
         composeRule.onNodeWithText("학생식당").assertDoesNotExist()
     }
 

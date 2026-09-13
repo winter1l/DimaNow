@@ -35,13 +35,13 @@ class LmsSecurityPolicyTest {
     }
 
     @Test
-    fun onlyTheObservedPortalBridgeMayUseCleartextDuringInteractiveLogin() {
-        assertTrue(
+    fun legacyCleartextSsoBridgesFailClosedDuringInteractiveLogin() {
+        assertFalse(
             LmsUrlPolicy.isAllowedLoginNavigation(
                 "http://sso.dima.ac.kr:8080/sso/pmi-sso.jsp?ticket=one-time",
             ),
         )
-        assertTrue(
+        assertFalse(
             LmsUrlPolicy.isAllowedLoginNavigation(
                 "http://sso.dima.ac.kr:8080/sso/pmi-sso2.jsp?ticket=one-time",
             ),

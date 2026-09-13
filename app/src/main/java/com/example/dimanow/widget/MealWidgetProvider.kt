@@ -33,24 +33,6 @@ class MealWidgetProvider : AppWidgetProvider() {
         newOptions: Bundle,
     ) = update(context, appWidgetManager, intArrayOf(appWidgetId))
 
-    override fun onReceive(context: Context, intent: Intent) {
-        super.onReceive(context, intent)
-        if (intent.action == ACTION_REFRESH) {
-            val pending = goAsync()
-            CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
-                try {
-                    com.example.dimanow.work.StudentMealSync.refresh(
-                        context,
-                        (context.applicationContext as DimaNowApplication).mealSource,
-                        com.example.dimanow.meal.MealRefreshTrigger.MANUAL,
-                    )
-                } finally {
-                    pending.finish()
-                }
-            }
-        }
-    }
-
     private fun update(context: Context, manager: AppWidgetManager, ids: IntArray) {
         val pending = goAsync()
         CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
@@ -99,7 +81,6 @@ class MealWidgetProvider : AppWidgetProvider() {
     }
 
     companion object {
-        private const val ACTION_REFRESH = "com.example.dimanow.action.REFRESH_MEAL_WIDGET"
         fun updateAll(context: Context) {
             val manager = AppWidgetManager.getInstance(context)
             val ids = manager.getAppWidgetIds(ComponentName(context, MealWidgetProvider::class.java))

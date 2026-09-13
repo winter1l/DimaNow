@@ -1,6 +1,7 @@
 package com.example.dimanow.pipeline
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Test
 
 class MealRemoteParserFixtureTest {
@@ -23,6 +24,20 @@ class MealRemoteParserFixtureTest {
 
         assertEquals("https://www.instagram.com/p/DcaCs3yE6So/", post?.sourceUrl)
         assertEquals("11:00 ~ 14:00", post?.hours)
+    }
+
+    @Test
+    fun `meal-looking discovery links outside the exact Instagram post origin are rejected`() {
+        val title = "[DIMA 학생식당] 9월 2주차 식단 안내 운영시간: 11:00 ~ 14:00"
+
+        assertNull(MealDiscoveryParser().parse("""<a href="https://169.254.169.254/latest">$title</a>"""))
+        assertNull(MealDiscoveryParser().parse("""<a href="https://www.instagram.com.evil.example/p/fixture/">$title</a>"""))
+        assertNull(MealDiscoveryParser().parse("""<a href="https://user@www.instagram.com/p/fixture/">$title</a>"""))
+        assertNull(MealDiscoveryParser().parse("""<a href="https://www.instagram.com:8443/p/fixture/">$title</a>"""))
+        assertEquals(
+            "https://www.instagram.com/p/fixture/",
+            MealDiscoveryParser().parse("""<a href="https://www.instagram.com/p/fixture/">$title</a>""")?.sourceUrl,
+        )
     }
 
     @Test

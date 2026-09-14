@@ -29,7 +29,12 @@ sealed interface DormitoryMealAnalysis {
 class GeminiDormitoryMealClient(
     private val apiKey: String,
     private val endpointRoot: String = "https://generativelanguage.googleapis.com",
+    private val extractionThinkingLevel: String = "minimal",
 ) {
+    init {
+        require(extractionThinkingLevel in setOf("minimal", "LOW")) { "지원하지 않는 식단 추출 추론 수준입니다." }
+    }
+
     private val json = Json { ignoreUnknownKeys = true }
 
     fun validate(imageBytes: ByteArray, mimeType: String): DormitoryMealValidation {
@@ -109,7 +114,7 @@ class GeminiDormitoryMealClient(
         mimeType = mimeType,
         prompt = "동아방송예술대학교 학생기숙사 주간 식단표를 월요일부터 금요일까지 전사하세요. 각 날짜 아래의 조식, 간편식, 라면, 중식, 석식, 샐러드도시락 등 표에 보이는 모든 구분을 위에서 아래 순서대로 sections에 넣으세요. 이름과 운영시간, 메뉴는 보이는 그대로 적고 번역, 보충, 추측하지 마세요. 같은 이름의 구분이 하루에 여러 번 있으면 각각 별도 section으로 유지하세요.",
         schema = EXTRACTION_SCHEMA,
-        thinkingLevel = "minimal",
+        thinkingLevel = extractionThinkingLevel,
     )
 
     private fun requestBody(
@@ -134,6 +139,7 @@ class GeminiDormitoryMealClient(
             })
         })
         put("generationConfig", buildJsonObject {
+            put("mediaResolution", "MEDIA_RESOLUTION_HIGH")
             put("thinkingConfig", buildJsonObject { put("thinkingLevel", thinkingLevel) })
             put("responseMimeType", "application/json")
             put("responseJsonSchema", schema)

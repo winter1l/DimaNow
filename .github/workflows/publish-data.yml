@@ -25,7 +25,7 @@ on:
         required: true
         default: all
         type: choice
-        options: [all, shuttle, meal, notice]
+        options: [all, shuttle, meal, notice, deploy-only]
 
 permissions:
   contents: write

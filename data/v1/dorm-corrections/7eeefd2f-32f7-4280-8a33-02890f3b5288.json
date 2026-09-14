@@ -1,0 +1,29 @@
+{
+    "schemaVersion": 1,
+    "submissionId": "7eeefd2f-32f7-4280-8a33-02890f3b5288",
+    "sourceImageSha256": "1bf302cdf9ae27b2d550023ef11a02502dd25771d678272f3e2a7424ec661e17",
+    "previousPayloadSha256": "41b9a6e0f57eac3c4f9c3fe7ee445d1f80924ab4abd6858785d5a7489dc90940",
+    "correctedPayloadSha256": "1d1a380954fa766d1b4982161a66e28b5b310d16906912f8ad9290acf8957324",
+    "reviewedAt": "2026-09-14T15:19:33.743482Z",
+    "method": "user-authorized comparison against submitted source photo",
+    "changes": [
+        {
+            "date": "2026-09-16",
+            "section": "중식",
+            "before": "돈육김치찌개\n-돈육,계육:국내산-",
+            "after": "돈육김치찌개\n-돈육:국내산-"
+        },
+        {
+            "date": "2026-09-16",
+            "section": "석식",
+            "before": "탄탄음료",
+            "after": "탄산음료"
+        },
+        {
+            "date": "2026-09-17",
+            "section": "샐러드도시락",
+            "before": "텐더샐러드도시락",
+            "after": "텐더샐러드도시락\n-계육:국내산-"
+        }
+    ]
+}

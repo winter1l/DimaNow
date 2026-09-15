@@ -19,3 +19,5 @@ Purpose: durable project context that survives session and context changes.
 2. Keep user-confirmed decisions separate from agent assumptions.
 3. Label claims as confirmed, observed, assumed, hearsay, or unknown.
 4. Product capability claims require code, test, or device evidence.
+
+Local connection handoff: read `LOCAL-ONLY.md` before device work.

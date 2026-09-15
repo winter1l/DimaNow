@@ -30,3 +30,6 @@
 Unknown: exact classroom room label in actual Kakao notifications. User has been asked for room name and phone unlock. Provisional D-071 reading: default-off local detection with explicit review of structured proposals. Real Kakao end-to-end observation requires user-granted special notification access and a qualifying new notification; synthetic notification tests are not real Kakao acceptance.
 
 Resolved 2026-09-14: D-072 removes Kakao intake, so the prior room-name/access question is withdrawn. Phone unlock and actual course UI observation completed. D-073 records user-approved SSO bridge exception, including Android domain-level allowance with application port/path checks.
+
+## 2026-09-16 — D-080 historical Git privacy
+Pending explicit history scope: two accidental screenshots remain in existing local commits after index removal; previously published documentation contains device metadata in GitHub main/history. Complete local ignore/redaction/checker changes first. Rewriting published commit IDs and force-updating remote refs requires a concrete reviewed plan and user authorization; do not conflate local index cleanup with erased historical exposure.

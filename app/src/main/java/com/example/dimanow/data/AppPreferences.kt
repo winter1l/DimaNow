@@ -34,6 +34,13 @@ data class AppUpdatePreferences(
 
 private val Context.settingsDataStore by preferencesDataStore(name = "dima_now_settings")
 
+enum class OnboardingStage { WELCOME, HOME_BASE, SETUP }
+
+data class OnboardingDraft(
+    val stage: OnboardingStage = OnboardingStage.WELCOME,
+    val homeBase: HomeBase? = null,
+)
+
 class AppPreferences(private val context: Context) {
     val automaticClassGuidance: Flow<Boolean> = context.settingsDataStore.data.map { true }
 
@@ -121,6 +128,18 @@ class AppPreferences(private val context: Context) {
     /** 최초 실행 권한 온보딩을 끝냈는지. 끝내기 전에는 앱 셸 대신 온보딩이 표시된다 (D-056). */
     val onboardingCompleted: Flow<Boolean> = context.settingsDataStore.data.map { preferences ->
         preferences[ONBOARDING_COMPLETED] ?: false
+    }
+
+    val onboardingDraft: Flow<OnboardingDraft> = context.settingsDataStore.data.map { preferences ->
+        val homeBase = preferences[ONBOARDING_DRAFT_HOME_BASE]
+            ?.let { runCatching { HomeBase.valueOf(it) }.getOrNull() }
+        val stage = preferences[ONBOARDING_STAGE]
+            ?.let { runCatching { OnboardingStage.valueOf(it) }.getOrNull() }
+            ?: OnboardingStage.WELCOME
+        OnboardingDraft(
+            stage = if (stage == OnboardingStage.SETUP && homeBase == null) OnboardingStage.HOME_BASE else stage,
+            homeBase = homeBase,
+        )
     }
 
     val backgroundWorkPolicyVersion: Flow<Int> = context.settingsDataStore.data.map { preferences ->
@@ -230,6 +249,25 @@ class AppPreferences(private val context: Context) {
         }
     }
 
+    suspend fun saveOnboardingDraft(draft: OnboardingDraft) {
+        context.settingsDataStore.edit {
+            it[ONBOARDING_STAGE] = draft.stage.name
+            it.putOrRemove(ONBOARDING_DRAFT_HOME_BASE, draft.homeBase?.name)
+        }
+    }
+
+    /** Only the final action confirms the direction and finishes the entire first-run flow. */
+    suspend fun completeOnboarding(homeBase: HomeBase) {
+        context.settingsDataStore.edit {
+            it[HOME_BASE] = homeBase.name
+            it[HOME_BASE_SELECTION_CONFIRMED] = true
+            it[ONBOARDING_COMPLETED] = true
+            it[NOW_BAR_SETUP_COMPLETED] = true
+            it.remove(ONBOARDING_STAGE)
+            it.remove(ONBOARDING_DRAFT_HOME_BASE)
+        }
+    }
+
     suspend fun setBackgroundWorkPolicyVersion(version: Int) {
         context.settingsDataStore.edit { it[BACKGROUND_WORK_POLICY_VERSION] = version }
     }
@@ -284,6 +322,8 @@ class AppPreferences(private val context: Context) {
         val HOME_BASE_SELECTION_CONFIRMED = booleanPreferencesKey("home_base_selection_confirmed")
         val NOW_BAR_SETUP_COMPLETED = booleanPreferencesKey("now_bar_setup_completed")
         val ONBOARDING_COMPLETED = booleanPreferencesKey("onboarding_completed")
+        val ONBOARDING_STAGE = stringPreferencesKey("onboarding_stage")
+        val ONBOARDING_DRAFT_HOME_BASE = stringPreferencesKey("onboarding_draft_home_base")
         val BACKGROUND_WORK_POLICY_VERSION = intPreferencesKey("background_work_policy_version")
         val UPDATE_LAST_CHECKED = longPreferencesKey("update_last_checked")
         val UPDATE_LATEST_VERSION = stringPreferencesKey("update_latest_version")

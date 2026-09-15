@@ -10,6 +10,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CancellationException
 
 interface LmsSessionController {
     val state: StateFlow<LmsSessionState>
@@ -36,6 +37,16 @@ sealed interface LmsLoginResult {
     data class Failure(val message: String) : LmsLoginResult
 }
 
+internal fun LmsLoginResult.failureMessage(): String? = when (this) {
+    LmsLoginResult.Success -> null
+    LmsLoginResult.CredentialsRejected -> "계정 정보를 다시 확인해 주세요"
+    LmsLoginResult.SessionConflict -> "다른 기기의 로그인 세션을 확인해 주세요"
+    is LmsLoginResult.SessionTakeoverFailed -> message
+    LmsLoginResult.InteractiveAuthenticationRequired -> "공식 LMS에서 추가 인증이 필요합니다"
+    is LmsLoginResult.NetworkError -> message
+    is LmsLoginResult.Failure -> message
+}
+
 interface LmsLoginDriver {
     suspend fun authenticate(credentials: SavedLmsCredentials): LmsLoginResult
 }
@@ -55,12 +66,17 @@ class LmsLoginBridge : LmsLoginDriver {
         return try {
             pending.result.await()
         } finally {
+            pending.result.cancel()
             mutableRequest.compareAndSet(pending, null)
         }
     }
 
     fun complete(result: LmsLoginResult) {
         mutableRequest.value?.result?.complete(result)
+    }
+
+    fun complete(request: LmsLoginRequest, result: LmsLoginResult) {
+        if (mutableRequest.value === request) request.result.complete(result)
     }
 
     fun cancel() {
@@ -305,19 +321,31 @@ class LmsAutoLoginCoordinator(
 ) {
     private val mutex = Mutex()
     private var retryAfter: Instant? = null
+    private val mutableErrorMessage = MutableStateFlow<String?>(null)
+    val errorMessage: StateFlow<String?> = mutableErrorMessage.asStateFlow()
 
-    suspend fun ensureActive(force: Boolean): LmsSessionState = mutex.withLock {
+    suspend fun ensureActive(force: Boolean, credentialsChanged: Boolean = false): LmsSessionState = mutex.withLock {
         val current = sessionController.state.value
-        if (!force && current == LmsSessionState.ACTIVE) return@withLock current
-        if (!force && current == LmsSessionState.CREDENTIALS_NEED_REVIEW) return@withLock current
-        if (!force && retryAfter?.isAfter(clock.instant()) == true) return@withLock current
+        if (!credentialsChanged && current == LmsSessionState.ACTIVE) return@withLock current
+        if (!force && !credentialsChanged && current == LmsSessionState.CREDENTIALS_NEED_REVIEW) return@withLock current
+        if (!force && !credentialsChanged && retryAfter?.isAfter(clock.instant()) == true) return@withLock current
+        mutableErrorMessage.value = null
         val credentials = credentialStore.load()
         if (credentials == null || !credentials.automaticLogin) {
             sessionController.transition(LmsSessionState.SIGNED_OUT)
             return@withLock LmsSessionState.SIGNED_OUT
         }
         sessionController.transition(LmsSessionState.AUTHENTICATING)
-        when (loginDriver.authenticate(credentials)) {
+        val result = try {
+            loginDriver.authenticate(credentials)
+        } catch (cancelled: CancellationException) {
+            if (sessionController.state.value == LmsSessionState.AUTHENTICATING) {
+                sessionController.transition(LmsSessionState.EXPIRED)
+            }
+            throw cancelled
+        }
+        mutableErrorMessage.value = result.failureMessage()
+        when (result) {
             LmsLoginResult.Success -> {
                 retryAfter = null
                 LmsSessionState.ACTIVE

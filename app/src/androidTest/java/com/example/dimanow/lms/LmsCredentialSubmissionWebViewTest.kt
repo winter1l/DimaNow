@@ -13,6 +13,21 @@ import org.junit.runner.RunWith
 @RunWith(AndroidJUnit4::class)
 class LmsCredentialSubmissionWebViewTest {
     @Test(timeout = WEB_VIEW_TEST_TIMEOUT_MS)
+    fun dormantPopupFramesDoNotBlockTheOfficialLoginForm() {
+        val result = evaluate(
+            html = """
+                <html><body>
+                  <input id="txtID" /><input id="txtPwd" type="password" />
+                  <div style="display:none"><iframe></iframe><input name="popupValue" /></div>
+                  <script>function Login(mode){ window.loginMode = mode; }</script>
+                </body></html>
+            """.trimIndent(),
+            script = lmsCredentialSubmissionScript("fixture-user", "fixture-password", portal = true),
+        )
+        assertEquals("\"submitted|fixture-user|fixture-password|N\"", result)
+    }
+
+    @Test(timeout = WEB_VIEW_TEST_TIMEOUT_MS)
     fun captchaDomStopsSubmissionBeforeCredentialsAreWritten() {
         val result = evaluate(
             html = """

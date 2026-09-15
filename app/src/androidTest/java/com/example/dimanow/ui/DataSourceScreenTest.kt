@@ -209,7 +209,7 @@ class DataSourceScreenTest {
             ShuttleScreen(
                 shuttleSource = FakeShuttleSource(departures),
                 currentZone = CampusZoneId.MAIN,
-                // 공식 저녁 운동장 운행으로 전환되기 전이면서 모든 fixture 운행이 끝난
+                // 공식 저녁 본관 운행으로 전환되기 전이면서 모든 fixture 운행이 끝난
                 // 시각을 사용해, 본관 그룹 헤더와 전체 시간표를 안정적으로 검증한다.
                 now = ZonedDateTime.now(ZoneId.of("Asia/Seoul"))
                     .withHour(18).withMinute(0).withSecond(0).withNano(0),
@@ -223,7 +223,7 @@ class DataSourceScreenTest {
         composeRule.onNodeWithText("원룸촌행").assertExists()
         composeRule.onNodeWithText("본관 → 엔터관").assertDoesNotExist()
         composeRule.onNodeWithText("본관 → 원룸촌").assertDoesNotExist()
-        composeRule.onNodeWithText("총 3회 (첫차 08:10 · 막차 09:10)").assertExists()
+        composeRule.onNodeWithText("첫차 08:10 · 막차 09:10").assertExists()
         composeRule.onNodeWithText("08:10 (첫차)").assertExists()
         composeRule.onNodeWithText("08:40").assertExists()
         composeRule.onNodeWithText("09:10 (막차)").assertExists()
@@ -246,9 +246,9 @@ class DataSourceScreenTest {
             )
         }
 
-        composeRule.onNodeWithText("20:00 (막차) · 운동장").assertExists()
-        composeRule.onNodeWithText("5분 후 · 운동장 전환").assertExists()
-        composeRule.onNodeWithText("19:35 · 운동장 전환").assertExists()
+        composeRule.onNodeWithText("20:00 (막차) · 본관").assertExists()
+        composeRule.onNodeWithText("5분 후 · 탑승 위치 변경").assertExists()
+        composeRule.onNodeWithText("19:35 · 탑승 위치 변경").assertExists()
     }
 
     @Test
@@ -294,7 +294,7 @@ class DataSourceScreenTest {
 
         composeRule.onNodeWithText("본관 학생식당").assertExists()
         composeRule.onNodeWithText("기숙사").performClick()
-        composeRule.onNodeWithText("사진 올리기").assertExists()
+        composeRule.onNodeWithText("식단표 사진 올리기").assertExists()
         // D-056: 주간 전체가 비면 같은 빈 카드 5장 대신 이유와 본문 CTA가 있는 안내 카드 하나만 남는다
         composeRule.onNodeWithTag("dormitory_week_empty").assertExists()
         composeRule.onNodeWithText("이번 주 기숙사 식단이 아직 없어요").assertExists()
@@ -336,7 +336,7 @@ class DataSourceScreenTest {
         // 운영시간이 없는 코너는 앞선 식사 카드 안에 남아 사라지지 않는다
         composeRule.onNodeWithText("간편식").assertExists()
         composeRule.onNodeWithText("시리얼").assertExists()
-        composeRule.onNodeWithText("사진 올리기").assertDoesNotExist()
+        composeRule.onNodeWithText("식단표 사진 올리기").assertDoesNotExist()
     }
 
     @Test
@@ -347,12 +347,12 @@ class DataSourceScreenTest {
         }
 
         composeRule.onNodeWithText("기숙사").performClick()
-        composeRule.onNodeWithText("사진 올리기").performClick()
+        composeRule.onNodeWithText("식단표 사진 올리기").performClick()
 
         composeRule.waitUntil(5_000) { source.refreshCount == 1 }
         composeRule.onNodeWithText("사진 선택").assertDoesNotExist()
         composeRule.onNodeWithText("이번 주 기숙사 식단을 불러왔어요").assertExists()
-        composeRule.onNodeWithText("사진 올리기").assertDoesNotExist()
+        composeRule.onNodeWithText("식단표 사진 올리기").assertDoesNotExist()
     }
 
     @Test
@@ -363,7 +363,7 @@ class DataSourceScreenTest {
         }
 
         composeRule.onNodeWithText("기숙사").performClick()
-        composeRule.onNodeWithText("사진 올리기").performClick()
+        composeRule.onNodeWithText("식단표 사진 올리기").performClick()
 
         composeRule.onNodeWithText("사진 선택").assertExists()
         composeRule.onNodeWithText("카메라 촬영").assertExists()

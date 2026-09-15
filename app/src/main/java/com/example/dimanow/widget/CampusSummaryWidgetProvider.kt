@@ -65,7 +65,7 @@ class CampusSummaryWidgetProvider : AppWidgetProvider() {
                 val todayCourses = if (guidancePaused) {
                     emptyList()
                 } else {
-                    schedule.courses.filter { it.weekday == now.dayOfWeek }
+                    schedule.coursesOn(today)
                 }
 
                 val plan = CampusSummaryWidgetPlanner().plan(

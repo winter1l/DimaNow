@@ -5,6 +5,8 @@ import android.content.Intent
 import android.net.Uri
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -19,7 +21,11 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -31,6 +37,7 @@ import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
 
 @Composable
+@OptIn(ExperimentalLayoutApi::class)
 internal fun Bus4402ScheduleContent(
     now: ZonedDateTime,
     nearbyStopNumber: String?,
@@ -62,6 +69,7 @@ internal fun Bus4402ScheduleContent(
         }
 
         schedule.stops.forEach { stop ->
+            var detailsExpanded by rememberSaveable(stop.stopNumber) { mutableStateOf(false) }
             val departures = remember(serviceType, stop.stopNumber) {
                 schedule.departures(serviceType, stop.stopNumber)
             }
@@ -85,11 +93,10 @@ internal fun Bus4402ScheduleContent(
             ) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                        Column {
+                        Column(Modifier.weight(1f)) {
                             Text(stop.displayName, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                             Text(
-                                if (stop.originOffsetMinutes == 0) "정류장 ${stop.stopNumber}"
-                                else "정류장 ${stop.stopNumber} · 공식 기점 +1분 예정",
+                                "강남행",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
@@ -110,7 +117,7 @@ internal fun Bus4402ScheduleContent(
                     if (upcoming.isEmpty()) {
                         Text("오늘 운행 종료", color = MaterialTheme.colorScheme.onSurfaceVariant)
                     } else {
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             upcoming.forEachIndexed { index, departure ->
                                 val target = now.toLocalDate().atTime(departure.time).atZone(now.zone)
                                 val millis = Duration.between(now, target).toMillis().coerceAtLeast(0)
@@ -120,11 +127,11 @@ internal fun Bus4402ScheduleContent(
                                     color = if (index == 0) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.secondaryContainer,
                                 ) {
                                     Text(
-                                        text = when {
-                                            minutes > 60 -> "강남행 · ${departure.time.format(TIME)} 출발" + if (departure.estimated) " 예정" else ""
-                                            minutes == 0L -> "강남행 · 곧 출발"
-                                            else -> "강남행 · ${minutes}분 후"
-                                        },
+                                        text = (when {
+                                            minutes > 60 -> "${departure.time.format(TIME)} 출발"
+                                            minutes == 0L -> "곧 출발"
+                                            else -> "${minutes}분 후"
+                                        }) + if (departure.estimated) " · 예정" else "",
                                         color = if (index == 0) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSecondaryContainer,
                                         style = MaterialTheme.typography.labelLarge,
                                         fontWeight = FontWeight.Bold,
@@ -135,7 +142,7 @@ internal fun Bus4402ScheduleContent(
                         }
                     }
 
-                    Text("전체 시간표 · 현재 ${now.format(TIME)}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("전체 시간표", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     LazyRow(state = timetableState, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         itemsIndexed(departures, key = { _, item -> item.time.toSecondOfDay() }) { index, departure ->
                             val isPast = departure.time.isBefore(now.toLocalTime())
@@ -166,6 +173,17 @@ internal fun Bus4402ScheduleContent(
                                 )
                             }
                         }
+                    }
+                    TextButton(onClick = { detailsExpanded = !detailsExpanded }) {
+                        Text(if (detailsExpanded) "정류장 정보 접기" else "정류장 정보")
+                    }
+                    if (detailsExpanded) {
+                        Text(
+                            if (stop.originOffsetMinutes == 0) "정류장 ${stop.stopNumber}"
+                            else "정류장 ${stop.stopNumber} · 공식 기점 +${stop.originOffsetMinutes}분 예정",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
                     }
                 }
             }

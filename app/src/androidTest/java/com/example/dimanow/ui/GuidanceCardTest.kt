@@ -1,10 +1,15 @@
 package com.example.dimanow.ui
 
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import com.example.dimanow.domain.CampusZoneId
 import com.example.dimanow.domain.DefaultSchedule
 import com.example.dimanow.domain.ShuttleDeparture
@@ -219,7 +224,7 @@ class GuidanceCardTest {
             )
         }
 
-        composeRule.onNodeWithText("상단 필").assertIsDisplayed()
+        composeRule.onNodeWithText("상단 알림 표시").assertIsDisplayed()
         composeRule.onNodeWithText("남은 시간").assertIsDisplayed()
         composeRule.onNodeWithText("강의실").performClick()
         composeRule.onNodeWithText("잠금화면 첫 줄").assertIsDisplayed()
@@ -270,13 +275,17 @@ class GuidanceCardTest {
             Bus4402ScheduleContent(
                 now = ZonedDateTime.of(2026, 9, 4, 8, 42, 0, 0, ZoneId.of("Asia/Seoul")),
                 nearbyStopNumber = "34710",
+                modifier = Modifier.verticalScroll(rememberScrollState()),
             )
         }
 
         composeRule.onNodeWithText("4402 강남행").assertExists()
         composeRule.onNodeWithText("대학 셔틀 정류장").assertExists()
         composeRule.onNodeWithText("원룸촌 앞").assertExists()
-        composeRule.onNodeWithText("강남행 · 8분 후").assertExists()
+        composeRule.onNodeWithText("8분 후").assertExists()
+        composeRule.onNodeWithText("9분 후 · 예정").assertExists()
+        composeRule.onNodeWithText("정류장 33243 · 공식 기점 +1분 예정").assertDoesNotExist()
+        composeRule.onAllNodesWithText("정류장 정보")[1].performScrollTo().performClick()
         composeRule.onNodeWithText("정류장 33243 · 공식 기점 +1분 예정").assertExists()
     }
 

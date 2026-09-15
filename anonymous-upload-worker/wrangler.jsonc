@@ -8,7 +8,7 @@
     "enabled": true
   },
   "triggers": {
-    "crons": ["23 17 * * *"]
+    "crons": ["7,37 0-4 * * MON", "7 5-23/2 * * MON", "7 1-23/2 * * SUN,TUE,WED,THU,FRI,SAT"]
   },
   "vars": {
     "GITHUB_APP_ID": "4774955",

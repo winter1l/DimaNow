@@ -20,3 +20,13 @@
 - Resolved (2026-09-08, D-065): the user authorized repairing the investigated report card. Reporting now follows published boarding departures; the 18:45 inferred MAIN arrival remains in topology but cannot be reported. Whether passengers can board that physical arrival is still unknown and is not asserted by the app. See shuttle-report-audit-20260908.md for the historical investigation.
 
 - Resolved (2026-09-08, D-065): after the user authorized repair, the title was changed to departure origin plus following vehicle and shortCriticalText retained the nearest vehicle. On the user's One UI 9 phone, the folded Now Bar visibly rendered `본관 출발 · 다음 차 29분` above `엔터관행 4분`; the unlocked chip also retained `엔터관행 4분`. See PRODUCT-TRUTH.md for dated evidence and nowbar-duplicate-audit-20260908.md for the original investigation.
+
+## Now Bar eligibility follow-up - 2026-09-14
+
+- Q-010 (unknown): which additional Samsung eligibility conditions allow DIMA Now's existing package identity to show without the developer test option? Metadata-only replacement was insufficient on the current API 37 / One UI 9 device. Android promotion was present, but Samsung Showing-list membership and the physical lock-screen card required the option in the tested controls. Cold reboot and any official OEM admission path remain unverified. See `nowbar-metadata-experiment-20260914.md`.
+
+## 2026-09-14 — Kakao setup and phone observation
+
+Unknown: exact classroom room label in actual Kakao notifications. User has been asked for room name and phone unlock. Provisional D-071 reading: default-off local detection with explicit review of structured proposals. Real Kakao end-to-end observation requires user-granted special notification access and a qualifying new notification; synthetic notification tests are not real Kakao acceptance.
+
+Resolved 2026-09-14: D-072 removes Kakao intake, so the prior room-name/access question is withdrawn. Phone unlock and actual course UI observation completed. D-073 records user-approved SSO bridge exception, including Android domain-level allowance with application port/path checks.

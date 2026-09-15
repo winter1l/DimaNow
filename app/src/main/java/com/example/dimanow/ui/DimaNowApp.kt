@@ -41,6 +41,8 @@ import com.example.dimanow.ui.onboarding.shouldShowOnboarding
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -131,6 +133,9 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -224,8 +229,6 @@ import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
 import java.time.temporal.TemporalAdjusters
 import java.io.File
-import java.io.ByteArrayOutputStream
-import java.io.InputStream
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
@@ -322,8 +325,9 @@ fun DimaNowApp(
     // 귀가 기준지가 이미 확정된 기존 설치는 업데이트만으로 온보딩을 다시 보지 않는다.
     if (shouldShowOnboarding(onboardingCompleted, homeBaseConfirmed)) {
         OnboardingRoute(
-            onSelectHomeBase = { scope.launch { preferences.setHomeBase(it) } },
-            onComplete = { scope.launch { preferences.setOnboardingCompleted() } },
+            preferences = preferences,
+            liveSurfaceController = liveSurfaceController,
+            onPermissionsChanged = { (appContext as? com.example.dimanow.DimaNowApplication)?.refreshGuidancePermissions() },
         )
         return
     }
@@ -390,6 +394,8 @@ fun DimaNowApp(
                     shuttleReportSource = shuttleReportSource,
                     mealSource = mealSource,
                     noticeSource = noticeSource,
+                    lmsSource = lmsSource,
+                    lmsSessionController = lmsSessionController,
                     onNavigateToPage = { page = it },
                     modifier = Modifier.padding(padding),
                     now = requireNotNull(minuteNow),
@@ -446,7 +452,7 @@ fun DimaNowApp(
         AlertDialog(
             onDismissRequest = { appUpdateCoordinator?.dismissPrompt() },
             title = { Text("업데이트 가능") },
-            text = { Text("DIMA Now ${updateState.promptVersion} 버전을 설치할 수 있습니다.") },
+            text = { Text("DIMA Now ${updateState.promptVersion} 버전을 설치할 수 있어요.") },
             confirmButton = {
                 Button(onClick = { appUpdateCoordinator?.downloadAndInstall() }) { Text("다운로드 및 설치") }
             },
@@ -490,11 +496,15 @@ private fun DashboardRoute(
     shuttleReportSource: ShuttleReportSource?,
     mealSource: MealSource,
     noticeSource: NoticeSource?,
+    lmsSource: LmsSource,
+    lmsSessionController: LmsSessionController,
     onNavigateToPage: (AppPage) -> Unit,
     modifier: Modifier,
     now: ZonedDateTime,
 ) {
     val schedule by repository.schedule.collectAsStateWithLifecycle(initialValue = DefaultSchedule.create())
+    val homeLms by lmsSource.snapshot.collectAsStateWithLifecycle(initialValue = com.example.dimanow.lms.LmsSnapshot())
+    val homeLmsSession by lmsSessionController.state.collectAsStateWithLifecycle()
     val resolvedZone by preferences.effectiveZone.collectAsStateWithLifecycle(initialValue = CampusZoneId.OUTSIDE)
     val locationMode by preferences.locationMode.collectAsStateWithLifecycle(initialValue = LocationMode.GPS)
     val shuttle by shuttleSource.data.collectAsStateWithLifecycle(
@@ -538,6 +548,8 @@ private fun DashboardRoute(
 
     DashboardScreen(
         schedule = schedule,
+        lmsSnapshot = homeLms,
+        lmsSessionState = homeLmsSession,
         zone = resolvedZone,
         testMode = locationMode == LocationMode.TEST,
         automatic = true,
@@ -696,14 +708,13 @@ internal fun DashboardScreen(
     onNavigateToPage: (AppPage) -> Unit = {},
     modifier: Modifier = Modifier,
     now: ZonedDateTime = ZonedDateTime.now(),
+    lmsSnapshot: com.example.dimanow.lms.LmsSnapshot = com.example.dimanow.lms.LmsSnapshot(),
+    lmsSessionState: LmsSessionState = LmsSessionState.SIGNED_OUT,
 ) {
     val context = LocalContext.current
     val nowTime = now.toLocalTime()
     val guidancePaused = now.toLocalDate() in schedule.noClassDates || schedule.guidancePause?.contains(now.toLocalDate()) == true
-    val todayCourses = schedule.courses
-        .filter { it.weekday == now.dayOfWeek }
-        .filterNot { guidancePaused }
-        .sortedBy { it.start }
+    val todayCourses = schedule.coursesOn(now.toLocalDate())
     val remainingCourses = todayCourses.filter { !it.end.isBefore(nowTime) }
     val nextCourse = remainingCourses.firstOrNull()
     val upcomingAfterCourse = remainingCourses.getOrNull(1)
@@ -723,7 +734,7 @@ internal fun DashboardScreen(
             now = now,
             termStart = schedule.termStart,
             termEnd = schedule.termEnd,
-            courses = schedule.courses,
+            courses = schedule.coursesOn(now.toLocalDate()),
             noClassDates = schedule.noClassDates,
             resolvedZone = zone,
             automaticClassGuidance = automatic,
@@ -737,6 +748,11 @@ internal fun DashboardScreen(
     val homeDormitoryMeal = dormitoryMeal.homeServiceAt(now)
     val useDormitoryMeal = zone == CampusZoneId.YEIN
     val mealStatusNow = meal.serviceStatusAt(now)
+    val homeMealOpen = if (useDormitoryMeal) {
+        homeDormitoryMeal?.let { day ->
+            groupDormitorySections(day.sections).any { mealServiceStatus(day.date, it.hours, now).state == MealServiceState.OPEN }
+        } == true
+    } else mealStatusNow.state == MealServiceState.OPEN
     val originName = DisplayVocabulary.originName(zone)
 
     ScreenColumn(
@@ -795,8 +811,7 @@ internal fun DashboardScreen(
         ElevatedCard(
             modifier = Modifier
                 .fillMaxWidth()
-                .entrance()
-                .expressiveBounceClick { onNavigateToPage(AppPage.TIMETABLE) },
+                .entrance(),
             shape = RoundedCornerShape(28.dp),
             colors = CardDefaults.elevatedCardColors(
                 containerColor = MaterialTheme.colorScheme.primaryContainer,
@@ -869,8 +884,7 @@ internal fun DashboardScreen(
                             }
                             .filter { !it.isBefore(schedule.termStart) && !it.isAfter(schedule.termEnd) }
                             .mapNotNull { date ->
-                                schedule.courses
-                                    .filter { it.weekday == date.dayOfWeek }
+                                schedule.coursesOn(date)
                                     .minByOrNull { it.start }
                                     ?.let { date to it }
                             }
@@ -878,7 +892,12 @@ internal fun DashboardScreen(
                     }
                     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                         Text(
-                            text = if (guidancePaused) "오늘은 휴강입니다" else "오늘 남은 수업이 없습니다",
+                            text = when {
+                                schedule.courses.isEmpty() -> "시간표에 수업을 추가해 주세요"
+                                guidancePaused -> "오늘은 휴강이에요"
+                                schedule.coursesOn(now.toLocalDate()).isEmpty() -> "오늘은 수업이 없어요"
+                                else -> "오늘 수업이 모두 끝났어요"
+                            },
                             style = MaterialTheme.typography.titleLarge,
                             fontWeight = FontWeight.Bold,
                         )
@@ -897,26 +916,20 @@ internal fun DashboardScreen(
                     }
                 }
 
-                // 하단 바로가기 힌트
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.End,
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Text(
-                        text = "시간표 전체보기",
-                        style = MaterialTheme.typography.labelMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.primary,
-                    )
-                    Icon(
-                        Icons.AutoMirrored.Filled.ArrowForward,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(16.dp),
-                    )
-                }
             }
+        }
+
+        ElevatedCard(
+            modifier = Modifier.fillMaxWidth().entrance().testTag("dashboard_learning_card"),
+            shape = RoundedCornerShape(24.dp),
+            colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+        ) {
+            HomeTodaySummary(
+                snapshot = lmsSnapshot, now = now,
+                onOpenCourses = { onNavigateToPage(AppPage.COURSES) },
+                sessionState = lmsSessionState,
+                modifier = Modifier.padding(18.dp),
+            )
         }
 
         // 2. 실시간 셔틀 카드
@@ -1008,8 +1021,8 @@ internal fun DashboardScreen(
                                                     else -> null
                                                 }
                                                 val boardingStopLabel = when {
-                                                    serviceDeparture?.isBoardingStopTransition == true -> "운동장 전환"
-                                                    serviceDeparture?.isStadiumStop == true -> "운동장"
+                                                    serviceDeparture?.isBoardingStopTransition == true -> "탑승 위치 변경"
+                                                    serviceDeparture?.isStadiumStop == true -> "본관"
                                                     else -> null
                                                 }
                                                 Surface(
@@ -1094,7 +1107,7 @@ internal fun DashboardScreen(
                         }
                     }
                     else -> {
-                        Text("오늘 운행 일정이 없습니다", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text("오늘은 운행하지 않아요", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
                 shuttleReportWarning?.let { warning ->
@@ -1119,6 +1132,9 @@ internal fun DashboardScreen(
         ElevatedCard(
             modifier = Modifier
                 .fillMaxWidth()
+                .testTag("dashboard_meal_card")
+                .semantics { stateDescription = if (homeMealOpen) "운영 중" else "운영 시간 아님" }
+                .then(if (homeMealOpen) Modifier.border(2.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(24.dp)) else Modifier)
                 .entrance()
                 .expressiveBounceClick { onNavigateToPage(AppPage.MEAL) },
             shape = RoundedCornerShape(24.dp),
@@ -1155,15 +1171,14 @@ internal fun DashboardScreen(
                                 color = MaterialTheme.colorScheme.primary,
                             )
                         }
-                        groupDormitorySections(homeDormitoryMeal.sections).forEach { block ->
+                        groupDormitorySections(homeDormitoryMeal.sections).forEachIndexed { index, block ->
+                            if (index > 0) HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
                             val status = mealServiceStatus(homeDormitoryMeal.date, block.hours, now)
-                            MealPeriodCard(status = status) {
-                                DormitoryMealPeriodContent(block, status)
-                            }
+                            DormitoryMealPeriodContent(block, status)
                         }
                     }
                     useDormitoryMeal -> {
-                        Text("예정된 식단 정보가 없습니다", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text("예정된 식단이 없어요", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     todayMeal != null && todayMeal.menuLines.isNotEmpty() -> {
                         Text(
@@ -1174,10 +1189,10 @@ internal fun DashboardScreen(
                         )
                     }
                     now.dayOfWeek.value >= 6 -> {
-                        Text("주말은 학생식당을 운영하지 않습니다", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text("주말에는 학생식당을 쉬어요", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     else -> {
-                        Text("오늘 등록된 식단 정보가 없습니다", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text("오늘 등록된 식단이 없어요", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
             }
@@ -1212,7 +1227,11 @@ internal fun DashboardScreen(
                 val latestNotices = notices.notices.take(3)
                 if (latestNotices.isEmpty()) {
                     Text(
-                        text = "공지를 불러오는 중이거나 없습니다",
+                        text = when {
+                            notices.error != null -> "공지를 불러오지 못했어요"
+                            notices.lastSuccess == null -> "공지를 확인하고 있어요"
+                            else -> "등록된 공지가 없어요"
+                        },
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -1330,12 +1349,15 @@ private fun TimetableScreen(repository: CampusDataRepository, schedule: TermSche
     var showPauseChoice by remember { mutableStateOf(false) }
     var pausePickerMode by remember { mutableStateOf<String?>(null) }
     var pendingDelete by remember { mutableStateOf<Course?>(null) }
+    var changingOnce by remember { mutableStateOf<Course?>(null) }
+    var changeError by remember { mutableStateOf<String?>(null) }
     val today = LocalDate.now(MinuteTicker.CAMPUS_ZONE)
 
     BackHandler(
-        enabled = showEditor || showTermEditor || showPauseChoice || pausePickerMode != null || pendingDelete != null,
+        enabled = changingOnce != null || showEditor || showTermEditor || showPauseChoice || pausePickerMode != null || pendingDelete != null,
     ) {
         when {
+            changingOnce != null -> changingOnce = null
             pendingDelete != null -> pendingDelete = null
             pausePickerMode != null -> pausePickerMode = null
             showPauseChoice -> showPauseChoice = false
@@ -1344,42 +1366,33 @@ private fun TimetableScreen(repository: CampusDataRepository, schedule: TermSche
         }
     }
 
-    ScreenColumn(title = "시간표", modifier = modifier) {
-        ElevatedCard(
-            modifier = Modifier
-                .fillMaxWidth()
-                .entrance(),
-            shape = RoundedCornerShape(20.dp),
-            colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
-        ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(16.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                    Text(text = "학기 기간", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Text(text = "${schedule.termStart} ~ ${schedule.termEnd}", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                }
-                FilledTonalButton(onClick = { showTermEditor = true }, shape = RoundedCornerShape(12.dp)) {
-                    Text("기간 변경")
-                }
-            }
+    ScreenColumn(
+        title = "시간표", modifier = modifier,
+        topAction = { TextButton(onClick = { editing = null; showEditor = true }) { Text("수업 추가") } },
+    ) {
+        TextButton(onClick = { showTermEditor = true }, modifier = Modifier.testTag("edit_term")) {
+            Text("학기 ${schedule.termStart} ~ ${schedule.termEnd}", style = MaterialTheme.typography.bodySmall)
         }
 
-        Button(
-            onClick = { editing = null; showEditor = true },
-            modifier = Modifier
-                .fillMaxWidth()
-                .entrance(),
-            shape = RoundedCornerShape(14.dp),
-            contentPadding = ButtonDefaults.ButtonWithIconContentPadding,
-        ) {
-            Icon(Icons.Default.School, contentDescription = null, modifier = Modifier.size(18.dp))
-            Spacer(Modifier.width(8.dp))
-            Text("수업 추가", fontWeight = FontWeight.Bold)
+        changeError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+        val upcomingChanges = schedule.courseOverrides.filter { it.date >= today }
+        if (upcomingChanges.isNotEmpty()) {
+            Text("한 번만 바꾼 수업", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            upcomingChanges.forEach { change ->
+                val course = schedule.courses.firstOrNull { it.id == change.courseId }
+                OutlinedCard(Modifier.fillMaxWidth()) {
+                    Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text("${change.date} · ${com.example.dimanow.ui.schedule.overrideKindLabel(change.kind)}")
+                            Text(course?.name.orEmpty(), fontWeight = FontWeight.SemiBold)
+                            if (change.kind == com.example.dimanow.domain.CourseOverrideKind.CHANGED) {
+                                Text("${change.start ?: course?.start}–${change.end ?: course?.end} · ${change.room ?: course?.room}")
+                            }
+                        }
+                        TextButton(onClick = { scope.launch { repository.removeCourseOverride(change.courseId, change.date) } }) { Text("되돌리기") }
+                    }
+                }
+            }
         }
 
         val grouped = schedule.courses
@@ -1393,7 +1406,7 @@ private fun TimetableScreen(repository: CampusDataRepository, schedule: TermSche
                     .entrance(),
                 shape = RoundedCornerShape(16.dp),
             ) {
-                Text(text = "등록된 수업이 없습니다", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(24.dp))
+                Text(text = "등록된 수업이 없어요", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(24.dp))
             }
         } else {
             grouped.forEach { (weekday, courses) ->
@@ -1411,6 +1424,7 @@ private fun TimetableScreen(repository: CampusDataRepository, schedule: TermSche
                         course = course,
                         onEdit = { editing = course; showEditor = true },
                         onDelete = { pendingDelete = course },
+                        onChangeOnce = { changingOnce = course },
                         modifier = Modifier.entrance(),
                     )
                 }
@@ -1435,7 +1449,7 @@ private fun TimetableScreen(repository: CampusDataRepository, schedule: TermSche
                     Column {
                         Text(text = "휴강 모드", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                         Text(
-                            text = schedule.guidancePause?.let { pauseLabel(it, today) } ?: "정상 수업 안내 중",
+                            text = schedule.guidancePause?.let { pauseLabel(it, today) } ?: "수업 안내 켜짐",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -1448,7 +1462,7 @@ private fun TimetableScreen(repository: CampusDataRepository, schedule: TermSche
                     )
                 }
                 if (schedule.noClassDates.isNotEmpty()) {
-                    Text("기존 개별 휴강일", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("지정한 휴강일", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
         }
@@ -1476,6 +1490,16 @@ private fun TimetableScreen(repository: CampusDataRepository, schedule: TermSche
         }
     }
 
+    changingOnce?.let { course ->
+        com.example.dimanow.ui.schedule.CourseOverrideDialog(
+            course, today, schedule.termStart, schedule.termEnd,
+            onDismiss = { changingOnce = null },
+            onSave = { change -> scope.launch {
+                try { repository.setCourseOverride(change); changingOnce = null; changeError = null }
+                catch (error: IllegalArgumentException) { changeError = error.message; changingOnce = null }
+            } },
+        )
+    }
     if (showEditor) {
         CourseEditorDialog(
             initial = editing,
@@ -1586,7 +1610,7 @@ internal fun PauseDurationDialog(
                 FilledTonalButton(
                     onClick = { onSelection(GuidancePause.untilDisabled(today)) },
                     modifier = Modifier.fillMaxWidth(),
-                ) { Text("휴강모드를 다시 끌 때까지") }
+                ) { Text("휴강을 해제할 때까지") }
             }
         },
         confirmButton = {},
@@ -1595,19 +1619,22 @@ internal fun PauseDurationDialog(
 }
 
 private fun pauseLabel(pause: GuidancePause, today: LocalDate): String = when {
-    pause.isUntilDisabled -> "휴강모드를 다시 끌 때까지 휴강"
+    pause.isUntilDisabled -> "휴강을 해제할 때까지 휴강"
     pause.startDate == pause.endDateInclusive -> "${pause.endDateInclusive.monthValue}월 ${pause.endDateInclusive.dayOfMonth}일 휴강"
     today.isBefore(pause.startDate) -> "${pause.startDate.monthValue}월 ${pause.startDate.dayOfMonth}일부터 ${pause.endDateInclusive.monthValue}월 ${pause.endDateInclusive.dayOfMonth}일까지 휴강"
     else -> "${pause.endDateInclusive.monthValue}월 ${pause.endDateInclusive.dayOfMonth}일까지 휴강"
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun CourseSummaryCard(
     course: Course,
     onEdit: () -> Unit,
     onDelete: () -> Unit,
     modifier: Modifier = Modifier,
+    onChangeOnce: (() -> Unit)? = null,
 ) {
+    var menuExpanded by remember { mutableStateOf(false) }
     ElevatedCard(
         modifier = modifier
             .fillMaxWidth()
@@ -1626,8 +1653,8 @@ fun CourseSummaryCard(
                 modifier = Modifier.weight(1f),
                 verticalArrangement = Arrangement.spacedBy(6.dp),
             ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
+                FlowRow(
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     Surface(
@@ -1663,22 +1690,16 @@ fun CourseSummaryCard(
                 }
             }
 
-            Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
-                IconButton(onClick = onEdit, modifier = Modifier.size(36.dp)) {
-                    Icon(
-                        Icons.Default.Edit,
-                        contentDescription = "수업 수정",
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.size(18.dp),
-                    )
+            Box {
+                IconButton(onClick = { menuExpanded = true }, modifier = Modifier.testTag("course_menu_${course.id}")) {
+                    Icon(Icons.Default.MoreVert, contentDescription = "${course.name} 더보기")
                 }
-                IconButton(onClick = onDelete, modifier = Modifier.size(36.dp)) {
-                    Icon(
-                        Icons.Default.Delete,
-                        contentDescription = "수업 삭제",
-                        tint = MaterialTheme.colorScheme.error,
-                        modifier = Modifier.size(18.dp),
-                    )
+                DropdownMenu(expanded = menuExpanded, onDismissRequest = { menuExpanded = false }) {
+                    onChangeOnce?.let { action ->
+                        DropdownMenuItem(text = { Text("이번 수업만 변경") }, onClick = { menuExpanded = false; action() })
+                    }
+                    DropdownMenuItem(text = { Text("수정") }, onClick = { menuExpanded = false; onEdit() })
+                    DropdownMenuItem(text = { Text("삭제") }, onClick = { menuExpanded = false; onDelete() })
                 }
             }
         }
@@ -1768,7 +1789,7 @@ fun CourseEditorDialog(initial: Course?, onDismiss: () -> Unit, onSave: (Course)
                     }
                 }
                 if (!end.isAfter(start)) {
-                    Text("종료 시간은 시작 시간보다 늦어야 합니다", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                    Text("종료 시간을 시작 시간보다 늦게 설정해 주세요", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
                 }
             }
         },
@@ -2057,7 +2078,7 @@ fun ShuttleScreen(
         if (dayDepartures.isEmpty()) {
             OutlinedCard(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp)) {
                 Text(
-                    text = "${koreanWeekdayLabel(activeDay)}은 운행 일정이 없습니다",
+                    text = "${koreanWeekdayLabel(activeDay)}은 운행하지 않아요",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(24.dp),
@@ -2175,7 +2196,7 @@ fun ShuttleScreen(
                             if (sortedTimes.isNotEmpty()) {
                                 Surface(shape = RoundedCornerShape(6.dp), color = MaterialTheme.colorScheme.surfaceContainerHigh) {
                                     Text(
-                                        text = "총 ${sortedTimes.size}회 (첫차 ${sortedTimes.first().format(TIME)} · 막차 ${sortedTimes.last().format(TIME)})",
+                                        text = "첫차 ${sortedTimes.first().format(TIME)} · 막차 ${sortedTimes.last().format(TIME)}",
                                         style = MaterialTheme.typography.labelSmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                                         modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
@@ -2189,7 +2210,7 @@ fun ShuttleScreen(
                             if (upcomingTimes.isNotEmpty()) {
                                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                                     Text(
-                                        text = "다음 출발 예정",
+                                        text = "출발 시각",
                                         style = MaterialTheme.typography.labelSmall,
                                         fontWeight = FontWeight.Bold,
                                         color = MaterialTheme.colorScheme.primary,
@@ -2208,8 +2229,8 @@ fun ShuttleScreen(
                                                 else -> null
                                             }
                                             val boardingStopLabel = when {
-                                                serviceDeparture?.isBoardingStopTransition == true -> "운동장 전환"
-                                                serviceDeparture?.isStadiumStop == true -> "운동장"
+                                                serviceDeparture?.isBoardingStopTransition == true -> "탑승 위치 변경"
+                                                serviceDeparture?.isStadiumStop == true -> "본관"
                                                 else -> null
                                             }
                                             val reportEvent = guidanceEngine.stopCallForDeparture(topology, countdown.departure)
@@ -2232,10 +2253,9 @@ fun ShuttleScreen(
                                                     .fillMaxWidth()
                                                     .testTag("next_departure_$index"),
                                             ) {
-                                                Row(
+                                                Column(
                                                     modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-                                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                                    verticalAlignment = Alignment.CenterVertically,
+                                                    verticalArrangement = Arrangement.spacedBy(4.dp),
                                                 ) {
                                                     AnimatedCountText(
                                                         text = buildString {
@@ -2288,7 +2308,7 @@ fun ShuttleScreen(
                                     modifier = Modifier.fillMaxWidth(),
                                 ) {
                                     Text(
-                                        text = "오늘 운행이 모두 종료되었습니다",
+                                        text = "오늘 운행이 끝났어요",
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                                         modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
@@ -2300,7 +2320,7 @@ fun ShuttleScreen(
                         // 전체 시간표 칩 (지나간 시간은 딤 처리)
                         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                             Text(
-                                text = "전체 시간표",
+                            text = "전체 시간표 · ${sortedTimes.size}회",
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
@@ -2434,15 +2454,24 @@ fun MealScreen(
     var uploadPreflight by remember { mutableStateOf(false) }
     var showDormitoryPhotoSource by remember { mutableStateOf(false) }
     var pendingImage by remember { mutableStateOf<DormitoryMealImage?>(null) }
+    var preparingDormitoryImage by remember { mutableStateOf(false) }
     var uploadingDormitoryMeal by remember { mutableStateOf(false) }
     var cameraOutput by remember { mutableStateOf<Uri?>(null) }
     var refreshMessage by remember { mutableStateOf<String?>(null) }
 
     fun loadImage(uri: Uri) {
+        if (preparingDormitoryImage || uploadingDormitoryMeal) return
+        preparingDormitoryImage = true
         scope.launch {
-            runCatching { readDormitoryMealImage(context, uri) }
-                .onSuccess { pendingImage = it }
-                .onFailure { refreshMessage = it.message ?: "식단 사진을 읽지 못했습니다." }
+            try {
+                pendingImage = com.example.dimanow.meal.DormitoryMealImageReader(context).read(uri)
+            } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                throw cancelled
+            } catch (failure: Exception) {
+                refreshMessage = failure.message ?: "식단 사진을 읽지 못했어요."
+            } finally {
+                preparingDormitoryImage = false
+            }
         }
     }
     val photoPicker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
@@ -2557,29 +2586,6 @@ fun MealScreen(
             title = "식단",
             listState = listState,
             modifier = Modifier.fillMaxSize(),
-            topAction = {
-                    if (venue == MealVenue.DORMITORY && !dormitoryMeal.hasCurrentWeek(today)) {
-                        TextButton(
-                            enabled = !refreshing && !uploadPreflight && !uploadingDormitoryMeal,
-                            onClick = {
-                                uploadPreflight = true
-                                scope.launch {
-                                    try {
-                                        val result = mealSource.refreshDormitory()
-                                        val currentWeekExists = mealSource.dormitoryData.first().hasCurrentWeek(today)
-                                        if (result is com.example.dimanow.meal.MealRefreshResult.Success && currentWeekExists) {
-                                            refreshMessage = "이번 주 기숙사 식단을 불러왔어요"
-                                        } else {
-                                            showDormitoryPhotoSource = true
-                                        }
-                                    } finally {
-                                        uploadPreflight = false
-                                    }
-                                }
-                            },
-                        ) { Text("사진 올리기") }
-                    }
-            },
             // 새로고침은 목록을 당겨서 실행한다 — 상단 아이콘 버튼은 제거했다 (D-058)
             onRefresh = ::refreshMeal,
             refreshing = refreshing,
@@ -2611,6 +2617,18 @@ fun MealScreen(
                 if (uploadingDormitoryMeal) {
                     item { DormitoryUploadProgressCard() }
                 }
+                if (preparingDormitoryImage) {
+                    item {
+                        Row(
+                            Modifier.fillMaxWidth().padding(16.dp),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            CircularProgressIndicator(Modifier.size(24.dp))
+                            Text("사진을 준비하고 있어요", Modifier.semantics { liveRegion = LiveRegionMode.Polite })
+                        }
+                    }
+                }
                 dormitoryDayContent(
                     meal = dormitoryMeal,
                     date = selectedDay,
@@ -2633,7 +2651,7 @@ fun MealScreen(
                             }
                         }
                     },
-                    uploadEnabled = !refreshing && !uploadPreflight && !uploadingDormitoryMeal,
+                    uploadEnabled = !refreshing && !uploadPreflight && !uploadingDormitoryMeal && !preparingDormitoryImage,
                 )
             } else {
                 if (!meal.hasCurrentStudentWeek(today) || meal.error != null) {
@@ -2685,7 +2703,7 @@ fun MealScreen(
         AlertDialog(
             onDismissRequest = { pendingImage = null },
             title = { Text("기숙사 식단 올리기") },
-            text = { Text("사진은 식단 확인 후 공개 데이터로 공유됩니다.") },
+            text = { Text("사진은 식단 확인 후 공개 데이터로 공유돼요.") },
             confirmButton = {
                 Button(
                     enabled = !uploadingDormitoryMeal,
@@ -2698,36 +2716,6 @@ fun MealScreen(
             dismissButton = { TextButton(onClick = { pendingImage = null }) { Text("취소") } },
         )
     }
-}
-
-private suspend fun readDormitoryMealImage(context: Context, uri: Uri): DormitoryMealImage = withContext(Dispatchers.IO) {
-    val mimeType = context.contentResolver.getType(uri)
-        ?: if (uri.toString().endsWith(".png", ignoreCase = true)) "image/png" else "image/jpeg"
-    val extension = when (mimeType) {
-        "image/jpeg" -> "jpg"
-        "image/png" -> "png"
-        "image/webp" -> "webp"
-        else -> error("JPG, PNG, WebP 사진만 사용할 수 있습니다.")
-    }
-    val bytes = context.contentResolver.openInputStream(uri)?.use { it.readWithLimit(15 * 1024 * 1024) }
-        ?: error("식단 사진을 읽지 못했습니다.")
-    require(bytes.size <= 15 * 1024 * 1024) { "식단 이미지는 15MB 이하여야 합니다." }
-    require(bytes.isNotEmpty()) { "식단 사진이 비어 있습니다." }
-    DormitoryMealImage(bytes, mimeType, extension)
-}
-
-private fun InputStream.readWithLimit(maxBytes: Int): ByteArray {
-    val output = ByteArrayOutputStream(minOf(maxBytes, 64 * 1024))
-    val buffer = ByteArray(16 * 1024)
-    var total = 0
-    while (true) {
-        val read = read(buffer)
-        if (read < 0) break
-        total += read
-        require(total <= maxBytes) { "식단 이미지는 15MB 이하여야 합니다." }
-        output.write(buffer, 0, read)
-    }
-    return output.toByteArray()
 }
 
 /**
@@ -2932,7 +2920,7 @@ private fun androidx.compose.foundation.lazy.LazyListScope.dormitoryDayContent(
                 DormitoryWeekEmptyCard(onUpload = onUpload, uploadEnabled = uploadEnabled)
             }
         } else {
-            item(key = "dorm-empty-$date") { MealEmptyDayCard("이 날은 등록된 식단이 없어요") }
+            item(key = "dorm-empty-$date") { MealEmptyDayCard("이날 식단이 없어요") }
         }
         return
     }
@@ -2948,14 +2936,16 @@ private fun androidx.compose.foundation.lazy.LazyListScope.dormitoryDayContent(
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun DormitoryMealPeriodContent(block: DormitoryMealBlock, status: MealServiceStatus) {
-    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        Icon(dormitoryBlockIcon(block.name), contentDescription = null, modifier = Modifier.size(20.dp))
-        Text(block.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-        MealHoursChip(block.hours, status.state)
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Icon(dormitoryBlockIcon(block.name), contentDescription = null, modifier = Modifier.size(20.dp))
+            Text(block.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+        }
+        MealHoursChip(block.hours, status.state, includeStatus = true)
     }
-    MealPeriodStatus(status)
     MenuLineList(block.menuLines)
     block.extras.forEach { extra ->
         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
@@ -3023,8 +3013,19 @@ private fun dormitoryBlockIcon(name: String): ImageVector = when {
 }
 
 @Composable
-private fun MealHoursChip(hours: String?, state: MealServiceState = MealServiceState.UNKNOWN_HOURS) {
-    val text = hours?.takeIf { it.isNotBlank() } ?: return
+private fun MealHoursChip(
+    hours: String?,
+    state: MealServiceState = MealServiceState.UNKNOWN_HOURS,
+    includeStatus: Boolean = false,
+) {
+    val hoursText = hours?.takeIf { it.isNotBlank() } ?: return
+    val statusText = if (includeStatus) when (state) {
+        MealServiceState.BEFORE_OPEN -> "운영 전"
+        MealServiceState.OPEN -> "운영 중"
+        MealServiceState.CLOSED -> "운영 종료"
+        else -> null
+    } else null
+    val text = listOfNotNull(hoursText, statusText).joinToString(" · ")
     val colors = MaterialTheme.colorScheme
     val background = when (state) {
         MealServiceState.OPEN -> colors.primary
@@ -3103,7 +3104,7 @@ private fun DormitoryWeekEmptyCard(
                 fontWeight = FontWeight.Bold,
             )
             Text(
-                text = "기숙사 식단표는 학생이 올린 사진으로 만들어집니다. 식당에 붙은 이번 주 식단표를 찍어 올리면 모두가 함께 볼 수 있어요.",
+                text = "식단표를 올리면 함께 볼 수 있어요.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.Center,
@@ -3147,13 +3148,13 @@ private fun DormitoryUploadProgressCard(modifier: Modifier = Modifier) {
             )
             Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 Text(
-                    text = "식단표를 확인하는 중이에요",
+                    text = "식단표를 확인하고 있어요",
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onSecondaryContainer,
                 )
                 Text(
-                    text = "보통 1~2분, 늦어도 15분 안에 끝나요. 앱을 닫아도 계속 진행됩니다.",
+                    text = "앱을 닫아도 계속 진행돼요.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.8f),
                 )
@@ -3165,6 +3166,7 @@ private fun DormitoryUploadProgressCard(modifier: Modifier = Modifier) {
 // -----------------------------------------------------------------------------
 // 5. 설정 및 진단 화면 (Settings) - 위치, 데이터, 권한 통합 (슬라이더 삭제)
 // -----------------------------------------------------------------------------
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun SettingsScreen(
     locationMode: LocationMode,
@@ -3194,29 +3196,13 @@ private fun SettingsScreen(
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val context = LocalContext.current
-    var locationMessage by remember { mutableStateOf<String?>(null) }
-    var liveSettingsMessage by remember { mutableStateOf<String?>(null) }
     var confirmDeleteLmsAccount by remember { mutableStateOf(false) }
-
-    val notifications = Build.VERSION.SDK_INT < 33 || ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
-    val exact = (context.getSystemService(Context.ALARM_SERVICE) as AlarmManager).canScheduleExactAlarms()
-    val fine = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
-    val background = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_BACKGROUND_LOCATION) == PackageManager.PERMISSION_GRANTED
-    val promoted = if (Build.VERSION.SDK_INT >= 36) {
-        (context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager).canPostPromotedNotifications()
-    } else false
-    val liveDiagnostics = remember(notifications, promoted) { liveSurfaceController.diagnostics() }
-
-    val fineLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
-        locationMessage = if (it) "정확한 위치 허용됨" else "정확한 위치 필요"
-    }
-    val backgroundLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
-        locationMessage = if (it) "백그라운드 위치 허용됨" else "백그라운드 위치 미허용"
-    }
+    var diagnosticsExpanded by rememberSaveable { mutableStateOf(false) }
+    var setupExpanded by rememberSaveable { mutableStateOf(false) }
+    val app = LocalContext.current.applicationContext as? com.example.dimanow.DimaNowApplication
 
     ScreenColumn(
-        title = "설정 및 상태",
+        title = "설정",
         topAction = { TextButton(onClick = onBack, modifier = Modifier.testTag("close_settings")) { Text("닫기") } },
         modifier = modifier,
     ) {
@@ -3229,16 +3215,16 @@ private fun SettingsScreen(
             colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
         ) {
             Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("귀가 기준지", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                Text("수업 시작 30분 후와 수업 종료 뒤 안내할 셔틀 방향입니다.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("귀가 방향", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                Text("수업이 끝난 뒤 안내할 셔틀 방향이에요.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     ExpressiveToggleButton(
-                        label = "예인관",
+                        label = "엔터관 방향",
                         selected = homeBase == HomeBase.YEIN,
                         onClick = { onHomeBaseChange(HomeBase.YEIN) },
                     )
                     ExpressiveToggleButton(
-                        label = "원룸촌",
+                        label = "원룸촌 방향",
                         selected = homeBase == HomeBase.ONE_ROOM,
                         onClick = { onHomeBaseChange(HomeBase.ONE_ROOM) },
                     )
@@ -3246,13 +3232,12 @@ private fun SettingsScreen(
             }
         }
 
-        // 2) Live Update 표시 + 나우바 설정 안내
+        Text("알림과 위치", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
         LiveDisplaySettings(
             options = displayOptions,
             onChipContentChange = onChipContentChange,
             onClassOrderChange = onClassOrderChange,
             modifier = Modifier.entrance(),
-            onShowNowBarSetup = onShowNowBarSetup,
         )
 
         NotificationGuidanceSettings(
@@ -3261,6 +3246,46 @@ private fun SettingsScreen(
             modifier = Modifier.entrance(),
         )
 
+        TextButton(onClick = { setupExpanded = !setupExpanded }, modifier = Modifier.testTag("open_guidance_setup")) {
+            Text(if (setupExpanded) "자동 안내 설정 접기" else "자동 안내 설정")
+        }
+        if (setupExpanded) {
+            GuidanceSetup(liveSurfaceController = liveSurfaceController, onPermissionsChanged = { app?.refreshGuidancePermissions() })
+        }
+
+        ElevatedCard(
+            modifier = Modifier.fillMaxWidth().entrance(),
+            shape = RoundedCornerShape(20.dp),
+            colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+        ) {
+            Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text("수업 계정", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                Text(
+                    if (lmsCredentialState == CredentialState.SAVED) "자동 로그인 사용 중" else "연결된 계정이 없어요",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                if (lmsCredentialState == CredentialState.SAVED) {
+                    OutlinedButton(onClick = { confirmDeleteLmsAccount = true }, modifier = Modifier.fillMaxWidth()) {
+                        Text("저장된 계정 삭제")
+                    }
+                }
+            }
+        }
+        Text("앱 정보", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+        AppUpdateCard(
+            state = updateState,
+            onCheck = onCheckUpdate,
+            onDownload = onDownloadUpdate,
+            onContinueInstall = onContinueInstall,
+            onCancelDownload = onCancelDownload,
+            modifier = Modifier.entrance(),
+        )
+        TextButton(onClick = { diagnosticsExpanded = !diagnosticsExpanded }, modifier = Modifier.testTag("toggle_diagnostics")) {
+            Text(if (diagnosticsExpanded) "고급 및 진단 접기" else "고급 및 진단")
+        }
+        if (diagnosticsExpanded) {
+            TextButton(onClick = onShowNowBarSetup) { Text("기기별 알림 도움말") }
         // 3) GPS 비반영 테스트 모드
         ElevatedCard(
             modifier = Modifier
@@ -3270,7 +3295,7 @@ private fun SettingsScreen(
             colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
         ) {
             Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text("위치 및 테스트", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                Text("위치 테스트", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
 
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -3314,102 +3339,14 @@ private fun SettingsScreen(
             }
         }
 
-        // 4) 시스템 권한 상태 — 미허용 항목은 행에서 바로 요청
-        ElevatedCard(
-            modifier = Modifier
-                .fillMaxWidth()
-                .entrance(),
-            shape = RoundedCornerShape(20.dp),
-            colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
-        ) {
-            Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text("시스템 권한 상태", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-
-                PermissionStatusRow("알림 권한", notifications)
-                PermissionStatusRow("정확한 알람", exact)
-                PermissionStatusRow(
-                    title = "정확한 위치",
-                    granted = fine,
-                    onRequest = { fineLauncher.launch(Manifest.permission.ACCESS_FINE_LOCATION) },
-                )
-                PermissionStatusRow(
-                    title = "백그라운드 위치",
-                    granted = background,
-                    onRequest = { backgroundLauncher.launch(Manifest.permission.ACCESS_BACKGROUND_LOCATION) },
-                )
-                if (Build.VERSION.SDK_INT >= 36) {
-                    PermissionStatusRow("Live Update 승격", liveDiagnostics.canPostPromotedNotifications)
-                }
-
-                locationMessage?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary) }
-
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 4.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    FilledTonalButton(
-                        onClick = { openAppSettings(context) },
-                        modifier = Modifier.weight(1f),
-                        shape = RoundedCornerShape(12.dp),
-                    ) {
-                        Text("앱 권한 설정")
-                    }
-                    if (Build.VERSION.SDK_INT >= 36) {
-                        OutlinedButton(
-                            onClick = {
-                                liveSettingsMessage = when (liveSurfaceController.openPromotionSettings()) {
-                                    LiveSettingsDestination.PROMOTED_NOTIFICATION_SETTINGS -> "Live Update 설정 열림"
-                                    LiveSettingsDestination.APP_NOTIFICATION_SETTINGS -> "앱 알림 설정 열림"
-                                    LiveSettingsDestination.APP_DETAILS -> "앱 정보 설정 열림"
-                                    LiveSettingsDestination.UNAVAILABLE -> "설정 화면 미지원"
-                                }
-                            },
-                            shape = RoundedCornerShape(12.dp),
-                        ) {
-                            Text("Live 설정")
-                        }
-                    }
-                }
-                liveSettingsMessage?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary) }
-            }
-        }
-
-        AppUpdateCard(
-            state = updateState,
-            onCheck = onCheckUpdate,
-            onDownload = onDownloadUpdate,
-            onContinueInstall = onContinueInstall,
-            onCancelDownload = onCancelDownload,
-            modifier = Modifier.entrance(),
-        )
-        DataAndSourcesCard(shuttleData, mealData, modifier = Modifier.entrance())
-        ElevatedCard(
-            modifier = Modifier.fillMaxWidth().entrance(),
-            shape = RoundedCornerShape(20.dp),
-            colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
-        ) {
-            Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text("LMS 계정", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                Text(
-                    if (lmsCredentialState == CredentialState.SAVED) "자동 로그인 계정 저장됨" else "저장된 계정 없음",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                if (lmsCredentialState == CredentialState.SAVED) {
-                    OutlinedButton(onClick = { confirmDeleteLmsAccount = true }, modifier = Modifier.fillMaxWidth()) {
-                        Text("계정 및 수업 캐시 삭제")
-                    }
-                }
-            }
+            DataAndSourcesCard(shuttleData, mealData)
         }
     }
     if (confirmDeleteLmsAccount) {
         AlertDialog(
             onDismissRequest = { confirmDeleteLmsAccount = false },
-            title = { Text("LMS 계정을 삭제할까요?") },
-            text = { Text("저장한 계정, 로그인 세션과 수업 캐시가 이 기기에서 삭제됩니다.") },
+            title = { Text("저장된 계정을 삭제할까요?") },
+            text = { Text("저장된 계정과 이 기기의 수업 정보가 삭제돼요.") },
             confirmButton = {
                 Button(onClick = { confirmDeleteLmsAccount = false; onDeleteLmsAccount() }) { Text("삭제") }
             },
@@ -3464,13 +3401,13 @@ internal fun AppUpdateCard(
             Text("앱 업데이트", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
             Text("현재 버전 ${state.currentVersion.ifBlank { "확인 중" }}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             val statusText = when (state.phase) {
-                AppUpdatePhase.IDLE -> "업데이트를 확인하지 않았습니다"
+                AppUpdatePhase.IDLE -> "업데이트를 아직 확인하지 않았어요"
                 AppUpdatePhase.CHECKING -> "업데이트 확인 중"
                 AppUpdatePhase.UP_TO_DATE -> "최신 버전입니다"
                 AppUpdatePhase.AVAILABLE -> "새 버전 ${state.latestRelease?.versionName}"
                 AppUpdatePhase.DOWNLOADING -> "다운로드 중 ${state.downloadProgress ?: 0}%"
                 AppUpdatePhase.READY_TO_INSTALL -> "설치 준비 완료"
-                AppUpdatePhase.PERMISSION_REQUIRED -> "설치 권한이 필요합니다"
+                AppUpdatePhase.PERMISSION_REQUIRED -> "설치 권한이 필요해요"
                 AppUpdatePhase.INSTALLER_OPENED -> "Android 설치 화면을 확인하세요"
                 AppUpdatePhase.ERROR -> state.message ?: "업데이트 오류"
             }
@@ -3668,6 +3605,7 @@ internal fun ExpressiveToggleButton(
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun LiveDisplaySettings(
     options: LiveDisplayOptions,
@@ -3682,11 +3620,11 @@ fun LiveDisplaySettings(
         colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
     ) {
         Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Text("Live Update 표시", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            Text("실시간 알림", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
 
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Text("상단 필", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("상단 알림 표시", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     ExpressiveToggleButton(
                         label = "남은 시간",
                         selected = options.chipContent == LiveChipContent.COUNTDOWN,
@@ -3702,7 +3640,7 @@ fun LiveDisplaySettings(
 
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Text("잠금화면 첫 줄", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     ExpressiveToggleButton(
                         label = "수업명 먼저",
                         selected = options.classOrder == LiveClassOrder.COURSE_FIRST,

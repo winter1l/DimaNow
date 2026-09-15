@@ -77,6 +77,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.key
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
@@ -140,10 +141,14 @@ fun LmsRoute(
     now: Instant,
     modifier: Modifier = Modifier,
     onFullScreenChange: (Boolean) -> Unit = {},
+    authenticationContent: @Composable (LmsLoginRequest, (List<LmsCourse>) -> Unit) -> Unit = { request, authenticated ->
+        LmsAuthenticationWebView(request, { loginBridge.complete(request, it) }, authenticated, loginBridge::cancel, silent = request.credentials.automaticLogin)
+    },
 ) {
     val scope = rememberCoroutineScope()
     val sessionState by sessionController.state.collectAsStateWithLifecycle()
     val credentialState by credentialStore.state.collectAsStateWithLifecycle()
+    val loginError by autoLoginCoordinator.errorMessage.collectAsStateWithLifecycle()
     val snapshot by source.snapshot.collectAsStateWithLifecycle(initialValue = LmsSnapshot())
     val loginRequest by loginBridge.request.collectAsStateWithLifecycle()
     val renderedPageRequest by (
@@ -158,19 +163,20 @@ fun LmsRoute(
     BackHandler(enabled = selectedDetail != null) { selectedDetail = null }
     BackHandler(enabled = officialCoursePage != null) { officialCoursePage = null }
     BackHandler(enabled = pendingOfficialCoursePage != null) { pendingOfficialCoursePage = null }
-    BackHandler(enabled = loginRequest != null) { loginBridge.cancel() }
+    val silentLogin = loginRequest?.credentials?.automaticLogin == true
+    BackHandler(enabled = loginRequest != null && !silentLogin) { loginBridge.cancel() }
     BackHandler(enabled = renderedPageRequest != null) { renderedPageBridge?.cancel() }
     // 로그인 WebView·글 상세가 떠 있는 동안 상위 셸이 하단 내비를 숨기게 알린다 (D-044)
-    val fullScreen = loginRequest != null || renderedPageRequest != null || selectedDetail != null || officialCoursePage != null
+    val fullScreen = (loginRequest != null && !silentLogin) || renderedPageRequest != null || selectedDetail != null || officialCoursePage != null
     LaunchedEffect(fullScreen) { onFullScreenChange(fullScreen) }
     DisposableEffect(Unit) {
         onDispose { onFullScreenChange(false) }
     }
 
-    suspend fun loginAndRefresh(force: Boolean) {
-        // `force` bypasses only the local data TTL. An already-active LMS session must not be
-        // logged in again, because the official LMS allows only one concurrent session.
-        val state = autoLoginCoordinator.ensureActive(force = false)
+    suspend fun loginAndRefresh(force: Boolean, credentialsChanged: Boolean = false) {
+        // Explicit retries bypass login cooldowns; the coordinator retains an active session
+        // unless the user has just supplied new credentials.
+        val state = autoLoginCoordinator.ensureActive(force = force, credentialsChanged = credentialsChanged)
         if (state == LmsSessionState.ACTIVE) {
             when (val result = source.refresh(force = force)) {
                 LmsRefreshResult.SessionExpired -> {
@@ -207,19 +213,7 @@ fun LmsRoute(
 
     Box(modifier = modifier.fillMaxSize()) {
         when {
-            loginRequest != null -> LmsAuthenticationWebView(
-                request = requireNotNull(loginRequest),
-                onComplete = loginBridge::complete,
-                onAuthenticated = { courses ->
-                    scope.launch {
-                        runCatching { source.storeRenderedCourses(courses) }
-                            .onSuccess { loginBridge.complete(LmsLoginResult.Success) }
-                            .onFailure { loginBridge.complete(LmsLoginResult.Failure("수업 목록을 저장하지 못했습니다")) }
-                    }
-                },
-                onCancel = loginBridge::cancel,
-                modifier = Modifier.fillMaxSize(),
-            )
+            loginRequest != null && !silentLogin -> Unit // The authentication host below owns manual progress.
             renderedPageRequest != null && renderedPageBridge != null -> LmsRenderedPageWebView(
                 request = requireNotNull(renderedPageRequest),
                 onComplete = renderedPageBridge::complete,
@@ -263,7 +257,7 @@ fun LmsRoute(
                             val credentials = SavedLmsCredentials(username.trim(), password, automatic)
                             if (automatic) {
                                 credentialStore.save(credentials)
-                                loginAndRefresh(force = true)
+                                loginAndRefresh(force = true, credentialsChanged = true)
                             } else {
                                 credentialStore.delete()
                                 sessionController.transition(LmsSessionState.AUTHENTICATING)
@@ -276,14 +270,16 @@ fun LmsRoute(
                                 }
                                 sessionController.transition(next)
                                 if (next == LmsSessionState.ACTIVE) source.refresh(force = true)
+                                else result.failureMessage()?.let { snackbar.showSnackbar(it) }
                             }
                         }
                     },
                     modifier = Modifier.fillMaxSize(),
                 )
             else -> LmsItemsScreen(
-                snapshot = snapshot,
+                snapshot = if (silentLogin) snapshot.copy(syncState = LmsSyncState.SYNCING, errorMessage = null) else snapshot,
                 sessionState = sessionState,
+                loginErrorMessage = loginError.takeUnless { sessionState == LmsSessionState.ACTIVE || silentLogin },
                 selectedCourse = selectedCourse,
                 selectedKind = selectedKind,
                 onCourseChange = { selectedCourse = it },
@@ -340,6 +336,19 @@ fun LmsRoute(
                 now = now,
                 modifier = Modifier.fillMaxSize(),
             )
+        }
+        loginRequest?.let { request ->
+            key(request) {
+                authenticationContent(request) { courses ->
+                    scope.launch {
+                        if (!request.result.isCompleted) {
+                            runCatching { source.storeRenderedCourses(courses) }
+                                .onSuccess { loginBridge.complete(request, LmsLoginResult.Success) }
+                                .onFailure { loginBridge.complete(request, LmsLoginResult.Failure("수업 목록을 저장하지 못했습니다")) }
+                        }
+                    }
+                }
+            }
         }
         SnackbarHost(snackbar, Modifier.align(Alignment.BottomCenter).navigationBarsPadding())
         pendingOfficialCoursePage?.let { pendingPage ->
@@ -753,7 +762,7 @@ private fun LmsLoginScreen(
             colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
         ) {
             Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                Text("LMS 계정으로 로그인", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                Text("학교 계정으로 로그인", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                 if (needsReview) {
                     Surface(
                         modifier = Modifier.fillMaxWidth(),
@@ -787,10 +796,10 @@ private fun LmsLoginScreen(
                     shape = RoundedCornerShape(12.dp),
                     modifier = Modifier.fillMaxWidth().testTag("lms_password"),
                 )
-                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
-                    Column {
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                    Column(Modifier.weight(1f)) {
                         Text("자동 로그인", fontWeight = FontWeight.Bold)
-                        Text("이 기기에 암호화해 저장합니다", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text("계정을 이 기기에 암호화해 저장해요", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     Switch(checked = automatic, onCheckedChange = { automatic = it })
                 }
@@ -850,7 +859,7 @@ private fun LmsFilterRow(
                 onClick = { onCourseChange(null); onKindChange(null) },
                 modifier = Modifier.testTag("lms_filter_clear"),
             ) {
-                Icon(Icons.Default.Close, contentDescription = "필터 해제")
+                Icon(Icons.Default.Close, contentDescription = "필터 초기화")
             }
         }
     }
@@ -904,8 +913,6 @@ private fun LmsSectionHeader(title: String) {
         style = MaterialTheme.typography.titleSmall,
         fontWeight = FontWeight.Bold,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
-        maxLines = 1,
-        overflow = TextOverflow.Ellipsis,
         modifier = Modifier.padding(top = 8.dp),
     )
 }
@@ -918,12 +925,11 @@ private fun LmsCompletedHeader(count: Int, expanded: Boolean, onToggle: () -> Un
         modifier = Modifier.fillMaxWidth().testTag("lms_completed_toggle"),
     ) {
         Text(
-            "완료한 학습",
+            "완료한 학습 · ${count}개",
             style = MaterialTheme.typography.titleSmall,
             fontWeight = FontWeight.Bold,
             modifier = Modifier.weight(1f),
         )
-        Text("${count}개")
         Spacer(Modifier.size(8.dp))
         Text(if (expanded) "접기" else "보기")
     }
@@ -941,11 +947,12 @@ internal fun LmsItemsScreen(
     onOpenItem: (LmsItem) -> Unit,
     now: Instant,
     modifier: Modifier = Modifier,
+    loginErrorMessage: String? = null,
 ) {
     val filtered = filterLmsItems(snapshot.items, selectedCourse, selectedKind)
     val filterActive = selectedCourse != null || selectedKind != null
-    val syncing = snapshot.syncState == LmsSyncState.SYNCING
-    val hasError = sessionState == LmsSessionState.ERROR || snapshot.syncState == LmsSyncState.ERROR
+    val syncing = snapshot.syncState == LmsSyncState.SYNCING || sessionState == LmsSessionState.AUTHENTICATING
+    val hasError = loginErrorMessage != null || sessionState == LmsSessionState.ERROR || snapshot.syncState == LmsSyncState.ERROR
     var todayMode by rememberSaveable { mutableStateOf(true) }
     var completedExpanded by rememberSaveable { mutableStateOf(false) }
     // 오늘 모드에서도 선택한 필터를 그대로 적용한다 (이전에는 칩이 조용히 무시됐다)
@@ -954,7 +961,11 @@ internal fun LmsItemsScreen(
     }
     // 전체 모드는 과목 순서로 묶고 완료한 학습을 아래로 내린다 (D-058)
     val coursePlan = remember(filtered, snapshot.courses) { planLmsByCourse(filtered, snapshot.courses) }
-    val visibleEmpty = if (todayMode) agenda.groups.isEmpty() else filtered.isEmpty()
+    val visibleEmpty = if (todayMode) {
+        agenda.groups.none { it.key != LmsAgendaGroupKey.COMPLETED }
+    } else {
+        filtered.isEmpty()
+    }
 
     ScreenScaffold(
         title = "수업",
@@ -977,7 +988,7 @@ internal fun LmsItemsScreen(
                     )
                 }
             }
-            if (!todayMode) {
+            if (!todayMode || filterActive) {
                 LmsFilterRow(
                     courses = snapshot.courses,
                     kinds = LmsItemKind.entries.filter { kind -> snapshot.items.any { it.kind == kind } },
@@ -994,7 +1005,7 @@ internal fun LmsItemsScreen(
         if (hasError && !visibleEmpty) {
             item {
                 LmsRefreshErrorBanner(
-                    message = snapshot.errorMessage ?: "최신 정보를 불러오지 못했습니다",
+                    message = loginErrorMessage ?: "수업 정보를 불러오지 못했어요",
                     lastSuccessAt = snapshot.lastSuccessAt,
                     onRetry = onRefresh,
                     modifier = Modifier.entrance(),
@@ -1008,13 +1019,13 @@ internal fun LmsItemsScreen(
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(vertical = 48.dp)
+                            .padding(vertical = 20.dp)
                             .entrance(),
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.spacedBy(14.dp),
                     ) {
-                        CircularProgressIndicator(strokeWidth = 3.dp, strokeCap = StrokeCap.Round)
-                        Text("수업 정보를 불러오는 중", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 3.dp, strokeCap = StrokeCap.Round)
+                        Text("수업 정보를 확인하고 있어요", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
             }
@@ -1032,10 +1043,11 @@ internal fun LmsItemsScreen(
                     ) {
                         Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                             Text(
-                                text = snapshot.errorMessage ?: "수업 정보를 불러오지 못했습니다",
+                                text = "수업 정보를 불러오지 못했어요",
                                 style = MaterialTheme.typography.bodyMedium,
                                 fontWeight = FontWeight.SemiBold,
                             )
+                            loginErrorMessage?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
                             FilledTonalButton(onClick = onRefresh, shape = RoundedCornerShape(12.dp)) {
                                 Text("다시 시도", fontWeight = FontWeight.Bold)
                             }
@@ -1055,69 +1067,78 @@ internal fun LmsItemsScreen(
                         Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                             Text(
                                 text = when {
-                                    filterActive -> "필터에 해당하는 항목이 없습니다"
-                                    todayMode -> "오늘 확인할 학습이 없습니다"
-                                    else -> "표시할 항목이 없습니다"
+                                    sessionState == LmsSessionState.INTERACTIVE_AUTH_REQUIRED -> "추가 인증이 필요해요"
+                                    sessionState != LmsSessionState.ACTIVE -> "수업 정보를 확인하려면 로그인해 주세요"
+                                    snapshot.syncState == LmsSyncState.IDLE && snapshot.lastSuccessAt == null -> "아직 수업 정보를 확인하지 않았어요"
+                                    filterActive -> "선택한 조건에 맞는 학습이 없어요"
+                                    todayMode -> "오늘 확인할 학습이 없어요"
+                                    else -> "등록된 학습이 없어요"
                                 },
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
-                            if (filterActive) {
+                            if (sessionState != LmsSessionState.ACTIVE ||
+                                (snapshot.syncState == LmsSyncState.IDLE && snapshot.lastSuccessAt == null)
+                            ) {
+                                TextButton(onClick = onRefresh) {
+                                    Text(if (sessionState == LmsSessionState.ACTIVE) "확인" else "다시 시도", fontWeight = FontWeight.Bold)
+                                }
+                            } else if (filterActive) {
                                 TextButton(onClick = { onCourseChange(null); onKindChange(null) }) {
-                                    Text("필터 해제", fontWeight = FontWeight.Bold)
+                                    Text("필터 초기화", fontWeight = FontWeight.Bold)
                                 }
                             }
                         }
                     }
                 }
             }
-            todayMode -> {
-                agenda.groups.forEach { group ->
-                    item(key = "agenda-${group.key}-${group.date}") {
-                        if (group.key == LmsAgendaGroupKey.COMPLETED) {
-                            LmsCompletedHeader(
-                                count = group.items.size,
-                                expanded = completedExpanded,
-                                onToggle = { completedExpanded = !completedExpanded },
-                            )
-                        } else {
-                            LmsSectionHeader(agendaGroupTitle(group))
-                        }
+        }
+        // Keep cached completed learning available below the status, even while refreshing or retrying.
+        if (todayMode) {
+            agenda.groups.forEach { group ->
+                item(key = "agenda-${group.key}-${group.date}") {
+                    if (group.key == LmsAgendaGroupKey.COMPLETED) {
+                        LmsCompletedHeader(
+                            count = group.items.size,
+                            expanded = completedExpanded,
+                            onToggle = { completedExpanded = !completedExpanded },
+                        )
+                    } else {
+                        LmsSectionHeader(agendaGroupTitle(group))
                     }
-                    if (group.key != LmsAgendaGroupKey.COMPLETED || completedExpanded) {
-                        group.items.forEach { groupItem ->
-                            item(key = "today-${groupItem.kind}-${groupItem.courseId}-${groupItem.id}") {
-                                LmsItemCard(groupItem, onOpenItem)
-                            }
+                }
+                if (group.key != LmsAgendaGroupKey.COMPLETED || completedExpanded) {
+                    group.items.forEach { groupItem ->
+                        item(key = "today-${groupItem.kind}-${groupItem.courseId}-${groupItem.id}") {
+                            LmsItemCard(groupItem, onOpenItem)
                         }
                     }
                 }
             }
-            else -> {
-                // 전체 모드: 과목 순서대로 묶고, 완료한 학습은 오늘 탭과 똑같이 맨 아래에 접어 둔다 (D-058)
-                coursePlan.groups.forEach { group ->
-                    item(key = "course-${group.courseId}") {
-                        LmsSectionHeader("${group.courseName} · ${group.items.size}")
-                    }
-                    group.items.forEach { courseItem ->
-                        item(key = "all-${courseItem.kind}-${courseItem.courseId}-${courseItem.id}") {
-                            LmsItemCard(courseItem, onOpenItem)
-                        }
+        } else {
+            // 전체 모드: 과목 순서대로 묶고, 완료한 학습은 오늘 탭과 똑같이 맨 아래에 접어 둔다 (D-058)
+            coursePlan.groups.forEach { group ->
+                item(key = "course-${group.courseId}") {
+                    LmsSectionHeader("${group.courseName} · ${group.items.size}")
+                }
+                group.items.forEach { courseItem ->
+                    item(key = "all-${courseItem.kind}-${courseItem.courseId}-${courseItem.id}") {
+                        LmsItemCard(courseItem, onOpenItem, showCourseName = false)
                     }
                 }
-                if (coursePlan.completed.isNotEmpty()) {
-                    item(key = "all-completed-header") {
-                        LmsCompletedHeader(
-                            count = coursePlan.completed.size,
-                            expanded = completedExpanded,
-                            onToggle = { completedExpanded = !completedExpanded },
-                        )
-                    }
-                    if (completedExpanded) {
-                        coursePlan.completed.forEach { completedItem ->
-                            item(key = "all-done-${completedItem.kind}-${completedItem.courseId}-${completedItem.id}") {
-                                LmsItemCard(completedItem, onOpenItem)
-                            }
+            }
+            if (coursePlan.completed.isNotEmpty()) {
+                item(key = "all-completed-header") {
+                    LmsCompletedHeader(
+                        count = coursePlan.completed.size,
+                        expanded = completedExpanded,
+                        onToggle = { completedExpanded = !completedExpanded },
+                    )
+                }
+                if (completedExpanded) {
+                    coursePlan.completed.forEach { completedItem ->
+                        item(key = "all-done-${completedItem.kind}-${completedItem.courseId}-${completedItem.id}") {
+                            LmsItemCard(completedItem, onOpenItem)
                         }
                     }
                 }
@@ -1211,7 +1232,7 @@ private fun LmsRefreshErrorBanner(
 }
 
 @Composable
-private fun LmsItemCard(item: LmsItem, onOpenItem: (LmsItem) -> Unit) {
+private fun LmsItemCard(item: LmsItem, onOpenItem: (LmsItem) -> Unit, showCourseName: Boolean = true) {
     ElevatedCard(
         onClick = { onOpenItem(item) },
         modifier = Modifier.fillMaxWidth().expressiveBounceClick(),
@@ -1219,9 +1240,10 @@ private fun LmsItemCard(item: LmsItem, onOpenItem: (LmsItem) -> Unit) {
         colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
     ) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text(item.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 LmsStatusBadge(kindLabel(item.kind), prominent = false)
-                Text(
+                if (showCourseName) Text(
                     item.courseName,
                     style = MaterialTheme.typography.labelMedium,
                     fontWeight = FontWeight.Bold,
@@ -1231,6 +1253,11 @@ private fun LmsItemCard(item: LmsItem, onOpenItem: (LmsItem) -> Unit) {
                     modifier = Modifier.weight(1f),
                 )
                 // 읽음/안읽음 배지는 제거했다 — 새 항목·완료 여부만 남긴다 (D-058)
+            }
+            item.dueAt?.let {
+                Text("마감 ${LMS_TIME.format(it.atZone(SEOUL))}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            } ?: item.registeredAt?.let {
+                Text("등록 ${LMS_TIME.format(it.atZone(SEOUL))}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             val badges = buildList {
                 when (item.changeState) {
@@ -1252,12 +1279,6 @@ private fun LmsItemCard(item: LmsItem, onOpenItem: (LmsItem) -> Unit) {
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     badges.forEach { badge -> LmsStatusBadge(badge, prominent = true) }
                 }
-            }
-            Text(item.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-            item.dueAt?.let {
-                Text("마감 ${LMS_TIME.format(it.atZone(SEOUL))}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            } ?: item.registeredAt?.let {
-                Text("등록 ${LMS_TIME.format(it.atZone(SEOUL))}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
     }
@@ -1522,18 +1543,15 @@ private fun assignmentPeriod(detail: LmsItemDetail): String? {
 }
 
 @Composable
-private fun LmsAuthenticationWebView(
-    request: LmsLoginRequest,
-    onComplete: (LmsLoginResult) -> Unit,
-    onAuthenticated: (List<LmsCourse>) -> Unit,
+private fun LmsAuthenticationFrame(
+    silent: Boolean,
     onCancel: () -> Unit,
-    modifier: Modifier = Modifier,
+    modifier: Modifier,
+    content: @Composable () -> Unit,
 ) {
-    val activity = LocalActivity.current
-    val parser = remember { LmsHtmlParser() }
-    DisposableEffect(activity) {
-        activity?.window?.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
-        onDispose { activity?.window?.clearFlags(WindowManager.LayoutParams.FLAG_SECURE) }
+    if (silent) {
+        Box(Modifier.size(1.dp)) { content() }
+        return
     }
     LmsFullScreenPane(
         title = "공식 포털에서 로그인 중",
@@ -1565,6 +1583,27 @@ private fun LmsAuthenticationWebView(
                 )
                 Text("공식 포털에서 로그인 중", fontWeight = FontWeight.SemiBold)
             }
+            content()
+        }
+    }
+}
+
+@Composable
+private fun LmsAuthenticationWebView(
+    request: LmsLoginRequest,
+    onComplete: (LmsLoginResult) -> Unit,
+    onAuthenticated: (List<LmsCourse>) -> Unit,
+    onCancel: () -> Unit,
+    modifier: Modifier = Modifier,
+    silent: Boolean = false,
+) {
+    val activity = LocalActivity.current
+    val parser = remember { LmsHtmlParser() }
+    DisposableEffect(activity, silent) {
+        if (!silent) activity?.window?.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
+        onDispose { if (!silent) activity?.window?.clearFlags(WindowManager.LayoutParams.FLAG_SECURE) }
+    }
+    LmsAuthenticationFrame(silent, onCancel, modifier) {
             AndroidView(
                 factory = { context ->
                     WebView(context).apply {
@@ -1811,9 +1850,12 @@ private fun LmsAuthenticationWebView(
                         advance(this, LmsLoginFlowEvent.CredentialsAvailable)
                     }
                 },
+                onRelease = { webView ->
+                    webView.stopLoading()
+                    webView.destroy()
+                },
                 modifier = Modifier.size(1.dp),
             )
-        }
     }
 }
 
@@ -2063,10 +2105,13 @@ internal fun lmsCredentialSubmissionScript(
           var i=document.querySelector('$userSelector'),p=document.querySelector('$passwordSelector');
           if(!i||!p||!($submitCheck))return 'interactive';
           function isHidden(control){
-            if(control.hidden)return true;
             if(control.tagName==='INPUT'&&control.type==='hidden')return true;
-            var style=window.getComputedStyle(control);
-            return style.display==='none'||style.visibility==='hidden';
+            for(var node=control;node;node=node.parentElement){
+              if(node.hidden)return true;
+              var style=window.getComputedStyle(node);
+              if(style.display==='none'||style.visibility==='hidden')return true;
+            }
+            return false;
           }
           var challengeMarker=document.querySelector(
             "[data-sitekey],.g-recaptcha,img[src*='captcha' i]"

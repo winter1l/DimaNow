@@ -14,6 +14,8 @@ interface CampusDataRepository {
     suspend fun ensureSeeded()
     suspend fun saveCourse(course: Course): Long
     suspend fun deleteCourse(id: Long)
+    suspend fun setCourseOverride(override: com.example.dimanow.domain.CourseOverride) { error("수업 1회 변경을 지원하지 않습니다.") }
+    suspend fun removeCourseOverride(courseId: Long, date: LocalDate) { error("수업 1회 변경을 지원하지 않습니다.") }
     suspend fun setTerm(start: LocalDate, end: LocalDate)
     suspend fun addNoClassDate(date: LocalDate)
     suspend fun removeNoClassDate(date: LocalDate)

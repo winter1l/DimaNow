@@ -84,7 +84,7 @@ class DimaNowApplication : Application() {
 
     val database: DimaDatabase by lazy {
         Room.databaseBuilder(this, DimaDatabase::class.java, "dima-now.db")
-            .addMigrations(DimaDatabase.MIGRATION_1_2, DimaDatabase.MIGRATION_2_3, DimaDatabase.MIGRATION_3_4, DimaDatabase.MIGRATION_4_5)
+            .addMigrations(DimaDatabase.MIGRATION_1_2, DimaDatabase.MIGRATION_2_3, DimaDatabase.MIGRATION_3_4, DimaDatabase.MIGRATION_4_5, DimaDatabase.MIGRATION_5_6)
             .build()
     }
     val repository: RoomCampusDataRepository by lazy { RoomCampusDataRepository(database) }
@@ -139,11 +139,12 @@ class DimaNowApplication : Application() {
     }
     val guidanceEngine: GuidanceEngine by lazy { GuidanceEngine() }
     val liveSurfaceController: AndroidLiveSurfaceController by lazy { AndroidLiveSurfaceController(this) }
+    val guidanceDismissalStore by lazy { com.example.dimanow.live.GuidanceDismissalStore(this) }
     val guidanceAlarmScheduler: GuidanceAlarmScheduler by lazy { GuidanceAlarmScheduler(this) }
     val widgetMinuteCoordinator: SharedWidgetMinuteCoordinator by lazy { SharedWidgetMinuteCoordinator(this) }
     private val shuttleIndexCache: ShuttleIndexCache by lazy { ShuttleIndexCache(guidanceEngine) }
     val guidanceOrchestrator: GuidanceOrchestrator by lazy {
-        GuidanceOrchestrator(guidanceEngine, liveSurfaceController, guidanceAlarmScheduler)
+        GuidanceOrchestrator(guidanceEngine, liveSurfaceController, guidanceAlarmScheduler, guidanceDismissalStore)
     }
     val guidanceRuntimeCoordinator: GuidanceRuntimeCoordinator<GuidanceRuntimeSnapshot> by lazy {
         GuidanceRuntimeCoordinator(applicationScope) { guidanceOrchestrator.refresh(it) }
@@ -175,6 +176,9 @@ class DimaNowApplication : Application() {
             registerReceiver(lockStateReceiver, lockStateFilter)
         }
         applicationScope.launch {
+            // Remove the retired notification-review store without touching schedule or LMS data.
+            java.io.File(filesDir, "datastore/class_notice_review.preferences_pb").delete()
+            java.io.File(filesDir, "datastore/class_notice_review.preferences_pb.tmp").delete()
             repository.ensureSeeded()
             if (preferences.campusZoneDefaultsVersion.first() < 4) {
                 repository.installBundledCampusZones()
@@ -284,6 +288,21 @@ class DimaNowApplication : Application() {
             configuredZones = repository.zones.first(),
             expectedZone = expectedZone,
         )
+    }
+
+    /** Apply permission changes immediately after first-run or settings configuration. */
+    fun refreshGuidancePermissions() {
+        applicationScope.launch {
+            if (preferences.locationMode.first() == LocationMode.TEST) {
+                geofenceManager.clear()
+            } else {
+                geofenceManager.sync(
+                    repository.zones.first(),
+                    preferences.notificationGuidancePolicy.first().bus4402 != NotificationGuidanceMode.OFF,
+                )
+            }
+            guidanceRuntimeCoordinator.requestRefresh()
+        }
     }
 
     private suspend fun refreshTransitStopProximity() {

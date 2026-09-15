@@ -46,6 +46,7 @@ data class Course(
     val professor: String,
     val zone: CampusZoneId,
     val id: Long = 0,
+    val isOnline: Boolean = false,
 )
 
 data class ShuttleDeparture(
@@ -111,6 +112,7 @@ data class GuidanceSnapshot(
     val countdownMeaning: CountdownMeaning? = null,
     val requiresMinuteUpdates: Boolean = false,
     val kind: GuidanceKind? = null,
+    val occurrenceKey: String? = null,
 )
 
 enum class MealValidationState {

@@ -29,7 +29,7 @@ class TimetablePauseDialogTest {
         composeRule.onNodeWithText("오늘만").assertExists()
         composeRule.onNodeWithText("기간 지정").assertExists()
         composeRule.onNodeWithText("학기 종료일까지").assertExists()
-        composeRule.onNodeWithText("휴강모드를 다시 끌 때까지").assertExists()
+        composeRule.onNodeWithText("휴강을 해제할 때까지").assertExists()
         composeRule.onAllNodesWithText("날짜 선택").assertCountEquals(0)
     }
 
@@ -46,7 +46,7 @@ class TimetablePauseDialogTest {
             )
         }
 
-        composeRule.onNodeWithText("휴강모드를 다시 끌 때까지").performClick()
+        composeRule.onNodeWithText("휴강을 해제할 때까지").performClick()
 
         assertEquals(LocalDate.of(2026, 8, 27), selected?.startDate)
         assertEquals(true, selected?.isUntilDisabled)

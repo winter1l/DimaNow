@@ -27,7 +27,7 @@ class AppBackNavigationTest {
         composeRule.waitForIdle()
         composeRule.onNodeWithTag("open_settings").performClick()
         composeRule.onNodeWithTag("nav_SETTINGS").assertDoesNotExist()
-        composeRule.onNodeWithText("설정 및 상태").assertExists()
+        composeRule.onNodeWithTag("close_settings").assertExists()
 
         composeRule.activityRule.scenario.onActivity {
             it.onBackPressedDispatcher.onBackPressed()

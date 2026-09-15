@@ -416,3 +416,48 @@ Confirmed: the user selected all 11 findings from security scan `cfa82db2-6c47-4
 Confirmed engineering boundary: Gemini may create only a `PENDING_REVIEW` dormitory candidate. READY/PUBLISHED requires an authenticated manual GitHub workflow, explicit `APPROVE`, the exact candidate SHA-256, a matching immutable source-image commit URL and submission ID, and a still-current KST week. Approval writes a separate reviewer audit record. Meal discovery/network fetches validate exact HTTPS authority/path, globally routable DNS answers, every redirect hop, and byte ceilings. Current tracked evidence uses irreversible test-device aliases; repository validation rejects physical ADB identifiers.
 
 Unknown: local source/test completion is not a Cloudflare Worker, D1, GitHub Pages, or phone deployment result. A fresh scan is required for independent validation of the changed tree.
+
+## D-071 - Home tasks, dated class changes, and occurrence dismissal - 2026-09-14 (user-confirmed)
+
+Confirmed: user selected all three annotated ideas: Home today task summary, one-time class changes with Kakao notification feasibility/implementation, and ending only the current guidance.
+
+Assumed interaction detail: show existing cached LMS unfinished deadlines due today and remaining classes; offer dated cancellation, online, or time/room change while retaining the weekly course. Kakao detection is optional, exact-room allowlisted, local, and proposes a change for explicit user review. No raw notification text is retained or sent. Notification access and room selection remain user-controlled. Dismissal is keyed to a dated class or individual departure; subsequent occurrences remain eligible.
+
+## D-072 - Remove Kakao intake and repair LMS refresh - 2026-09-14 (user-confirmed)
+
+Confirmed: user reports course information cannot load after re-login following update and authorizes phone investigation while unlocked. Remove Kakao notification integration because setup is cumbersome. This supersedes only D-071 Kakao intake; retain manual dated class changes, Home summary and occurrence dismissal. Remove listener permission entry, settings, proposals and stored intake state.
+
+## D-073 - Restore only the school SSO login bridge - 2026-09-14 (user-confirmed)
+
+Confirmed: after being told that the school HTTP SSO bridge carries a login ticket without transport encryption, user explicitly chose '학교 SSO 경로만 허용해서 복구'. This supersedes D-070's complete rejection only for login WebView navigation to exact host sso.dima.ac.kr, port 8080, paths /sso/pmi-sso.jsp and /sso/pmi-sso2.jsp. Ordinary LMS transport and attachments remain HTTPS-only. Network security exception is limited to that exact domain; application URL checks constrain port and paths. Actual login/course-fetch evidence is required before completion.
+
+Confirmed D-073 implementation approval: automatic review initially rejected Android domain-level HTTP permission as broader than the first wording. User was explicitly told Android cannot grant per-path permission and then approved '이 방식으로 허용하고 복구': exact domain permission in Android plus exact port/path checks in app. The rejected patch had not applied; after additional approval, both layers were applied normally.
+
+## D-074 - Silent automatic LMS authentication - 2026-09-14 (user-confirmed)
+
+Confirmed: user dislikes the screen shown on every automatic login and requests background handling. Implement invisible automatic authentication while retaining the current Courses list, selection/scroll and app navigation. Assumed scope: foreground in-app work, no new OS background service or scheduled account access. Manual login may show explicit progress; actual credential review/additional authentication remains visible as an actionable status. Preserve D-073 SSO policy.
+
+## D-075 - UI wording and layout cleanup with three-screen first-run setup - 2026-09-14 (user-approved plan)
+
+Confirmed: preserve theme and five primary tabs; merge Home class/deadline briefing; simplify timetable actions, transit/meal wording and settings hierarchy. Courses Today must explain no actionable learning even if completed items remain; preserve future-three-day/fresh/overdue groups and distinguish loading/error/filter states. First run is welcome, draft home direction, shared permission checklist; school login stays in Courses. Persist draft and atomically finalize home direction plus completion; existing users never replay onboarding on update. Permission refusal does not block entry; real OS state is re-read on resume, no developer options in basic setup. Preserve D-069, D-073 and D-074 behavior and existing data. Tests and physical data-preserving update authorized by the full implementation request.
+
+## D-076 — HEIC dormitory photo support — 2026-09-14
+
+Confirmed: user supplied a HEIC photo and requested implementation and testing. Prepare HEIC/HEIF locally as a high-quality JPEG for the existing upload path; retain the sharing confirmation, 15MiB ceiling and server publication policy. Test the supplied photo locally and through a non-publishing AI probe, then install a data-preserving phone update. Assumed resource policy: preserve native resolution up to 24MP; reject larger decode surfaces rather than silently reduce text detail. User photos and derived artifacts stay in ignored local artifacts, never APK assets or tracked fixtures.
+
+Confirmed D-076 follow-up: user explicitly authorized sending the sample to Google Gemini for actual AI testing, resolving an initial automatic approval rejection. Local probe then failed with provider HTTP400 FAILED_PRECONDITION (unsupported API location), before extraction. User subsequently authorized public data upload ('공개 데이터로 올려도 돼'); the original phone photo was selected and the app's existing upload confirmation accepted at 2026-09-15 00:05 KST. Continue the normal production submission path and verify its result; do not deploy code or bypass provider regional restrictions.
+
+Confirmed D-076 follow-up (2026-09-15): after production upload and AI transcription succeeded, user requested explicit high image media resolution and then a LOW thinking test. Compare the same JPEG with MEDIA_RESOLUTION_HIGH and extraction minimal versus LOW; photo validation keeps its existing HIGH thinking. Original default-media/minimal production output is the baseline. Keep test outputs separate from public data until reviewed. Three source-confirmed OCR issues await correction (Sep16 dinner drink, Sep16 lunch pork origin, Sep17 salad origin). Do not normalize the school's Tuesday salad spelling based on guesswork.
+
+D-076 completed follow-up (2026-09-15): observed HIGH/minimal retained fewer errors than HIGH/LOW in the one-photo trial; keep media HIGH and existing minimal default. Source-reviewed three corrections published as dorm revision4. Narrow Gemini configuration/test plus deploy-only option deployed under the user's implementation/testing request. Earlier instruction to avoid deployment applied to the initial transmission-only probe; later HIGH implementation and public correction follow-up supersedes that boundary for these scoped changes. Details and limits: heic-support-20260915.md.
+
+## D-077 — Home deadline grouping and redundant text removal — 2026-09-15
+Confirmed: user marked Home 오늘 and 오늘 마감 headers and 시간표 보기 for deletion. Replace today-only LMS tasks with upcoming unfinished deadlines grouped by subject and sorted nearest deadline first, with D-day. Merge dorm meal operational state into the meal-time chip, removing the repeated status line. Assumed display bounds: up to3 subjects and2 tasks per subject, with omitted count and Courses navigation; exclude already elapsed deadlines and completed work, preserve unknown completion and unavailable/cache disclosures. Preserve account/data through phone update.
+
+## D-078 — Compact Home course counts and global nearest three — 2026-09-15
+Confirmed: user finds D-077 Home too long. Supersede per-course2-title display: show eligible remaining count for each course, and only the three nearest deadlines across all courses as title rows. Preserve D-day and existing eligibility/cache/account semantics. Counts include all eligible items, not only the displayed three. Compact course count chips share a row with Courses action; phone update preserves data.
+
+## D-079 — Independent learning card and urgent titles — 2026-09-15
+Confirmed: user requests learning outside main class card, course counts normally and titles/D-day only for D-2 or closer. Retain prior global3 title cap. Remove Home completion-uncertainty and stored-content boilerplate; this explicitly supersedes those Home disclosures in prior decisions. Counts still exclude confirmed completed/elapsed tasks. Keep necessary initial-login/fetch errors actionable. Learning and meal cards retain surrounding surfaceContainerLow/24dp radius/18dp padding. Home meal highlights actual open time with primary border and hours chip, removing nested full meal-card styling; meal-tab period cards retain existing active treatment. KST calendar D-2 includes today through dayafter, not elapsed deadlines. Preserve phone data.
+
+D-079 header follow-up (2026-09-15): user flags learning header top spacing and oversized arrow. Confirmed code cause:48dp IconButton set row height and default24dp arrow unlike14dp nearby arrows. Use24dp header slot with centered required48dp touch button,14dp icon and12dp content gap, keeping physical touch target while removing excess header height. Verify phone visual and Courses navigation after replacement update.

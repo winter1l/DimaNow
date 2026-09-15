@@ -22,6 +22,41 @@ import org.junit.runner.RunWith
 @RunWith(AndroidJUnit4::class)
 class AppPreferencesUpgradeTest {
     @Test
+    fun onboardingDraftRestoresWithoutConfirmingDirectionOrFinishingTheFlow() = runTest {
+        val context = ApplicationProvider.getApplicationContext<android.content.Context>()
+        val preferences = AppPreferences(context)
+        val originalDraft = preferences.onboardingDraft.first()
+        val originalHome = preferences.homeBase.first()
+        val originalConfirmed = preferences.homeBaseSelectionConfirmed.first()
+        val originalCompleted = preferences.onboardingCompleted.first()
+        val originalNowBar = preferences.nowBarSetupCompleted.first()
+        try {
+            val draft = OnboardingDraft(OnboardingStage.SETUP, HomeBase.ONE_ROOM)
+            preferences.saveOnboardingDraft(draft)
+            val reopened = AppPreferences(context)
+            assertEquals(draft, reopened.onboardingDraft.first())
+            assertEquals(originalHome, reopened.homeBase.first())
+            assertEquals(originalConfirmed, reopened.homeBaseSelectionConfirmed.first())
+            assertEquals(originalCompleted, reopened.onboardingCompleted.first())
+            assertEquals(originalNowBar, reopened.nowBarSetupCompleted.first())
+        } finally {
+            preferences.saveOnboardingDraft(originalDraft)
+        }
+    }
+
+    @Test
+    fun finishingOnboardingConfirmsDirectionAndBothCompletionFlagsTogether() = runTest {
+        val preferences = AppPreferences(ApplicationProvider.getApplicationContext())
+        preferences.saveOnboardingDraft(OnboardingDraft(OnboardingStage.SETUP, HomeBase.ONE_ROOM))
+        preferences.completeOnboarding(HomeBase.ONE_ROOM)
+        assertEquals(HomeBase.ONE_ROOM, preferences.homeBase.first())
+        assertTrue(preferences.homeBaseSelectionConfirmed.first())
+        assertTrue(preferences.onboardingCompleted.first())
+        assertTrue(preferences.nowBarSetupCompleted.first())
+        assertEquals(OnboardingDraft(), preferences.onboardingDraft.first())
+    }
+
+    @Test
     fun notificationGuidanceModesPersistIndependently() = runTest {
         val preferences = AppPreferences(ApplicationProvider.getApplicationContext())
 

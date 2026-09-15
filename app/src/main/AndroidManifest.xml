@@ -82,6 +82,9 @@
             android:name=".live.GuidanceAlarmReceiver"
             android:exported="false" />
         <receiver
+            android:name=".live.DismissGuidanceReceiver"
+            android:exported="false" />
+        <receiver
             android:name=".live.RescheduleReceiver"
             android:exported="false">
             <intent-filter>

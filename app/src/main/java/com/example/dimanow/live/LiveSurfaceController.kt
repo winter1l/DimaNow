@@ -80,8 +80,12 @@ interface LiveSurfaceController {
     fun cancel(): LiveSurfaceResult
     fun openPromotionSettings(): LiveSettingsDestination
     fun diagnostics(): LiveSurfaceDiagnostics
+    fun resumeAfterDismissal(snapshot: GuidanceSnapshot) {}
 
     companion object {
+        fun isDismissed(snapshot: GuidanceSnapshot, dismissedKeys: Set<String>): Boolean =
+            snapshot.occurrenceKey?.let { it in dismissedKeys } == true
+
         fun startUpdaterSafely(start: () -> Unit): Boolean = try {
             start()
             true
@@ -225,6 +229,11 @@ class AndroidLiveSurfaceController(private val context: Context) : LiveSurfaceCo
         return LiveSurfaceResult.CANCELLED
     }
 
+    override fun resumeAfterDismissal(snapshot: GuidanceSnapshot) {
+        val nextCheck = (snapshot.countdownTarget ?: snapshot.expiresAt)?.plusSeconds(1) ?: return
+        LiveSurfaceController.startUpdaterSafely { minuteUpdater.resumeAt(nextCheck) }
+    }
+
     override fun openPromotionSettings(): LiveSettingsDestination {
         var promotedAvailable = Build.VERSION.SDK_INT >= 36 && canResolve(promotedSettingsIntent())
         var appNotificationsAvailable = canResolve(appNotificationSettingsIntent())
@@ -350,6 +359,16 @@ class AndroidLiveSurfaceController(private val context: Context) : LiveSurfaceCo
             .setShowWhen(LiveSurfaceController.usesSystemChronometer(snapshot))
         snapshot.countdownTarget?.takeIf { LiveSurfaceController.usesSystemChronometer(snapshot) }?.let {
             builder.setWhen(it.toEpochMilli()).setUsesChronometer(true).setChronometerCountDown(true)
+        }
+        snapshot.occurrenceKey?.let { key ->
+            val dismissIntent = PendingIntent.getBroadcast(
+                context, 6303,
+                Intent(context, DismissGuidanceReceiver::class.java)
+                    .setData(Uri.parse("dimanow://dismiss/${Uri.encode(key)}"))
+                    .putExtra(DismissGuidanceReceiver.EXTRA_OCCURRENCE, key),
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+            )
+            builder.addAction(0, "이번 안내만 종료", dismissIntent)
         }
         if (Build.VERSION.SDK_INT >= 36) {
             // 수업 countdown은 시스템 chronometer, 셔틀 countdown은 목적지 포함 분 단위 텍스트를 쓴다.

@@ -18,6 +18,40 @@ import com.example.dimanow.location.NearbyTransitStop
 
 class GuidanceEngineTest {
     @Test
+    fun `4402 occurrence remains stable each minute and changes at the next departure`() {
+        val now = ZonedDateTime.parse("2026-09-04T08:42:00+09:00[Asia/Seoul]")
+        fun snapshot(at: ZonedDateTime) = GuidanceEngine().bus4402Snapshot(at, NearbyTransitStop("34710", "정류장"))!!
+        val key = snapshot(now).occurrenceKey
+        org.junit.Assert.assertNotNull(key)
+        assertEquals(key, snapshot(now.plusMinutes(1)).occurrenceKey)
+        org.junit.Assert.assertNotEquals(key, snapshot(now.withMinute(51)).occurrenceKey)
+    }
+
+    @Test
+    fun `online class keeps its reminder without directing travel to campus`() {
+        val now = ZonedDateTime.parse("2026-09-14T09:30:00+09:00[Asia/Seoul]")
+        val course = Course(DayOfWeek.MONDAY, LocalTime.of(10, 0), LocalTime.of(11, 50), "실습", "비대면", "교수", CampusZoneId.MAIN, isOnline = true)
+        val departure = ShuttleDeparture("A", "one-room", "TO_MAIN", DayOfWeek.MONDAY, LocalTime.of(9, 40), CampusZoneId.ONE_ROOM, CampusZoneId.MAIN)
+        val snapshot = GuidanceEngine().snapshot(now, now.toLocalDate(), now.toLocalDate(), listOf(course), emptySet(), CampusZoneId.ONE_ROOM, true, listOf(departure))
+        assertEquals(GuidancePhase.BEFORE_CLASS, snapshot.phase)
+        assertEquals(emptyList<Any>(), snapshot.shuttleLines)
+        assertEquals("비대면", snapshot.classContent?.room)
+    }
+
+    @Test
+    fun `ending a class guide covers minute refresh and in-class phase but not next week`() {
+        val now = ZonedDateTime.parse("2026-09-14T09:30:00+09:00[Asia/Seoul]")
+        val course = Course(DayOfWeek.MONDAY, LocalTime.of(10, 0), LocalTime.of(11, 50), "실습", "본관", "교수", CampusZoneId.MAIN, id = 42)
+        fun snapshot(at: ZonedDateTime) = GuidanceEngine().snapshot(at, now.toLocalDate(), now.toLocalDate().plusMonths(1),
+            listOf(course), emptySet(), CampusZoneId.MAIN, true)
+        val key = snapshot(now).occurrenceKey
+        org.junit.Assert.assertNotNull(key)
+        assertEquals(key, snapshot(now.plusMinutes(1)).occurrenceKey)
+        assertEquals(key, snapshot(now.plusMinutes(31)).occurrenceKey)
+        org.junit.Assert.assertNotEquals(key, snapshot(now.plusWeeks(1)).occurrenceKey)
+    }
+
+    @Test
     fun `class companion shuttle uses departure time for a distant following vehicle`() {
         val now = ZonedDateTime.parse("2026-09-14T09:00:30+09:00[Asia/Seoul]")
         val departures = listOf(LocalTime.of(9, 10), LocalTime.of(11, 0)).map {
@@ -294,7 +328,7 @@ class GuidanceEngineTest {
         )
 
         assertEquals(
-            listOf("18:30 (첫차)", "19:00 · 운동장 전환", "19:30 (막차) · 운동장"),
+            listOf("18:30 (첫차)", "19:00 · 탑승 위치 변경", "19:30 (막차) · 본관"),
             annotated.map { it.displayText },
         )
     }
@@ -582,7 +616,7 @@ class GuidanceEngineTest {
             shuttleDepartures = departures,
         )
 
-        assertEquals(listOf("운동장  5분, 30분"), snapshot.shuttleLines.map { it.text })
+        assertEquals(listOf("본관  5분, 30분"), snapshot.shuttleLines.map { it.text })
     }
 
     @Test
@@ -700,7 +734,7 @@ class GuidanceEngineTest {
         )
 
         assertEquals(
-            listOf("원룸촌  5분, 30분", "운동장  20분, 50분"),
+            listOf("원룸촌  5분, 30분", "본관  20분, 50분"),
             snapshot.shuttleLines.map { it.text },
         )
     }

@@ -1,6 +1,8 @@
 name: 캠퍼스 데이터 게시
 
 on:
+  repository_dispatch:
+    types: [student-meal-publication-watch]
   push:
     branches: [main, dorm-submissions]
     paths:
@@ -23,7 +25,7 @@ on:
         required: true
         default: all
         type: choice
-        options: [all, shuttle, meal, notice, dorm-approve]
+        options: [all, shuttle, meal, notice, dorm-approve, deploy-only]
       submission_id:
         description: 기숙사 식단 승인 시 제출 ID
         required: false
@@ -108,7 +110,7 @@ jobs:
           EVENT_NAME: ${{ github.event_name }}
         run: |
           command=publish-meal
-          if [[ "$EVENT_NAME" == "schedule" ]]; then command=collect-meal; fi
+          if [[ "$EVENT_NAME" == "schedule" || "$EVENT_NAME" == "repository_dispatch" ]]; then command=collect-meal; fi
           bash ./gradlew :data-pipeline:run --args="$command ignored $GITHUB_WORKSPACE/site"
       - name: 기숙사 제출 확인
         id: dorm_submission

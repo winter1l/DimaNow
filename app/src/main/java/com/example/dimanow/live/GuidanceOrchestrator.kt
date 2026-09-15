@@ -18,11 +18,13 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.first
 
 class GuidanceOrchestrator(
     private val engine: GuidanceEngine,
     private val controller: LiveSurfaceController,
     private val alarmScheduler: GuidanceAlarmScheduler,
+    private val dismissalStore: GuidanceDismissalStore? = null,
 ) {
     suspend fun refresh(
         runtime: GuidanceRuntimeSnapshot,
@@ -33,7 +35,7 @@ class GuidanceOrchestrator(
             now = now,
             termStart = schedule.termStart,
             termEnd = schedule.termEnd,
-            courses = schedule.courses,
+            courses = schedule.coursesOn(now.toLocalDate()),
             noClassDates = schedule.noClassDates,
             resolvedZone = runtime.resolvedZone,
             automaticClassGuidance = true,
@@ -46,7 +48,10 @@ class GuidanceOrchestrator(
             },
             bus4402Schedule = runtime.bus4402Schedule,
         )
-        if (snapshot.phase == GuidancePhase.NONE) {
+        if (LiveSurfaceController.isDismissed(snapshot, dismissalStore?.dismissedKeys?.first().orEmpty())) {
+            controller.cancel()
+            controller.resumeAfterDismissal(snapshot)
+        } else if (snapshot.phase == GuidancePhase.NONE) {
             controller.cancel()
         } else {
             val mode = runtime.notificationPolicy.modeFor(snapshot)
@@ -83,7 +88,14 @@ class GuidanceAlarmScheduler(private val context: Context) {
 
     companion object {
         fun planNext(now: ZonedDateTime, schedule: TermSchedule): GuidanceAlarmPlan {
-            val candidates = boundaryCandidates(now, schedule.courses)
+            val candidates = (0..7).flatMap { dayOffset ->
+                val date = now.toLocalDate().plusDays(dayOffset.toLong())
+                schedule.coursesOn(date).filter { it.weekday == date.dayOfWeek }.flatMap { course ->
+                    val start = date.atTime(course.start).atZone(now.zone)
+                    val end = date.atTime(course.end).atZone(now.zone)
+                    listOf(start.minusMinutes(60), start, start.plusMinutes(30), end)
+                }
+            }.filter { it.isAfter(now.plusSeconds(1)) }
                 .filter { candidate ->
                     val date = candidate.toLocalDate()
                     date in schedule.termStart..schedule.termEnd &&

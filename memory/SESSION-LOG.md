@@ -307,3 +307,44 @@ User restored Tailscale and authorized installation. Reconnected wireless ADB, v
 - Observed green evidence on only `emulator-5554` (API 36, QEMU): Android-test assembly passed; Q-008 passed focused; the LMS WebView class passed 3/3; the Q-007 target passed 12 consecutive repetitions; the previously variable live-surface test passed focused; and the final complete runner reported `Time: 375.223` and `OK (165 tests)`. The Q-007 class and Q-008's complete 11-test class both passed in that full order.
 - Observed infrastructure diagnosis: the first post-reboot runner crashes coincided with a 2 GB AVD running Play Store package updates, `dex2oat` above 200% CPU, and low-memory pressure. Play Store was temporarily disabled only on the emulator, the suite ran after the emulator became idle, and Play Store was re-enabled afterward. No AVD userdata was wiped.
 - Confirmed closure: Q-007 and Q-008 are resolved in `OPEN-QUESTIONS.md`. Play Store was re-enabled and the `medium_phone` emulator was stopped after validation. No app production source, physical phone, production service, commit, push, deployment, or install was changed. Existing unrelated dirty security-remediation work remains preserved.
+
+## 2026-09-14 - Samsung Now Bar side-thread handoff completed
+
+Confirmed: user-directed relay requested a controlled metadata-only test under DIMA's unchanged application ID. Observed: baseline OFF/ON control established that Android promotion does not imply Samsung display. Metadata-only replacement failed to enable actual Now Bar display with the developer option OFF. The ON control visibly rendered on the lock screen. Exact original installed Debug APK and both altered secure settings restored; probe/package/source removed; source remains at the existing 7b1ddec content. No full regression, reboot, commit, release or other-app change. See `nowbar-metadata-experiment-20260914.md` and PRODUCT-TRUTH for evidence and unknown OEM criteria.
+
+## 2026-09-14 - Wireless ADB meal-delay diagnosis and server repair
+
+Confirmed user request completed through phone inspection, meal-only sync timing, public data/Actions evidence, and isolated server repair. Added independent student meal publication watch, tests, local Worker integration and workflow event route. Deployed scoped remote workflow commit 092f58b and Cloudflare version af8b5d05-a57b-4ba0-b9db-f131c1babf62 with live settings preserved. Real dispatch succeeded and skipped current data; 49 Worker tests plus candidate handler test and dry-run passed. No APK install, credentials export, or unrelated source deployment. See meal-delay-fix-20260914.md; future timed recovery remains to be observed.
+
+## 2026-09-14 — D-071 implementation
+
+Implemented annotated daily features with three delegated bounded subtasks and root integration. Unit/build/lint and 46 targeted device tests pass before final parser date review correction; parser regression red then green. See daily-features-20260914.md for evidence and current device boundaries. No unrelated meal-worker deployment changes were included in app work.
+
+D-071 final build/install completed at 15:46 KST: 246 JVM tests, 46 targeted emulator tests (35 new-feature/integration plus 11 existing UI), lint and optimized packaging; matching installed APK hash. No real phone UI/Kakao claim while locked. Final source remains local uncommitted.
+
+## 2026-09-14 — LMS refresh restored and Kakao retired
+
+Completed D-072 and D-073. Reproduced phone failure, tried official HTTPS paths, fixed hidden popup misclassification and retry/error state, restored exact approved SSO after a second explicit approval resolved auto-review scope rejection. Final optimized installation hash matched and physical Courses/All/manual refresh succeeded. Unit240, instrumentation25, lint/build pass. Full record: lms-recovery-20260914.md.
+
+## 2026-09-14 — Silent LMS automatic authentication
+
+Completed D-074 with agent review of cancellation and root UI integration. Red-to-green evidence covers cached list disappearing during authentication, abandoned bridge requests, and stuck coordinator state. All 244 JVM and 11 selected emulator tests passed; optimized/debug build and lint passed. Installed optimized update on physical phone without clearing data and verified matching APK plus actual Courses All/refresh screenshot. See lms-silent-auth-20260914.md for exact evidence and device-versus-test boundary.
+
+## 2026-09-14 — UI cleanup and onboarding implementation
+
+Completed D-075 with three bounded agent implementations and root integration. Two behavioral red cases established the old empty-state and onboarding mismatch; 239 JVM and 68 distinct targeted instrumentation cases are green after selector alignment. Final build/lint succeeded. Visually checked fresh onboarding/permission/resume and display/accessibility variants on selected emulator, then stopped it. User restored Tailscale; optimized replacement update installed on phone, pulled hash verified, existing data and no-onboarding-replay observed. Final UI includes no-action Courses plus 17 completed items. Source remains local with prior unrelated changes preserved. See ux-onboarding-20260914.md.
+
+## 2026-09-15 00:28 — HEIC and Gemini HIGH/LOW completed
+Implemented HEIC conversion and progress/error UI, tested supplied photo and existing formats, installed preserving phone data. User-authorized actual public upload succeeded. HIGH/minimal and HIGH/LOW artifact-only comparison completed; retained HIGH/minimal based on observed errors. Deployed scoped pipeline settings and three source-reviewed public corrections; CI and Pages successful, public hash verified and phone corrected dinner visually checked. Full evidence: heic-support-20260915.md. No pending user action; unrelated working changes preserved.
+
+## 2026-09-15 00:46 — D-077 complete
+Implemented five screenshot requests: Home labels/actions removed, upcoming course-grouped D-day summary and combined dorm hours/state.243 unit and14 selected emulator UI tests pass, optimized build/lint pass. Data-preserving phone update and actual Home/meal visuals verified; installed hash equals build. Details and artifacts in PRODUCT-TRUTH entry00:46. No pending action.
+
+## 2026-09-15 00:52 — D-078 complete
+User requested shorter Home: replaced3×2 grouped titles with course counts plus global nearest3. Tests244 unit/4 UI pass; optimized phone update verified visually and by installed hash, preserving data. PRODUCT-TRUTH00:52 and artifacts/home-compact-20260915 record evidence. No outstanding action.
+
+## 2026-09-15 01:05 — D-079 complete
+Separate learning card, counts-only normal display/D2 urgent3 titles and removed requested boilerplate. Meal styling unified with open-time border/chip. Unit246/Compose17/build/lint pass. Phone data-preserving update verified, plus emulator light/dark open-state captures. PRODUCT-TRUTH01:05 and artifacts/home-cards-20260915 contain evidence. No pending action.
+
+## 2026-09-15 01:09 — Header follow-up complete
+Corrected learning header height and arrow14dp, retained48dp button. Build/lint pass, phonevisual and expandedtouch Courses navigation verified, returnedHome. Evidence PRODUCT-TRUTH01:09 and artifacts/home-header-20260915. No new functional test rerun for cosmetic-only change.

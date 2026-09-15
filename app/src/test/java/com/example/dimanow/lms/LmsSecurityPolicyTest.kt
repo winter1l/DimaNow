@@ -35,13 +35,13 @@ class LmsSecurityPolicyTest {
     }
 
     @Test
-    fun legacyCleartextSsoBridgesFailClosedDuringInteractiveLogin() {
-        assertFalse(
+    fun approvedSsoBridgesAreAllowedOnlyDuringLoginAtTheirExactPortAndPaths() {
+        assertTrue(
             LmsUrlPolicy.isAllowedLoginNavigation(
                 "http://sso.dima.ac.kr:8080/sso/pmi-sso.jsp?ticket=one-time",
             ),
         )
-        assertFalse(
+        assertTrue(
             LmsUrlPolicy.isAllowedLoginNavigation(
                 "http://sso.dima.ac.kr:8080/sso/pmi-sso2.jsp?ticket=one-time",
             ),
@@ -52,6 +52,9 @@ class LmsSecurityPolicyTest {
         assertFalse(LmsUrlPolicy.isAllowedLoginNavigation("http://sso.dima.ac.kr:8080/other.jsp"))
         assertFalse(LmsUrlPolicy.isAllowedLoginNavigation("http://sso.dima.ac.kr:8080/sso/pmi-sso3.jsp"))
         assertFalse(LmsUrlPolicy.isAllowedLoginNavigation("http://sso.dima.ac.kr.evil.example:8080/sso/pmi-sso.jsp"))
+        assertFalse(LmsUrlPolicy.isAllowedLoginNavigation("http://user@sso.dima.ac.kr:8080/sso/pmi-sso.jsp"))
+        assertFalse(LmsUrlPolicy.isAllowedLoginNavigation("http://sso.dima.ac.kr:8080/sso/%70mi-sso.jsp"))
+        assertFalse(LmsUrlPolicy.isAllowedLoginNavigation("http://sso.dima.ac.kr:8080/sso/pmi-sso.jsp#other"))
     }
 
     @Test

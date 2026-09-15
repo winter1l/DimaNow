@@ -24,7 +24,10 @@ import java.time.Instant
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertEquals
+import kotlinx.coroutines.CompletableDeferred
+import androidx.compose.ui.test.assertIsSelected
 import org.junit.Rule
 import org.junit.Test
 
@@ -80,30 +83,49 @@ class LmsNativeDetailScreenTest {
     }
 
     @Test
-    fun automaticLoginShowsOnlyNativeProgressInsteadOfThePortalWebView() {
+    fun automaticLoginKeepsTheCachedListAndSelectedModeWithoutTakingTheWholeScreen() {
         val credentials = SavedCredentialStore()
         val session = MutableLmsSessionController(LmsSessionState.EXPIRED)
         val loginBridge = LmsLoginBridge()
-
+        val beginRefresh = CompletableDeferred<Unit>()
+        val cachedItem = LmsItem("cached", "camera", "카메라기초및실습", LmsItemKind.MATERIAL,
+            "저장된 수업자료", detailUrl = "https://lms.dima.ac.kr/item/cached")
+        var refreshed = false
+        val source = object : LmsSource by ExpiringLmsSource() {
+            override val snapshot: Flow<LmsSnapshot> = MutableStateFlow(
+                LmsSnapshot(items = listOf(cachedItem), syncState = LmsSyncState.READY))
+            override suspend fun refresh(force: Boolean): LmsRefreshResult {
+                beginRefresh.await()
+                if (session.state.value == LmsSessionState.ACTIVE) {
+                    refreshed = true
+                    return LmsRefreshResult.Success
+                }
+                return LmsRefreshResult.SessionExpired
+            }
+        }
+        val fullScreenStates = mutableListOf<Boolean>()
         composeRule.setContent {
             DIMANowTheme {
-                LmsRoute(
-                    credentialStore = credentials,
-                    sessionController = session,
-                    loginBridge = loginBridge,
+                LmsRoute(credentials, session, loginBridge,
                     autoLoginCoordinator = LmsAutoLoginCoordinator(credentials, session, loginBridge),
-                    source = ExpiringLmsSource(),
-                    now = Instant.parse("2026-09-01T03:00:00Z"),
+                    source = source, now = Instant.parse("2026-09-01T03:00:00Z"),
+                    onFullScreenChange = { fullScreenStates += it },
+                    // Hold authentication at its public bridge; never submit fixture credentials to school.
+                    authenticationContent = { _, _ -> },
                 )
             }
         }
-
-        composeRule.waitUntil(5_000) {
-            composeRule.onAllNodesWithText("공식 포털에서 로그인 중").fetchSemanticsNodes().isNotEmpty()
-        }
-        onView(allOf(isAssignableFrom(WebView::class.java), isDisplayed())).check(doesNotExist())
-        loginBridge.cancel()
-        composeRule.waitUntil(5_000) { loginBridge.request.value == null }
+        composeRule.onNodeWithTag("lms_mode_all").performClick()
+        composeRule.onNodeWithText("저장된 수업자료").assertExists()
+        composeRule.runOnIdle { beginRefresh.complete(Unit) }
+        composeRule.waitUntil(5_000) { loginBridge.request.value != null }
+        composeRule.onNodeWithText("저장된 수업자료").assertExists()
+        composeRule.onNodeWithTag("lms_mode_all").assertIsSelected()
+        composeRule.onNodeWithText("공식 포털에서 로그인 중").assertDoesNotExist()
+        composeRule.runOnIdle { assertFalse(fullScreenStates.any { it }); loginBridge.complete(LmsLoginResult.Success) }
+        composeRule.waitUntil(5_000) { refreshed && loginBridge.request.value == null }
+        composeRule.onNodeWithText("저장된 수업자료").assertExists()
+        composeRule.onNodeWithTag("lms_mode_all").assertIsSelected()
     }
 
     @Test

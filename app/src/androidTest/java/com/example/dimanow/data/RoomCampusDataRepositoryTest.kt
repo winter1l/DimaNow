@@ -16,6 +16,51 @@ import org.junit.Test
 
 class RoomCampusDataRepositoryTest {
     @Test
+    fun versionFiveUpgradePreservesScheduleAndSupportsDatedChanges() = runTest {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val name = "course-override-migration-${java.util.UUID.randomUUID()}.db"
+        val original = Room.databaseBuilder(context, DimaDatabase::class.java, name).build()
+        val originalRepository = RoomCampusDataRepository(original)
+        originalRepository.ensureSeeded()
+        val before = originalRepository.schedule.first()
+        original.close()
+        // v5 has the same existing tables and no occurrence overrides.
+        android.database.sqlite.SQLiteDatabase.openDatabase(context.getDatabasePath(name).path, null,
+            android.database.sqlite.SQLiteDatabase.OPEN_READWRITE).use { raw ->
+            raw.execSQL("DROP TABLE course_overrides")
+            raw.version = 5
+        }
+        val upgraded = Room.databaseBuilder(context, DimaDatabase::class.java, name)
+            .addMigrations(DimaDatabase.MIGRATION_5_6).build()
+        try {
+            val restored = RoomCampusDataRepository(upgraded)
+            assertEquals(before.courses, restored.schedule.first().courses)
+            val course = before.courses.first()
+            restored.setCourseOverride(com.example.dimanow.domain.CourseOverride(course.id, LocalDate.of(2026, 9, 14),
+                com.example.dimanow.domain.CourseOverrideKind.ONLINE))
+            val occurrence = restored.schedule.first().coursesOn(LocalDate.of(2026, 9, 14)).single { it.id == course.id }
+            assertEquals(true, occurrence.isOnline)
+            assertEquals("비대면", occurrence.room)
+        } finally { upgraded.close(); context.deleteDatabase(name) }
+    }
+
+    @Test
+    fun oneClassCancellationSurvivesRepositoryRecreationAndLeavesNextWeekIntact() = runTest {
+        repository.ensureSeeded()
+        val before = repository.schedule.first()
+        val course = before.courses.first()
+        val date = LocalDate.of(2026, 9, 14)
+        repository.setCourseOverride(com.example.dimanow.domain.CourseOverride(course.id, date,
+            com.example.dimanow.domain.CourseOverrideKind.CANCELLED))
+        val restored = RoomCampusDataRepository(database).schedule.first()
+        assertEquals(before.courses, restored.courses)
+        assertEquals(false, restored.coursesOn(date).any { it.id == course.id })
+        assertEquals(true, restored.coursesOn(date.plusWeeks(1)).any { it.id == course.id })
+        repository.removeCourseOverride(course.id, date)
+        assertEquals(true, repository.schedule.first().coursesOn(date).any { it.id == course.id })
+    }
+
+    @Test
     fun guidancePauseRangePersistsWithoutReplacingExistingNoClassDates() = runTest {
         repository.ensureSeeded()
         val legacyDate = LocalDate.of(2026, 9, 7)

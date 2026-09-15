@@ -67,6 +67,6 @@ class NoticeCardTest {
         }
 
         composeRule.onNodeWithText("학교 공지").assertExists()
-        composeRule.onNodeWithText("공지를 불러오는 중이거나 없습니다").assertExists()
+        composeRule.onNodeWithText("공지를 확인하고 있어요").assertExists()
     }
 }

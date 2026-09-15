@@ -1,3 +1,5 @@
+import { createStudentMealPublicationWatch, STUDENT_MEAL_WATCH_CRONS } from './meal-publication-watch.mjs';
+
 const MAX_IMAGE_BYTES = 15 * 1024 * 1024;
 const MAX_SHUTTLE_JSON_BYTES = 8 * 1024;
 const RATE_LIMIT_SECONDS = 10 * 60;
@@ -15,6 +17,7 @@ export function createWorker(dependencies = {}) {
   const randomUUID = dependencies.randomUUID ?? (() => crypto.randomUUID());
   const githubTokenProvider = dependencies.githubTokenProvider
     ?? ((env) => createGitHubInstallationToken(env, fetchImpl, now));
+  const studentMealWatch = createStudentMealPublicationWatch({ fetch: fetchImpl, now, githubTokenProvider });
   const scheduleProvider = dependencies.scheduleProvider
     ?? (() => loadCurrentShuttleSchedule(fetchImpl));
   const cachedScheduleProvider = createCachedScheduleProvider(scheduleProvider, now);
@@ -54,7 +57,12 @@ export function createWorker(dependencies = {}) {
       }
       return jsonResponse(404, '요청한 경로가 없습니다.');
     },
-    scheduled(_event, env, context) {
+    scheduled(event, env, context) {
+      if (STUDENT_MEAL_WATCH_CRONS.includes(event.cron)) {
+        context.waitUntil(studentMealWatch(env).then((result) => console.info('Student meal publication watch', result)));
+        // Reuse the daily 17:07 UTC watch slot for maintenance, keeping three Cron Triggers.
+        if (new Date(event.scheduledTime).getUTCHours() !== 17) return;
+      }
       context.waitUntil((async () => {
         const store = reportStoreFactory(env);
         await store.prune?.(dateDaysBefore(kstDate(now()), 7));

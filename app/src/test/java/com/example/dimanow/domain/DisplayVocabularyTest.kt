@@ -10,6 +10,7 @@ class DisplayVocabularyTest {
         val names = listOf(CampusZoneId.YEIN, CampusZoneId.MAIN, CampusZoneId.ONE_ROOM).map(DisplayVocabulary::originName)
 
         assertEquals(listOf("엔터관", "본관", "원룸촌"), names)
+        assertEquals(names, listOf(CampusZoneId.YEIN, CampusZoneId.MAIN, CampusZoneId.ONE_ROOM).map(DisplayVocabulary::zoneName))
         assertFalse(names.any { it.contains("운동" + "장") })
     }
 }

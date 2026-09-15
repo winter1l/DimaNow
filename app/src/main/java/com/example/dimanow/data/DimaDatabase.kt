@@ -264,8 +264,41 @@ data class TermSettingsEntity(
     val endDate: LocalDate get() = LocalDate.ofEpochDay(endEpochDay)
 }
 
+@Entity(tableName = "course_overrides", primaryKeys = ["courseId", "epochDay"])
+data class CourseOverrideEntity(
+    val courseId: Long,
+    val epochDay: Long,
+    val kind: String,
+    val startMinute: Int?,
+    val endMinute: Int?,
+    val room: String?,
+) {
+    fun toDomain() = com.example.dimanow.domain.CourseOverride(courseId, LocalDate.ofEpochDay(epochDay),
+        com.example.dimanow.domain.CourseOverrideKind.valueOf(kind),
+        startMinute?.let { LocalTime.of(it / 60, it % 60) },
+        endMinute?.let { LocalTime.of(it / 60, it % 60) }, room)
+}
+
 @Dao
 interface ScheduleDao {
+    @Query("SELECT * FROM courses WHERE id = :id")
+    suspend fun courseById(id: Long): CourseEntity?
+
+    @Query("SELECT * FROM term_settings WHERE id = 1")
+    suspend fun currentTerm(): TermSettingsEntity?
+
+    @Query("SELECT * FROM course_overrides ORDER BY epochDay, courseId")
+    fun observeCourseOverrides(): Flow<List<CourseOverrideEntity>>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun putCourseOverride(override: CourseOverrideEntity)
+
+    @Query("DELETE FROM course_overrides WHERE courseId = :courseId AND epochDay = :epochDay")
+    suspend fun removeCourseOverride(courseId: Long, epochDay: Long)
+
+    @Query("DELETE FROM course_overrides WHERE courseId = :courseId")
+    suspend fun removeCourseOverrides(courseId: Long)
+
     @Query("SELECT * FROM courses ORDER BY weekday, startMinute")
     fun observeCourses(): Flow<List<CourseEntity>>
 
@@ -380,14 +413,19 @@ interface ScheduleDao {
 }
 
 @Database(
-    entities = [CourseEntity::class, TermSettingsEntity::class, NoClassDateEntity::class, GuidancePauseEntity::class, CampusZoneEntity::class, ShuttleDepartureEntity::class, SourceStatusEntity::class, SyncStateEntity::class, MealDayEntity::class, DormitoryMealDayEntity::class, NoticeEntity::class],
-    version = 5,
+    entities = [CourseOverrideEntity::class, CourseEntity::class, TermSettingsEntity::class, NoClassDateEntity::class, GuidancePauseEntity::class, CampusZoneEntity::class, ShuttleDepartureEntity::class, SourceStatusEntity::class, SyncStateEntity::class, MealDayEntity::class, DormitoryMealDayEntity::class, NoticeEntity::class],
+    version = 6,
     exportSchema = false,
 )
 abstract class DimaDatabase : RoomDatabase() {
     abstract fun scheduleDao(): ScheduleDao
 
     companion object {
+        val MIGRATION_5_6 = object : Migration(5, 6) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("CREATE TABLE IF NOT EXISTS `course_overrides` (`courseId` INTEGER NOT NULL, `epochDay` INTEGER NOT NULL, `kind` TEXT NOT NULL, `startMinute` INTEGER, `endMinute` INTEGER, `room` TEXT, PRIMARY KEY(`courseId`, `epochDay`))")
+            }
+        }
         val MIGRATION_1_2 = object : Migration(1, 2) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL(

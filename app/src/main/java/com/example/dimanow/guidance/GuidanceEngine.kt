@@ -109,8 +109,8 @@ data class AnnotatedServiceDeparture(
             isLast -> " (막차)"
             else -> ""
         } + when {
-            isBoardingStopTransition -> " · 운동장 전환"
-            isStadiumStop -> " · 운동장"
+            isBoardingStopTransition -> " · 탑승 위치 변경"
+            isStadiumStop -> " · 본관"
             else -> ""
         }
 }
@@ -309,7 +309,7 @@ class GuidanceEngine {
         originZone == CampusZoneId.MAIN &&
         displayedDepartures.minByOrNull { it.time }?.sourceStopId == STADIUM_STOP_ID
     ) {
-        "운동장"
+        "본관"
     } else {
         DisplayVocabulary.originName(originZone)
     }
@@ -493,6 +493,7 @@ class GuidanceEngine {
                     countdownMeaning = CountdownMeaning.SHUTTLE_DEPARTURE,
                     requiresMinuteUpdates = true,
                     kind = GuidanceKind.CAMPUS_SHUTTLE,
+                    occurrenceKey = shuttleOccurrenceKey(now, returnRow.departures.first().departure),
                 )
             }
         }
@@ -562,6 +563,7 @@ class GuidanceEngine {
                     countdownMeaning = CountdownMeaning.SHUTTLE_DEPARTURE,
                     requiresMinuteUpdates = true,
                     kind = GuidanceKind.CAMPUS_SHUTTLE,
+                    occurrenceKey = shuttleOccurrenceKey(now, firstLegs.first()),
                 )
             }
         }
@@ -584,7 +586,7 @@ class GuidanceEngine {
         val phase = if (isInClass) GuidancePhase.IN_CLASS else GuidancePhase.BEFORE_CLASS
         val remainingText = if (isInClass) "수업 중" else "시작까지 ${minutesUntilStart}분"
 
-        val shuttleLine = if (isInClass || resolvedZone == CampusZoneId.MAIN || resolvedZone == CampusZoneId.OUTSIDE) {
+        val shuttleLine = if (course.isOnline || isInClass || resolvedZone == CampusZoneId.MAIN || resolvedZone == CampusZoneId.OUTSIDE) {
             emptyList()
         } else {
             val remaining = shuttleDepartures
@@ -632,6 +634,7 @@ class GuidanceEngine {
             // The system chronometer only animates the timer; class/shuttle text still needs reposting.
             requiresMinuteUpdates = !isInClass,
             kind = GuidanceKind.CLASS,
+            occurrenceKey = "${now.toLocalDate()}|class|${course.id}|${course.start}|${course.name}",
         )
     }
 
@@ -671,8 +674,12 @@ class GuidanceEngine {
             countdownMeaning = CountdownMeaning.SHUTTLE_DEPARTURE,
             requiresMinuteUpdates = true,
             kind = GuidanceKind.BUS_4402,
+            occurrenceKey = "${now.toLocalDate()}|4402|${nearbyStop.stopNumber}|${departures.first().time}",
         )
     }
+
+    private fun shuttleOccurrenceKey(now: ZonedDateTime, departure: ShuttleDeparture): String =
+        "${now.toLocalDate()}|shuttle|${departure.sourceRouteId}|${departure.sourceStopId}|${departure.destinationZone}|${departure.time}"
 
     private companion object {
         const val STADIUM_STOP_ID = "stadium-stop"

@@ -19,6 +19,18 @@ import kotlinx.coroutines.flow.first
 @RunWith(AndroidJUnit4::class)
 class LiveSurfacePresentationTest {
     @Test
+    fun guidanceNotificationOffersAnImmutableOccurrenceDismissAction() {
+        val context = ApplicationProvider.getApplicationContext<android.content.Context>()
+        val snapshot = GuidanceSnapshot(ClassContent("실습", "시작까지 10분"), emptyList(), GuidancePhase.BEFORE_CLASS,
+            occurrenceKey = "2026-09-14|class|42|10:00|실습")
+        val notification = AndroidLiveSurfaceController(context).buildNotification(snapshot, requestPromotion = false)
+        val action = notification.actions.single { it.title.toString() == "이번 안내만 종료" }
+        assertEquals(true, action.actionIntent.isImmutable)
+        val plain = AndroidLiveSurfaceController(context).buildNotification(snapshot.copy(occurrenceKey = null), requestPromotion = false)
+        assertEquals(true, plain.actions.isNullOrEmpty())
+    }
+
+    @Test
     fun distantBusRemovesExistingCardAndSixtyMinuteBusReturns() {
         val context = ApplicationProvider.getApplicationContext<android.content.Context>()
         val controller = AndroidLiveSurfaceController(context)
@@ -185,7 +197,7 @@ class LiveSurfacePresentationTest {
         val notification = AndroidLiveSurfaceController(context).buildNotification(
             snapshot = GuidanceSnapshot(
                 classContent = null,
-                shuttleLines = listOf(com.example.dimanow.domain.ShuttleLine("운동장  5분, 30분")),
+                shuttleLines = listOf(com.example.dimanow.domain.ShuttleLine("본관  5분, 30분")),
                 phase = GuidancePhase.RETURN,
                 countdownTarget = Instant.parse("2026-08-27T10:00:00Z"),
             ),
@@ -193,7 +205,7 @@ class LiveSurfacePresentationTest {
             presentation = LiveDisplayOptions(chipContent = LiveChipContent.COUNTDOWN),
         )
 
-        assertEquals("운동장  5분, 30분", notification.extras.getCharSequence(Notification.EXTRA_TITLE))
+        assertEquals("본관  5분, 30분", notification.extras.getCharSequence(Notification.EXTRA_TITLE))
     }
 
     @Test

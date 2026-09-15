@@ -1,0 +1,15 @@
+# Daily features — 2026-09-14
+
+Confirmed implementation: HomeTodaySummary uses cached LMS agenda and effective dated classes. CourseOverride is persisted in Room schema 6 with a 5-to-6 additive migration; cancelled classes are omitted and online classes avoid campus travel guidance. Timetable permits one-date cancellation, online mode, and time/room changes, with undo.
+
+Confirmed implementation: Kakao NotificationListenerService accepts only com.kakao.talk, excludes group summaries, checks an exact configured room, and parses a bounded current-message batch using original message times when available. Parser requires a unique named course, explicit supported date, and affirmative cancellation/online wording. A dated structured proposal must be reviewed on Home before repository mutation. Default is off; no room configured. Store caps pending proposals at 20 and deduplication hashes at 200. Raw text is neither saved nor sent.
+
+Confirmed implementation: notification action '이번 안내만 종료' saves the dated occurrence key in DataStore. Later refreshes suppress the same occurrence, including class phase changes; a new class/departure can resume.
+
+Observed validation: first final build passed 245 JVM tests, debug/optimized packaging and lint. API 36 emulator passed 35 targeted instrumentation tests, including Room schema migration/data retention, dated override persistence, UI forms, notification extraction/store, dismissal persistence and notification actions. Existing dashboard/shuttle UI tests passed 11/11. Emulator home and one-time class dialog screenshots were captured and visually inspected. Artifacts: artifacts/daily-features-20260914.
+
+Observed additional review: explicit years and relative-word substrings could be misread by the original parser. Added a failing regression then fixed full-year date parsing and word boundaries; parser 9/9 green. Final rebuild including this fix is pending at this writing.
+
+Observed phone boundary: first optimized feature build installed with adb install -r successfully on test-device-galaxy-api37-a. Device was locked, so Home rendering/data retention on the phone is not yet established. Final reviewed APK installation remains pending. Notification special access has not been enabled and actual Kakao payloads have not been observed. Exact classroom chat room name and phone unlock were requested asynchronously.
+
+Observed completion at 15:46 KST: reviewed build succeeded (246 JVM tests, zero failures/errors; optimized packaging and lint). Final optimized APK was installed with replacement and pulled back; both SHA-256 values equal 26878950BA2AE3918428A038DDBB6F84E01C4B9DCBBDCA7CACA13442D1A11A69. App process starts. First installation time remains 2026-09-03 01:04:38; update time is 2026-09-14 15:46:22. Final UI hierarchy still shows the locked phone. Actual phone content retention/rendering and real Kakao intake are pending user unlock/configuration, not claimed. Emulator settings hierarchy confirms default-off feature and room/access controls. No phone data clear/uninstall, schedule mutation, special-access grant, or test fixture injection was performed.

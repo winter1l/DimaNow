@@ -11,6 +11,18 @@ import org.junit.Test
 
 class LiveSurfacePlannerTest {
     @Test
+    fun `one occurrence opt-out survives changed countdown text without muting another guide`() {
+        val before = GuidanceSnapshot(ClassContent("수업", "30분"), emptyList(), GuidancePhase.BEFORE_CLASS,
+            occurrenceKey = "2026-09-14|class|42|10:00|실습")
+        val rememberedKeys = setOf(requireNotNull(before.occurrenceKey))
+        assertEquals(true, LiveSurfaceController.isDismissed(before, rememberedKeys))
+        assertEquals(true, LiveSurfaceController.isDismissed(before.copy(classContent = ClassContent("수업", "29분")), rememberedKeys))
+        assertEquals(true, LiveSurfaceController.isDismissed(before.copy(phase = GuidancePhase.IN_CLASS), rememberedKeys))
+        assertEquals(false, LiveSurfaceController.isDismissed(before.copy(occurrenceKey = "2026-09-14|class|43|13:00|제작"), rememberedKeys))
+        assertEquals(false, LiveSurfaceController.isDismissed(before.copy(occurrenceKey = null), rememberedKeys))
+    }
+
+    @Test
     fun `shuttle chip starts at sixty minutes and suppresses longer waits`() {
         for ((minutes, expected) in listOf(120L to null, 61L to null, 60L to "강남행 60분", 1L to "강남행 1분", 0L to "강남행 곧")) {
             val snapshot = GuidanceSnapshot(null, listOf(ShuttleLine("4402", "강남행", minutes)),

@@ -80,7 +80,7 @@ try {
         $testCount++
     }
     & git -C $testRoot check-ignore -q --no-index -- '.env.example'
-    if ($LASTEXITCODE -eq 0) { throw 'Environment example must remain trackable.' }
+    if ($LASTEXITCODE -ne 1) { throw 'Expected the environment example to be trackable without a Git error.' }
     $testCount++
     Write-Host "PASS repository ignore policy. Total assertions: $testCount"
 }
@@ -92,3 +92,5 @@ finally {
     }
     Remove-Item -LiteralPath $resolved -Recurse -Force
 }
+# GitHub Actions propagates the expected check-ignore non-match unless success is explicit.
+exit 0

@@ -13,6 +13,7 @@ Purpose: durable project context that survives session and context changes.
 | `goal/dima-now-android.md` | Goal map, skeleton, and done checks | Update status without erasing superseded cuts |
 | `CHECKPOINT.md` | Fast resume point and next live-device action | Replace when the project state materially changes |
 | `LOCAL-ONLY.md` | Location of ignored device connection settings for this PC | Tracked instructions only; no connection values |
+| `git-privacy-cleanup-20260916.md` | D-080 history rewrite evidence, private recovery location and GitHub residual refs | Append dated verification; never include private values |
 | `ux-onboarding-20260914.md` | D-075 UI cleanup and first-run setup implementation and evidence | Append dated evidence |
 | `lms-silent-auth-20260914.md` | D-074 invisible automatic authentication, tests and phone update evidence | Append dated evidence |
 | `lms-recovery-20260914.md` | D-072 and D-073 login repair and Kakao removal evidence | Append dated evidence |

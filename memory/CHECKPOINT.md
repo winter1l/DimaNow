@@ -1,16 +1,16 @@
-# Checkpoint — Local tracking privacy fix verified — 2026-09-16
+# Checkpoint — Git privacy history cleanup verified — 2026-09-16
 
 ## The story so far
-D080 local cleanup verified and staged. Two original JPGs preserved locally, removed from index.8 address occurrences in5 docs anonymized. Ignored .local/device-connections.json retains actual last-known/historical values; future sessions read memory/LOCAL-ONLY.md first. Exclusion policy and trackedtext/privatepath checker strengthened; CI regression31 assertions passes, actual checker and staged diffcheck pass. No trackedignored conflicts. No commit/push/history rewrite; old local photo commits and public metadata remain in history.
+Confirmed: D-080 authorized history cleanup is complete for local Git and all14 public branches/5tags. Known device identifiers and two accidental local screenshot objects are absent from verified reachable history; originals and actual device settings remain ignored locally. Public app sources and authorized meal content are preserved. CI34996317038 and deploy-only34995690653 succeeded. Main protection is identical to its original configuration and the publish workflow is active. Full evidence: git-privacy-cleanup-20260916.md.
 
 ## Decided
-User explicitly requires ignored local connection handoff. Keep reviewed artifactdocs/sharedgeometry and original photos. Never copy values into trackedfiles.
+User approved rewriting commit IDs and force updates. Keep connection data in .local/device-connections.json and use aliases in tracked documents. Private recovery bundles remain in .local/history-cleanup-20260916. Local unpublished app commits remain local; do not overwrite them with public main or restore old refs.
 
 ## Waiting on the user
-Whether to rewrite local screenshot-bearing commits and public GitHub history; rewritten hashes/force-push require explicit reviewed scope.
+No decision needed for the completed repository cleanup. GitHub-managed closed PR heads1/7/9 and cached commit access remain. A private Support request draft is ready but has not been sent; host-side eligibility and erasure are unconfirmed.
 
 ## Next first action
-Read the user's history-cleanup decision; if no decision, do not publish or rewrite commits. For device work read memory/LOCAL-ONLY.md.
+For a GitHub residual follow-up, read .local/history-cleanup-20260916/support-request.md; for device work, read memory/LOCAL-ONLY.md.
 
 ## Tried
-Sandbox index write required approved escalation. Guard initially flagged intentional CGNAT fixture; exact fixture/value/noport exemption tested. No broad testfile bypass.
+Git-filter-repo skips standalone tree refs; those were cleaned separately and checked. Windows long refs required hashed mirror aliases. Main protection initially rejected the atomic push; scoped force permission was restored after the approved rewrite. GitHub test command inherited an intentional check-ignore non-match; explicit success and exact expected code fixed it, and final CI passed.

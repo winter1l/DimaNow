@@ -33,3 +33,9 @@ Resolved 2026-09-14: D-072 removes Kakao intake, so the prior room-name/access q
 
 ## 2026-09-16 — D-080 historical Git privacy
 Pending explicit history scope: two accidental screenshots remain in existing local commits after index removal; previously published documentation contains device metadata in GitHub main/history. Complete local ignore/redaction/checker changes first. Rewriting published commit IDs and force-updating remote refs requires a concrete reviewed plan and user authorization; do not conflate local index cleanup with erased historical exposure.
+
+Resolved 2026-09-16: user explicitly approved history rewriting and force updates.
+Local refs and published branches/tags are rewritten and verified. Remaining
+host-side issue: old closed PR heads #1/#7/#9 and cached commit access require
+GitHub's assessment. An ignored support request draft is ready but not sent;
+see git-privacy-cleanup-20260916.md for exact evidence and limits.

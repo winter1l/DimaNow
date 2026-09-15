@@ -351,3 +351,8 @@ Corrected learning header height and arrow14dp, retained48dp button. Build/lint 
 
 ## 2026-09-16 — D-080 local cleanup
 User-authorized tracking cleanup applied; actual connection data saved privately for future same-workspace sessions. Photos kept locally but staged for index deletion. See PRODUCT-TRUTH and LOCAL-ONLY. Existing commits and public GitHub history unchanged, pending separate history decision.
+
+## 2026-09-16 — D-080 historical privacy cleanup
+Confirmed: user approved rewriting local and public history. Created ignored private recovery bundles before filtering. Cleaned historical screenshots/device values including standalone Codex tree refs; preserved current app tree. Published19 refs with exact leases; protected main initially rejected the atomic push, then scoped temporary force permission was restored immediately after successful rewrite. Automatic meal publication paused during ref replacement, restored afterward; deploy-only corrected the immutable image link. Initial CI passed31 checks but inherited an expected Git non-match exit; fixed explicit process success and exact expected Git status. Host-side cached/closed-PR residuals documented with a private unsent Support draft. Final CI outcome recorded in the cleanup report.
+
+D-080 final outcome: CI34996317038 succeeded after the one-file exit-code fix. Fresh public history1754objects has no known private findings; main protection fully matches its original state. Remaining old closedPR1/7/9 heads require GitHub-side assessment. Repository work is complete; no Support message sent.

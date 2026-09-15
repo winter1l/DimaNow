@@ -1,0 +1,9 @@
+{
+  "reason": "Update immutable image reference after authorized privacy history cleanup; meal content unchanged",
+  "updatedAt": "2026-09-15T16:27:39Z",
+  "previousSourceImageUrl": "https://raw.githubusercontent.com/winter1l/DimaNow/80e5a6392c7bdddd2dd74936d508b9b1e0989adb/dorm-submissions/7eeefd2f-32f7-4280-8a33-02890f3b5288.jpg",
+  "sourceImageUrl": "https://raw.githubusercontent.com/winter1l/DimaNow/ddd9248e501c38bbfbc6e52d084c61147d26d80d/dorm-submissions/7eeefd2f-32f7-4280-8a33-02890f3b5288.jpg",
+  "previousPayloadSha256": "1d1a380954fa766d1b4982161a66e28b5b310d16906912f8ad9290acf8957324",
+  "payloadSha256": "2e070c9548a78a446494c2e0ceb3a07b7dae6b358a3f89f0bf26fd1e71792627",
+  "revision": 5
+}

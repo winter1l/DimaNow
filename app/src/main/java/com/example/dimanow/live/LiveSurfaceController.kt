@@ -311,15 +311,11 @@ class AndroidLiveSurfaceController(private val context: Context) : LiveSurfaceCo
         val criticalText = LiveSurfaceController.statusChipText(snapshot, presentation, deviceLocked)
         val complementaryShuttle = classContent == null && firstShuttle?.origin != null &&
             snapshot.countdownMeaning == CountdownMeaning.SHUTTLE_DEPARTURE && criticalText != null
+        val simpleCampusShuttle = complementaryShuttle && snapshot.kind != com.example.dimanow.domain.GuidanceKind.BUS_4402
         val title = if (snapshot.kind == com.example.dimanow.domain.GuidanceKind.BUS_4402) {
             firstShuttle?.text ?: "4402 강남행"
-        } else if (complementaryShuttle) {
-            buildString {
-                append("${firstShuttle!!.origin} 출발")
-                firstShuttle.followingMinutes?.takeIf { it <= 60 }?.let { minutes ->
-                    append(if (minutes <= 0) " · 다음 차 곧" else " · 다음 차 ${minutes}분")
-                }
-            }
+        } else if (simpleCampusShuttle) {
+            "${firstShuttle!!.origin} → ${firstShuttle.destination!!.removeSuffix("행")}"
         } else if (classroomFirst && classContent?.startTime != null && classContent.room != null) {
             "${classContent.startTime} · ${classContent.room}"
         } else {
@@ -331,9 +327,19 @@ class AndroidLiveSurfaceController(private val context: Context) : LiveSurfaceCo
             else -> classContent?.detail
         }
         val detail = buildList {
-            if (complementaryShuttle) add(requireNotNull(criticalText))
+            if (simpleCampusShuttle) {
+                // All notification surfaces describe the same immediate boarding leg.
+                // The engine keeps later vehicles and transfers for the full schedule.
+                add(buildString {
+                    val minutes = requireNotNull(firstShuttle?.minutes)
+                    append(if (minutes <= 0) "곧 출발" else "${minutes}분 후 출발")
+                    snapshot.countdownTarget?.atZone(com.example.dimanow.time.MinuteTicker.CAMPUS_ZONE)?.let {
+                        append(" · ${it.format(java.time.format.DateTimeFormatter.ofPattern("HH:mm"))}")
+                    }
+                })
+            } else if (complementaryShuttle) add(requireNotNull(criticalText))
             classDetail?.let(::add)
-            addAll(
+            if (!simpleCampusShuttle) addAll(
                 snapshot.shuttleLines
                     .drop(if (classContent == null) 1 else 0)
                     .map { it.text },

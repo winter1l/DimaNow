@@ -145,7 +145,7 @@ class LiveSurfacePresentationTest {
     }
 
     @Test
-    fun shuttleTitleAndCriticalTextDescribeDifferentDeparturesInBothLockStates() {
+    fun shuttleTitleAndCriticalTextDescribeTheSameVehicleInBothLockStates() {
         val context = ApplicationProvider.getApplicationContext<android.content.Context>()
         val now = java.time.ZonedDateTime.parse("2026-09-08T18:50:00+09:00[Asia/Seoul]")
         val rows = listOf(18 to 55, 19 to 25).map { (hour, minute) ->
@@ -166,9 +166,9 @@ class LiveSurfacePresentationTest {
             val notification = AndroidLiveSurfaceController(context).buildNotification(
                 snapshot, requestPromotion = true, deviceLocked = locked,
             )
-            assertEquals("본관 출발 · 다음 차 35분", notification.extras.getCharSequence(Notification.EXTRA_TITLE))
+            assertEquals("본관 → 엔터관", notification.extras.getCharSequence(Notification.EXTRA_TITLE))
             assertEquals("엔터관행 5분", notification.shortCriticalText)
-            assertEquals("엔터관행 5분", notification.extras.getCharSequence(Notification.EXTRA_TEXT))
+            assertEquals("5분 후 출발 · 18:55", notification.extras.getCharSequence(Notification.EXTRA_TEXT))
         }
     }
 

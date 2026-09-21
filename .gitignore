@@ -15,6 +15,7 @@
 .cxx
 local.properties
 /.tooling/
+.wrangler/
 /.agent
 /dist/*.apk
 /artifacts/**

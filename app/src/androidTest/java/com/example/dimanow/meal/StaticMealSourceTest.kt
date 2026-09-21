@@ -32,6 +32,40 @@ class StaticMealSourceTest {
     fun tearDown() = database.close()
 
     @Test
+    fun publishedChuseokWeekImportsAllFiveDaysIncludingSingleLineHolidays() = runTest {
+        val fixture = chuseokFixture()
+        val now = Instant.parse("2026-09-21T06:00:00Z")
+        val source: MealSource = StaticMealSource(database, StaticDataTransport { url ->
+            if (url.endsWith("manifest.json")) fixture.manifest.toByteArray() else fixture.payload.toByteArray()
+        }, Clock.fixed(now, ZoneOffset.UTC))
+
+        assertEquals(MealRefreshResult.Success(LocalDate.parse("2026-09-21"), now), source.refresh())
+        val imported = source.data.first()
+        assertEquals(5, imported.days.size)
+        assertEquals(listOf("추석 공휴일"), imported.days.single { it.date == LocalDate.parse("2026-09-24") }.menuLines)
+        assertEquals(listOf("추석"), imported.days.single { it.date == LocalDate.parse("2026-09-25") }.menuLines)
+        assertEquals(true, imported.hasCurrentStudentWeek(LocalDate.parse("2026-09-21")))
+    }
+
+    @Test
+    fun incompleteOrBlankMenuStillFailsAndKeepsLastGoodMeal() = runTest {
+        var fixture = mealFixture()
+        val now = Instant.parse("2026-09-21T06:00:00Z")
+        val source: MealSource = StaticMealSource(database, StaticDataTransport { url ->
+            if (url.endsWith("manifest.json")) fixture.manifest.toByteArray() else fixture.payload.toByteArray()
+        }, Clock.fixed(now, ZoneOffset.UTC))
+        source.refresh()
+        val previous = source.data.first()
+
+        for (badMenu in listOf("밥", " ", "추석 특식", "휴무 여부 미정")) {
+            fixture = chuseokFixture(badMenu)
+            assertEquals(MealRefreshResult.Failure("식단 메뉴 줄 수가 부족합니다."), source.refresh())
+            assertEquals(previous.days, source.data.first().days)
+            assertEquals(previous.lastSuccess, source.data.first().lastSuccess)
+        }
+    }
+
+    @Test
     fun manualRefreshBypassesTheManifestCacheThenForegroundChecksAreThrottled() = runTest {
         val fixture = mealFixture()
         var response = fixture.manifest.replace("\"state\":\"READY\"", "\"state\":\"WAITING\"")
@@ -208,4 +242,19 @@ class StaticMealSourceTest {
     }
 
     private data class MealFixture(val payload: String, val manifest: String)
+
+    private fun chuseokFixture(thursday: String = "추석 공휴일"): MealFixture {
+        val days = (21..25).joinToString(",") { day ->
+            val menu = when (day) {
+                24 -> "[\"$thursday\"]"
+                25 -> "[\"추석\"]"
+                else -> "[\"쌀밥\",\"된장국\"]"
+            }
+            """{"date":"2026-09-$day","menuLines":$menu,"hours":"11:00 ~ 14:00","sourceUrl":"https://www.instagram.com/p/example/","sourceImageUrl":"https://scontent.example/meal.jpg"}"""
+        }
+        val payload = """{"schemaVersion":1,"weekStart":"2026-09-21","weekEnd":"2026-09-27","days":[$days]}"""
+        val hash = MessageDigest.getInstance("SHA-256").digest(payload.toByteArray()).joinToString("") { "%02x".format(it) }
+        val manifest = """{"schemaVersion":1,"generatedAt":"2026-09-21T06:00:00Z","datasets":{"meal":{"revision":10,"state":"READY","publishedAt":"2026-09-21T06:00:00Z","lastAttemptAt":"2026-09-21T06:00:00Z","url":"meal/$hash.json","sha256":"$hash","sourceUrl":"https://www.dima.ac.kr/?p=1"}}}"""
+        return MealFixture(payload, manifest)
+    }
 }

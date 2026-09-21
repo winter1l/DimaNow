@@ -104,7 +104,7 @@ class GeminiDormitoryMealClient(
     private fun validationRequest(imageBytes: ByteArray, mimeType: String): JsonObject = requestBody(
         imageBytes = imageBytes,
         mimeType = mimeType,
-        prompt = "사진이 동아방송예술대학교 학생기숙사에서 제공하는 주간 식단표인지, 표의 모든 가장자리와 식단 내용이 잘리지 않고 전부 보이는지 확인하세요. 두 조건 중 하나라도 거짓이면 사용자가 다시 촬영할 수 있도록 한 문장으로만 이유를 적으세요.",
+        prompt = "사진이 동아방송예술대학교 학생기숙사에서 제공하는 주간 식단표인지, 표의 모든 가장자리와 식단 내용이 잘리지 않고 전부 보이는지 확인하세요. 사진에 명시된 휴일·휴무·미운영 안내로 메뉴가 없는 칸은 잘리거나 누락된 식단으로 판단하지 마세요. 휴무 근거가 보이지 않는 빈칸은 휴일이라고 추측하지 마세요. 두 조건 중 하나라도 거짓이면 사용자가 다시 촬영할 수 있도록 한 문장으로만 이유를 적으세요.",
         schema = VALIDATION_SCHEMA,
         thinkingLevel = "HIGH",
     )
@@ -112,7 +112,7 @@ class GeminiDormitoryMealClient(
     private fun extractionRequest(imageBytes: ByteArray, mimeType: String): JsonObject = requestBody(
         imageBytes = imageBytes,
         mimeType = mimeType,
-        prompt = "동아방송예술대학교 학생기숙사 주간 식단표를 월요일부터 금요일까지 전사하세요. 각 날짜 아래의 조식, 간편식, 라면, 중식, 석식, 샐러드도시락 등 표에 보이는 모든 구분을 위에서 아래 순서대로 sections에 넣으세요. 이름과 운영시간, 메뉴는 보이는 그대로 적고 번역, 보충, 추측하지 마세요. 같은 이름의 구분이 하루에 여러 번 있으면 각각 별도 section으로 유지하세요.",
+        prompt = "동아방송예술대학교 학생기숙사 주간 식단표를 월요일부터 금요일까지 전사하세요. 각 날짜 아래의 조식, 간편식, 라면, 중식, 석식, 샐러드도시락 등 표에 보이는 모든 구분을 위에서 아래 순서대로 sections에 넣으세요. 이름과 운영시간, 메뉴는 보이는 그대로 적고 번역, 보충, 추측하지 마세요. 같은 이름의 구분이 하루에 여러 번 있으면 각각 별도 section으로 유지하세요. 휴일·휴무·미운영 문구도 menuLines에 원문 그대로 한 줄로 기록하고 날짜를 생략하지 마세요. 특정 식사만 휴무이면 그 식사의 이름을 유지하세요. 하루 전체를 덮는 휴무 안내만 있고 식사 구분이 없으면 name은 안내, menuLines는 사진에 보이는 휴무 문구로 기록하며 hours는 생략하세요. 여러 날짜에 걸친 병합 칸의 안내는 사진에서 적용 범위가 명확한 날짜에만 각각 기록하세요. 빈칸이나 보이지 않는 날짜·식사·운영시간을 휴무로 채우지 마세요.",
         schema = EXTRACTION_SCHEMA,
         thinkingLevel = extractionThinkingLevel,
     )

@@ -24,6 +24,8 @@ function fixture(options = {}) {
     now: () => new Date(options.now ?? '2026-09-14T01:37:00Z'),
     githubTokenProvider: async (env) => { assert.equal(env, ENV); tokens++; return 'test-installation-token'; },
     fetch: async (url, init = {}) => {
+      // Match workerd: redirect:error throws before any HTTP request is made.
+      if (init.redirect === 'error') throw new TypeError('Unsupported Worker redirect mode');
       calls.push({ url, init });
       if (url === `${ROOT}/manifest.json`) return options.manifestResponse?.()
         ?? Response.json(manifest);
@@ -55,6 +57,31 @@ test('a verified complete current week skips OCR dispatch even after a later fai
   assert.deepEqual(await f.watch(), { status: 'skipped', reason: 'current-week-complete' });
   assert.equal(f.tokenCount(), 0);
 });
+
+test('the published Chuseok week is complete with single-line holiday rows', async () => {
+  const payload = meal('2026-09-21');
+  payload.days[3].menuLines = ['추석 공휴일'];
+  payload.days[4].menuLines = ['추석'];
+  const f = fixture({ payload, now: '2026-09-21T04:37:00Z' });
+  assert.deepEqual(await f.watch(), { status: 'skipped', reason: 'current-week-complete' });
+  assert.equal(f.tokenCount(), 0);
+});
+
+for (const label of ['추석\u00a0공휴일', '추석\u3000연휴', '\ufeff추석\ufeff']) {
+  test(`holiday whitespace matches the Kotlin contract (${JSON.stringify(label)})`, async () => {
+    const payload = meal('2026-09-14');
+    payload.days[3].menuLines = [label];
+    assert.equal((await fixture({ payload }).watch()).reason, 'current-week-complete');
+  });
+}
+
+for (const label of ['밥', '추석특식', '휴무 여부 미정', '추석\u00a0특식', '휴무\u3000여부 미정', ' ']) {
+  test(`a single incomplete menu line (${label}) does not suppress collection`, async () => {
+    const payload = meal('2026-09-14');
+    payload.days[3].menuLines = [label];
+    assert.equal((await fixture({ payload }).watch()).status, 'dispatched');
+  });
+}
 
 test('recent collection attempt suppresses duplicate work during the Monday morning window', async () => {
   const f = fixture({ now: '2026-09-14T01:24:00Z' });
@@ -107,6 +134,12 @@ test('GitHub rejection is observable as failure rather than a successful dispatc
   await assert.rejects(fixture({ dispatchStatus: 403 }).watch(), /403/);
 });
 
+test('GitHub redirects are rejected without following the authenticated request', async () => {
+  const f = fixture({ dispatchStatus: 302 });
+  await assert.rejects(f.watch(), /302/);
+  assert.equal(f.calls.at(-1).init.redirect, 'manual');
+});
+
 test('an unpublished initial descriptor can request the first meal collection', async () => {
   const f = fixture({ descriptor: { revision: 0, state: 'WAITING', url: '', sha256: '' } });
   assert.equal((await f.watch()).status, 'dispatched');
@@ -128,7 +161,7 @@ test('public fetches bypass cache and prohibit redirects', async () => {
   const f = fixture({ payload: meal('2026-09-14') });
   await f.watch();
   for (const { init } of f.calls) {
-    assert.equal(init.redirect, 'error');
+    assert.equal(init.redirect, 'manual');
     assert.equal(init.cache, 'no-store');
     assert.ok(init.signal instanceof AbortSignal);
   }

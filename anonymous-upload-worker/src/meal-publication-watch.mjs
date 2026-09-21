@@ -3,6 +3,12 @@ const DISPATCH_URL = 'https://api.github.com/repos/winter1l/DimaNow/dispatches';
 const DAY_MILLIS = 86400000;
 const MANIFEST_MAX_BYTES = 64 * 1024;
 const MEAL_MAX_BYTES = 512 * 1024;
+// Keep in sync with the Kotlin student meal contract. Only explicit closure labels
+// are complete with one line; an incomplete ordinary meal still needs collection.
+const CLOSURE_LABELS = new Set([
+  '휴무', '휴일', '공휴일', '대체공휴일', '미운영', '운영안함', '휴관',
+  '추석', '추석공휴일', '추석연휴', '설날', '설연휴',
+]);
 
 // Cloudflare numbers Sunday as 1; named days avoid confusing GitHub's Sunday=0 syntax.
 export const STUDENT_MEAL_WATCH_CRONS = Object.freeze([
@@ -55,7 +61,7 @@ export function createStudentMealPublicationWatch(dependencies = {}) {
     if (typeof token !== 'string' || !token) throw new Error('GitHub installation token unavailable');
     const response = await fetchImpl(DISPATCH_URL, {
       method: 'POST',
-      redirect: 'error',
+      redirect: 'manual',
       signal: AbortSignal.timeout(10000),
       headers: {
         Accept: 'application/vnd.github+json',
@@ -78,7 +84,9 @@ export function createStudentMealPublicationWatch(dependencies = {}) {
 }
 
 async function readPublicBytes(fetchImpl, url, maxBytes) {
-  const response = await fetchImpl(url, { redirect: 'error', cache: 'no-store', signal: AbortSignal.timeout(10000) });
+  // workerd does not support redirect:error. Manual mode leaves 3xx responses
+  // unfollowed, and the status check below rejects them before reading any data.
+  const response = await fetchImpl(url, { redirect: 'manual', cache: 'no-store', signal: AbortSignal.timeout(10000) });
   if (!response.ok || response.redirected) {
     await response.body?.cancel();
     throw new Error(`Student meal public fetch failed: ${response.status}`);
@@ -171,5 +179,7 @@ function isCompleteWeek(payload, monday) {
   if (payload.weekStart !== monday.toISOString().slice(0, 10) || payload.days.length !== 5) return false;
   const dates = payload.days.map((day) => day.date).sort();
   return dates.every((date, index) => date === new Date(monday.getTime() + index * DAY_MILLIS).toISOString().slice(0, 10))
-    && payload.days.every((day) => day.menuLines.length >= 2 && day.menuLines.every((line) => line.trim().length > 0));
+    && payload.days.every((day) => day.menuLines.every((line) => line.trim().length > 0)
+      && (day.menuLines.length >= 2
+        || (day.menuLines.length === 1 && CLOSURE_LABELS.has(day.menuLines[0].replace(/\s+/g, '')))));
 }

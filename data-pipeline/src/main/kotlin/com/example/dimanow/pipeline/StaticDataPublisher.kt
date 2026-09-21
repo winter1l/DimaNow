@@ -4,6 +4,7 @@ import com.example.dimanow.sync.CampusDataManifest
 import com.example.dimanow.sync.DatasetDescriptor
 import com.example.dimanow.sync.ShuttlePayload
 import com.example.dimanow.sync.MealPayload
+import com.example.dimanow.sync.isValidStudentMealMenu
 import com.example.dimanow.sync.NoticePayload
 import com.example.dimanow.sync.DormitoryMealPayload
 import com.example.dimanow.sync.DormitoryMealSubmissionStatus
@@ -41,7 +42,7 @@ class StaticDataPublisher(private val outputRoot: Path) {
         payload.schemaVersion == 1 && payload.weekStart == monday.toString() &&
             payload.weekEnd == monday.plusDays(6).toString() &&
             payload.days.map { it.date }.sorted() == (0L..4L).map { monday.plusDays(it).toString() } &&
-            payload.days.all { it.menuLines.size >= 2 && it.menuLines.all(String::isNotBlank) }
+            payload.days.all { isValidStudentMealMenu(it.menuLines) }
     }.getOrDefault(false)
 
     fun publishDormitoryMeal(payload: DormitoryMealPayload, revision: Long, publishedAt: Instant) {

@@ -2,6 +2,7 @@ package com.example.dimanow.pipeline
 
 import com.example.dimanow.sync.MealDayPayload
 import com.example.dimanow.sync.MealPayload
+import com.example.dimanow.sync.isValidStudentMealMenu
 import java.time.DayOfWeek
 import java.time.LocalDate
 import java.time.temporal.ChronoUnit
@@ -50,6 +51,7 @@ class GeminiMealPayloadBuilder {
             }
         }
         require(weekStart in allowedWeekStarts) { "현재 기준 주와 식단 날짜가 일치하지 않습니다." }
+        require(days.all { isValidStudentMealMenu(it.second) }) { "식단 메뉴 줄 수가 부족합니다." }
         return MealPayload(
             weekStart = weekStart.toString(),
             weekEnd = weekStart.plusDays(6).toString(),

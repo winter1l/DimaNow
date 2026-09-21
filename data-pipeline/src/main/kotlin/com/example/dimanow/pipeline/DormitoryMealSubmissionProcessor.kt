@@ -35,6 +35,8 @@ class DormitoryMealSubmissionProcessor(
                     )
                 } catch (error: DormitoryMealWeekMismatchException) {
                     return publishStatus(submissionId, "REJECTED", error.message)
+                } catch (_: IllegalArgumentException) {
+                    return publishStatus(submissionId, "REJECTED", "식단표의 날짜와 메뉴가 잘 보이도록 다시 촬영해 주세요")
                 }
                 publisher.publishDormitoryMeal(
                     payload = payload,

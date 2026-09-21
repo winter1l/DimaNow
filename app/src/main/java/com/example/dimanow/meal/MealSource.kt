@@ -28,6 +28,7 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import com.example.dimanow.sync.CampusDataManifest
 import com.example.dimanow.sync.MealPayload
+import com.example.dimanow.sync.isValidStudentMealMenu
 import com.example.dimanow.sync.DormitoryMealPayload
 import com.example.dimanow.sync.DormitoryMealSectionPayload
 import com.example.dimanow.sync.StaticDataTransport
@@ -332,7 +333,7 @@ class StaticMealSource(
             val entities = payload.days.map { row ->
                 val date = LocalDate.parse(row.date)
                 require(date in weekStart..weekEnd) { "식단 날짜가 주차 범위를 벗어났습니다." }
-                require(row.menuLines.size >= 2 && row.menuLines.all { it.isNotBlank() }) { "식단 메뉴 줄 수가 부족합니다." }
+                require(isValidStudentMealMenu(row.menuLines)) { "식단 메뉴 줄 수가 부족합니다." }
                 require(row.sourceUrl.startsWith("https://www.instagram.com/") || row.sourceUrl.startsWith("https://www.dima.ac.kr/")) {
                     "허용되지 않은 식단 원문 주소입니다."
                 }

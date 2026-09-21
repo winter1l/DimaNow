@@ -7,6 +7,27 @@ import org.junit.Test
 
 class GeminiMealPayloadBuilderTest {
     @Test
+    fun `holiday labels are preserved but incomplete ordinary menus are rejected before publication`() {
+        fun build(thursday: String) = GeminiMealPayloadBuilder().build(
+            """{"days":[
+              {"month":9,"day":21,"menuLines":["쌀밥","된장국"]},
+              {"month":9,"day":22,"menuLines":["쌀밥","미역국"]},
+              {"month":9,"day":23,"menuLines":["볶음밥","계란국"]},
+              {"month":9,"day":24,"menuLines":["$thursday"]},
+              {"month":9,"day":25,"menuLines":["추석"]}]}""",
+            LocalDate.parse("2026-09-21"), "11:00 ~ 14:00",
+            "https://www.instagram.com/p/example/", "https://scontent.example/meal.jpg",
+        )
+        assertEquals(listOf("추석 공휴일"), build("추석 공휴일").days[3].menuLines)
+        for (label in listOf("휴무", "휴일", "공휴일", "대체공휴일", "미운영", "운영 안함", "휴관", "추석", "추석 연휴", "설날", "설 연휴", "추석\u00A0공휴일", "추석\u3000연휴", "\uFEFF추석\uFEFF")) {
+            assertEquals(listOf(label), build(label).days[3].menuLines)
+        }
+        for (line in listOf("밥", " ", "추석 특식", "휴무 여부 미정", "추석\u00A0특식", "휴무\u3000여부 미정")) {
+            assertThrows(IllegalArgumentException::class.java) { build(line) }
+        }
+    }
+
+    @Test
     fun `Gemini JSON 월일을 기준 연도의 주간 식단으로 만든다`() {
         val response = """
             {
@@ -40,11 +61,11 @@ class GeminiMealPayloadBuilderTest {
         val response = """
             {
               "days": [
-                {"month": 12, "day": 28, "menuLines": ["월요일 메뉴"]},
-                {"month": 12, "day": 29, "menuLines": ["화요일 메뉴"]},
-                {"month": 12, "day": 30, "menuLines": ["수요일 메뉴"]},
-                {"month": 12, "day": 31, "menuLines": ["목요일 메뉴"]},
-                {"month": 1, "day": 1, "menuLines": ["금요일 메뉴"]}
+                {"month": 12, "day": 28, "menuLines": ["월요일 메뉴", "쌀밥"]},
+                {"month": 12, "day": 29, "menuLines": ["화요일 메뉴", "쌀밥"]},
+                {"month": 12, "day": 30, "menuLines": ["수요일 메뉴", "쌀밥"]},
+                {"month": 12, "day": 31, "menuLines": ["목요일 메뉴", "쌀밥"]},
+                {"month": 1, "day": 1, "menuLines": ["공휴일"]}
               ]
             }
         """.trimIndent()
@@ -117,10 +138,10 @@ class GeminiMealPayloadBuilderTest {
         val response = """
             {"days": [
               {"month": 8, "day": 24, "menuLines": ["  유부장국  ", "", "함박스테이크조림"]},
-              {"month": 8, "day": 25, "menuLines": ["미역국"]},
-              {"month": 8, "day": 26, "menuLines": ["참치김치찌개"]},
-              {"month": 8, "day": 27, "menuLines": ["배추된장국"]},
-              {"month": 8, "day": 28, "menuLines": ["계란볶음밥"]}
+              {"month": 8, "day": 25, "menuLines": ["미역국", "쌀밥"]},
+              {"month": 8, "day": 26, "menuLines": ["참치김치찌개", "쌀밥"]},
+              {"month": 8, "day": 27, "menuLines": ["배추된장국", "쌀밥"]},
+              {"month": 8, "day": 28, "menuLines": ["계란볶음밥", "미역국"]}
             ]}
         """.trimIndent()
 

@@ -15,6 +15,49 @@ import org.junit.Test
 
 class StaticDataPublisherTest {
     @Test
+    fun `incomplete ordinary menus never stop the weekly collection watch`() {
+        val publisher = StaticDataPublisher(Files.createTempDirectory("student-meal-incomplete"))
+        val monday = LocalDate.parse("2026-09-21")
+        for (menu in listOf(emptyList(), listOf("밥"), listOf(" "), listOf("추석 특식"), listOf("밥", " "))) {
+            publisher.publishMeal(
+                com.example.dimanow.sync.MealPayload(
+                    weekStart = "2026-09-21", weekEnd = "2026-09-27",
+                    days = (0L..4L).map { offset ->
+                        com.example.dimanow.sync.MealDayPayload(
+                            monday.plusDays(offset).toString(), if (offset == 3L) menu else listOf("쌀밥", "된장국"),
+                            "11:00 ~ 14:00", "https://www.instagram.com/p/example/", "https://example.com/meal.jpg",
+                        )
+                    },
+                ), 10, Instant.parse("2026-09-21T06:00:00Z"),
+            )
+            assertTrue("Invalid menu must remain eligible for collection: $menu", publisher.shouldCollectStudentMeal(monday))
+        }
+    }
+
+    @Test
+    fun `published Chuseok week with explicit single line holidays stops scheduled collection`() {
+        val publisher = StaticDataPublisher(Files.createTempDirectory("student-meal-holiday"))
+        val monday = LocalDate.parse("2026-09-21")
+        publisher.publishMeal(
+            com.example.dimanow.sync.MealPayload(
+                weekStart = "2026-09-21", weekEnd = "2026-09-27",
+                days = (0L..4L).map { offset ->
+                    com.example.dimanow.sync.MealDayPayload(
+                        monday.plusDays(offset).toString(),
+                        when (offset) {
+                            3L -> listOf("추석 공휴일")
+                            4L -> listOf("추석")
+                            else -> listOf("쌀밥", "된장국")
+                        },
+                        "11:00 ~ 14:00", "https://www.instagram.com/p/example/", "https://example.com/meal.jpg",
+                    )
+                },
+            ), 10, Instant.parse("2026-09-21T06:00:00Z"),
+        )
+        assertEquals(false, publisher.shouldCollectStudentMeal(monday))
+    }
+
+    @Test
     fun `scheduled collection stops only after the full current student meal week is published`() {
         val publisher = StaticDataPublisher(Files.createTempDirectory("student-meal-watch"))
         val monday = LocalDate.parse("2026-09-07")

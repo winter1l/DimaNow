@@ -34,3 +34,6 @@
 ## Local evidence
 
 Ignored .local/meal-delay-20260921/ holds public before snapshots, deployed-source backup, workerd probe, regression logs, isolated release clone and emulator captures. Actual device connection values remain only in ignored .local/device-connections.json. Wrangler state is excluded from tracking.
+
+## Final CI confirmation — 2026-09-21 13:46 KST
+Observed: production CI run35561839693 completed successfully, including tracking/privacy checks, JVM/pipeline tests, Android test compilation, lint, optimized assembly and worker tests. Local source commit57d9d5e retains this repair separately from the scoped production-base commite0ce29e. Physical-phone update remains pending user reconnection; APK and optimized emulator verification are complete.

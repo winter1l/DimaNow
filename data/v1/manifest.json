@@ -1,5 +1,5 @@
 {
-    "generatedAt": "2026-09-27T05:41:55.358970095Z",
+    "generatedAt": "2026-09-27T15:08:11.260883115Z",
     "datasets": {
         "shuttle": {
             "revision": 2,
@@ -12,12 +12,13 @@
         },
         "meal": {
             "revision": 10,
-            "state": "READY",
+            "state": "NEEDS_REVIEW",
             "publishedAt": "2026-09-21T04:08:03.138568728Z",
-            "lastAttemptAt": "2026-09-21T04:08:03.138568728Z",
+            "lastAttemptAt": "2026-09-27T15:08:11.260883115Z",
             "url": "meal/7ac7601efb4698ef7eefb3a96fb7d9b3754358fd3a80a7d75ba7ce543361a32f.json",
             "sha256": "7ac7601efb4698ef7eefb3a96fb7d9b3754358fd3a80a7d75ba7ce543361a32f",
-            "sourceUrl": "https://www.dima.ac.kr/?p=1"
+            "sourceUrl": "https://www.dima.ac.kr/?p=1",
+            "message": "HTTP error fetching URL. Status=401, URL=[https://www.instagram.com/api/v1/feed/user/30891067635/?count=12]"
         },
         "notice": {
             "revision": 21,

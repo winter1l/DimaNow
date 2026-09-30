@@ -16,7 +16,7 @@
 ## Observed publication and runtime evidence
 
 - Manual recovery run https://github.com/winter1l/DimaNow/actions/runs/35559819410 succeeded. Revision10 READY published2026-09-21T04:08:03Z (13:08 KST), weekSep21–27; SHA2567ac7601efb4698ef7eefb3a96fb7d9b3754358fd3a80a7d75ba7ce543361a32f.
-- Cloudflare worker dima-now-meal-upload updated04:27 UTC, version f721083c-f0e7-472a-9093-f2b0d488567a. Only the meal watcher module changed; prior index module and all existing bindings/schedules were retained.
+- Cloudflare worker dima-now-meal-upload updated04:27 UTC, version f721083c-f0e7-472a-9093-f2b0d488567a. Worker module/binding details are recorded privately (P-04).
 - Real scheduled invocation at04:37:24 UTC succeeded (4015us CPU), following failed04:07:24 and earlier invocations. Local workerd also fetched the real public week and skipped unnecessary dispatch.
 - Remote main is materially behind the working checkout. A separate ignored clone of remote4a37f31 received only the meal repair; production commit e0ce29e77dda34738a55bbb1f56db79950cfae94. Unrelated local UI/security changes were not pushed. Existing remote dormitory publication policy was retained; local review policy was retained separately.
 - Production data workflow after the commit succeeded: https://github.com/winter1l/DimaNow/actions/runs/35561839678. General CI run35561839693 was still running at this entry; append its conclusion after checking.

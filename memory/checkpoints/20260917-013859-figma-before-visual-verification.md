@@ -11,7 +11,7 @@ Current app UI transferred to editable Figma file W5Zbmv0XsI0v9scNchwGCB across 
 The user can provide Figma comments or frame IDs for desired UI changes.
 
 ## Next first action
-Open https://www.figma.com/design/W5Zbmv0XsI0v9scNchwGCB?node-id=2-3 and inspect the user-selected frame before making a proposal.
+Open [figma-file]?node-id=2-3 and inspect the user-selected frame before making a proposal.
 
 ## Tried
 - Upload auto-review initially rejected one PNG; specific user approval resolved it.

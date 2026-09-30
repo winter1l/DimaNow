@@ -2,7 +2,7 @@
 
 ## The story so far
 
-Confirmed: the user selected all 11 findings from completed scan `cfa82db2-6c47-4534-b6cc-0138f32206ab` and asked for fixes. The findings span LMS cleartext SSO, anonymous-upload Worker admission and resource controls, exported widget receivers, meal-publication authorization, meal-discovery URL validation, and tracked device-identifier redaction. No remediation source or test edit has been made yet. Existing uncommitted D-064 through D-069 work must remain intact; no branch, worktree, commit, push, release, or deployment is authorized.
+Confirmed: the user selected all 11 findings from completed scan `[security-scan]` and asked for fixes. The findings span LMS cleartext SSO, anonymous-upload Worker admission and resource controls, exported widget receivers, meal-publication authorization, meal-discovery URL validation, and tracked device-identifier redaction. No remediation source or test edit has been made yet. Existing uncommitted D-064 through D-069 work must remain intact; no branch, worktree, commit, push, release, or deployment is authorized.
 
 ## Decided
 

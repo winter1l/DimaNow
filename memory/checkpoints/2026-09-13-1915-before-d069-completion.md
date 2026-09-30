@@ -2,7 +2,7 @@
 
 ## The story so far
 
-Confirmed: Codex Security scan `cfa82db2-6c47-4534-b6cc-0138f32206ab` completed successfully for its immutable launch snapshot at revision `e2240b0f50989776037ec8b98acd1224539d5db9`. All 278 authorized repository paths were reviewed; `memory/**` and `graphify-out/**` remained excluded. The sealed result contains 11 findings: 8 medium and 3 low. No application source was changed by the scan. Later D-068 working-tree changes remain preserved and were not folded into the original-snapshot result.
+Confirmed: Codex Security scan `[security-scan]` completed successfully for its immutable launch snapshot at revision `e2240b0f50989776037ec8b98acd1224539d5db9`. All 278 authorized repository paths were reviewed; `memory/**` and `graphify-out/**` remained excluded. The sealed result contains 11 findings: 8 medium and 3 low. No application source was changed by the scan. Later D-068 working-tree changes remain preserved and were not folded into the original-snapshot result.
 
 ## Decided
 
@@ -16,7 +16,7 @@ Confirmed: Codex Security scan `cfa82db2-6c47-4534-b6cc-0138f32206ab` completed 
 
 ## Next first action
 
-Open the sealed `report.md` for scan `cfa82db2-6c47-4534-b6cc-0138f32206ab` and choose which finding to remediate first.
+Open the sealed `report.md` for scan `[security-scan]` and choose which finding to remediate first.
 
 ## Tried
 

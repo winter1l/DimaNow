@@ -6,7 +6,7 @@ User requested all current app UI in Figma so they can identify changes there be
 
 ## Observed deliverable
 
-- File: https://www.figma.com/design/W5Zbmv0XsI0v9scNchwGCB
+- File: [figma-file] (private values: `.local/memory-private/SENSITIVE.md`)
 - Eight pages: guide, foundations/components, main screens, LMS, settings/onboarding, editing/dialogs, widgets/system content, reference captures.
 - Main page: 16 light screen/state frames, six dark examples, one tablet rail example, one supplemental state board and guide.
 - LMS: 17 screens plus state board; settings: three long screens, six onboarding variants, three dialogs, nine update variants, permission/adaptive samples.

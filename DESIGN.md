@@ -4,7 +4,7 @@ Reviewed 2026-09-16. Material 3 Expressive is the design authority. Impeccable i
 
 ## Product tasks
 
-Home answers what comes next: class, unfinished learning, departures and meals. Timetable edits personal classes and date exceptions. Shuttle compares departures and reports a missing vehicle. Meals shows a selected day's services and supports a confirmed photo submission. Courses reads official LMS learning and details. Settings controls account, guidance and updates. First run selects a return direction and offers optional permissions.
+Home answers what comes next: class, unfinished learning, departures and meals. Timetable edits personal classes and date exceptions. Shuttle compares departures. Meals shows a selected day's services and supports a confirmed photo submission. Courses reads official LMS learning and details. Settings controls account, guidance and updates. First run selects a return direction and offers optional permissions.
 
 ## From Material
 

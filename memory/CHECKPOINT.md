@@ -1,21 +1,20 @@
-# Checkpoint — Wireless phone update installed — 2026-09-21
+# Checkpoint — D-089..D-092 implemented locally — 2026-09-30
 
 ## The story so far
-Observed: launching the PC Tailscale desktop app changed NoState to Running. USB-assisted wireless ADB activation, phone identity match, and replacement install of the shuttle/meal APK succeeded. Installed APK hash matches, original first-install time is preserved, launch is OK and Home/Courses UI nodes were observed. No new Samsung notification visual acceptance is claimed. See device-update-20260921.md.
+Observed: main was merged with origin and pushed (cd6e019); CI passed. Post-push review led to user decisions D-089 (automatic dorm publication), D-090 (restore 운동장 label), D-091 (remove shuttle reports) and D-092 (sensitive memory values in ignored `.local/memory-private/`). All four are implemented and verified locally but not committed.
 
 ## Decided
-- User authorizes directly launching the PC Tailscale app; the user handles phone Tailscale.
-- Keep the phone awake during active agent use, then restore temporary screen settings.
-- Requested phone ADB button must work through cellular and Tailscale; a Wi-Fi-only tile does not satisfy it.
+- Dorm submissions auto-publish; the `dorm-submissions` branch keeps its older workflow file, which calls the same `publish-dorm-meal` command.
+- Worker deployment and APK install are separate operator steps.
 
 ## Waiting on the user
-None for the completed update. Fully disabled ADB reactivation through a normal phone app is unsupported on the observed stock non-root setup.
+Commit/push approval for the D-089..D-092 working tree.
 
 ## Next first action
-Read memory/device-update-20260921.md before further device changes; inspect the ignored session's quick-settings residue only if continuing cleanup.
+After approval: commit (code, docs, memory), push, confirm `검증` and `캠퍼스 데이터 게시` runs.
 
-## Tried
-- Native Wi-Fi debugging tile does not control cellular legacy TCP ADB.
-- Samsung rejected component enable. Add-tile appended one inactive internal spec; removal/settings restore returned success but the spec remains, absent from the inspected visible panel. Original visible layout was preserved.
-- A direct port-property write probe was blocked by automatic approval review and was not executed or retried.
-- Screen timeout and stay-awake settings were restored and read back successfully.
+## Open follow-ups
+- Worker deploy: D1 migration 0002, remove report endpoints, delete `SHUTTLE_REPORT_HMAC_KEY`, decide on unused `shuttle_reports` rows.
+- `prepareShuttleTopology` has no production caller after D-091.
+- Docs debt not yet fixed: SECURITY/README HTTPS-only LMS claim vs D-073, removed LMS 읽음 filter, One UI 8 device note, PRODUCT-TRUTH "private repo", D-009 duplicate ID, 00-INDEX missing files.
+- Sensitive values already in published Git history remain there.

@@ -2,7 +2,7 @@
 
 ## The story so far
 
-Codex Security scan `cfa82db2-6c47-4534-b6cc-0138f32206ab` is continuing in the original DimaNow checkout and scan workspace; no replacement setup workspace was opened. The authoritative target is revision `e2240b0f50989776037ec8b98acd1224539d5db9`, scope `.`, with `graphify-out/` and `memory/` excluded by user context. Preflight is ready with only the advisory six-slot warning. Threat mapping is source-backed and recorded as 8/8 surfaces. The independent baseline and focused Cloudflare Worker investigator are still running; the architecture mapper completed. No candidate has yet been parent-validated or recorded as a finding, and no product source has been changed by this scan.
+Codex Security scan `[security-scan]` is continuing in the original DimaNow checkout and scan workspace; no replacement setup workspace was opened. The authoritative target is revision `e2240b0f50989776037ec8b98acd1224539d5db9`, scope `.`, with `graphify-out/` and `memory/` excluded by user context. Preflight is ready with only the advisory six-slot warning. Threat mapping is source-backed and recorded as 8/8 surfaces. The independent baseline and focused Cloudflare Worker investigator are still running; the architecture mapper completed. No candidate has yet been parent-validated or recorded as a finding, and no product source has been changed by this scan.
 
 ## Decided
 

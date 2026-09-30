@@ -23,10 +23,7 @@ storage. Read `LOCAL-ONLY.md` before device work.
 - Public source change `1570bc55a5d6cb1514777feb2c3f2587e1975990` adds only tracking
   policy, checks and documentation. App, pipeline and Worker source bytes match
   the original public main. Local unpublished app changes remain local.
-- Main's force-push prohibition was temporarily relaxed for the approved rewrite
-  and restored. Required `test` status checks and strict mode remain configured.
-  Existing administrator privileges allowed the new commit before CI completed;
-  that push is not evidence of passing tests.
+- Branch-protection handling during the rewrite is recorded privately (P-05).
 - Windows and GitHub regressions passed all 31 assertions. The initial GitHub
   job nevertheless propagated the final expected `git check-ignore` non-match.
   Commit `4a37f31e0ef22525a8cd08539fc01907de457766` explicitly returns success and
@@ -46,9 +43,8 @@ storage. Read `LOCAL-ONLY.md` before device work.
 
 ## Host-side limitation and recovery
 
-Observed: the old first changed commit remains resolvable through GitHub's API.
-Three closed PR heads (#1, #7, #9) still retain old history. Updating branches and
-tags cannot remove these server-managed refs or prove cached-object deletion.
+Observed: some server-managed GitHub refs may still retain old history; details are
+recorded privately (P-05). Updating branches and tags cannot prove cached-object deletion.
 An ignored support request draft is prepared at
 `.local/history-cleanup-20260916/support-request.md`; it has not been sent.
 GitHub must determine eligibility for host-side sensitive-data removal.

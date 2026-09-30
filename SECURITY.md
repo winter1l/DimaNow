@@ -19,8 +19,6 @@
 - 식단 OCR용 `GEMINI_API_KEY`는 GitHub Actions Secret으로만 주입하고 요청 본문·로그·아티팩트에 기록하지 않습니다.
 - 기숙사 사진은 인증 없는 Cloudflare Worker endpoint로 제출합니다. Worker는 이미지 형식·크기와 짧은 IP 해시 기반 중복 제한을 확인하고, 이 저장소에만 설치된 최소 권한 GitHub App의 단기 설치 토큰으로 `dorm-submissions` 브랜치의 신규 이미지 경로만 씁니다. GitHub App 개인 키와 rate-limit salt는 Wrangler Secret으로만 보관하며 APK·Git·로그에 포함하지 않습니다.
 - 제출 workflow는 직렬 실행하고, OCR 전에 현재 주 기숙사 식단 존재 여부를 다시 확인합니다. 검증 실패 사진은 정상 식단 캐시를 덮어쓰지 않습니다.
-- 셔틀 미도착 API는 현재 게시된 셔틀 revision과 서버가 계산한 물리 운행·정류장 호출만 허용합니다. 신고 가능 시간은 예정 시각부터 다음 동일 정류장 차량 또는 15분 중 이른 시각까지이며, 설치 토큰은 서버 전용 HMAC 키로 해시해 D1에 보관합니다. 원시 토큰·GPS 좌표·계정은 저장하지 않고 신고 행은 7일 뒤 정리합니다.
-- 셔틀 신고 endpoint는 Cloudflare rate-limit binding과 설치별 물리 정류장 호출 단일 PK로 중복을 제한합니다. `SHUTTLE_REPORT_HMAC_KEY`는 Worker Secret, 신고 데이터는 전용 D1에만 두며 APK·Git·로그에 포함하지 않습니다.
 - 앱 업데이트는 공개 GitHub latest stable release의 이름 규칙과 asset SHA-256을 확인합니다.
 - 업데이트 다운로드는 허용된 GitHub HTTPS 호스트와 128 MiB 상한으로 제한하고, 완료 전 `.part` 파일은 설치 대상으로 사용하지 않습니다.
 - 설치 전 APK의 패키지명, versionName, 더 높은 versionCode와 현재 설치본과 동일한 서명 인증서를 확인합니다. Android의 앱별 설치 출처 권한과 시스템 설치 확인 화면을 우회하지 않습니다.

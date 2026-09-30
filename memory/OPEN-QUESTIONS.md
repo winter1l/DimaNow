@@ -36,6 +36,17 @@ Pending explicit history scope: two accidental screenshots remain in existing lo
 
 Resolved 2026-09-16: user explicitly approved history rewriting and force updates.
 Local refs and published branches/tags are rewritten and verified. Remaining
-host-side issue: old closed PR heads #1/#7/#9 and cached commit access require
+host-side issue: server-managed refs and cached commit access (private P-05) require
 GitHub's assessment. An ignored support request draft is ready but not sent;
 see git-privacy-cleanup-20260916.md for exact evidence and limits.
+
+## 2026-09-30 — Post-push review (D-070 live on main)
+
+- Q-011 (observed, code): stadium-stop boarding label. D-019 requires `운동장` for `stadium-stop` departures on Shuttle, Live Update, and widgets; since 14691bd `GuidanceEngine.boardingOriginName` returns `본관` for both branches and no superseding decision or test records the change. Needs user decision: restore D-019 or record a superseding decision.
+- Q-012 (confirmed): dormitory push runs still execute the older workflow file on the `dorm-submissions` branch (blob 5404720, step `기숙사 식단 검증 및 게시`) with pipeline code from `main`, so candidates become PENDING_REVIEW but the new review-summary step never runs and no operator notification exists. Submissions can wait indefinitely; the app shows only a generic "계속 확인 중" message.
+- Q-013 (confirmed, code): D-070 approval has no idempotency/rollback guard (re-dispatch republishes and overwrites the audit record; older candidate can replace newer) and weekend approval window rejects the ending week that staging accepts.
+- Q-014 (observed from records): repo Worker differs from deployed f721083c. Next APK release is blocked until the repo Worker, D1 migration 0002 and new secrets are deployed, because the app now calls `/v1/shuttle-reporter-token`, which the deployed Worker does not serve.
+- Q-015 (observed, code): shuttle reporter identity is now a Worker HMAC of the client IP instead of D-055's install-scoped token; users behind shared campus NAT collapse to one reporter. Needs decision: accept as D-070 consequence or restore install scope.
+- Docs debt (observed): README/PRIVACY/SECURITY still describe dormitory auto-publication (contradicts live D-070), HTTPS-only LMS hosts (contradicts D-073 SSO exception), a removed LMS 읽음 filter, and One UI 8 as the test device; PRODUCT-TRUTH still says the repository is private. Public memory contains a real course/classroom and a Figma file URL; history-residual PR pointers remain listed.
+
+Resolved 2026-09-30 (same day): Q-011 by D-090 (stadium label restored), Q-012 and Q-013 by D-089 (automatic publication; approval path removed; single weekend week rule), Q-015 by D-091 (shuttle reports removed). Q-014 narrowed: the app no longer calls `/v1/shuttle-reporter-token`, so the next APK is not blocked by the Worker; repo Worker still differs from deployed f721083c and its deployment (D1 migration 0002, removal of report endpoints, `SHUTTLE_REPORT_HMAC_KEY` deletion, unused `shuttle_reports` rows) remains an operator task.

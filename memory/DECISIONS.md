@@ -411,7 +411,7 @@ Confirmed: apply the proposed distant-departure presentation with a 60-minute th
 
 ## D-070 - Selected security boundaries fail closed and dormitory publication requires operator approval - 2026-09-13 (user-authorized remediation)
 
-Confirmed: the user selected all 11 findings from security scan `cfa82db2-6c47-4534-b6cc-0138f32206ab` and requested repair. Cleartext LMS SSO is removed instead of retaining a ticket exception. App-widget receivers are private and no custom broadcast refresh entry point remains. Anonymous Worker requests must pass mandatory server-side identity-independent admission, bounded parsing/streaming, and D1 atomic lease/budget checks before expensive work.
+Confirmed: the user selected all 11 findings from security scan `[security-scan]` and requested repair. Cleartext LMS SSO is removed instead of retaining a ticket exception. App-widget receivers are private and no custom broadcast refresh entry point remains. Anonymous Worker requests must pass mandatory server-side identity-independent admission, bounded parsing/streaming, and D1 atomic lease/budget checks before expensive work.
 
 Confirmed engineering boundary: Gemini may create only a `PENDING_REVIEW` dormitory candidate. READY/PUBLISHED requires an authenticated manual GitHub workflow, explicit `APPROVE`, the exact candidate SHA-256, a matching immutable source-image commit URL and submission ID, and a still-current KST week. Approval writes a separate reviewer audit record. Meal discovery/network fetches validate exact HTTPS authority/path, globally routable DNS answers, every redirect hop, and byte ceilings. Current tracked evidence uses irreversible test-device aliases; repository validation rejects physical ADB identifiers.
 
@@ -493,3 +493,15 @@ Confirmed: user reported confusing 원룸촌 travel notifications and asked for 
 
 ## D-088 — PC Tailscale startup and active phone sessions — 2026-09-21
 Confirmed: the user authorizes agents to launch the PC Tailscale desktop app directly when needed and asks this to be remembered. The user handles phone Tailscale. Keep the phone screen awake while agents actively operate it; preserve original settings privately and restore temporary overrides afterward. The requested phone-side ADB activation must work over cellular plus Tailscale; a Wi-Fi-only shortcut does not meet the request. Feasibility and observed install evidence: device-update-20260921.md.
+
+## D-089 — Automatic dormitory meal publication — 2026-09-30
+Confirmed: user chose automatic approval after the post-push review found the D-070 manual approval flow stranded submissions (the `dorm-submissions` branch runs an older workflow file; no operator notification). A submission that passes the two-stage Gemini validation/OCR, the current KST week rule and the duplicate-week check is published directly and its status becomes PUBLISHED. The manual `dorm-approve` path, review candidates and approval audit records are removed. Supersedes only the operator-approval clause of D-070; all other D-070 boundaries (input validation, bounded parsing, SSRF checks, last-good protection) stand.
+
+## D-090 — Restore the stadium boarding label — 2026-09-30
+Confirmed: user asked to restore D-019. When the displayed official departure boards at `stadium-stop`, user surfaces show `운동장` (Shuttle screen, Home capsules, Live Update/Now Bar including the D-087 single-leg title, shuttle and all-in-one widgets). The MAIN group header stays `본관` per D-020. Reverses the unrecorded `본관` label introduced in 14691bd.
+
+## D-091 — Remove shuttle missed-arrival reports — 2026-09-30
+Confirmed: user asked to delete the shuttle report feature. The `셔틀이 오지 않나요?` report UI, app report source/token handling, and Worker report and reporter-token endpoints are removed. Supersedes the reporting clauses of D-055 and D-065; D-055's physical-stop extra departures and evening physical-run schedule projection remain. Existing D1 migration files stay as history; no destructive migration.
+
+## D-092 — Sensitive memory values live outside Git — 2026-09-30
+Confirmed: user asked to collect sensitive memory content in an untracked location. Personal timetable values, the Figma file URL, account-derived Worker host and submission ID, security scan ID and deployment-gap notes, and Git history residual/branch-protection details moved to ignored `.local/memory-private/SENSITIVE.md`; tracked memory uses placeholders (`[classroom-A]`, `[figma-file]`, P-01..P-05). This is a narrow redaction exception to append-only editing. Values already in published Git history are not erased by this change.

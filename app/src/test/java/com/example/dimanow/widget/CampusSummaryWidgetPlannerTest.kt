@@ -146,6 +146,6 @@ class CampusSummaryWidgetPlannerTest {
         )
 
         assertEquals("현재 위치: 본관", plan.headerLocationText)
-        assertEquals("셔틀 (본관 출발)", plan.shuttleTitle)
+        assertEquals("셔틀 (운동장 출발)", plan.shuttleTitle)
     }
 }

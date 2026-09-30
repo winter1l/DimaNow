@@ -166,7 +166,8 @@ class LiveSurfacePresentationTest {
             val notification = AndroidLiveSurfaceController(context).buildNotification(
                 snapshot, requestPromotion = true, deviceLocked = locked,
             )
-            assertEquals("본관 → 엔터관", notification.extras.getCharSequence(Notification.EXTRA_TITLE))
+            // D-019/D-087: the immediate leg boards at the official stadium stop.
+            assertEquals("운동장 → 엔터관", notification.extras.getCharSequence(Notification.EXTRA_TITLE))
             assertEquals("엔터관행 5분", notification.shortCriticalText)
             assertEquals("5분 후 출발 · 18:55", notification.extras.getCharSequence(Notification.EXTRA_TEXT))
         }
@@ -197,7 +198,7 @@ class LiveSurfacePresentationTest {
         val notification = AndroidLiveSurfaceController(context).buildNotification(
             snapshot = GuidanceSnapshot(
                 classContent = null,
-                shuttleLines = listOf(com.example.dimanow.domain.ShuttleLine("본관  5분, 30분")),
+                shuttleLines = listOf(com.example.dimanow.domain.ShuttleLine("운동장  5분, 30분")),
                 phase = GuidancePhase.RETURN,
                 countdownTarget = Instant.parse("2026-08-27T10:00:00Z"),
             ),
@@ -205,7 +206,7 @@ class LiveSurfacePresentationTest {
             presentation = LiveDisplayOptions(chipContent = LiveChipContent.COUNTDOWN),
         )
 
-        assertEquals("본관  5분, 30분", notification.extras.getCharSequence(Notification.EXTRA_TITLE))
+        assertEquals("운동장  5분, 30분", notification.extras.getCharSequence(Notification.EXTRA_TITLE))
     }
 
     @Test

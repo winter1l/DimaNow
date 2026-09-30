@@ -202,10 +202,6 @@ import com.example.dimanow.meal.OFFICIAL_MEAL_SOURCE_URL
 import com.example.dimanow.shuttle.OFFICIAL_SHUTTLE_SOURCE_URL
 import com.example.dimanow.shuttle.ShuttleData
 import com.example.dimanow.shuttle.ShuttleSource
-import com.example.dimanow.shuttle.ShuttleReportSource
-import com.example.dimanow.shuttle.ShuttleReportEventKey
-import com.example.dimanow.shuttle.ShuttleReportActionResult
-import com.example.dimanow.shuttle.ShuttleReportState
 import com.example.dimanow.time.MinuteTicker
 import com.example.dimanow.location.LocationMode
 import com.example.dimanow.update.AppUpdateCoordinator
@@ -273,8 +269,6 @@ fun DimaNowApp(
     repository: CampusDataRepository,
     preferences: AppPreferences,
     shuttleSource: ShuttleSource,
-    shuttleReportSource: ShuttleReportSource? = null,
-    verifyShuttleReportLocation: suspend (CampusZoneId) -> Boolean = { false },
     mealSource: MealSource,
     liveSurfaceController: LiveSurfaceController,
     appUpdateCoordinator: AppUpdateCoordinator? = null,
@@ -391,7 +385,6 @@ fun DimaNowApp(
                     repository = repository,
                     preferences = preferences,
                     shuttleSource = shuttleSource,
-                    shuttleReportSource = shuttleReportSource,
                     mealSource = mealSource,
                     noticeSource = noticeSource,
                     lmsSource = lmsSource,
@@ -415,8 +408,6 @@ fun DimaNowApp(
                 AppPage.SHUTTLE -> ShuttleRoute(
                     preferences,
                     shuttleSource,
-                    shuttleReportSource,
-                    verifyShuttleReportLocation,
                     Modifier.padding(padding),
                     requireNotNull(minuteNow),
                 )
@@ -493,7 +484,6 @@ private fun DashboardRoute(
     repository: CampusDataRepository,
     preferences: AppPreferences,
     shuttleSource: ShuttleSource,
-    shuttleReportSource: ShuttleReportSource?,
     mealSource: MealSource,
     noticeSource: NoticeSource?,
     lmsSource: LmsSource,
@@ -520,31 +510,6 @@ private fun DashboardRoute(
     val emptyNotices = remember { NoticeData(emptyList(), null, null, null, OFFICIAL_NOTICE_SOURCE_URL) }
     val notices by (noticeSource?.data ?: remember { kotlinx.coroutines.flow.flowOf(emptyNotices) })
         .collectAsStateWithLifecycle(initialValue = emptyNotices)
-    val emptyReportState = remember { kotlinx.coroutines.flow.flowOf(ShuttleReportState()) }
-    val reportState by (shuttleReportSource?.state ?: emptyReportState)
-        .collectAsStateWithLifecycle(initialValue = ShuttleReportState())
-    val reportEngine = remember { GuidanceEngine() }
-    val reportTopology = remember(shuttle.departures) { reportEngine.prepareShuttleTopology(shuttle.departures) }
-    val reportBoard = remember(now, resolvedZone, shuttle.departures) {
-        reportEngine.shuttleBoard(now, resolvedZone, shuttle.departures, ShuttleBoardPurpose.GENERAL)
-    }
-    val shuttleReportWarning = remember(reportBoard, reportTopology, reportState.reports) {
-        reportBoard.rows.mapNotNull { row ->
-            val first = row.departures.firstOrNull()?.departure ?: return@mapNotNull null
-            val event = reportEngine.stopCallForDeparture(reportTopology, first) ?: return@mapNotNull null
-            val count = reportEngine.affectedReportCount(event.run, event.stopCall, reportState.reports)
-            count.takeIf { it > 0 }?.let { "${DisplayVocabulary.originName(row.destinationZone)}행 ${it}명" }
-        }
-            // 영향받는 목적지를 전부 보여준다 (이전에는 첫 건만 남기고 나머지를 버렸다)
-            .takeIf { it.isNotEmpty() }
-            ?.let { "미도착 신고 · ${it.joinToString(" · ")}" }
-    }
-    LaunchedEffect(shuttleReportSource, shuttle.serverRevision, now.toLocalDate()) {
-        val revision = shuttle.serverRevision
-        if (shuttleReportSource != null && revision != null && revision > 0) {
-            shuttleReportSource.refresh(now.toLocalDate(), revision)
-        }
-    }
 
     DashboardScreen(
         schedule = schedule,
@@ -558,7 +523,6 @@ private fun DashboardRoute(
         dormitoryMeal = dormitoryMeal,
         homeBase = homeBase,
         notices = notices,
-        shuttleReportWarning = shuttleReportWarning,
         onNavigateToPage = onNavigateToPage,
         modifier = modifier,
         now = now,
@@ -575,21 +539,15 @@ private fun TimetableRoute(repository: CampusDataRepository, modifier: Modifier)
 private fun ShuttleRoute(
     preferences: AppPreferences,
     shuttleSource: ShuttleSource,
-    shuttleReportSource: ShuttleReportSource?,
-    verifyShuttleReportLocation: suspend (CampusZoneId) -> Boolean,
     modifier: Modifier,
     now: ZonedDateTime,
 ) {
     val resolvedZone by preferences.effectiveZone.collectAsStateWithLifecycle(initialValue = CampusZoneId.OUTSIDE)
-    val locationMode by preferences.locationMode.collectAsStateWithLifecycle(initialValue = LocationMode.GPS)
     val nearbyTransitStopNumber by preferences.effectiveTransitStopNumber.collectAsStateWithLifecycle(initialValue = null)
     ShuttleScreen(
         shuttleSource = shuttleSource,
         currentZone = resolvedZone,
-        reportSource = shuttleReportSource,
-        locationMode = locationMode,
         nearbyTransitStopNumber = nearbyTransitStopNumber,
-        verifyReportLocation = verifyShuttleReportLocation,
         modifier = modifier,
         now = now,
     )
@@ -704,7 +662,6 @@ internal fun DashboardScreen(
     dormitoryMeal: DormitoryMealData = DormitoryMealData(emptyList(), null, null, null),
     homeBase: HomeBase = HomeBase.YEIN,
     notices: NoticeData = NoticeData(emptyList(), null, null, null, OFFICIAL_NOTICE_SOURCE_URL),
-    shuttleReportWarning: String? = null,
     onNavigateToPage: (AppPage) -> Unit = {},
     modifier: Modifier = Modifier,
     now: ZonedDateTime = ZonedDateTime.now(),
@@ -1021,8 +978,8 @@ internal fun DashboardScreen(
                                                     else -> null
                                                 }
                                                 val boardingStopLabel = when {
-                                                    serviceDeparture?.isBoardingStopTransition == true -> "탑승 위치 변경"
-                                                    serviceDeparture?.isStadiumStop == true -> "본관"
+                                                    serviceDeparture?.isBoardingStopTransition == true -> "운동장 전환"
+                                                    serviceDeparture?.isStadiumStop == true -> "운동장"
                                                     else -> null
                                                 }
                                                 Surface(
@@ -1108,21 +1065,6 @@ internal fun DashboardScreen(
                     }
                     else -> {
                         Text("오늘은 운행하지 않아요", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                }
-                shuttleReportWarning?.let { warning ->
-                    Surface(
-                        shape = RoundedCornerShape(10.dp),
-                        color = MaterialTheme.colorScheme.errorContainer,
-                        modifier = Modifier.fillMaxWidth().testTag("dashboard_shuttle_report_warning"),
-                    ) {
-                        Text(
-                            text = warning,
-                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-                            style = MaterialTheme.typography.labelMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onErrorContainer,
-                        )
                     }
                 }
             }
@@ -1910,10 +1852,7 @@ private enum class ShuttleView { CAMPUS, BUS_4402 }
 fun ShuttleScreen(
     shuttleSource: ShuttleSource,
     currentZone: CampusZoneId,
-    reportSource: ShuttleReportSource? = null,
-    locationMode: LocationMode = LocationMode.GPS,
     nearbyTransitStopNumber: String? = null,
-    verifyReportLocation: suspend (CampusZoneId) -> Boolean = { false },
     modifier: Modifier = Modifier,
     now: ZonedDateTime = ZonedDateTime.now(MinuteTicker.CAMPUS_ZONE),
 ) {
@@ -1922,27 +1861,13 @@ fun ShuttleScreen(
     val shuttle by shuttleSource.data.collectAsStateWithLifecycle(
         initialValue = ShuttleData(emptyList(), null, null, null, OFFICIAL_SHUTTLE_SOURCE_URL, null),
     )
-    val emptyReportState = remember { kotlinx.coroutines.flow.flowOf(ShuttleReportState()) }
-    val reportState by (reportSource?.state ?: emptyReportState)
-        .collectAsStateWithLifecycle(initialValue = ShuttleReportState())
     val guidanceEngine = remember { GuidanceEngine() }
-    val topology = remember(shuttle.departures) { guidanceEngine.prepareShuttleTopology(shuttle.departures) }
-    val reportableEvent = remember(now, currentZone, topology) {
-        guidanceEngine.reportableMissedEvents(now, currentZone, topology).firstOrNull()
-    }
     var refreshing by remember { mutableStateOf(false) }
     var refreshMessage by remember { mutableStateOf<String?>(null) }
     // 날짜가 바뀌면(자정) 선택 요일도 새 오늘로 재설정된다 (#14)
     var selectedDay by remember(now.toLocalDate()) { mutableStateOf(now.dayOfWeek) }
     var shuttleView by rememberSaveable { mutableStateOf(ShuttleView.CAMPUS) }
     val nowTime = now.toLocalTime()
-
-    LaunchedEffect(reportSource, shuttle.serverRevision, now.toLocalDate()) {
-        val revision = shuttle.serverRevision
-        if (reportSource != null && revision != null && revision > 0) {
-            reportSource.refresh(now.toLocalDate(), revision)
-        }
-    }
 
     LaunchedEffect(refreshMessage) {
         refreshMessage?.let {
@@ -2001,68 +1926,6 @@ fun ShuttleScreen(
             itemTag = { "shuttle_day_${it.name}" },
             modifier = Modifier.staggeredEntrance(0),
         )
-
-        if (selectedDay == now.dayOfWeek && reportSource != null && shuttle.serverRevision != null && reportableEvent != null) {
-            val event = reportableEvent
-            val reportDepartureLabel = listOfNotNull(
-                event.stopCall.expectedTime.format(TIME),
-                event.stopCall.destinationZone?.let(DisplayVocabulary::destinationName),
-            ).joinToString(" ")
-            val reportedByYou = event.stopCall.id in reportState.reportedByThisInstall
-            val affectedCount = guidanceEngine.affectedReportCount(event.run, event.stopCall, reportState.reports)
-            OutlinedCard(
-                modifier = Modifier.fillMaxWidth().testTag("shuttle_missed_report_card"),
-                shape = RoundedCornerShape(16.dp),
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(16.dp),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Text(
-                            "$reportDepartureLabel 셔틀이 오지 않나요?",
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.Bold,
-                        )
-                        Text(
-                            if (affectedCount > 0) "${affectedCount}명이 이 운행을 신고했어요" else "도착하지 않았다면 알려주세요",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                        if (locationMode == LocationMode.TEST) {
-                            Text(
-                                "테스트 모드에서는 현황만 볼 수 있어요",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.tertiary,
-                            )
-                        }
-                    }
-                    FilledTonalButton(
-                        enabled = !reportState.isLoading && locationMode == LocationMode.GPS,
-                        onClick = {
-                            scope.launch {
-                                if (!verifyReportLocation(event.stopCall.zone)) {
-                                    refreshMessage = "현재 정류장 위치를 확인해 주세요"
-                                    return@launch
-                                }
-                                val key = ShuttleReportEventKey(
-                                    serviceDate = now.toLocalDate(),
-                                    scheduleRevision = shuttle.serverRevision!!,
-                                    runId = event.run.id,
-                                    stopCallId = event.stopCall.id,
-                                )
-                                val result = if (reportedByYou) reportSource.revoke(key) else reportSource.report(key)
-                                refreshMessage = when (result) {
-                                    ShuttleReportActionResult.Success -> if (reportedByYou) "신고를 취소했어요" else "신고했어요"
-                                    is ShuttleReportActionResult.Failure -> result.message
-                                }
-                            }
-                        },
-                    ) { Text(if (reportedByYou) "신고 취소" else "신고") }
-                }
-            }
-        }
 
         // 선택된 요일의 노선별 셔틀 목록 (현재 위치 출발 우선 정렬)
         AnimatedContent(
@@ -2229,18 +2092,10 @@ fun ShuttleScreen(
                                                 else -> null
                                             }
                                             val boardingStopLabel = when {
-                                                serviceDeparture?.isBoardingStopTransition == true -> "탑승 위치 변경"
-                                                serviceDeparture?.isStadiumStop == true -> "본관"
+                                                serviceDeparture?.isBoardingStopTransition == true -> "운동장 전환"
+                                                serviceDeparture?.isStadiumStop == true -> "운동장"
                                                 else -> null
                                             }
-                                            val reportEvent = guidanceEngine.stopCallForDeparture(topology, countdown.departure)
-                                            val reportCount = reportEvent?.let {
-                                                guidanceEngine.affectedReportCount(it.run, it.stopCall, reportState.reports)
-                                            } ?: 0
-                                            Column(
-                                                modifier = Modifier.weight(1f),
-                                                verticalArrangement = Arrangement.spacedBy(4.dp),
-                                            ) {
                                             Surface(
                                                 shape = RoundedCornerShape(10.dp),
                                                 color = when {
@@ -2250,7 +2105,7 @@ fun ShuttleScreen(
                                                     else -> MaterialTheme.colorScheme.secondaryContainer
                                                 },
                                                 modifier = Modifier
-                                                    .fillMaxWidth()
+                                                    .weight(1f)
                                                     .testTag("next_departure_$index"),
                                             ) {
                                                 Column(
@@ -2288,15 +2143,6 @@ fun ShuttleScreen(
                                                         },
                                                     )
                                                 }
-                                            }
-                                            if (reportCount > 0) {
-                                                Text(
-                                                    "${reportCount}명이 미도착 신고",
-                                                    style = MaterialTheme.typography.labelSmall,
-                                                    color = MaterialTheme.colorScheme.error,
-                                                    fontWeight = FontWeight.SemiBold,
-                                                )
-                                            }
                                             }
                                         }
                                     }

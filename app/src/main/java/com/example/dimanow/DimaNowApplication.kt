@@ -21,8 +21,6 @@ import kotlinx.coroutines.flow.collectLatest
 import com.example.dimanow.location.CampusGeofenceManager
 import com.example.dimanow.shuttle.ShuttleSource
 import com.example.dimanow.shuttle.StaticShuttleSource
-import com.example.dimanow.shuttle.HttpShuttleReportSource
-import com.example.dimanow.shuttle.ShuttleReportSource
 import com.example.dimanow.work.RefreshScheduler
 import com.example.dimanow.live.GuidanceOrchestrator
 import com.example.dimanow.live.GuidanceRuntimeCoordinator
@@ -91,11 +89,6 @@ class DimaNowApplication : Application() {
     val preferences: AppPreferences by lazy { AppPreferences(this) }
     private val staticDataTransport by lazy { CachingStaticDataTransport(UrlConnectionStaticDataTransport()) }
     val shuttleSource: ShuttleSource by lazy { StaticShuttleSource(database, staticDataTransport) }
-    val shuttleReportSource: ShuttleReportSource by lazy {
-        HttpShuttleReportSource(
-            rootUrl = getString(R.string.shuttle_report_api_url),
-        )
-    }
     private val dormitoryMealSubmissionService by lazy {
         DormitoryMealSubmissionService(
             gateway = AnonymousDormitoryMealApi(
@@ -264,30 +257,6 @@ class DimaNowApplication : Application() {
                     }
                 }
             }
-    }
-
-    suspend fun isAtShuttleReportZone(expectedZone: CampusZoneId): Boolean {
-        if (preferences.locationMode.first() != LocationMode.GPS) return false
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) return false
-        val cancellation = CancellationTokenSource()
-        val location = runCatching {
-            withTimeoutOrNull(10_000) {
-                LocationServices.getFusedLocationProviderClient(this@DimaNowApplication)
-                    .getCurrentLocation(Priority.PRIORITY_HIGH_ACCURACY, cancellation.token)
-                    .await()
-            }
-        }.getOrNull().also { if (it == null) cancellation.cancel() } ?: return false
-        val sample = LocationSample(
-            point = GeoPoint(location.latitude, location.longitude),
-            accuracyMeters = location.accuracy,
-            capturedAt = Instant.ofEpochMilli(location.time),
-        )
-        return LocationResolver().isFreshSampleAtZone(
-            sample = sample,
-            now = Instant.now(),
-            configuredZones = repository.zones.first(),
-            expectedZone = expectedZone,
-        )
     }
 
     /** Apply permission changes immediately after first-run or settings configuration. */

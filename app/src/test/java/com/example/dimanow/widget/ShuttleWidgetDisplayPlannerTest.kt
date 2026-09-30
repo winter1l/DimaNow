@@ -91,10 +91,10 @@ class ShuttleWidgetDisplayPlannerTest {
 
         val plan = ShuttleWidgetDisplayPlanner().plan(now, CampusZoneId.MAIN, board, allDepartures)
 
-        assertEquals("DIMA 셔틀 · 본관", plan.headerTagText)
+        assertEquals("DIMA 셔틀 · 운동장", plan.headerTagText)
         assertEquals("엔터관행", plan.rows[0].destinationTag)
-        assertEquals("5분(19:35)·탑승 위치 변경", plan.rows[0].capsules[0].text)
-        assertEquals("30분(20:00)·본관", plan.rows[0].capsules[1].text)
+        assertEquals("5분(19:35)·운동장 전환", plan.rows[0].capsules[0].text)
+        assertEquals("30분(20:00)·운동장", plan.rows[0].capsules[1].text)
         assertTrue(plan.rows[0].capsules[1].isLast)
     }
 
@@ -129,7 +129,8 @@ class ShuttleWidgetDisplayPlannerTest {
 
         val plan = ShuttleWidgetDisplayPlanner().plan(now, CampusZoneId.MAIN, board, listOf(stadium), compact = true)
 
-        assertEquals("5분·본관", plan.rows[0].capsules[0].text)
+        assertEquals("DIMA 셔틀 · 운동장", plan.headerTagText)
+        assertEquals("5분·운동장", plan.rows[0].capsules[0].text)
     }
 
     @Test

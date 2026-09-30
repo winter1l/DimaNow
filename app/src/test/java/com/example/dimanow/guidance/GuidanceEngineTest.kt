@@ -157,58 +157,27 @@ class GuidanceEngineTest {
         )
         assertEquals(listOf("18:40", "18:45", "18:50", "18:55", "19:00"), evening.stopCalls.map { it.expectedTime.toString() })
         assertEquals(listOf("stadium-stop", "stadium-stop"), evening.stopCalls.filter { it.zone == CampusZoneId.MAIN }.map { it.stopId })
+        assertEquals(listOf(true, false, true, true, false), evening.stopCalls.map { it.isBoardingDeparture })
     }
 
     @Test
-    fun `missed shuttle reports affect only later calls in the same physical run`() {
-        val run = ShuttleVehicleRun(
-            id = "evening-loop-monday-1850",
-            serviceDay = DayOfWeek.MONDAY,
-            pattern = ShuttleServicePattern.EVENING_LOOP,
-            stopCalls = listOf(
-                ShuttleStopCall("run:0", 0, CampusZoneId.YEIN, "yein", LocalTime.of(18, 40)),
-                ShuttleStopCall("run:1", 1, CampusZoneId.MAIN, "stadium-stop", LocalTime.of(18, 45)),
-                ShuttleStopCall("run:2", 2, CampusZoneId.ONE_ROOM, "one-room", LocalTime.of(18, 50)),
-                ShuttleStopCall("run:3", 3, CampusZoneId.MAIN, "stadium-stop", LocalTime.of(18, 55)),
-                ShuttleStopCall("run:4", 4, CampusZoneId.YEIN, "yein", LocalTime.of(19, 0)),
-            ),
-        )
-        val otherRun = run.copy(id = "evening-loop-monday-1920", stopCalls = run.stopCalls.map { it.copy(id = "other:${it.sequence}") })
-        val reports = listOf(
-            ShuttleReportAggregate(run.id, "run:0", 0, 3),
-            ShuttleReportAggregate(run.id, "run:2", 2, 2),
-            ShuttleReportAggregate(otherRun.id, "other:0", 0, 9),
+    fun `evening loop keeps a published waiting interval and a terminal departure stays standalone`() {
+        val departures = listOf(
+            ShuttleDeparture("B-evening", "yein", "TO_MAIN", DayOfWeek.TUESDAY, LocalTime.of(19, 0), CampusZoneId.YEIN, CampusZoneId.MAIN, LocalTime.of(19, 5)),
+            ShuttleDeparture("A-evening", "one-room", "TO_MAIN", DayOfWeek.TUESDAY, LocalTime.of(19, 20), CampusZoneId.ONE_ROOM, CampusZoneId.MAIN, LocalTime.of(19, 25)),
+            ShuttleDeparture("A-evening", "stadium-stop", "TO_YEIN", DayOfWeek.TUESDAY, LocalTime.of(19, 25), CampusZoneId.MAIN, CampusZoneId.YEIN, LocalTime.of(19, 30)),
+            ShuttleDeparture("B-evening", "yein", "TO_MAIN", DayOfWeek.TUESDAY, LocalTime.of(21, 55), CampusZoneId.YEIN, CampusZoneId.MAIN, LocalTime.of(22, 0)),
         )
 
-        val engine = GuidanceEngine()
+        val topology = GuidanceEngine().prepareShuttleTopology(departures)
 
-        assertEquals(3, engine.affectedReportCount(run, run.stopCalls[1], reports))
-        assertEquals(5, engine.affectedReportCount(run, run.stopCalls[3], reports))
-        assertEquals(0, engine.affectedReportCount(run, run.stopCalls[0], reports.filter { it.stopCallId == "run:2" }))
-    }
-
-    @Test
-    fun `report window starts at expected time and closes at the earlier next same stop call`() {
-        val first = ShuttleVehicleRun(
-            id = "day-b-monday-0825-main",
-            serviceDay = DayOfWeek.MONDAY,
-            pattern = ShuttleServicePattern.DAY_B,
-            stopCalls = listOf(ShuttleStopCall("first:0", 0, CampusZoneId.MAIN, "university-headquarters", LocalTime.of(8, 25))),
-        )
-        val next = ShuttleVehicleRun(
-            id = "day-b-monday-0835-main",
-            serviceDay = DayOfWeek.MONDAY,
-            pattern = ShuttleServicePattern.DAY_B,
-            stopCalls = listOf(ShuttleStopCall("next:0", 0, CampusZoneId.MAIN, "university-headquarters", LocalTime.of(8, 35))),
-        )
-        val topology = ShuttleTopology(listOf(first, next))
-        val engine = GuidanceEngine()
-        val date = LocalDate.of(2026, 8, 31)
-        val zone = ZoneId.of("Asia/Seoul")
-
-        assertEquals(false, engine.canReportMissedShuttle(date.atTime(8, 24, 59).atZone(zone), first, first.stopCalls[0], topology))
-        assertEquals(true, engine.canReportMissedShuttle(date.atTime(8, 25).atZone(zone), first, first.stopCalls[0], topology))
-        assertEquals(false, engine.canReportMissedShuttle(date.atTime(8, 35).atZone(zone), first, first.stopCalls[0], topology))
+        val loop = topology.runs.single { it.pattern == ShuttleServicePattern.EVENING_LOOP }
+        assertEquals("evening-loop-tuesday-1920", loop.id)
+        assertEquals(listOf("19:00", "19:05", "19:20", "19:25", "19:30"), loop.stopCalls.map { it.expectedTime.toString() })
+        val terminal = topology.runs.single { it.stopCalls.first().expectedTime == LocalTime.of(21, 55) }
+        assertEquals("other-tuesday-2155-yein", terminal.id)
+        assertEquals(listOf("yein", "university-headquarters"), terminal.stopCalls.map { it.stopId })
+        assertEquals(listOf(true, false), terminal.stopCalls.map { it.isBoardingDeparture })
     }
 
     @Test
@@ -328,7 +297,7 @@ class GuidanceEngineTest {
         )
 
         assertEquals(
-            listOf("18:30 (첫차)", "19:00 · 탑승 위치 변경", "19:30 (막차) · 본관"),
+            listOf("18:30 (첫차)", "19:00 · 운동장 전환", "19:30 (막차) · 운동장"),
             annotated.map { it.displayText },
         )
     }
@@ -591,6 +560,7 @@ class GuidanceEngineTest {
         assertEquals(com.example.dimanow.domain.GuidanceKind.CAMPUS_SHUTTLE, snapshot.kind)
         assertEquals(null, snapshot.classContent)
         assertEquals(listOf("본관  5분, 30분"), snapshot.shuttleLines.map { it.text })
+        assertEquals(listOf("본관"), snapshot.shuttleLines.map { it.origin })
     }
 
     @Test
@@ -616,7 +586,9 @@ class GuidanceEngineTest {
             shuttleDepartures = departures,
         )
 
-        assertEquals(listOf("본관  5분, 30분"), snapshot.shuttleLines.map { it.text })
+        assertEquals(listOf("운동장  5분, 30분"), snapshot.shuttleLines.map { it.text })
+        // D-087 immediate-leg notification title origin follows D-019's stadium boarding stop.
+        assertEquals(listOf("운동장"), snapshot.shuttleLines.map { it.origin })
     }
 
     @Test
@@ -734,9 +706,10 @@ class GuidanceEngineTest {
         )
 
         assertEquals(
-            listOf("원룸촌  5분, 30분", "본관  20분, 50분"),
+            listOf("원룸촌  5분, 30분", "운동장  20분, 50분"),
             snapshot.shuttleLines.map { it.text },
         )
+        assertEquals(listOf("원룸촌", "운동장"), snapshot.shuttleLines.map { it.origin })
     }
 
     @Test

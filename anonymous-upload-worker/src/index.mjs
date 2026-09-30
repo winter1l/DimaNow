@@ -1,10 +1,7 @@
 import { createStudentMealPublicationWatch, STUDENT_MEAL_WATCH_CRONS } from './meal-publication-watch.mjs';
 
 const MAX_IMAGE_BYTES = 15 * 1024 * 1024;
-const MAX_SHUTTLE_JSON_BYTES = 8 * 1024;
 const RATE_LIMIT_SECONDS = 10 * 60;
-const REPORTER_TOKEN_SECONDS = 24 * 60 * 60;
-const SHUTTLE_SCHEDULE_CACHE_MILLIS = 60 * 1000;
 const IMAGE_EXTENSIONS = new Map([
   ['image/jpeg', 'jpg'],
   ['image/png', 'png'],
@@ -18,11 +15,7 @@ export function createWorker(dependencies = {}) {
   const githubTokenProvider = dependencies.githubTokenProvider
     ?? ((env) => createGitHubInstallationToken(env, fetchImpl, now));
   const studentMealWatch = createStudentMealPublicationWatch({ fetch: fetchImpl, now, githubTokenProvider });
-  const scheduleProvider = dependencies.scheduleProvider
-    ?? (() => loadCurrentShuttleSchedule(fetchImpl));
-  const cachedScheduleProvider = createCachedScheduleProvider(scheduleProvider, now);
-  const reportStoreFactory = dependencies.reportStoreFactory
-    ?? ((env) => createD1ReportStore(env.SHUTTLE_REPORTS));
+  // The D1 binding keeps its historical name; it now holds only the dormitory upload admission tables.
   const securityStoreFactory = dependencies.securityStoreFactory
     ?? ((env) => createD1SecurityStore(env.SHUTTLE_REPORTS));
   const dormitoryPublicationProvider = dependencies.dormitoryPublicationProvider
@@ -32,18 +25,6 @@ export function createWorker(dependencies = {}) {
   return {
     async fetch(request, env) {
       const url = new URL(request.url);
-      if (url.pathname === '/v1/shuttle-reporter-token') {
-        return handleShuttleReporterToken(request, env, { now });
-      }
-      if (url.pathname === '/v1/shuttle-reports') {
-        return handleShuttleReports(request, url, env, {
-          now,
-          scheduleProvider: cachedScheduleProvider,
-          reportStoreFactory,
-          jsonParser: dependencies.jsonParser ?? JSON.parse,
-          bodyReader,
-        });
-      }
       if (url.pathname === '/v1/dormitory-meals') {
         return handleDormitoryMealUpload(request, env, {
           now,
@@ -64,33 +45,12 @@ export function createWorker(dependencies = {}) {
         if (new Date(event.scheduledTime).getUTCHours() !== 17) return;
       }
       context.waitUntil((async () => {
-        const store = reportStoreFactory(env);
-        await store.prune?.(dateDaysBefore(kstDate(now()), 7));
         const securityStore = securityStoreFactory(env);
         await securityStore.prune?.(Math.floor(now().getTime() / 1000));
       })().catch((error) => {
         console.error('Scheduled gateway maintenance failed', error instanceof Error ? error.message : error);
       }));
     },
-  };
-}
-
-function createCachedScheduleProvider(provider, now) {
-  let cached = null;
-  let inFlight = null;
-  return async (env) => {
-    const currentMillis = now().getTime();
-    if (cached && currentMillis - cached.loadedAtMillis < SHUTTLE_SCHEDULE_CACHE_MILLIS) return cached.schedule;
-    if (!inFlight) {
-      inFlight = Promise.resolve(provider(env)).then((schedule) => {
-        if (!Number.isSafeInteger(schedule?.revision) || schedule.revision <= 0 || !Array.isArray(schedule.events)) {
-          throw new Error('invalid shuttle schedule');
-        }
-        cached = { schedule, loadedAtMillis: now().getTime() };
-        return schedule;
-      }).finally(() => { inFlight = null; });
-    }
-    return inFlight;
   };
 }
 
@@ -243,200 +203,6 @@ function uploadBudgetWindows(current) {
   };
 }
 
-async function handleShuttleReporterToken(request, env, dependencies) {
-  if (request.method !== 'POST') {
-    return jsonResponse(405, 'POST 요청만 지원합니다.', { Allow: 'POST' });
-  }
-  const routeAdmission = await enforceShuttleRouteLimits(request, env, 'TOKEN');
-  if (routeAdmission instanceof Response) return routeAdmission;
-  const hmacKey = env.SHUTTLE_REPORT_HMAC_KEY?.trim();
-  if (!hmacKey || hmacKey.length < 32) {
-    return jsonResponse(503, '셔틀 신고 서비스가 준비되지 않았습니다.');
-  }
-  const expiresAt = Math.floor(dependencies.now().getTime() / 1000) + REPORTER_TOKEN_SECONDS;
-  const subject = await hmacSha256Hex(hmacKey, `reporter:${routeAdmission.clientAddress}`);
-  const unsigned = `v1.${expiresAt}.${subject}`;
-  const signature = await hmacSha256Hex(hmacKey, unsigned);
-  return new Response(JSON.stringify({ token: `${unsigned}.${signature}`, expiresAt }), {
-    status: 201,
-    headers: jsonHeaders(),
-  });
-}
-
-async function enforceShuttleRouteLimits(request, env, routeKey) {
-  const clientAddress = request.headers.get('CF-Connecting-IP')?.trim();
-  if (!clientAddress) return jsonResponse(400, '셔틀 요청을 확인할 수 없습니다.');
-  const rateLimitSalt = env.RATE_LIMIT_SALT?.trim();
-  if (!rateLimitSalt || rateLimitSalt.length < 32 || !env.SHUTTLE_GLOBAL_RATE_LIMIT || !env.SHUTTLE_REPORT_RATE_LIMIT) {
-    return jsonResponse(503, '셔틀 신고 서비스가 준비되지 않았습니다.');
-  }
-  const globalRate = await env.SHUTTLE_GLOBAL_RATE_LIMIT.limit({ key: routeKey });
-  if (!globalRate.success) {
-    return jsonResponse(429, '잠시 후 다시 시도해 주세요.', { 'Retry-After': '60' });
-  }
-  const clientKey = await sha256Hex(`${rateLimitSalt}:${clientAddress}`);
-  const clientRate = await env.SHUTTLE_REPORT_RATE_LIMIT.limit({ key: `${routeKey}:${clientKey}` });
-  if (!clientRate.success) {
-    return jsonResponse(429, '잠시 후 다시 시도해 주세요.', { 'Retry-After': '60' });
-  }
-  return { clientAddress };
-}
-
-async function handleShuttleReports(request, url, env, dependencies) {
-  if (!['GET', 'POST', 'DELETE'].includes(request.method)) {
-    return jsonResponse(405, 'GET, POST, DELETE 요청만 지원합니다.', { Allow: 'GET, POST, DELETE' });
-  }
-  const routeAdmission = await enforceShuttleRouteLimits(request, env, request.method);
-  if (routeAdmission instanceof Response) return routeAdmission;
-  const current = dependencies.now();
-  let requestBody = null;
-  if (request.method !== 'GET') {
-    const contentType = request.headers.get('Content-Type')?.split(';', 1)[0]?.trim().toLowerCase();
-    if (contentType !== 'application/json') {
-      return jsonResponse(415, 'JSON 요청만 지원합니다.');
-    }
-    try {
-      const bytes = await dependencies.bodyReader(request, MAX_SHUTTLE_JSON_BYTES);
-      requestBody = parseJsonObject(bytes, dependencies.jsonParser);
-    } catch (error) {
-      if (error instanceof BodyTooLargeError) return jsonResponse(413, '신고 내용이 너무 큽니다.');
-      return jsonResponse(400, '신고 내용을 확인해 주세요.');
-    }
-    if (!requestBody) return jsonResponse(400, '신고 내용을 확인해 주세요.');
-  }
-
-  const serviceDate = request.method === 'GET' ? url.searchParams.get('serviceDate') : requestBody.serviceDate;
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(serviceDate ?? '') || serviceDate !== kstDate(current)) {
-    return jsonResponse(400, '오늘 운행만 확인할 수 있습니다.');
-  }
-  const scheduleRevision = Number(request.method === 'GET'
-    ? url.searchParams.get('scheduleRevision')
-    : requestBody.scheduleRevision);
-  if (!Number.isSafeInteger(scheduleRevision) || scheduleRevision <= 0) {
-    return jsonResponse(400, '시간표 버전을 확인해 주세요.');
-  }
-
-  const hmacKey = env.SHUTTLE_REPORT_HMAC_KEY?.trim();
-  if (!hmacKey || hmacKey.length < 32) return jsonResponse(503, '셔틀 신고 서비스가 준비되지 않았습니다.');
-  const reporterToken = request.headers.get('X-Dima-Reporter')?.trim();
-  let reporterHash = null;
-  if (reporterToken) {
-    reporterHash = await verifyReporterToken(reporterToken, hmacKey, routeAdmission.clientAddress, current);
-    if (!reporterHash) return jsonResponse(401, '셔틀 신고 신원을 다시 발급해 주세요.');
-  } else if (request.method !== 'GET') {
-    return jsonResponse(401, '셔틀 신고 신원을 다시 발급해 주세요.');
-  }
-
-  const runId = request.method === 'GET' ? null : boundedIdentifier(requestBody.runId, 120);
-  const stopCallId = request.method === 'GET' ? null : boundedIdentifier(requestBody.stopCallId, 160);
-  if (request.method !== 'GET' && (!runId || !stopCallId)) {
-    return jsonResponse(400, '운행 정보를 확인해 주세요.');
-  }
-  if (request.method === 'POST') {
-    if (!env.SHUTTLE_EVENT_RATE_LIMIT) return jsonResponse(503, '셔틀 신고 서비스가 준비되지 않았습니다.');
-    const eventRate = await env.SHUTTLE_EVENT_RATE_LIMIT.limit({
-      key: `${serviceDate}:${scheduleRevision}:${runId}:${stopCallId}`,
-    });
-    if (!eventRate.success) {
-      return jsonResponse(429, '이 운행의 신고가 잠시 제한되었습니다.', { 'Retry-After': '60' });
-    }
-  }
-
-  let schedule;
-  try {
-    schedule = await dependencies.scheduleProvider(env);
-  } catch (error) {
-    console.error('Shuttle schedule validation failed', error instanceof Error ? error.message : error);
-    return jsonResponse(503, '셔틀 시간표를 확인하지 못했습니다.');
-  }
-  if (schedule.revision !== scheduleRevision) {
-    return jsonResponse(409, '셔틀 시간표가 갱신되었습니다. 다시 확인해 주세요.');
-  }
-  let store;
-  try {
-    store = dependencies.reportStoreFactory(env);
-  } catch {
-    return jsonResponse(503, '셔틀 신고 서비스가 준비되지 않았습니다.');
-  }
-  if (request.method === 'GET') {
-    const reports = await store.aggregates(serviceDate, scheduleRevision, reporterHash);
-    return new Response(JSON.stringify({ serviceDate, scheduleRevision, reports }), {
-      status: 200,
-      headers: jsonHeaders(),
-    });
-  }
-
-  const event = schedule.events.find((candidate) => candidate.runId === runId && candidate.stopCallId === stopCallId);
-  if (!event || event.serviceDay !== dayOfWeekName(serviceDate)) {
-    return jsonResponse(409, '현재 시간표에 없는 운행입니다.');
-  }
-  if (request.method === 'POST' && !isReportWindowOpen(current, serviceDate, event, schedule.events)) {
-    return jsonResponse(409, '현재 신고할 수 있는 운행이 아닙니다.');
-  }
-  const key = { serviceDate, scheduleRevision, runId, stopCallId, reporterHash };
-  if (request.method === 'DELETE') {
-    await store.remove(key);
-    return new Response(null, { status: 204 });
-  }
-  const inserted = await store.upsert({
-    ...key,
-    stopSequence: event.stopSequence,
-    createdAt: current.toISOString(),
-  });
-  return new Response(JSON.stringify({ reported: true, alreadyReported: !inserted }), {
-    status: inserted ? 201 : 200,
-    headers: jsonHeaders(),
-  });
-}
-
-function createD1ReportStore(database) {
-  if (!database) throw new Error('SHUTTLE_REPORTS D1 binding is required');
-  return {
-    async upsert(report) {
-      const result = await database.prepare(`
-        INSERT OR IGNORE INTO shuttle_reports
-          (service_date, schedule_revision, run_id, stop_call_id, stop_sequence, reporter_hash, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
-      `).bind(
-        report.serviceDate,
-        report.scheduleRevision,
-        report.runId,
-        report.stopCallId,
-        report.stopSequence,
-        report.reporterHash,
-        report.createdAt,
-      ).run();
-      return Number(result.meta?.changes ?? 0) > 0;
-    },
-    async remove(key) {
-      await database.prepare(`
-        DELETE FROM shuttle_reports
-        WHERE service_date = ? AND schedule_revision = ? AND run_id = ? AND stop_call_id = ? AND reporter_hash = ?
-      `).bind(key.serviceDate, key.scheduleRevision, key.runId, key.stopCallId, key.reporterHash).run();
-    },
-    async aggregates(serviceDate, scheduleRevision, reporterHash) {
-      const result = await database.prepare(`
-        SELECT run_id, stop_call_id, stop_sequence, COUNT(*) AS report_count,
-          MAX(CASE WHEN reporter_hash = ? THEN 1 ELSE 0 END) AS reported_by_you
-        FROM shuttle_reports
-        WHERE service_date = ? AND schedule_revision = ?
-        GROUP BY run_id, stop_call_id, stop_sequence
-        ORDER BY run_id, stop_sequence
-      `).bind(reporterHash ?? '', serviceDate, scheduleRevision).all();
-      return result.results.map((row) => ({
-        runId: row.run_id,
-        stopCallId: row.stop_call_id,
-        stopSequence: Number(row.stop_sequence),
-        count: Number(row.report_count),
-        reportedByYou: Number(row.reported_by_you) === 1,
-      }));
-    },
-    async prune(oldestDate) {
-      await database.prepare('DELETE FROM shuttle_reports WHERE service_date < ?').bind(oldestDate).run();
-    },
-  };
-}
-
 function createD1SecurityStore(database) {
   if (!database) throw new Error('SHUTTLE_REPORTS D1 binding is required for gateway admission');
   return {
@@ -485,22 +251,6 @@ function createD1SecurityStore(database) {
   };
 }
 
-async function loadCurrentShuttleSchedule(fetchImpl) {
-  const root = 'https://winter1l.github.io/DimaNow/data/v1';
-  const manifestResponse = await fetchImpl(`${root}/manifest.json`, { headers: { Accept: 'application/json' } });
-  if (!manifestResponse.ok) throw new Error(`manifest ${manifestResponse.status}`);
-  const manifest = await manifestResponse.json();
-  const descriptor = manifest.datasets?.shuttle;
-  if (!descriptor || descriptor.state !== 'READY' || !/^shuttle\/[0-9a-f]{64}\.json$/.test(descriptor.url)) {
-    throw new Error('shuttle descriptor unavailable');
-  }
-  const payloadResponse = await fetchImpl(`${root}/${descriptor.url}`, { headers: { Accept: 'application/json' } });
-  if (!payloadResponse.ok) throw new Error(`shuttle payload ${payloadResponse.status}`);
-  const payload = await payloadResponse.json();
-  if (!Array.isArray(payload.departures)) throw new Error('invalid shuttle payload');
-  return { revision: Number(descriptor.revision), events: buildShuttleReportEvents(payload.departures) };
-}
-
 async function hasCurrentDormitoryPublication(fetchImpl, current) {
   const root = 'https://winter1l.github.io/DimaNow/data/v1';
   const manifestResponse = await fetchImpl(`${root}/manifest.json`, {
@@ -531,124 +281,6 @@ function targetDormitoryWeekStart(current) {
   return kst.toISOString().slice(0, 10);
 }
 
-export function buildShuttleReportEvents(departures) {
-  const scheduleDepartures = withFieldShuttleOverrides(departures);
-  const standalone = scheduleDepartures
-    .map((departure) => {
-      const pattern = ({ A: 'day_a', B: 'day_b', 'A-field-extra': 'field_override', C: 'sunday' })[departure.routeId] ?? 'other';
-      const runId = `${pattern}-${departure.serviceDay.toLowerCase()}-${departure.departureTime.replace(':', '')}-${departure.originZone.toLowerCase()}`;
-      return {
-        runId,
-        stopCallId: `${runId}:0`,
-        stopSequence: 0,
-        serviceDay: departure.serviceDay,
-        stopId: departure.stopId,
-        expectedTime: departure.departureTime,
-      };
-    });
-  const evening = scheduleDepartures
-    .filter((departure) => departure.routeId === 'A-evening' && departure.originZone === 'ONE_ROOM' && departure.destinationZone === 'MAIN')
-    .flatMap((oneRoom) => {
-      const firstLeg = scheduleDepartures.filter((candidate) => candidate.serviceDay === oneRoom.serviceDay
-        && candidate.routeId === 'B-evening'
-        && candidate.originZone === 'YEIN'
-        && candidate.destinationZone === 'MAIN'
-        && candidate.arrivalTime && candidate.arrivalTime < oneRoom.departureTime)
-        .sort((left, right) => right.arrivalTime.localeCompare(left.arrivalTime))[0];
-      const firstMainTime = firstLeg?.arrivalTime;
-      const finalLeg = scheduleDepartures.find((candidate) => candidate.serviceDay === oneRoom.serviceDay
-        && String(candidate.routeId).endsWith('-evening')
-        && candidate.originZone === 'MAIN'
-        && candidate.destinationZone === 'YEIN'
-        && candidate.departureTime === oneRoom.arrivalTime);
-      if (!firstLeg || !finalLeg?.arrivalTime) return [];
-      const runId = `evening-loop-${oneRoom.serviceDay.toLowerCase()}-${oneRoom.departureTime.replace(':', '')}`;
-      return [
-        ['yein', firstLeg.departureTime],
-        ['stadium-stop', firstMainTime],
-        ['one-room', oneRoom.departureTime],
-        ['stadium-stop', oneRoom.arrivalTime],
-        ['yein', finalLeg.arrivalTime],
-      ].map(([stopId, expectedTime], stopSequence) => ({
-        runId,
-        stopCallId: `${runId}:${stopSequence}`,
-        stopSequence,
-        serviceDay: oneRoom.serviceDay,
-        stopId,
-        expectedTime,
-      })).filter((event) => [0, 2, 3].includes(event.stopSequence));
-    });
-  const remaining = standalone.filter(event => !evening.some(call =>
-    call.serviceDay === event.serviceDay && call.stopId === event.stopId && call.expectedTime === event.expectedTime));
-  return [...remaining, ...evening];
-}
-
-function withFieldShuttleOverrides(departures) {
-  const serviceDays = ['MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY'];
-  const departureTimes = ['14:30', '15:30', '16:30', '17:30'];
-  const eventKey = (departure) => [
-    departure.routeId,
-    departure.stopId,
-    departure.direction,
-    departure.serviceDay,
-    departure.departureTime,
-    departure.originZone,
-    departure.destinationZone ?? '',
-  ].join('|');
-  const existing = new Set(departures.map(eventKey));
-  const additions = [];
-  for (const serviceDay of serviceDays) {
-    for (const departureTime of departureTimes) {
-      const departure = {
-        serviceDay,
-        routeId: 'A-field-extra',
-        stopId: 'one-room',
-        direction: 'TO_MAIN',
-        originZone: 'ONE_ROOM',
-        destinationZone: 'MAIN',
-        departureTime,
-        arrivalTime: null,
-      };
-      if (!existing.has(eventKey(departure))) additions.push(departure);
-    }
-  }
-  return [...departures, ...additions];
-}
-
-function isReportWindowOpen(now, serviceDate, event, events) {
-  const expectedAt = kstInstant(serviceDate, event.expectedTime);
-  if (now < expectedAt) return false;
-  const nextSameStop = events
-    .filter((candidate) => candidate.serviceDay === event.serviceDay
-      && candidate.stopId === event.stopId
-      && candidate.stopCallId !== event.stopCallId
-      && candidate.expectedTime > event.expectedTime)
-    .sort((left, right) => left.expectedTime.localeCompare(right.expectedTime))[0];
-  const fifteenMinutesLater = new Date(expectedAt.getTime() + 15 * 60 * 1000);
-  const closesAt = nextSameStop
-    ? new Date(Math.min(fifteenMinutesLater.getTime(), kstInstant(serviceDate, nextSameStop.expectedTime).getTime()))
-    : fifteenMinutesLater;
-  return now < closesAt;
-}
-
-function kstInstant(date, time) { return new Date(`${date}T${time}:00+09:00`); }
-function kstDate(date) { return new Date(date.getTime() + 9 * 60 * 60 * 1000).toISOString().slice(0, 10); }
-function dateDaysBefore(date, days) {
-  const value = new Date(`${date}T00:00:00Z`);
-  value.setUTCDate(value.getUTCDate() - days);
-  return value.toISOString().slice(0, 10);
-}
-function dayOfWeekName(date) {
-  return ['SUNDAY', 'MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY'][new Date(`${date}T00:00:00Z`).getUTCDay()];
-}
-function subtractMinutes(time, minutes) {
-  const [hour, minute] = time.split(':').map(Number);
-  const total = (hour * 60 + minute - minutes + 24 * 60) % (24 * 60);
-  return `${String(Math.floor(total / 60)).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}`;
-}
-function boundedIdentifier(value, max) {
-  return typeof value === 'string' && value.length <= max && /^[a-z0-9_:-]+$/.test(value) ? value : null;
-}
 class BodyTooLargeError extends Error {}
 
 async function readBoundedRequestBody(request, maxBytes) {
@@ -693,42 +325,6 @@ function parseJsonObject(bytes, parser) {
   const text = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
   const value = parser(text);
   return value && typeof value === 'object' && !Array.isArray(value) ? value : null;
-}
-
-async function verifyReporterToken(token, hmacKey, clientAddress, current) {
-  const parts = token?.split('.') ?? [];
-  if (parts.length !== 4 || parts[0] !== 'v1' || !/^\d{10}$/.test(parts[1]) ||
-      !/^[0-9a-f]{64}$/.test(parts[2]) || !/^[0-9a-f]{64}$/.test(parts[3])) return null;
-  const expiresAt = Number(parts[1]);
-  const nowSeconds = Math.floor(current.getTime() / 1000);
-  if (!Number.isSafeInteger(expiresAt) || expiresAt <= nowSeconds || expiresAt > nowSeconds + REPORTER_TOKEN_SECONDS) {
-    return null;
-  }
-  const subject = await hmacSha256Hex(hmacKey, `reporter:${clientAddress}`);
-  if (!constantTimeEqual(parts[2], subject)) return null;
-  const signature = await hmacSha256Hex(hmacKey, `${parts[0]}.${parts[1]}.${parts[2]}`);
-  return constantTimeEqual(parts[3], signature) ? subject : null;
-}
-
-function constantTimeEqual(left, right) {
-  if (left.length !== right.length) return false;
-  let difference = 0;
-  for (let index = 0; index < left.length; index += 1) {
-    difference |= left.charCodeAt(index) ^ right.charCodeAt(index);
-  }
-  return difference === 0;
-}
-
-async function hmacSha256Hex(secret, value) {
-  const key = await crypto.subtle.importKey(
-    'raw',
-    new TextEncoder().encode(secret),
-    { name: 'HMAC', hash: 'SHA-256' },
-    false,
-    ['sign'],
-  );
-  const bytes = new Uint8Array(await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(value)));
-  return Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('');
 }
 
 async function createGitHubInstallationToken(env, fetchImpl, now) {

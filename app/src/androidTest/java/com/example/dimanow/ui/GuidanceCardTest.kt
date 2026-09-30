@@ -180,6 +180,36 @@ class GuidanceCardTest {
     }
 
     @Test
+    fun dashboardCapsulesUseStadiumLabelsForOfficialEveningService() {
+        val departures = listOf(
+            ShuttleDeparture("B", "university-headquarters", "TO_YEIN", DayOfWeek.MONDAY, LocalTime.of(19, 20), CampusZoneId.MAIN, CampusZoneId.YEIN),
+            ShuttleDeparture("B-evening", "stadium-stop", "TO_YEIN", DayOfWeek.MONDAY, LocalTime.of(19, 35), CampusZoneId.MAIN, CampusZoneId.YEIN),
+            ShuttleDeparture("B-evening", "stadium-stop", "TO_YEIN", DayOfWeek.MONDAY, LocalTime.of(20, 0), CampusZoneId.MAIN, CampusZoneId.YEIN),
+        )
+        composeRule.setContent {
+            DashboardScreen(
+                schedule = DefaultSchedule.create(),
+                zone = CampusZoneId.MAIN,
+                automatic = true,
+                shuttle = ShuttleData(
+                    departures = departures,
+                    lastSuccess = Instant.parse("2026-08-26T12:00:10Z"),
+                    lastAttempt = Instant.parse("2026-08-26T12:00:10Z"),
+                    error = null,
+                    sourceUrl = "https://www.dima.ac.kr/?p=97",
+                    noticeUrl = null,
+                ),
+                meal = MealData(emptyList(), null, null, null, "https://www.dima.ac.kr/?p=1", null, null),
+                now = ZonedDateTime.of(2026, 8, 31, 19, 30, 0, 0, ZoneId.of("Asia/Seoul")),
+            )
+        }
+
+        // D-019: the first stadium departure is the stop transition; later stadium slots name the stadium.
+        composeRule.onNodeWithText("5분 후 · 운동장 전환").assertExists()
+        composeRule.onNodeWithText("30분 후 · 막차 · 운동장").assertExists()
+    }
+
+    @Test
     fun dashboardOmitsSourceStatusBecauseItLivesInSettings() {
         composeRule.setContent {
             DashboardScreen(

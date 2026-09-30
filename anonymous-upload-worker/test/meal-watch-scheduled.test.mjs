@@ -16,7 +16,7 @@ test('scheduled Monday watch reaches authenticated collection without a user req
       dispatches.push({ url, init });
       return new Response(null, { status: 204 });
     },
-    reportStoreFactory: () => { throw new Error('Morning watch must not start daily maintenance'); },
+    securityStoreFactory: () => { throw new Error('Morning watch must not start daily maintenance'); },
   });
   worker.scheduled({ cron: STUDENT_MEAL_WATCH_CRONS[0], scheduledTime: Date.parse('2026-09-14T01:37:00Z') },
     { GITHUB_OWNER: 'winter1l', GITHUB_REPOSITORY: 'DimaNow' }, { waitUntil: (promise) => pending.push(promise) });
@@ -34,11 +34,10 @@ test('daily watch slot also preserves gateway maintenance', async () => {
     fetch: async () => Response.json({ datasets: { meal: {
       revision: 0, state: 'WAITING', url: '', sha256: '', lastAttemptAt: '2026-09-14T17:00:00Z',
     } } }),
-    reportStoreFactory: () => ({ prune: async (day) => pruned.push(day) }),
     securityStoreFactory: () => ({ prune: async (seconds) => pruned.push(seconds) }),
   });
   worker.scheduled({ cron: STUDENT_MEAL_WATCH_CRONS[1], scheduledTime: Date.parse('2026-09-14T17:07:00Z') },
     {}, { waitUntil: (promise) => pending.push(promise) });
   await Promise.all(pending);
-  assert.deepEqual(pruned, ['2026-09-08', Date.parse('2026-09-14T17:07:00Z') / 1000]);
+  assert.deepEqual(pruned, [Date.parse('2026-09-14T17:07:00Z') / 1000]);
 });

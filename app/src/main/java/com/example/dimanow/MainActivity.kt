@@ -45,8 +45,6 @@ class MainActivity : ComponentActivity() {
             repository = application.repository,
             preferences = application.preferences,
             shuttleSource = application.shuttleSource,
-            shuttleReportSource = application.shuttleReportSource,
-            verifyShuttleReportLocation = application::isAtShuttleReportZone,
             mealSource = application.mealSource,
             noticeSource = application.noticeSource,
             lmsCredentialStore = application.lmsCredentialStore,

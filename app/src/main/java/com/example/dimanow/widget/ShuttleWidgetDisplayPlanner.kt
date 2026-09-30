@@ -58,18 +58,18 @@ class ShuttleWidgetDisplayPlanner {
                 val capsules = row.departures.take(2).map { countdown ->
                     val service = annotated.firstOrNull { it.departure.time == countdown.departure.time }
                     // 좁은 셀에서도 잘리지 않도록 D-010의 압축 표기 `N분(HH:mm)`을 쓰고,
-                    // 막차는 텍스트 라벨 대신 경고색 캡슐(D-016)로 구분한다. 탑승 위치는 승인된 표시명을 쓴다.
+                    // 막차는 텍스트 라벨 대신 경고색 캡슐(D-016)로 구분한다. 운동장은 D-019에 따라 유지.
                     val stopLabel = when {
-                        service?.isBoardingStopTransition == true -> "탑승 위치 변경"
-                        service?.isStadiumStop == true -> "본관"
+                        service?.isBoardingStopTransition == true -> "운동장 전환"
+                        service?.isStadiumStop == true -> "운동장"
                         else -> null
                     }
                     ShuttleWidgetCapsule(
                         text = buildString {
                             append(if (countdown.remainingMinutes <= 0) "곧 출발" else "${countdown.remainingMinutes}분")
-                            // 컴팩트(2x1)에서는 남은 분과 짧은 탑승 위치 표기를 쓴다.
+                            // 컴팩트(2x1)에서는 남은 분만 남기고, 운동장 표기는 D-019에 따라 짧게 유지한다
                             if (!compact) append("(${countdown.departure.time.format(TIME)})")
-                            if (stopLabel != null) append(if (compact) "·본관" else "·$stopLabel")
+                            if (stopLabel != null) append(if (compact) "·운동장" else "·$stopLabel")
                         },
                         isLast = service?.isLast == true,
                     )

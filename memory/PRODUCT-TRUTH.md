@@ -466,3 +466,6 @@ Observed: photo-time6/46/11min regression reproduced and fixed at AndroidLiveSur
 
 ## 2026-09-21 — Physical phone replacement update
 Observed: PC Tailscale app startup restored connectivity; wireless replacement install and launch succeeded. Installed APK hash matches the shuttle/meal repair artifact, original first-install time was retained, and Home/Courses UI nodes were observed. Screen settings restored after use. No new One UI notification visual acceptance. See device-update-20260921.md for evidence and phone-side cellular ADB limits.
+
+## 2026-09-30 — Stadium label and report removal on device (D-090/D-091)
+Observed: emulator (API 36) and the user's phone (Android 17, USB) run optimized build 479a617 (SHA-256 prefix 2EFD38244DAA5B77). Both Shuttle screens show `운동장`/`운동장 전환` on stadium-stop departures with the `본관` group header and no missed-arrival report UI. Instrumentation `LiveSurfacePresentationTest` asserts the notification title `운동장 → 엔터관`; the live Samsung notification itself was not observed (no finished class on the test day). Dormitory auto-publication (D-089) is deployed in main's workflow; no live submission has been observed since.

@@ -137,7 +137,9 @@ class GuidanceCardTest {
 
         composeRule.onNodeWithText("09:00 – 11:50").assertIsDisplayed()
         composeRule.onNodeWithText("스튜디오기초실습").assertIsDisplayed()
-        composeRule.onNodeWithText("기예관 122 · 이상운").assertIsDisplayed()
+        // D-093: 강의실과 교수는 각각 한 줄로 읽힌다
+        composeRule.onNodeWithText("기예관 122").assertIsDisplayed()
+        composeRule.onNodeWithText("이상운").assertIsDisplayed()
         composeRule.onNodeWithText("담당 이상운").assertDoesNotExist()
         composeRule.onNodeWithText("TUESDAY").assertDoesNotExist()
     }

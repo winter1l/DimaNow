@@ -1,5 +1,9 @@
 package com.example.dimanow.ui
 
+import androidx.compose.ui.test.hasScrollToNodeAction
+import androidx.compose.ui.test.hasTestTag
+import androidx.compose.ui.test.onFirst
+import androidx.compose.ui.test.performScrollToNode
 import android.graphics.Bitmap
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.test.*
@@ -44,6 +48,8 @@ class AppVisualReviewTest {
         capture("settings")
         compose.onNodeWithText("고급 및 진단").performScrollTo().performClick()
         capture("settings-diagnostics")
+        // D-093: the close action lives in the list's first row, so return to it before closing.
+        compose.onAllNodes(hasScrollToNodeAction()).onFirst().performScrollToNode(hasTestTag("close_settings"))
         compose.onNodeWithTag("close_settings").performClick()
         compose.onNodeWithTag("nav_COURSES").assertIsSelected()
     }

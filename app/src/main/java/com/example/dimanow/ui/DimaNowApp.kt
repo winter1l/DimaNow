@@ -1150,7 +1150,8 @@ internal fun DashboardScreen(
         ElevatedCard(
             modifier = Modifier
                 .fillMaxWidth()
-                .entrance(),
+                .entrance()
+                .testTag("dashboard_notices_card"),
             shape = RoundedCornerShape(24.dp),
             colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
         ) {
@@ -2644,7 +2645,9 @@ private fun WeekdaySelector(
 @Composable
 private fun MenuLineList(lines: List<String>, modifier: Modifier = Modifier) {
     Column(modifier = modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        lines.filter { it.isNotBlank() }.forEach { rawLine ->
+        // OCR can attach an origin note to a dish on the next line; classify each line separately
+        // so the dish keeps its menu style and only the note becomes supporting text.
+        lines.flatMap { it.split('\n') }.filter { it.isNotBlank() }.forEach { rawLine ->
             val line = rawLine.trim()
             val isOriginOrNote = line.contains("원산지") || line.contains("국내산") || line.contains("호주산") ||
                 line.contains("미국산") || line.startsWith("-") || line.startsWith("*") ||

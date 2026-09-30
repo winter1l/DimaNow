@@ -56,7 +56,8 @@ class NoticeCardTest {
         composeRule.onNodeWithText("2026-2학기 국가장학금 2차 신청 안내").assertExists()
         composeRule.onNodeWithText("네 번째 공지는 카드에 나오지 않습니다").assertDoesNotExist()
         composeRule.onNodeWithText("DIMA Portal").assertExists()
-        composeRule.onNodeWithText("수업 (LMS)").assertDoesNotExist()
+        // D-093: the current Home keeps the LMS shortcut beside DIMA Portal.
+        composeRule.onNodeWithText("수업 (LMS)").assertExists()
         composeRule.onNodeWithContentDescription("수업 보기").assertExists()
     }
 

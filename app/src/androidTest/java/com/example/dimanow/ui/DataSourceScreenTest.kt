@@ -1,6 +1,12 @@
 package com.example.dimanow.ui
 
 import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.hasAnyAncestor
+import androidx.compose.ui.test.hasAnyDescendant
+import androidx.compose.ui.test.hasScrollToNodeAction
+import androidx.compose.ui.test.hasTestTag
+import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.performScrollToNode
 import org.junit.Assert.assertEquals
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
@@ -53,8 +59,11 @@ class DataSourceScreenTest {
             }
         }
 
-        composeRule.onNodeWithText("10:00 · 30분 후").assertExists()
-        composeRule.onNodeWithText("11:00 · 막차").assertExists()
+        // D-093: 다음 출발 캡슐은 남은 시간(60분 이내)과 출발 시각을 나눠 보여준다
+        assertInDeparture(0, "30분 후")
+        assertInDeparture(0, "10:00")
+        assertInDeparture(1, "다음 출발 · 막차")
+        assertInDeparture(1, "11:00")
         composeRule.onNodeWithText("90분 후", substring = true).assertDoesNotExist()
     }
 
@@ -71,7 +80,8 @@ class DataSourceScreenTest {
             }
         }
 
-        composeRule.onNodeWithText("09:00 · 30분 후 · 막차").assertExists()
+        assertInDeparture(0, "30분 후 · 막차")
+        assertInDeparture(0, "09:00")
     }
 
     @Test
@@ -96,7 +106,7 @@ class DataSourceScreenTest {
         }
         composeRule.onNodeWithText(expected).assertExists()
         composeRule.onNodeWithText("서버 게시: 2026년 8월 26일 20:30 KST").assertExists()
-        composeRule.onNodeWithText("공식 주간 시간표 4행 · 표시할 출발 시각 3개").assertExists()
+        composeRule.onNodeWithText("공식 주간 시간표 4행 · 사용자 출발 슬롯 3개").assertExists()
         composeRule.onNodeWithText("캠퍼스 구역 CAMPUS_ZONES_V2_USER_2026_08_27 · © OpenStreetMap contributors").assertExists()
     }
 
@@ -121,7 +131,7 @@ class DataSourceScreenTest {
 
         source.release.complete(Unit)
         composeRule.waitUntil(5_000) {
-            composeRule.onAllNodesWithText("셔틀 시간표 2건을 불러왔어요").fetchSemanticsNodes().isNotEmpty()
+            composeRule.onAllNodesWithText("2건 저장 완료").fetchSemanticsNodes().isNotEmpty()
         }
         assertEquals(1, source.refreshCount)
     }
@@ -176,15 +186,11 @@ class DataSourceScreenTest {
         composeRule.onNodeWithText("본관 → 엔터관").assertDoesNotExist()
         composeRule.onNodeWithText("본관 → 원룸촌").assertDoesNotExist()
         composeRule.onNodeWithText("첫차 08:10 · 막차 09:10").assertExists()
-        composeRule.onNodeWithText("08:10 (첫차)").assertDoesNotExist()
-        val timetable = composeRule.onNodeWithTag("shuttle_times_toggle_${serviceDay}_MAIN_YEIN")
-        timetable.performScrollTo().performClick()
-        composeRule.onNodeWithText("08:10 (첫차)").assertExists()
+        // D-093: 전체 시간표는 펼치기 없이 가로 칩 목록으로 항상 보인다
         composeRule.onNodeWithText("08:40").assertExists()
         composeRule.onNodeWithText("09:10 (막차)").assertExists()
-        timetable.performScrollTo().performClick()
-        composeRule.onNodeWithText("08:10 (첫차)").assertDoesNotExist()
-        composeRule.onNodeWithText("08:40").assertDoesNotExist()
+        timetableRowContaining("09:10 (막차)").performScrollToNode(hasText("08:10 (첫차)"))
+        composeRule.onNodeWithText("08:10 (첫차)").assertExists()
     }
 
     @Test
@@ -204,10 +210,14 @@ class DataSourceScreenTest {
             )
         }
 
-        composeRule.onNodeWithText("19:35 · 5분 후 · 운동장 전환").assertExists()
-        composeRule.onNodeWithTag("shuttle_times_toggle_${now.dayOfWeek}_MAIN_YEIN").performScrollTo().performClick()
-        composeRule.onNodeWithText("20:00 (막차) · 운동장").assertExists()
+        // D-020/D-090: 그룹 제목은 본관, 운동장 탑승은 캡슐과 시간표 칩에 표시한다
+        composeRule.onNodeWithText("본관").assertExists()
+        assertInDeparture(0, "5분 후 · 운동장 전환")
+        assertInDeparture(0, "19:35")
+        assertInDeparture(1, "30분 후 · 막차 · 운동장")
+        assertInDeparture(1, "20:00")
         composeRule.onNodeWithText("19:35 · 운동장 전환").assertExists()
+        composeRule.onNodeWithText("20:00 (막차) · 운동장").assertExists()
     }
 
     @Test
@@ -338,7 +348,8 @@ class DataSourceScreenTest {
             )
         }
 
-        composeRule.onNodeWithText("11:30~14:00 · 운영 전").assertExists()
+        composeRule.onNodeWithText("11:30~14:00").assertExists()
+        composeRule.onNodeWithText("운영 전 · 11:30부터").assertExists()
         composeRule.onNodeWithText("제육볶음").assertExists()
     }
 
@@ -376,6 +387,13 @@ class DataSourceScreenTest {
             composeRule.onAllNodesWithText("아직 새 식단이 올라오지 않았어요").fetchSemanticsNodes().isNotEmpty()
         }
     }
+
+    private fun assertInDeparture(index: Int, text: String) {
+        composeRule.onNode(hasText(text) and hasAnyAncestor(hasTestTag("next_departure_$index"))).assertExists()
+    }
+
+    private fun timetableRowContaining(text: String) =
+        composeRule.onNode(hasScrollToNodeAction() and !hasTestTag("shuttle_list") and hasAnyDescendant(hasText(text)))
 
     private fun departure(
         route: String,

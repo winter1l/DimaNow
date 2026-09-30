@@ -32,9 +32,11 @@ class MealServiceScreenTest {
         compose.onNodeWithText("12:00~14:00 · 운영 중").assertIsDisplayed()
         compose.onNodeWithText("중식").assertIsDisplayed()
         compose.onNodeWithText("조식").assertIsNotDisplayed()
-        compose.onNodeWithText("9월 8일 화요일").assertIsDisplayed()
         compose.onNodeWithText("-돈육:국내산-").assertIsDisplayed()
         screenshot("dormitory-open-dark")
+        // D-093: the date heading is the list's first row, above the auto-focused meal.
+        compose.onNodeWithTag("meal_list").performScrollToIndex(0)
+        compose.onNodeWithText("9월 8일 화요일").assertIsDisplayed()
     }
 
     @Test
@@ -55,7 +57,6 @@ class MealServiceScreenTest {
         compose.runOnIdle { time.value = LocalTime.of(14, 0) }
         compose.onNodeWithText("석식").assertIsDisplayed()
         compose.onNodeWithText("18:00~19:30 · 운영 전").assertIsDisplayed()
-        compose.onNodeWithText("9월 8일 화요일").assertIsDisplayed()
         compose.onNodeWithText("운영 중", substring = true).assertDoesNotExist()
         screenshot("dormitory-next-dinner-dark")
 
@@ -76,13 +77,16 @@ class MealServiceScreenTest {
                 Surface { MealScreen(source, today = today, nowTime = time.value) }
             }
         }
-        compose.onNodeWithText("11:30~14:00 · 운영 중").assertIsDisplayed()
+        // D-093: the cafeteria card shows the hours chip and the service status separately.
+        compose.onNodeWithText("11:30~14:00").assertIsDisplayed()
+        compose.onNodeWithText("운영 중 · 14:00까지").assertIsDisplayed()
         compose.onNodeWithText("마지막 확인", substring = true).assertDoesNotExist()
         compose.onNodeWithText("이번 주 식단을 아직 불러오지 못했어요").assertDoesNotExist()
         compose.onNodeWithText("제육볶음").assertIsDisplayed()
         screenshot("cafeteria-open-light")
         compose.runOnIdle { time.value = LocalTime.of(14, 0) }
-        compose.onNodeWithText("11:30~14:00 · 운영 종료").assertIsDisplayed()
+        compose.onNodeWithText("11:30~14:00").assertIsDisplayed()
+        compose.onNodeWithText("운영 종료").assertIsDisplayed()
         compose.onNodeWithText("제육볶음").assertIsDisplayed()
         screenshot("cafeteria-ended-light")
     }

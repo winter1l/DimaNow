@@ -189,9 +189,9 @@ class LmsNativeDetailScreenTest {
 
         composeRule.onNodeWithText("전체").performClick()
         composeRule.onNodeWithText("2주차 음향 실습 영상").performClick()
-        composeRule.onNodeWithText("학습 시작을 하실건가요?").assertExists()
+        composeRule.onNodeWithText("학습을 시작할까요?").assertExists()
         composeRule.onNodeWithText("취소").performClick()
-        composeRule.onNodeWithText("학습 시작을 하실건가요?").assertDoesNotExist()
+        composeRule.onNodeWithText("학습을 시작할까요?").assertDoesNotExist()
         onView(isAssignableFrom(WebView::class.java)).check(doesNotExist())
         assertEquals(emptyList<String>(), source.openedItemIds)
     }
@@ -226,7 +226,7 @@ class LmsNativeDetailScreenTest {
 
         composeRule.onNodeWithText("전체").performClick()
         composeRule.onNodeWithText("음향 설계 토론").performClick()
-        composeRule.onNodeWithText("학습 시작을 하실건가요?").assertDoesNotExist()
+        composeRule.onNodeWithText("학습을 시작할까요?").assertDoesNotExist()
         composeRule.onNodeWithTag("lms_official_course_screen").assertExists()
         composeRule.onNodeWithContentDescription("뒤로").performClick()
         onView(isAssignableFrom(WebView::class.java)).check(doesNotExist())
@@ -275,7 +275,6 @@ class LmsNativeDetailScreenTest {
         composeRule.onNodeWithText("담당교수").assertExists()
         composeRule.onNodeWithText("등록일").assertExists()
         composeRule.onNodeWithText("2026년 9월 1일 09:30").assertExists()
-        composeRule.onNodeWithText("내용").assertExists()
         composeRule.onNodeWithText("첫 수업 준비물을 확인하세요.", substring = true).assertExists()
     }
 
@@ -319,7 +318,6 @@ class LmsNativeDetailScreenTest {
         composeRule.onNodeWithText("2주차 과제 · 영상사운드 구성 분석").performClick()
         composeRule.onNodeWithText("음향기초실습").assertExists()
         composeRule.onNodeWithText("과제").assertExists()
-        composeRule.onNodeWithText("내용").assertExists()
         composeRule.onNodeWithText("작성한 내용을 PDF 파일로 제출하세요.", substring = true).assertExists()
         composeRule.onNodeWithText("제출기간").assertExists()
         composeRule.onNodeWithText("2026년 9월 1일 09:00 ~ 2026년 9월 8일 15:59").assertExists()

@@ -6,6 +6,7 @@ import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.lifecycle.Lifecycle
 import com.example.dimanow.DimaNowApplication
 import com.example.dimanow.MainActivity
@@ -75,7 +76,8 @@ class NowBarSettingsActionTest {
 
     private fun openNowBarSetupGuide() {
         composeRule.onNodeWithTag("open_settings").performClick()
-        composeRule.onNodeWithText("나우바 설정 안내").performClick()
+        composeRule.onNodeWithText("고급 및 진단").performScrollTo().performClick()
+        composeRule.onNodeWithText("기기별 알림 도움말").performScrollTo().performClick()
     }
 
     private fun topResumedComponent(): String {

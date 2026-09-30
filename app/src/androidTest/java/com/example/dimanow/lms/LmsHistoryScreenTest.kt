@@ -66,13 +66,13 @@ class LmsHistoryScreenTest {
             }
         }
 
-        composeRule.onNodeWithText("아직 수업 정보를 확인하지 않았어요").assertExists()
+        composeRule.onNodeWithText("아직 불러온 수업 정보가 없어요").assertExists()
         composeRule.onNodeWithText("오늘 확인할 학습이 없어요").assertDoesNotExist()
-        composeRule.onNodeWithText("확인").performClick()
+        composeRule.onNodeWithText("수업 정보 불러오기").performClick()
         assertEquals(1, retries)
 
         composeRule.runOnIdle { snapshot = LmsSnapshot(syncState = LmsSyncState.SYNCING) }
-        composeRule.onNodeWithText("수업 정보를 확인하고 있어요").assertExists()
+        composeRule.onNodeWithText("수업 정보를 불러오고 있어요").assertExists()
         composeRule.onNodeWithText("오늘 확인할 학습이 없어요").assertDoesNotExist()
 
         composeRule.runOnIdle {

@@ -1,172 +1,100 @@
 package com.example.dimanow.ui.motion
 
 import androidx.compose.animation.AnimatedContent
-import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.AnimationSpec
-import androidx.compose.animation.core.CubicBezierEasing
-import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.SizeTransform
+import androidx.compose.animation.core.SpringSpec
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.spring
-import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
-import androidx.compose.foundation.gestures.awaitFirstDown
-import androidx.compose.foundation.gestures.waitForUpOrCancellation
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.material3.Text
+import androidx.compose.material3.ripple
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.composed
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
-import kotlinx.coroutines.launch
+import androidx.compose.ui.unit.dp
 
 /**
- * Material 3 Expressive Motion Specifications
+ * Values from Material3 1.4.0 ExpressiveMotionTokens (v0_14_0).
+ * Its MotionScheme is internal, so custom app motion uses these verified spring tokens.
+ * Compose's animation clock applies the system animator duration scale to these animations.
  */
 object ExpressiveMotion {
-    val SmoothSpring: AnimationSpec<Float> = spring(
-        dampingRatio = Spring.DampingRatioNoBouncy,
-        stiffness = Spring.StiffnessMediumLow,
-    )
-
-    val BouncySpring: AnimationSpec<Float> = spring(
-        dampingRatio = Spring.DampingRatioMediumBouncy,
-        stiffness = Spring.StiffnessMedium,
-    )
-
-    val SnappySpring: AnimationSpec<Float> = spring(
-        dampingRatio = Spring.DampingRatioLowBouncy,
-        stiffness = Spring.StiffnessMedium,
-    )
-
-    /** 카드 스태거드 입장 간격 (index당 지연) */
-    const val STAGGER_DELAY_MILLIS = 60L
+    fun <T> defaultSpatial(): SpringSpec<T> = spring(dampingRatio = 0.8f, stiffness = 380f)
+    fun <T> fastSpatial(): SpringSpec<T> = spring(dampingRatio = 0.6f, stiffness = 800f)
+    fun <T> defaultEffects(): SpringSpec<T> = spring(dampingRatio = 1f, stiffness = 1600f)
+    fun <T> fastEffects(): SpringSpec<T> = spring(dampingRatio = 1f, stiffness = 3800f)
 }
 
-/**
- * M3 Expressive 터치 바운스 인터랙션 모디파이어
- */
+/** Native click behavior, ripple and semantics, with a small spatial press response. */
 fun Modifier.expressiveBounceClick(
     scaleDown: Float = 0.97f,
     onClick: (() -> Unit)? = null,
 ): Modifier = composed {
-    val scale = remember { Animatable(1f) }
-    val scope = rememberCoroutineScope()
-
-    this
-        .scale(scale.value)
-        .pointerInput(onClick) {
-            awaitPointerEventScope {
-                while (true) {
-                    awaitFirstDown(requireUnconsumed = false)
-                    scope.launch {
-                        scale.animateTo(
-                            scaleDown,
-                            spring(
-                                dampingRatio = Spring.DampingRatioNoBouncy,
-                                stiffness = Spring.StiffnessHigh,
-                            ),
-                        )
-                    }
-                    val up = waitForUpOrCancellation()
-                    scope.launch {
-                        scale.animateTo(
-                            1f,
-                            spring(
-                                dampingRatio = Spring.DampingRatioMediumBouncy,
-                                stiffness = Spring.StiffnessMedium,
-                            ),
-                        )
-                    }
-                    if (up != null && onClick != null) {
-                        onClick()
-                    }
-                }
-            }
-        }
+    // A decorative modifier must never intercept a child control or create an empty click action.
+    if (onClick == null) return@composed this
+    val interactionSource = remember { MutableInteractionSource() }
+    val pressed by interactionSource.collectIsPressedAsState()
+    val scale by animateFloatAsState(
+        targetValue = if (pressed) scaleDown else 1f,
+        animationSpec = ExpressiveMotion.fastSpatial(),
+        label = "press_scale",
+    )
+    this.scale(scale).clickable(
+        interactionSource = interactionSource,
+        indication = ripple(),
+        role = Role.Button,
+        onClick = onClick,
+    )
 }
 
-/**
- * 실시간 상태("수업 중", "곧 출발", "현재 위치") 뱃지용 은은한 알파 호흡 애니메이션
- */
+/** Compatibility for existing status callers: persistent status stays fully readable and still. */
+@Suppress("UNUSED_PARAMETER")
 @Composable
 fun Modifier.pulseBreath(
     minAlpha: Float = 0.65f,
     maxAlpha: Float = 1.0f,
     durationMillis: Int = 1200,
-): Modifier {
-    val infiniteTransition = rememberInfiniteTransition(label = "pulse_breath")
-    val alpha by infiniteTransition.animateFloat(
-        initialValue = maxAlpha,
-        targetValue = minAlpha,
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = durationMillis, easing = LinearEasing),
-            repeatMode = RepeatMode.Reverse,
-        ),
-        label = "breath_alpha",
-    )
-    return this.alpha(alpha)
-}
+): Modifier = this
 
-/** M3 emphasized decelerate — 화면 진입 전환용 표준 이징 */
-private val EmphasizedDecelerate = CubicBezierEasing(0.05f, 0.7f, 0.1f, 1f)
-
-/**
- * 화면 진입 시 카드가 한꺼번에 아래에서 떠오르는 입장 애니메이션 (D-058).
- *
- * 셔틀 화면을 뺀 모든 탭이 쓰는 기본 입장 모션이다. [staggeredEntrance]와 달리
- * index 기반 지연이 없어 화면 전체가 동시에 자리를 잡는다. 카드 수가 많은 화면에서
- * 위에서부터 순차적으로 밀려 들어오는 느낌이 느리게 읽혔기 때문이다.
- */
+/** App decision: a subtle 12dp entry offset, with no delay before content becomes actionable. */
 @Composable
-fun Modifier.entrance(): Modifier = staggeredEntrance(index = 0)
-
-/**
- * 화면 진입 시 카드가 순서대로(index 기반 지연) 아래에서 떠오르며 나타나는
- * M3 Expressive 스태거드 입장 애니메이션. 지연을 포함한 전 구간이 컴포즈
- * 프레임 클록으로 구동되어 UI 테스트의 idle 대기와도 호환된다.
- *
- * 셔틀 화면 전용이다. 다른 탭은 [entrance]를 쓴다 (D-058).
- */
-@Composable
-fun Modifier.staggeredEntrance(index: Int): Modifier {
+fun Modifier.entrance(): Modifier {
     var entered by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) { entered = true }
-    // 리스트가 길어도 마지막 항목이 과도하게 늦게 나타나지 않도록 지연을 상한 처리한다
-    val delayMillis = (index.coerceAtMost(8) * ExpressiveMotion.STAGGER_DELAY_MILLIS).toInt()
+    val offset = with(LocalDensity.current) { 12.dp.toPx() }
     val translationY by animateFloatAsState(
-        targetValue = if (entered) 0f else 36f,
-        animationSpec = tween(durationMillis = 420, delayMillis = delayMillis, easing = EmphasizedDecelerate),
-        label = "entrance_translation_$index",
+        targetValue = if (entered) 0f else offset,
+        animationSpec = ExpressiveMotion.defaultSpatial(),
+        label = "entrance_translation",
     )
-    return this.graphicsLayer {
-        this.translationY = translationY
-    }
+    return this.graphicsLayer { this.translationY = translationY }
 }
 
-/**
- * 분 카운트다운처럼 매분 바뀌는 짧은 텍스트를 위·아래 슬라이드 spring 전환으로
- * 갈아끼우는 M3 Expressive 숫자 전환 컴포저블. 시맨틱 텍스트 값은 그대로 유지된다.
- */
+/** Retains existing call sites while avoiding staggered delays in operational lists. */
+@Suppress("UNUSED_PARAMETER")
+@Composable
+fun Modifier.staggeredEntrance(index: Int): Modifier = entrance()
+
+/** Spatial motion for the changing count, non-overshooting effects for opacity. */
 @Composable
 fun AnimatedCountText(
     text: String,
@@ -179,17 +107,14 @@ fun AnimatedCountText(
         targetState = text,
         transitionSpec = {
             (slideInVertically(
-                animationSpec = spring(
-                    dampingRatio = Spring.DampingRatioLowBouncy,
-                    stiffness = Spring.StiffnessMediumLow,
-                ),
+                animationSpec = ExpressiveMotion.fastSpatial(),
                 initialOffsetY = { it / 2 },
-            ) + fadeIn(spring(stiffness = Spring.StiffnessMediumLow))).togetherWith(
+            ) + fadeIn(ExpressiveMotion.fastEffects())).togetherWith(
                 slideOutVertically(
-                    animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
+                    animationSpec = ExpressiveMotion.fastSpatial(),
                     targetOffsetY = { -it / 2 },
-                ) + fadeOut(spring(stiffness = Spring.StiffnessMediumLow)),
-            )
+                ) + fadeOut(ExpressiveMotion.fastEffects()),
+            ).using(SizeTransform { _, _ -> ExpressiveMotion.fastSpatial() })
         },
         label = "animated_count_text",
         modifier = modifier,

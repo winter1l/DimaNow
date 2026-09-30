@@ -32,7 +32,7 @@ class LmsTabTest {
 
         composeRule.onNodeWithText("학번").assertExists()
         composeRule.onNodeWithText("비밀번호").assertExists()
-        composeRule.onNodeWithText("이 기기에 암호화해 저장합니다").assertExists()
+        composeRule.onNodeWithText("계정을 이 기기에 암호화해 저장해요").assertExists()
         composeRule.onNodeWithTag("nav_SETTINGS").assertDoesNotExist()
     }
 }

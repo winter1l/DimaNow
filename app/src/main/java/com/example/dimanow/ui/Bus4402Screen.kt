@@ -9,10 +9,8 @@ import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.LazyListState
-import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ElevatedCard
@@ -28,6 +26,9 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.example.dimanow.transit.Bus4402Schedule
@@ -48,7 +49,7 @@ internal fun Bus4402ScheduleContent(
     val serviceType = remember(now.toLocalDate()) { Bus4402ServiceCalendar.serviceType(now.toLocalDate()) }
 
     Column(modifier = modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+        FlowRow(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 Text("4402 강남행", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
                 Text(
@@ -70,19 +71,15 @@ internal fun Bus4402ScheduleContent(
 
         schedule.stops.forEach { stop ->
             var detailsExpanded by rememberSaveable(stop.stopNumber) { mutableStateOf(false) }
+            var timetableExpanded by rememberSaveable(now.toLocalDate(), serviceType, stop.stopNumber) { mutableStateOf(false) }
             val departures = remember(serviceType, stop.stopNumber) {
                 schedule.departures(serviceType, stop.stopNumber)
             }
             val upcoming = departures.filterNot { it.time.isBefore(now.toLocalTime()) }.take(2)
             val firstUpcomingIndex = departures.indexOfFirst { !it.time.isBefore(now.toLocalTime()) }
-            // Match the campus timetable: open near now, but retain the user's manual scroll.
-            val timetableState = remember(now.toLocalDate(), serviceType, stop.stopNumber) {
-                val target = firstUpcomingIndex.takeIf { it >= 0 } ?: departures.lastIndex
-                LazyListState(firstVisibleItemIndex = (target - 1).coerceAtLeast(0))
-            }
             ElevatedCard(
                 modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(20.dp),
+                shape = MaterialTheme.shapes.large,
                 colors = CardDefaults.elevatedCardColors(
                     containerColor = if (nearbyStopNumber == stop.stopNumber) {
                         MaterialTheme.colorScheme.primaryContainer
@@ -91,12 +88,15 @@ internal fun Bus4402ScheduleContent(
                     },
                 ),
             ) {
-                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                         Column(Modifier.weight(1f)) {
                             Text(stop.displayName, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                             Text(
-                                "강남행",
+                                departures.firstOrNull()?.let { first ->
+                                    "첫차 ${first.time.format(TIME)} · 막차 ${departures.last().time.format(TIME)}" +
+                                        if (first.estimated) " · 예정" else ""
+                                } ?: "강남행",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
@@ -127,24 +127,36 @@ internal fun Bus4402ScheduleContent(
                                     color = if (index == 0) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.secondaryContainer,
                                 ) {
                                     Text(
-                                        text = (when {
-                                            minutes > 60 -> "${departure.time.format(TIME)} 출발"
-                                            minutes == 0L -> "곧 출발"
-                                            else -> "${minutes}분 후"
-                                        }) + if (departure.estimated) " · 예정" else "",
+                                        text = buildString {
+                                            append(departure.time.format(TIME))
+                                            when {
+                                                minutes == 0L -> append(" · 곧 출발")
+                                                minutes <= 60 -> append(" · ${minutes}분 후")
+                                            }
+                                            if (departure.estimated) append(" · 예정")
+                                        },
                                         color = if (index == 0) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSecondaryContainer,
-                                        style = MaterialTheme.typography.labelLarge,
-                                        fontWeight = FontWeight.Bold,
-                                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                                        style = MaterialTheme.typography.titleMedium,
+                                        fontWeight = if (index == 0) FontWeight.Bold else FontWeight.Medium,
+                                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
                                     )
                                 }
                             }
                         }
                     }
 
-                    Text("전체 시간표", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    LazyRow(state = timetableState, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        itemsIndexed(departures, key = { _, item -> item.time.toSecondOfDay() }) { index, departure ->
+                    TextButton(
+                        onClick = { timetableExpanded = !timetableExpanded },
+                        modifier = Modifier.testTag("bus4402_times_toggle_${stop.stopNumber}")
+                            .semantics { stateDescription = if (timetableExpanded) "펼쳐짐" else "접힘" },
+                    ) {
+                        Text(if (timetableExpanded) "전체 시간표 접기" else "전체 시간표 · ${departures.size}회")
+                    }
+                    if (timetableExpanded) FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        departures.forEachIndexed { index, departure ->
                             val isPast = departure.time.isBefore(now.toLocalTime())
                             val isNext = index == firstUpcomingIndex
                             val label = buildString {
@@ -161,13 +173,13 @@ internal fun Bus4402ScheduleContent(
                                 color = if (isNext) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceContainerHigh,
                                 contentColor = when {
                                     isNext -> MaterialTheme.colorScheme.onPrimary
-                                    isPast -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.45f)
+                                    isPast -> MaterialTheme.colorScheme.onSurfaceVariant
                                     else -> MaterialTheme.colorScheme.onSurface
                                 },
                             ) {
                                 Text(
                                     label,
-                                    modifier = Modifier.padding(horizontal = 9.dp, vertical = 6.dp),
+                                    modifier = Modifier.heightIn(min = 32.dp).padding(horizontal = 8.dp, vertical = 6.dp),
                                     style = MaterialTheme.typography.bodySmall,
                                     fontWeight = if (isNext || index == 0 || index == departures.lastIndex) FontWeight.Bold else FontWeight.Normal,
                                 )

@@ -3,19 +3,15 @@ package com.example.dimanow.ui
 import androidx.compose.ui.test.assertCountEquals
 import org.junit.Assert.assertEquals
 import androidx.compose.ui.test.assertIsNotEnabled
-import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipeDown
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.toArgb
-import androidx.compose.ui.graphics.toPixelMap
-import androidx.compose.material3.MaterialTheme
 import com.example.dimanow.domain.CampusZoneId
 import com.example.dimanow.domain.MealDay
 import com.example.dimanow.domain.MealValidationState
@@ -86,40 +82,38 @@ class DataSourceScreenTest {
     }
 
     @Test
-    fun nearestNormalDepartureUsesTheSolidPrimaryColorInLightTheme() {
+    fun nearestDeparturesKeepClockTimeAndOnlyCountDownWithinSixtyMinutes() {
         val now = ZonedDateTime.of(2026, 8, 31, 9, 30, 0, 0, ZoneId.of("Asia/Seoul"))
         val departures = listOf(
             departure("A", "main", LocalTime.of(8, 0), CampusZoneId.MAIN, CampusZoneId.YEIN, now.dayOfWeek),
             departure("A", "main", LocalTime.of(10, 0), CampusZoneId.MAIN, CampusZoneId.YEIN, now.dayOfWeek),
             departure("A", "main", LocalTime.of(11, 0), CampusZoneId.MAIN, CampusZoneId.YEIN, now.dayOfWeek),
         )
-        var expected = Color.Unspecified
         composeRule.setContent {
             DIMANowTheme(darkTheme = false) {
-                expected = MaterialTheme.colorScheme.primary
                 ShuttleScreen(FakeShuttleSource(departures), CampusZoneId.MAIN, now = now)
             }
         }
 
-        composeRule.onNodeWithTag("next_departure_0").captureToImage().assertMostly(expected)
+        composeRule.onNodeWithText("10:00 · 30분 후").assertExists()
+        composeRule.onNodeWithText("11:00 · 막차").assertExists()
+        composeRule.onNodeWithText("90분 후", substring = true).assertDoesNotExist()
     }
 
     @Test
-    fun nearestLastDepartureUsesTheSolidErrorColorInLightTheme() {
+    fun nearestLastDepartureRetainsItsClockCountdownAndLastServiceWarning() {
         val now = ZonedDateTime.of(2026, 8, 31, 8, 30, 0, 0, ZoneId.of("Asia/Seoul"))
         val departures = listOf(
             departure("A", "main", LocalTime.of(8, 0), CampusZoneId.MAIN, CampusZoneId.YEIN, now.dayOfWeek),
             departure("A", "main", LocalTime.of(9, 0), CampusZoneId.MAIN, CampusZoneId.YEIN, now.dayOfWeek),
         )
-        var expected = Color.Unspecified
         composeRule.setContent {
             DIMANowTheme(darkTheme = false) {
-                expected = MaterialTheme.colorScheme.error
                 ShuttleScreen(FakeShuttleSource(departures), CampusZoneId.MAIN, now = now)
             }
         }
 
-        composeRule.onNodeWithTag("next_departure_0").captureToImage().assertMostly(expected)
+        composeRule.onNodeWithText("09:00 · 30분 후 · 막차").assertExists()
     }
 
     @Test
@@ -144,7 +138,7 @@ class DataSourceScreenTest {
         }
         composeRule.onNodeWithText(expected).assertExists()
         composeRule.onNodeWithText("서버 게시: 2026년 8월 26일 20:30 KST").assertExists()
-        composeRule.onNodeWithText("공식 주간 시간표 4행 · 사용자 출발 슬롯 3개").assertExists()
+        composeRule.onNodeWithText("공식 주간 시간표 4행 · 표시할 출발 시각 3개").assertExists()
         composeRule.onNodeWithText("캠퍼스 구역 CAMPUS_ZONES_V2_USER_2026_08_27 · © OpenStreetMap contributors").assertExists()
     }
 
@@ -169,7 +163,7 @@ class DataSourceScreenTest {
 
         source.release.complete(Unit)
         composeRule.waitUntil(5_000) {
-            composeRule.onAllNodesWithText("2건 저장 완료").fetchSemanticsNodes().isNotEmpty()
+            composeRule.onAllNodesWithText("셔틀 시간표 2건을 불러왔어요").fetchSemanticsNodes().isNotEmpty()
         }
         assertEquals(1, source.refreshCount)
     }
@@ -224,9 +218,15 @@ class DataSourceScreenTest {
         composeRule.onNodeWithText("본관 → 엔터관").assertDoesNotExist()
         composeRule.onNodeWithText("본관 → 원룸촌").assertDoesNotExist()
         composeRule.onNodeWithText("첫차 08:10 · 막차 09:10").assertExists()
+        composeRule.onNodeWithText("08:10 (첫차)").assertDoesNotExist()
+        val timetable = composeRule.onNodeWithTag("shuttle_times_toggle_${serviceDay}_MAIN_YEIN")
+        timetable.performScrollTo().performClick()
         composeRule.onNodeWithText("08:10 (첫차)").assertExists()
         composeRule.onNodeWithText("08:40").assertExists()
         composeRule.onNodeWithText("09:10 (막차)").assertExists()
+        timetable.performScrollTo().performClick()
+        composeRule.onNodeWithText("08:10 (첫차)").assertDoesNotExist()
+        composeRule.onNodeWithText("08:40").assertDoesNotExist()
     }
 
     @Test
@@ -246,8 +246,9 @@ class DataSourceScreenTest {
             )
         }
 
+        composeRule.onNodeWithText("19:35 · 5분 후 · 탑승 위치 변경").assertExists()
+        composeRule.onNodeWithTag("shuttle_times_toggle_${now.dayOfWeek}_MAIN_YEIN").performScrollTo().performClick()
         composeRule.onNodeWithText("20:00 (막차) · 본관").assertExists()
-        composeRule.onNodeWithText("5분 후 · 탑승 위치 변경").assertExists()
         composeRule.onNodeWithText("19:35 · 탑승 위치 변경").assertExists()
     }
 
@@ -328,7 +329,7 @@ class DataSourceScreenTest {
 
         // D-057: 식사 시간대별 카드 — 이름과 운영시간이 한 문자열로 붙어 있지 않다
         composeRule.onNodeWithText("조식").assertExists()
-        composeRule.onNodeWithText("08:00~09:30").assertExists()
+        composeRule.onNodeWithText("08:00~09:30 · 운영 종료").assertExists()
         composeRule.onNodeWithText("떡국").assertExists()
         composeRule.onNodeWithText("쌀밥").assertExists()
         composeRule.onNodeWithText("중식").assertExists()
@@ -379,7 +380,7 @@ class DataSourceScreenTest {
             )
         }
 
-        composeRule.onNodeWithText("운영 전 · 11:30부터").assertExists()
+        composeRule.onNodeWithText("11:30~14:00 · 운영 전").assertExists()
         composeRule.onNodeWithText("제육볶음").assertExists()
     }
 
@@ -499,25 +500,4 @@ class DataSourceScreenTest {
         }
     }
 
-    private fun androidx.compose.ui.graphics.ImageBitmap.assertMostly(expected: Color) {
-        val pixels = toPixelMap()
-        var matches = 0
-        val expectedArgb = expected.toArgb()
-        val histogram = mutableMapOf<Int, Int>()
-        fun channel(argb: Int, shift: Int) = (argb ushr shift) and 0xff
-        for (x in 0 until width) {
-            for (y in 0 until height) {
-                val actual = pixels[x, y].toArgb()
-                histogram[actual] = (histogram[actual] ?: 0) + 1
-                val closeEnough = listOf(16, 8, 0).all { shift ->
-                    kotlin.math.abs(channel(actual, shift) - channel(expectedArgb, shift)) <= 3
-                }
-                if (closeEnough) matches++
-            }
-        }
-        org.junit.Assert.assertTrue(
-            "expected solid color ${expected.toArgb().toUInt().toString(16)} to cover the departure capsule, matched $matches/${width * height}; top=${histogram.entries.sortedByDescending { it.value }.take(8).joinToString { it.key.toUInt().toString(16) + ":" + it.value }}",
-            matches >= (width * height) / 2,
-        )
-    }
 }

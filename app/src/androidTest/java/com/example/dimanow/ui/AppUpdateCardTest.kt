@@ -61,7 +61,7 @@ class AppUpdateCardTest {
                 onCheck = {}, onDownload = {}, onContinueInstall = {}, onCancelDownload = {},
             )
         }
-        composeRule.onNodeWithText("설치 권한이 필요합니다").assertExists()
+        composeRule.onNodeWithText("설치 권한이 필요해요").assertExists()
         composeRule.onNodeWithText("설치 계속").assertExists()
     }
 }

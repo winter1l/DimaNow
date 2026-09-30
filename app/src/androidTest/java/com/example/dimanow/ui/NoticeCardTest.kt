@@ -2,6 +2,10 @@ package com.example.dimanow.ui
 
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.assertHasClickAction
+import androidx.compose.ui.test.assertHasNoClickAction
 import com.example.dimanow.domain.CampusNotice
 import com.example.dimanow.domain.CampusZoneId
 import com.example.dimanow.domain.DefaultSchedule
@@ -45,12 +49,15 @@ class NoticeCardTest {
         }
 
         composeRule.onNodeWithText("학교 공지").assertExists()
-        composeRule.onNodeWithText("2026-2학기 수강신청 정정 기간 안내").assertExists()
+        composeRule.onNodeWithTag("dashboard_notices_card").assertHasNoClickAction()
+        composeRule.onNodeWithText("2026-2학기 수강신청 정정 기간 안내").assertHasClickAction()
+        composeRule.onNodeWithText("전체보기").assertHasClickAction()
         composeRule.onNodeWithText("학내 Wi-Fi 구축 관련 사용 안내").assertExists()
         composeRule.onNodeWithText("2026-2학기 국가장학금 2차 신청 안내").assertExists()
         composeRule.onNodeWithText("네 번째 공지는 카드에 나오지 않습니다").assertDoesNotExist()
         composeRule.onNodeWithText("DIMA Portal").assertExists()
-        composeRule.onNodeWithText("수업 (LMS)").assertExists()
+        composeRule.onNodeWithText("수업 (LMS)").assertDoesNotExist()
+        composeRule.onNodeWithContentDescription("수업 보기").assertExists()
     }
 
     @Test

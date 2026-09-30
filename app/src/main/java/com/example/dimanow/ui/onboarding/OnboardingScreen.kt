@@ -12,19 +12,19 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.DirectionsBus
-import androidx.compose.material.icons.filled.Restaurant
-import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -38,6 +38,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -48,6 +51,7 @@ import com.example.dimanow.data.OnboardingStage
 import com.example.dimanow.guidance.HomeBase
 import com.example.dimanow.live.LiveSurfaceController
 import com.example.dimanow.ui.GuidanceSetup
+import com.example.dimanow.ui.DimaLayout
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 
@@ -118,7 +122,8 @@ internal fun OnboardingScreen(
     }
     BackHandler(enabled = draft.stage != OnboardingStage.WELCOME) { back() }
     Surface(modifier.fillMaxSize().testTag("onboarding_root")) {
-        Column(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding()) {
+        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
+        Column(Modifier.widthIn(max = DimaLayout.readingWidth).fillMaxSize().statusBarsPadding().navigationBarsPadding()) {
             Row(
                 Modifier.fillMaxWidth().heightIn(min = 56.dp).padding(horizontal = 12.dp),
                 verticalAlignment = Alignment.CenterVertically,
@@ -142,32 +147,32 @@ internal fun OnboardingScreen(
                 ) {
                     when (draft.stage) {
                         OnboardingStage.WELCOME -> {
-                            StepHeading("학교생활에 필요한 정보를 한곳에서", "수업, 셔틀, 오늘 식단을 확인해요.")
-                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                                listOf(Icons.Default.Schedule to "수업", Icons.Default.DirectionsBus to "셔틀", Icons.Default.Restaurant to "식단").forEach { (icon, label) ->
-                                    Column(Modifier.weight(1f).padding(vertical = 16.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                        Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(28.dp))
-                                        Text(label, style = MaterialTheme.typography.labelLarge)
-                                    }
-                                }
-                            }
+                            StepHeading("학교생활을 한눈에", "수업, 셔틀, 오늘 식단을 확인해요.")
                         }
                         OnboardingStage.HOME_BASE -> {
                             StepHeading("주로 어느 방향으로 돌아가나요?", "수업이 끝난 뒤 안내할 셔틀 방향이에요.")
+                            Column(Modifier.selectableGroup(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             listOf(HomeBase.YEIN to "엔터관 방향", HomeBase.ONE_ROOM to "원룸촌 방향").forEach { (homeBase, label) ->
                                 Surface(
-                                    selected = draft.homeBase == homeBase,
-                                    onClick = { onDraftChange(draft.copy(homeBase = homeBase)) },
-                                    enabled = !saving,
                                     shape = MaterialTheme.shapes.large,
                                     color = if (draft.homeBase == homeBase) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerLow,
-                                    modifier = Modifier.fillMaxWidth().heightIn(min = 64.dp).testTag("onboarding_home_base_${homeBase.name.lowercase()}"),
+                                    modifier = Modifier.fillMaxWidth().heightIn(min = 64.dp),
                                 ) {
-                                    Row(Modifier.padding(18.dp), verticalAlignment = Alignment.CenterVertically) {
+                                    Row(
+                                        Modifier.fillMaxWidth().selectable(
+                                            selected = draft.homeBase == homeBase,
+                                            enabled = !saving,
+                                            role = Role.RadioButton,
+                                            onClick = { onDraftChange(draft.copy(homeBase = homeBase)) },
+                                        ).testTag("onboarding_home_base_${homeBase.name.lowercase()}").padding(16.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(16.dp),
+                                    ) {
                                         Text(label, modifier = Modifier.weight(1f), style = MaterialTheme.typography.titleMedium)
-                                        if (draft.homeBase == homeBase) Icon(Icons.Default.Check, contentDescription = null)
+                                        RadioButton(selected = draft.homeBase == homeBase, onClick = null, enabled = !saving)
                                     }
                                 }
+                            }
                             }
                         }
                         OnboardingStage.SETUP -> {
@@ -178,9 +183,16 @@ internal fun OnboardingScreen(
                 }
             }
             Column(Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                error?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
+                error?.let {
+                    Text(
+                        it,
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
+                    )
+                }
                 if (draft.stage == OnboardingStage.SETUP) {
-                    Text("나중에 설정에서 이어서 설정할 수 있어요.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("나중에 설정에서 변경할 수 있어요.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 Button(
                     onClick = {
@@ -200,6 +212,7 @@ internal fun OnboardingScreen(
                     })
                 }
             }
+        }
         }
     }
 }

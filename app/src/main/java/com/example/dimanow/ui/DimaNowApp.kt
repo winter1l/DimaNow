@@ -1134,7 +1134,6 @@ internal fun DashboardScreen(
                 .fillMaxWidth()
                 .testTag("dashboard_meal_card")
                 .semantics { stateDescription = if (homeMealOpen) "운영 중" else "운영 시간 아님" }
-                .then(if (homeMealOpen) Modifier.border(2.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(24.dp)) else Modifier)
                 .entrance()
                 .expressiveBounceClick { onNavigateToPage(AppPage.MEAL) },
             shape = RoundedCornerShape(24.dp),
@@ -1152,13 +1151,20 @@ internal fun DashboardScreen(
                     }
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         if (!useDormitoryMeal) {
-                            Text(
-                                text = mealStatusNow.label,
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
+                            Surface(
+                                shape = RoundedCornerShape(8.dp),
+                                color = if (homeMealOpen) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant,
+                                contentColor = if (homeMealOpen) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
+                            ) {
+                                Text(
+                                    text = mealStatusNow.label,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+                                )
+                            }
                         }
-                        Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(14.dp))
+                        Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(16.dp))
                     }
                 }
 
@@ -1185,7 +1191,7 @@ internal fun DashboardScreen(
                             text = todayMeal.menuLines.joinToString(" · "),
                             style = MaterialTheme.typography.bodyMedium,
                             fontWeight = FontWeight.Medium,
-                            lineHeight = 20.sp,
+                            lineHeight = 22.sp,
                         )
                     }
                     now.dayOfWeek.value >= 6 -> {
@@ -1218,7 +1224,7 @@ internal fun DashboardScreen(
                         Icon(Icons.Default.Campaign, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(22.dp))
                         Text(text = "학교 공지", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                     }
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                         Text("전체보기", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
                         Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(14.dp))
                     }
@@ -1236,28 +1242,37 @@ internal fun DashboardScreen(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 } else {
-                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                         latestNotices.forEach { notice ->
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .expressiveBounceClick { openUrl(context, notice.url) },
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .expressiveBounceClick { openUrl(context, notice.url) }
+                                    .padding(vertical = 4.dp),
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                             ) {
                                 Text(
                                     text = notice.title,
                                     style = MaterialTheme.typography.bodyMedium,
-                                    fontWeight = FontWeight.SemiBold,
+                                    fontWeight = FontWeight.Medium,
                                     maxLines = 1,
                                     overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
                                     modifier = Modifier.weight(1f),
                                 )
-                                Text(
-                                    text = "${notice.date.monthValue}.${notice.date.dayOfMonth}",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
+                                Surface(
+                                    shape = RoundedCornerShape(6.dp),
+                                    color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                                ) {
+                                    Text(
+                                        text = "${notice.date.monthValue}.${notice.date.dayOfMonth}",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                    )
+                                }
                             }
                         }
                     }
@@ -1370,8 +1385,45 @@ private fun TimetableScreen(repository: CampusDataRepository, schedule: TermSche
         title = "시간표", modifier = modifier,
         topAction = { TextButton(onClick = { editing = null; showEditor = true }) { Text("수업 추가") } },
     ) {
-        TextButton(onClick = { showTermEditor = true }, modifier = Modifier.testTag("edit_term")) {
-            Text("학기 ${schedule.termStart} ~ ${schedule.termEnd}", style = MaterialTheme.typography.bodySmall)
+        ElevatedCard(
+            modifier = Modifier
+                .fillMaxWidth()
+                .entrance(),
+            shape = RoundedCornerShape(20.dp),
+            colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+        ) {
+            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Surface(
+                        onClick = { showTermEditor = true },
+                        modifier = Modifier.testTag("edit_term"),
+                        shape = RoundedCornerShape(10.dp),
+                        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        ) {
+                            Icon(Icons.Default.Schedule, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(16.dp))
+                            Text("학기 ${schedule.termStart} ~ ${schedule.termEnd}", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold)
+                        }
+                    }
+                }
+
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+
+                GuidancePauseSetting(
+                    pause = schedule.guidancePause,
+                    today = today,
+                    onConfigure = { showPauseChoice = true },
+                    onClear = { scope.launch { repository.clearGuidancePause() } },
+                )
+            }
         }
 
         changeError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
@@ -1431,40 +1483,9 @@ private fun TimetableScreen(repository: CampusDataRepository, schedule: TermSche
             }
         }
 
-        Spacer(Modifier.height(8.dp))
-        HorizontalDivider()
-
-        ElevatedCard(
-            modifier = Modifier
-                .fillMaxWidth()
-                .entrance(),
-            shape = RoundedCornerShape(18.dp),
-        ) {
-            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Column {
-                        Text(text = "휴강 모드", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                        Text(
-                            text = schedule.guidancePause?.let { pauseLabel(it, today) } ?: "수업 안내 켜짐",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                    Switch(
-                        checked = schedule.guidancePause?.contains(today) == true,
-                        onCheckedChange = { enabled ->
-                            if (enabled) showPauseChoice = true else scope.launch { repository.clearGuidancePause() }
-                        },
-                    )
-                }
-                if (schedule.noClassDates.isNotEmpty()) {
-                    Text("지정한 휴강일", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-            }
+        if (schedule.noClassDates.isNotEmpty()) {
+            Spacer(Modifier.height(8.dp))
+            Text("지정한 휴강일", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
         }
 
         if (schedule.noClassDates.isNotEmpty()) {
@@ -1618,6 +1639,34 @@ internal fun PauseDurationDialog(
     )
 }
 
+@Composable
+internal fun GuidancePauseSetting(
+    pause: GuidancePause?,
+    today: LocalDate,
+    onConfigure: () -> Unit,
+    onClear: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(modifier = modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text("휴강 모드", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+        Text(
+            text = pause?.let { pauseLabel(it, today) } ?: "수업 안내 켜짐",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            FilledTonalButton(onClick = onConfigure) {
+                Text(if (pause == null) "설정" else "변경")
+            }
+            if (pause != null) {
+                TextButton(onClick = onClear, modifier = Modifier.testTag("clear_guidance_pause")) {
+                    Text("해제")
+                }
+            }
+        }
+    }
+}
+
 private fun pauseLabel(pause: GuidancePause, today: LocalDate): String = when {
     pause.isUntilDisabled -> "휴강을 해제할 때까지 휴강"
     pause.startDate == pause.endDateInclusive -> "${pause.endDateInclusive.monthValue}월 ${pause.endDateInclusive.dayOfMonth}일 휴강"
@@ -1717,18 +1766,35 @@ fun koreanWeekdayLabel(day: DayOfWeek): String = when (day) {
 }
 
 @Composable
-private fun TermEditorDialog(start: LocalDate, end: LocalDate, onDismiss: () -> Unit, onSave: (LocalDate, LocalDate) -> Unit) {
+internal fun TermEditorDialog(start: LocalDate, end: LocalDate, onDismiss: () -> Unit, onSave: (LocalDate, LocalDate) -> Unit) {
     var startText by remember(start) { mutableStateOf(start.toString()) }
     var endText by remember(end) { mutableStateOf(end.toString()) }
     val parsedStart = runCatching { LocalDate.parse(startText) }.getOrNull()
     val parsedEnd = runCatching { LocalDate.parse(endText) }.getOrNull()
+    val reversedDates = parsedStart != null && parsedEnd != null && parsedEnd.isBefore(parsedStart)
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("학기 기간 설정", fontWeight = FontWeight.Bold) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                OutlinedTextField(value = startText, onValueChange = { startText = it }, label = { Text("시작 (YYYY-MM-DD)") }, shape = RoundedCornerShape(12.dp))
-                OutlinedTextField(value = endText, onValueChange = { endText = it }, label = { Text("종료 (YYYY-MM-DD)") }, shape = RoundedCornerShape(12.dp))
+                OutlinedTextField(
+                    value = startText, onValueChange = { startText = it },
+                    modifier = Modifier.testTag("term_start"),
+                    label = { Text("시작 (YYYY-MM-DD)") }, shape = RoundedCornerShape(12.dp),
+                    isError = parsedStart == null,
+                    supportingText = if (parsedStart == null) ({ Text("2026-09-01 형식으로 입력해 주세요") }) else null,
+                )
+                OutlinedTextField(
+                    value = endText, onValueChange = { endText = it },
+                    modifier = Modifier.testTag("term_end"),
+                    label = { Text("종료 (YYYY-MM-DD)") }, shape = RoundedCornerShape(12.dp),
+                    isError = parsedEnd == null || reversedDates,
+                    supportingText = when {
+                        parsedEnd == null -> ({ Text("2026-09-01 형식으로 입력해 주세요") })
+                        reversedDates -> ({ Text("종료일은 시작일과 같거나 늦어야 해요") })
+                        else -> null
+                    },
+                )
             }
         },
         confirmButton = {
@@ -1926,73 +1992,15 @@ fun ShuttleScreen(
             Bus4402ScheduleContent(now = now, nearbyStopNumber = nearbyTransitStopNumber)
             return@ScreenColumn
         }
-        // M3 Expressive Connected Button Group (월~일 요일 선택)
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(44.dp)
-                .staggeredEntrance(0),
-            horizontalArrangement = Arrangement.spacedBy(3.dp),
-        ) {
-            val weekdays = DayOfWeek.entries
-            weekdays.forEachIndexed { index, day ->
-                val isSelected = selectedDay == day
-                // M3 Expressive shape morphing: 선택된 항목은 완전한 필 형태로 부풀어 오른다
-                val innerRadius by animateDpAsState(
-                    targetValue = if (isSelected) 18.dp else 4.dp,
-                    animationSpec = spring(
-                        dampingRatio = Spring.DampingRatioLowBouncy,
-                        stiffness = Spring.StiffnessMedium,
-                    ),
-                    label = "btn_shape_${day.name}",
-                )
-                val itemShape = when (index) {
-                    0 -> RoundedCornerShape(topStart = 18.dp, bottomStart = 18.dp, topEnd = innerRadius, bottomEnd = innerRadius)
-                    weekdays.lastIndex -> RoundedCornerShape(topStart = innerRadius, bottomStart = innerRadius, topEnd = 18.dp, bottomEnd = 18.dp)
-                    else -> RoundedCornerShape(innerRadius)
-                }
-                val bgColor by animateColorAsState(
-                    targetValue = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceContainerHigh,
-                    animationSpec = spring(stiffness = Spring.StiffnessMedium),
-                    label = "btn_bg_${day.name}",
-                )
-                val contentColor by animateColorAsState(
-                    targetValue = if (isSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
-                    animationSpec = spring(stiffness = Spring.StiffnessMedium),
-                    label = "btn_content_${day.name}",
-                )
-                Surface(
-                    onClick = { selectedDay = day },
-                    shape = itemShape,
-                    color = bgColor,
-                    contentColor = contentColor,
-                    modifier = Modifier
-                        .weight(1f)
-                        .fillMaxHeight(),
-                ) {
-                    Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
-                        Text(
-                            text = koreanWeekdayLabel(day).take(1),
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = if (isSelected) FontWeight.ExtraBold else FontWeight.Medium,
-                        )
-                        // 다른 요일을 보고 있어도 '오늘' 위치를 알 수 있는 점 마커
-                        if (day == now.dayOfWeek) {
-                            Box(
-                                modifier = Modifier
-                                    .align(Alignment.BottomCenter)
-                                    .padding(bottom = 5.dp)
-                                    .size(4.dp)
-                                    .clip(CircleShape)
-                                    .background(
-                                        if (isSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.primary,
-                                    ),
-                            )
-                        }
-                    }
-                }
-            }
-        }
+        // M3 Expressive 요일 선택 (DimaDaySelector)
+        DimaDaySelector(
+            days = DayOfWeek.entries,
+            selected = selectedDay,
+            onSelect = { selectedDay = it },
+            today = now.dayOfWeek,
+            itemTag = { "shuttle_day_${it.name}" },
+            modifier = Modifier.staggeredEntrance(0),
+        )
 
         if (selectedDay == now.dayOfWeek && reportSource != null && shuttle.serverRevision != null && reportableEvent != null) {
             val event = reportableEvent
@@ -2167,18 +2175,10 @@ fun ShuttleScreen(
                 val upcomingTimes = upcomingCountdowns.map { it.departure.time }
 
                 ElevatedCard(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .then(
-                            if (isCurrentLocation) {
-                                Modifier.border(1.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(18.dp))
-                            } else {
-                                Modifier
-                            },
-                        ),
+                    modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(18.dp),
                     colors = CardDefaults.elevatedCardColors(
-                        containerColor = if (isCurrentLocation) MaterialTheme.colorScheme.surfaceContainer else MaterialTheme.colorScheme.surfaceContainerLow,
+                        containerColor = if (isCurrentLocation) MaterialTheme.colorScheme.surfaceContainerHigh else MaterialTheme.colorScheme.surfaceContainerLow,
                     ),
                 ) {
                     Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -2733,63 +2733,59 @@ private fun WeekdaySelector(
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .height(44.dp),
-        horizontalArrangement = Arrangement.spacedBy(3.dp),
+            .height(52.dp),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
     ) {
         (0L..4L).forEach { offset ->
             val date = weekStart.plusDays(offset)
             val isSelected = date == selected
-            val innerRadius by animateDpAsState(
-                targetValue = if (isSelected) 18.dp else 4.dp,
-                animationSpec = spring(dampingRatio = Spring.DampingRatioLowBouncy, stiffness = Spring.StiffnessMedium),
-                label = "meal_day_shape_$offset",
-            )
-            val itemShape = when (offset) {
-                0L -> RoundedCornerShape(topStart = 18.dp, bottomStart = 18.dp, topEnd = innerRadius, bottomEnd = innerRadius)
-                4L -> RoundedCornerShape(topStart = innerRadius, bottomStart = innerRadius, topEnd = 18.dp, bottomEnd = 18.dp)
-                else -> RoundedCornerShape(innerRadius)
-            }
+            val isToday = date == today
             val bgColor by animateColorAsState(
-                targetValue = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceContainerHigh,
+                targetValue = if (isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerLow,
                 animationSpec = spring(stiffness = Spring.StiffnessMedium),
                 label = "meal_day_bg_$offset",
             )
             val contentColor by animateColorAsState(
-                targetValue = if (isSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
+                targetValue = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
                 animationSpec = spring(stiffness = Spring.StiffnessMedium),
                 label = "meal_day_content_$offset",
             )
             Surface(
                 onClick = { onSelect(date) },
-                shape = itemShape,
+                shape = RoundedCornerShape(16.dp),
                 color = bgColor,
                 contentColor = contentColor,
+                border = if (isToday && !isSelected) androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)) else null,
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxHeight()
                     .testTag("meal_day_${date.dayOfWeek.name}"),
             ) {
                 Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center,
+                    ) {
                         Text(
                             text = koreanWeekdayLabel(date.dayOfWeek).take(1),
                             style = MaterialTheme.typography.titleSmall,
-                            fontWeight = if (isSelected) FontWeight.ExtraBold else FontWeight.Medium,
+                            fontWeight = if (isSelected) FontWeight.ExtraBold else FontWeight.Bold,
                         )
                         Text(
                             text = "${date.dayOfMonth}",
                             style = MaterialTheme.typography.labelSmall,
-                            color = contentColor.copy(alpha = 0.75f),
+                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                            color = contentColor.copy(alpha = if (isSelected) 0.9f else 0.7f),
                         )
                     }
-                    if (date == today) {
+                    if (isToday) {
                         Box(
                             modifier = Modifier
                                 .align(Alignment.BottomCenter)
-                                .padding(bottom = 3.dp)
+                                .padding(bottom = 4.dp)
                                 .size(4.dp)
                                 .clip(CircleShape)
-                                .background(if (isSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.primary),
+                                .background(if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.primary),
                         )
                     }
                 }
@@ -2802,20 +2798,38 @@ private fun WeekdaySelector(
 @Composable
 private fun MenuLineList(lines: List<String>, modifier: Modifier = Modifier) {
     Column(modifier = modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        lines.filter { it.isNotBlank() }.forEach { line ->
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                Box(
-                    modifier = Modifier
-                        .padding(top = 7.dp)
-                        .size(4.dp)
-                        .clip(CircleShape)
-                        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)),
-                )
+        lines.filter { it.isNotBlank() }.forEach { rawLine ->
+            val line = rawLine.trim()
+            val isOriginOrNote = line.contains("원산지") || line.contains("국내산") || line.contains("호주산") ||
+                line.contains("미국산") || line.startsWith("-") || line.startsWith("*") ||
+                (line.contains(":") && !line.contains("kcal", ignoreCase = true))
+
+            if (isOriginOrNote) {
                 Text(
                     text = line,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = LocalContentColor.current,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
+                    modifier = Modifier.padding(start = 14.dp, top = 2.dp, bottom = 2.dp),
                 )
+            } else {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.padding(vertical = 2.dp),
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(5.dp)
+                            .clip(CircleShape)
+                            .background(MaterialTheme.colorScheme.primary),
+                    )
+                    Text(
+                        text = line,
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = LocalContentColor.current,
+                    )
+                }
             }
         }
     }
@@ -2978,7 +2992,6 @@ private fun MealPeriodCard(
     }
     ElevatedCard(
         modifier = modifier.fillMaxWidth()
-            .then(if (isOpen) Modifier.border(2.dp, colors.primary, shape) else Modifier)
             .semantics { stateDescription = status.label },
         shape = shape,
         colors = CardDefaults.elevatedCardColors(

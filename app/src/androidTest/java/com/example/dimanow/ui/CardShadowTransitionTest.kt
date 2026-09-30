@@ -23,6 +23,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.setValue
 import com.example.dimanow.theme.DIMANowTheme
 import com.example.dimanow.ui.motion.staggeredEntrance
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -58,11 +59,11 @@ class CardShadowTransitionTest {
     }
 
     @Test
-    fun incomingAndOutgoingTabsBothFadeDuringTheOriginalDirectionalTransition() {
+    fun incomingAndOutgoingTabsBothFadeBetweenOpaqueDestinationStates() {
         composeRule.mainClock.autoAdvance = false
         var page by mutableIntStateOf(0)
         composeRule.setContent {
-            Box(Modifier.size(200.dp).background(Color.Black)) {
+            Box(Modifier.size(200.dp).background(Color.Black).testTag("transition_scene")) {
                 AnimatedContent(
                     targetState = page,
                     transitionSpec = { dimaTabContentTransform(targetState > initialState) },
@@ -78,12 +79,31 @@ class CardShadowTransitionTest {
             }
         }
 
+        assertEquals("initial destination must be opaque", Color.Red.toArgb(), sceneCenter())
         composeRule.runOnIdle { page = 1 }
-        composeRule.mainClock.advanceTimeBy(90)
+        var blendedFrame: Int? = null
+        // Sample a bounded number of actual frames, without assuming a duration-based midpoint.
+        // Both panels cover the center throughout this quarter-width slide. Over the black parent,
+        // red + blue < 255 proves the outgoing layer fades too, rather than only the incoming one.
+        for (frame in 0 until 20) {
+            composeRule.mainClock.advanceTimeByFrame()
+            val center = sceneCenter()
+            val red = (center ushr 16) and 0xff
+            val blue = center and 0xff
+            if (red in 1..254 && blue in 1..254 && red + blue < 250) {
+                blendedFrame = center
+                break
+            }
+        }
+        assertTrue("no rendered frame showed both destination layers fading", blendedFrame != null)
+        // This is a completion bound, not an expectation about spring duration or its midpoint.
+        composeRule.mainClock.advanceTimeBy(2_000)
+        assertEquals("final destination must be opaque", Color.Blue.toArgb(), sceneCenter())
+        composeRule.onNodeWithTag("tab_0").assertDoesNotExist()
+    }
 
-        val center = composeRule.onNodeWithTag("tab_1").captureToImage().toPixelMap()[100, 100].toArgb()
-        val red = (center ushr 16) and 0xff
-        val blue = center and 0xff
-        assertTrue("incoming tab was already opaque at the midpoint: ${center.toUInt().toString(16)}", red in 20..220 && blue in 40..235)
+    private fun sceneCenter(): Int {
+        val image = composeRule.onNodeWithTag("transition_scene").captureToImage()
+        return image.toPixelMap()[image.width / 2, image.height / 2].toArgb()
     }
 }

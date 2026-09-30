@@ -23,6 +23,7 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.LocalActivity
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -30,12 +31,16 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.text.selection.SelectionContainer
@@ -49,6 +54,7 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -60,6 +66,10 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ListItem
+import androidx.compose.material3.ListItemDefaults
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.SegmentedButton
@@ -88,6 +98,9 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.fromHtml
@@ -98,6 +111,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.dimanow.ui.ScreenColumn
+import com.example.dimanow.ui.DimaLayout
 import com.example.dimanow.ui.ScreenScaffold
 import com.example.dimanow.ui.motion.expressiveBounceClick
 import com.example.dimanow.ui.motion.pulseBreath
@@ -354,14 +368,14 @@ fun LmsRoute(
         pendingOfficialCoursePage?.let { pendingPage ->
             AlertDialog(
                 onDismissRequest = { pendingOfficialCoursePage = null },
-                title = { Text("학습 시작을 하실건가요?") },
+                title = { Text("학습을 시작할까요?") },
                 confirmButton = {
                     TextButton(
                         onClick = {
                             pendingOfficialCoursePage = null
                             officialCoursePage = pendingPage
                         },
-                    ) { Text("시작") }
+                    ) { Text("학습 시작") }
                 },
                 dismissButton = {
                     TextButton(onClick = { pendingOfficialCoursePage = null }) { Text("취소") }
@@ -753,15 +767,13 @@ private fun LmsLoginScreen(
     var username by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var automatic by remember { mutableStateOf(true) }
-    ScreenColumn(title = "수업", modifier = modifier) {
-        ElevatedCard(
+    ScreenColumn(title = "수업", modifier = modifier.imePadding()) {
+        Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .entrance(),
-            shape = RoundedCornerShape(24.dp),
-            colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
         ) {
-            Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+            Column(Modifier.padding(vertical = 16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
                 Text("학교 계정으로 로그인", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                 if (needsReview) {
                     Surface(
@@ -783,7 +795,6 @@ private fun LmsLoginScreen(
                     onValueChange = { username = it },
                     label = { Text("학번") },
                     singleLine = true,
-                    shape = RoundedCornerShape(12.dp),
                     modifier = Modifier.fillMaxWidth().testTag("lms_username"),
                 )
                 OutlinedTextField(
@@ -793,20 +804,22 @@ private fun LmsLoginScreen(
                     visualTransformation = PasswordVisualTransformation(),
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
                     singleLine = true,
-                    shape = RoundedCornerShape(12.dp),
                     modifier = Modifier.fillMaxWidth().testTag("lms_password"),
                 )
-                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                Row(
+                    Modifier.fillMaxWidth().toggleable(value = automatic, role = Role.Switch, onValueChange = { automatic = it }).padding(vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(16.dp),
+                ) {
                     Column(Modifier.weight(1f)) {
                         Text("자동 로그인", fontWeight = FontWeight.Bold)
                         Text("계정을 이 기기에 암호화해 저장해요", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
-                    Switch(checked = automatic, onCheckedChange = { automatic = it })
+                    Switch(checked = automatic, onCheckedChange = null)
                 }
                 Button(
                     onClick = { onLogin(username, password, automatic) },
                     enabled = username.isNotBlank() && password.isNotEmpty(),
-                    shape = RoundedCornerShape(14.dp),
                     modifier = Modifier.fillMaxWidth().testTag("lms_login"),
                 ) { Text("로그인", fontWeight = FontWeight.Bold) }
             }
@@ -887,7 +900,6 @@ private fun <T> LmsFilterMenuChip(
             trailingIcon = {
                 Icon(Icons.Default.ArrowDropDown, contentDescription = null, modifier = Modifier.size(18.dp))
             },
-            shape = RoundedCornerShape(10.dp),
             modifier = Modifier.fillMaxWidth().testTag(tag),
         )
         DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
@@ -913,7 +925,7 @@ private fun LmsSectionHeader(title: String) {
         style = MaterialTheme.typography.titleSmall,
         fontWeight = FontWeight.Bold,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = Modifier.padding(top = 8.dp),
+        modifier = Modifier.padding(top = 8.dp).semantics { heading() },
     )
 }
 
@@ -973,7 +985,7 @@ internal fun LmsItemsScreen(
         listTag = "lms_history",
         // 새로고침은 목록을 당겨서 실행한다 (D-058)
         onRefresh = onRefresh,
-        refreshing = syncing,
+        refreshing = syncing && !visibleEmpty,
         // 모드 전환과 필터는 목록을 아무리 내려도 항상 닿을 수 있어야 한다 (D-057).
         // 이전에는 목록의 첫 항목이라 스크롤과 함께 사라졌고, 필터가 세 줄을 차지했다.
         subHeader = {
@@ -1025,7 +1037,7 @@ internal fun LmsItemsScreen(
                         verticalArrangement = Arrangement.spacedBy(14.dp),
                     ) {
                         CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 3.dp, strokeCap = StrokeCap.Round)
-                        Text("수업 정보를 확인하고 있어요", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text("수업 정보를 불러오고 있어요", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
             }
@@ -1035,7 +1047,7 @@ internal fun LmsItemsScreen(
                         modifier = Modifier
                             .fillMaxWidth()
                             .entrance(),
-                        shape = RoundedCornerShape(20.dp),
+                        shape = MaterialTheme.shapes.large,
                         colors = CardDefaults.elevatedCardColors(
                             containerColor = MaterialTheme.colorScheme.errorContainer,
                             contentColor = MaterialTheme.colorScheme.onErrorContainer,
@@ -1061,7 +1073,7 @@ internal fun LmsItemsScreen(
                         modifier = Modifier
                             .fillMaxWidth()
                             .entrance(),
-                        shape = RoundedCornerShape(20.dp),
+                        shape = MaterialTheme.shapes.large,
                         colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
                     ) {
                         Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -1069,7 +1081,7 @@ internal fun LmsItemsScreen(
                                 text = when {
                                     sessionState == LmsSessionState.INTERACTIVE_AUTH_REQUIRED -> "추가 인증이 필요해요"
                                     sessionState != LmsSessionState.ACTIVE -> "수업 정보를 확인하려면 로그인해 주세요"
-                                    snapshot.syncState == LmsSyncState.IDLE && snapshot.lastSuccessAt == null -> "아직 수업 정보를 확인하지 않았어요"
+                                    snapshot.syncState == LmsSyncState.IDLE && snapshot.lastSuccessAt == null -> "아직 불러온 수업 정보가 없어요"
                                     filterActive -> "선택한 조건에 맞는 학습이 없어요"
                                     todayMode -> "오늘 확인할 학습이 없어요"
                                     else -> "등록된 학습이 없어요"
@@ -1081,7 +1093,7 @@ internal fun LmsItemsScreen(
                                 (snapshot.syncState == LmsSyncState.IDLE && snapshot.lastSuccessAt == null)
                             ) {
                                 TextButton(onClick = onRefresh) {
-                                    Text(if (sessionState == LmsSessionState.ACTIVE) "확인" else "다시 시도", fontWeight = FontWeight.Bold)
+                                    Text(if (sessionState == LmsSessionState.ACTIVE) "수업 정보 불러오기" else "다시 시도", fontWeight = FontWeight.Bold)
                                 }
                             } else if (filterActive) {
                                 TextButton(onClick = { onCourseChange(null); onKindChange(null) }) {
@@ -1154,6 +1166,7 @@ internal fun LmsItemsScreen(
  * 같은 상단 문법과 창 인셋을 쓰게 한다.
  */
 @Composable
+@OptIn(ExperimentalMaterial3Api::class)
 private fun LmsFullScreenPane(
     title: String,
     onBack: () -> Unit,
@@ -1167,28 +1180,19 @@ private fun LmsFullScreenPane(
         modifier = modifier
             .fillMaxSize()
             .statusBarsPadding()
-            .navigationBarsPadding(),
+            .navigationBarsPadding()
+            .imePadding(),
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(start = 4.dp, end = 16.dp, top = 4.dp, bottom = 4.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(4.dp),
-        ) {
-            IconButton(onClick = onBack) {
-                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = backDescription)
-            }
-            Text(
-                text = title,
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
-                maxLines = titleMaxLines,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.weight(1f),
-            )
-            trailing?.invoke()
-        }
+        TopAppBar(
+            title = { Text(title, style = com.example.dimanow.theme.dimaPageTitleStyle(), maxLines = titleMaxLines, overflow = TextOverflow.Ellipsis) },
+            navigationIcon = {
+                IconButton(onClick = onBack) {
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = backDescription)
+                }
+            },
+            actions = { trailing?.invoke() },
+            windowInsets = WindowInsets(0, 0, 0, 0),
+        )
         content()
     }
 }
@@ -1203,28 +1207,30 @@ private fun LmsRefreshErrorBanner(
 ) {
     ElevatedCard(
         modifier = modifier.fillMaxWidth().testTag("lms_refresh_error_banner"),
-        shape = RoundedCornerShape(20.dp),
+        shape = MaterialTheme.shapes.large,
         colors = CardDefaults.elevatedCardColors(
             containerColor = MaterialTheme.colorScheme.errorContainer,
             contentColor = MaterialTheme.colorScheme.onErrorContainer,
         ),
     ) {
-        Row(
+        Column(
             modifier = Modifier.fillMaxWidth().padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 Text(message, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
                 Text(
                     text = lastSuccessAt
                         ?.let { "마지막 갱신 ${LMS_DETAIL_TIME.format(it.atZone(SEOUL))}" }
                         ?: "저장된 목록을 보여주고 있어요",
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onErrorContainer.copy(alpha = 0.8f),
+                    color = MaterialTheme.colorScheme.onErrorContainer,
                 )
             }
-            FilledTonalButton(onClick = onRetry, shape = RoundedCornerShape(12.dp)) {
+            TextButton(
+                onClick = onRetry,
+                colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.onErrorContainer),
+            ) {
                 Text("다시 시도", fontWeight = FontWeight.Bold)
             }
         }
@@ -1233,23 +1239,18 @@ private fun LmsRefreshErrorBanner(
 
 @Composable
 private fun LmsItemCard(item: LmsItem, onOpenItem: (LmsItem) -> Unit, showCourseName: Boolean = true) {
-    ElevatedCard(
-        onClick = { onOpenItem(item) },
-        modifier = Modifier.fillMaxWidth().expressiveBounceClick(),
-        shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
-    ) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            Text(item.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+    ListItem(
+        modifier = Modifier.fillMaxWidth().clickable(role = Role.Button, onClick = { onOpenItem(item) }),
+        colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.surface),
+        headlineContent = { Text(item.title, style = MaterialTheme.typography.titleMedium) },
+        supportingContent = {
+        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                LmsStatusBadge(kindLabel(item.kind), prominent = false)
+                LmsMetadataLabel(kindLabel(item.kind), prominent = false)
                 if (showCourseName) Text(
                     item.courseName,
                     style = MaterialTheme.typography.labelMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.primary,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.weight(1f),
                 )
                 // 읽음/안읽음 배지는 제거했다 — 새 항목·완료 여부만 남긴다 (D-058)
@@ -1277,27 +1278,22 @@ private fun LmsItemCard(item: LmsItem, onOpenItem: (LmsItem) -> Unit, showCourse
             }
             if (badges.isNotEmpty()) {
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    badges.forEach { badge -> LmsStatusBadge(badge, prominent = true) }
+                    badges.forEach { badge -> LmsMetadataLabel(badge, prominent = badge == "새 항목" || badge == "변경됨") }
                 }
             }
         }
-    }
+        },
+    )
 }
 
 @Composable
-private fun LmsStatusBadge(label: String, prominent: Boolean) {
-    Surface(
-        shape = RoundedCornerShape(6.dp),
-        color = if (prominent) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.primaryContainer,
-    ) {
-        Text(
-            label,
-            style = MaterialTheme.typography.labelSmall,
-            fontWeight = FontWeight.Bold,
-            color = if (prominent) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onPrimaryContainer,
-            modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp),
-        )
-    }
+private fun LmsMetadataLabel(label: String, prominent: Boolean) {
+    Text(
+        label,
+        style = MaterialTheme.typography.labelMedium,
+        fontWeight = if (prominent) FontWeight.SemiBold else FontWeight.Normal,
+        color = if (prominent) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+    )
 }
 
 private fun agendaGroupTitle(group: LmsAgendaGroup): String = when (group.key) {
@@ -1364,7 +1360,7 @@ private fun LmsDetailScreen(
                 ).write(verified.cache, uri, verified.expectedBytes)
             }
             when (result) {
-                is LmsDocumentWriteResult.Success -> onMessage("저장했습니다")
+                is LmsDocumentWriteResult.Success -> onMessage("첨부파일을 저장했어요")
                 is LmsDocumentWriteResult.Failure -> onMessage(result.message)
             }
             activeDownloadCache = null
@@ -1372,7 +1368,7 @@ private fun LmsDetailScreen(
         }
     }
     LmsFullScreenPane(
-        title = detail.item.title,
+        title = kindLabel(detail.item.kind),
         onBack = onBack,
         modifier = modifier,
         titleMaxLines = 2,
@@ -1397,6 +1393,8 @@ private fun LmsDetailScreen(
         Column(
             modifier = Modifier
                 .weight(1f)
+                .align(Alignment.CenterHorizontally)
+                .widthIn(max = DimaLayout.readingWidth)
                 .fillMaxWidth()
                 .verticalScroll(rememberScrollState())
                 .padding(16.dp)
@@ -1414,7 +1412,6 @@ private fun LmsDetailScreen(
                     fontWeight = FontWeight.Bold,
                     modifier = Modifier.weight(1f),
                 )
-                LmsStatusBadge(kindLabel(detail.item.kind), prominent = false)
             }
             Text(detail.item.title, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
             val registeredAt = detail.metadata.registeredAt ?: detail.item.registeredAt
@@ -1428,13 +1425,13 @@ private fun LmsDetailScreen(
                     }
                 }
             }
-            Text("내용", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+            val body = AnnotatedString.fromHtml(
+                htmlString = detail.sanitizedHtml,
+                linkInteractionListener = {},
+            )
             SelectionContainer {
                 Text(
-                    text = AnnotatedString.fromHtml(
-                        htmlString = detail.sanitizedHtml,
-                        linkInteractionListener = {},
-                    ),
+                    text = body.takeUnless { it.isBlank() } ?: AnnotatedString("표시할 본문이 없어요"),
                     style = MaterialTheme.typography.bodyLarge,
                     color = MaterialTheme.colorScheme.onSurface,
                 )
@@ -1459,9 +1456,9 @@ private fun LmsDetailScreen(
                                 scope.launch {
                                     val cache = runCatching {
                                         createLmsAttachmentCacheFile(context.cacheDir)
-                                    }.getOrElse { error ->
+                                    }.getOrElse {
                                         downloadingAttachment = null
-                                        onMessage(error.message ?: "첨부파일 임시 경로를 만들지 못했습니다")
+                                        onMessage("첨부파일을 저장할 준비를 하지 못했어요. 다시 시도해 주세요.")
                                         return@launch
                                     }
                                     activeDownloadCache = cache
@@ -1500,7 +1497,6 @@ private fun LmsDetailScreen(
                                 }
                             },
                             enabled = downloadingAttachment == null,
-                            shape = RoundedCornerShape(12.dp),
                             modifier = Modifier.fillMaxWidth(),
                         ) {
                             if (downloadingAttachment == attachmentKey) {
@@ -1509,7 +1505,7 @@ private fun LmsDetailScreen(
                                 Icon(Icons.Default.Download, null)
                             }
                             Spacer(Modifier.size(8.dp))
-                            Text(attachment.fileName, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            Text(attachment.fileName, modifier = Modifier.weight(1f))
                         }
                     }
                 }
@@ -1554,17 +1550,10 @@ private fun LmsAuthenticationFrame(
         return
     }
     LmsFullScreenPane(
-        title = "공식 포털에서 로그인 중",
+        title = "로그인",
         onBack = onCancel,
         modifier = modifier,
         backDescription = "로그인 취소",
-        trailing = {
-            CircularProgressIndicator(
-                Modifier.size(20.dp).pulseBreath(),
-                strokeWidth = 2.5.dp,
-                strokeCap = StrokeCap.Round,
-            )
-        },
     ) {
         Box(
             modifier = Modifier
@@ -1873,13 +1862,6 @@ private fun LmsRenderedPageWebView(
         onBack = onCancel,
         modifier = modifier,
         backDescription = "불러오기 취소",
-        trailing = {
-            CircularProgressIndicator(
-                Modifier.size(20.dp).pulseBreath(),
-                strokeWidth = 2.5.dp,
-                strokeCap = StrokeCap.Round,
-            )
-        },
     ) {
         Box(
             modifier = Modifier

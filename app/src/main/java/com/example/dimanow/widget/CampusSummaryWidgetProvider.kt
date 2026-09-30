@@ -77,15 +77,12 @@ class CampusSummaryWidgetProvider : AppWidgetProvider() {
                 )
 
                 ids.forEach { id ->
-                    val views = RemoteViews(context.packageName, R.layout.widget_campus_summary)
-                    views.setTextViewText(R.id.summary_widget_location, plan.headerLocationText)
-                    views.setTextViewText(R.id.summary_widget_date, plan.headerDateText)
-                    views.setTextViewText(R.id.summary_widget_course_title, plan.courseTitle)
-                    views.setTextViewText(R.id.summary_widget_course_detail, plan.courseDetail)
-                    views.setTextViewText(R.id.summary_widget_shuttle_title, plan.shuttleTitle)
-                    views.setTextViewText(R.id.summary_widget_shuttle_content, plan.shuttleContent)
-                    views.setTextViewText(R.id.summary_widget_meal_title, plan.mealTitle)
-                    views.setTextViewText(R.id.summary_widget_meal_content, plan.mealContent)
+                    val options = manager.getAppWidgetOptions(id)
+                    val views = campusSummaryWidgetViews(
+                        context, plan,
+                        options.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_WIDTH, 250),
+                        options.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_HEIGHT, 110),
+                    )
 
                     val openApp = Intent(context, MainActivity::class.java).apply {
                         putExtra("TARGET_PAGE", "DASHBOARD")
@@ -111,4 +108,46 @@ class CampusSummaryWidgetProvider : AppWidgetProvider() {
             context.sendBroadcast(Intent(context, CampusSummaryWidgetProvider::class.java).setAction(AppWidgetManager.ACTION_APPWIDGET_UPDATE).putExtra(AppWidgetManager.EXTRA_APPWIDGET_IDS, ids))
         }
     }
+}
+
+/** Presentation-only adaptation; all schedule, countdown and update decisions stay in the planner. */
+internal fun campusSummaryWidgetViews(
+    context: Context,
+    plan: CampusSummaryWidgetPlan,
+    widthDp: Int,
+    heightDp: Int,
+): RemoteViews {
+    val fontScale = context.resources.configuration.fontScale
+    // App layout decision: the three-panel layout needs room for its separate labels and content.
+    val compact = heightDp < 180 * fontScale || widthDp < 300
+    val views = RemoteViews(context.packageName, if (compact) R.layout.widget_campus_summary_compact else R.layout.widget_campus_summary)
+    if (compact) {
+        val course = "${plan.courseTitle} · ${plan.courseDetail}"
+        val shuttle = "${plan.shuttleTitle} · ${plan.shuttleContent}"
+        val meal = "${plan.mealTitle} · ${plan.mealContent}"
+        views.setTextViewText(R.id.summary_widget_compact_header, "${plan.headerLocationText} · ${plan.headerDateText}")
+        views.setTextViewText(R.id.summary_widget_compact_course, course)
+        views.setTextViewText(R.id.summary_widget_compact_shuttle, shuttle)
+        views.setTextViewText(R.id.summary_widget_compact_meal, meal)
+        listOf(
+            R.id.summary_widget_compact_course to course,
+            R.id.summary_widget_compact_shuttle to shuttle,
+            R.id.summary_widget_compact_meal to meal,
+        ).forEach { (viewId, text) ->
+            // Keep the complete summary available to accessibility when visual text is ellipsized.
+            views.setContentDescription(viewId, text)
+            // A short widget guarantees one whole line per summary; never show half a second line.
+            views.setInt(viewId, "setMaxLines", 1)
+        }
+    } else {
+        views.setTextViewText(R.id.summary_widget_location, plan.headerLocationText)
+        views.setTextViewText(R.id.summary_widget_date, plan.headerDateText)
+        views.setTextViewText(R.id.summary_widget_course_title, plan.courseTitle)
+        views.setTextViewText(R.id.summary_widget_course_detail, plan.courseDetail)
+        views.setTextViewText(R.id.summary_widget_shuttle_title, plan.shuttleTitle)
+        views.setTextViewText(R.id.summary_widget_shuttle_content, plan.shuttleContent)
+        views.setTextViewText(R.id.summary_widget_meal_title, plan.mealTitle)
+        views.setTextViewText(R.id.summary_widget_meal_content, plan.mealContent)
+    }
+    return views
 }

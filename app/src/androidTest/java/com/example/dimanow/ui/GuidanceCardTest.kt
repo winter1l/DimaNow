@@ -137,8 +137,7 @@ class GuidanceCardTest {
 
         composeRule.onNodeWithText("09:00 – 11:50").assertIsDisplayed()
         composeRule.onNodeWithText("스튜디오기초실습").assertIsDisplayed()
-        composeRule.onNodeWithText("기예관 122").assertIsDisplayed()
-        composeRule.onNodeWithText("이상운").assertIsDisplayed()
+        composeRule.onNodeWithText("기예관 122 · 이상운").assertIsDisplayed()
         composeRule.onNodeWithText("담당 이상운").assertDoesNotExist()
         composeRule.onNodeWithText("TUESDAY").assertDoesNotExist()
     }
@@ -282,8 +281,8 @@ class GuidanceCardTest {
         composeRule.onNodeWithText("4402 강남행").assertExists()
         composeRule.onNodeWithText("대학 셔틀 정류장").assertExists()
         composeRule.onNodeWithText("원룸촌 앞").assertExists()
-        composeRule.onNodeWithText("8분 후").assertExists()
-        composeRule.onNodeWithText("9분 후 · 예정").assertExists()
+        composeRule.onNodeWithText("08:50 · 8분 후").assertExists()
+        composeRule.onNodeWithText("08:51 · 9분 후 · 예정").assertExists()
         composeRule.onNodeWithText("정류장 33243 · 공식 기점 +1분 예정").assertDoesNotExist()
         composeRule.onAllNodesWithText("정류장 정보")[1].performScrollTo().performClick()
         composeRule.onNodeWithText("정류장 33243 · 공식 기점 +1분 예정").assertExists()

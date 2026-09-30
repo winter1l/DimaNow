@@ -4,7 +4,6 @@ import com.example.dimanow.sync.DormitoryMealSubmissionStatus
 import java.nio.file.Path
 import java.nio.file.Files
 import java.time.Clock
-import java.time.LocalDate
 import java.time.ZoneId
 
 class DormitoryMealSubmissionProcessor(
@@ -12,16 +11,23 @@ class DormitoryMealSubmissionProcessor(
     private val geminiClient: GeminiDormitoryMealClient,
     private val clock: Clock = Clock.system(ZoneId.of("Asia/Seoul")),
 ) {
+    /**
+     * Validates, transcribes and automatically publishes one dormitory meal photo (D-070 operator approval reverted).
+     * Only a submission that passes both Gemini stages, payload validation, the single KST target-week rule and the
+     * duplicate current-week check becomes the new `dorm_meal` revision; everything else publishes a short status.
+     */
     fun process(
         imagePath: Path,
         mimeType: String,
         sourceImageUrl: String,
         submissionId: String,
     ): DormitoryMealSubmissionStatus {
-        if (publisher.hasCurrentDormitoryMeal(LocalDate.now(clock))) {
+        val now = clock.instant()
+        val today = now.atZone(clock.zone).toLocalDate()
+        if (publisher.hasCurrentDormitoryMeal(today)) {
             return publishStatus(submissionId, "DUPLICATE", "이번 주 기숙사 식단이 이미 등록되어 있어요")
         }
-        require(sourceImageUrl.startsWith("https://")) { "제출 이미지 주소가 HTTPS가 아닙니다." }
+        publisher.requireValidDormitorySubmission(submissionId, sourceImageUrl)
         require(Files.size(imagePath) in 1..MAX_IMAGE_BYTES.toLong()) { "식단 이미지가 너무 큽니다." }
         val imageBytes = Files.readAllBytes(imagePath)
         return when (val analysis = geminiClient.analyze(imageBytes, mimeType)) {
@@ -30,7 +36,7 @@ class DormitoryMealSubmissionProcessor(
                 val payload = try {
                     GeminiDormitoryMealPayloadBuilder().build(
                         responseJson = analysis.responseJson,
-                        referenceDate = LocalDate.now(clock),
+                        referenceDate = today,
                         sourceImageUrl = sourceImageUrl,
                     )
                 } catch (error: DormitoryMealWeekMismatchException) {
@@ -38,13 +44,11 @@ class DormitoryMealSubmissionProcessor(
                 } catch (_: IllegalArgumentException) {
                     return publishStatus(submissionId, "REJECTED", "식단표의 날짜와 메뉴가 잘 보이도록 다시 촬영해 주세요")
                 }
-                publisher.stageDormitoryMealReviewCandidate(
+                publisher.publishDormitoryMealSubmission(
                     payload = payload,
                     submissionId = submissionId,
-                    sourceImageSha256 = imageBytes.sha256(),
-                    createdAt = clock.instant(),
+                    publishedAt = now,
                 )
-                publishStatus(submissionId, "PENDING_REVIEW", "운영자 확인을 기다리고 있어요")
             }
         }
     }

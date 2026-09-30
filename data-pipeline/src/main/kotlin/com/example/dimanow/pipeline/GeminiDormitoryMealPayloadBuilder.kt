@@ -13,6 +13,16 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.int
 
+/**
+ * The single KST week rule for dormitory meals, shared by OCR payload validation, duplicate detection and publication.
+ * Monday-Friday target the running week; Saturday and Sunday target the following Monday's week, matching the app's
+ * `dormitoryMealWeekStart`, so a weekend upload can only fill the week the app is about to show.
+ */
+internal fun dormitoryMealTargetWeekStart(today: LocalDate): LocalDate = when (today.dayOfWeek) {
+    DayOfWeek.SATURDAY, DayOfWeek.SUNDAY -> today.with(TemporalAdjusters.next(DayOfWeek.MONDAY))
+    else -> today.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY))
+}
+
 class DormitoryMealWeekMismatchException : IllegalArgumentException("이번 주 기숙사 식단표가 아니에요")
 
 class GeminiDormitoryMealPayloadBuilder {
@@ -47,14 +57,7 @@ class GeminiDormitoryMealPayloadBuilder {
             weekStart.dayOfWeek == DayOfWeek.MONDAY &&
                 days.map { it.first } == (0L..4L).map(weekStart::plusDays),
         ) { "월요일부터 금요일까지 연속된 날짜가 아닙니다." }
-        val currentWeekStart = referenceDate.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY))
-        val allowedWeekStarts = buildSet {
-            add(currentWeekStart)
-            if (referenceDate.dayOfWeek in setOf(DayOfWeek.SATURDAY, DayOfWeek.SUNDAY)) {
-                add(referenceDate.with(TemporalAdjusters.next(DayOfWeek.MONDAY)))
-            }
-        }
-        if (weekStart !in allowedWeekStarts) throw DormitoryMealWeekMismatchException()
+        if (weekStart != dormitoryMealTargetWeekStart(referenceDate)) throw DormitoryMealWeekMismatchException()
         return DormitoryMealPayload(
             weekStart = weekStart.toString(),
             weekEnd = weekStart.plusDays(6).toString(),

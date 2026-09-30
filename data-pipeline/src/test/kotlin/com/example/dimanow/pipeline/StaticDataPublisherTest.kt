@@ -82,145 +82,83 @@ class StaticDataPublisherTest {
     }
 
     @Test
-    fun `기숙사 식단 후보는 운영자 승인 전에는 READY로 게시하지 않는다`() {
-        val output = Files.createTempDirectory("dima-dorm-meal")
+    fun `검증된 기숙사 식단은 승인 기록 없이 READY와 PUBLISHED를 쓴다`() {
+        val output = Files.createTempDirectory("dima-dorm-publish")
         val publisher = StaticDataPublisher(output)
-        val payload = dormitoryPayload()
 
-        val candidateHash = publisher.stageDormitoryMealReviewCandidate(
-            payload = payload,
-            submissionId = "submission-1",
-            sourceImageSha256 = "a".repeat(64),
-            createdAt = Instant.parse("2026-08-27T03:00:00Z"),
-        )
-
-        assertEquals(false, Files.exists(output.resolve("data/v1/manifest.json")))
-        assertTrue(candidateHash.matches(Regex("[0-9a-f]{64}")))
-        assertTrue(Files.exists(output.resolve("data/v1/dorm-review-candidates/submission-1.json")))
-    }
-
-    @Test
-    fun `인증된 운영자가 정확한 후보 해시를 승인해야 READY와 PUBLISHED를 쓴다`() {
-        val output = Files.createTempDirectory("dima-dorm-approval")
-        val publisher = StaticDataPublisher(output)
-        val candidateHash = publisher.stageDormitoryMealReviewCandidate(
+        val status = publisher.publishDormitoryMealSubmission(
             payload = dormitoryPayload(),
             submissionId = "submission-1",
-            sourceImageSha256 = "a".repeat(64),
-            createdAt = Instant.parse("2026-08-27T03:00:00Z"),
+            publishedAt = Instant.parse("2026-08-27T04:00:00Z"),
         )
 
-        publisher.approveDormitoryMeal(
-            submissionId = "submission-1",
-            expectedCandidateSha256 = candidateHash,
-            approvedBy = "repository-reviewer",
-            approvedAt = Instant.parse("2026-08-27T04:00:00Z"),
-        )
-
+        assertEquals(DormitoryMealSubmissionStatus("submission-1", "PUBLISHED", null, "2026-08-27T04:00:00Z"), status)
         val manifest = Json.decodeFromString<CampusDataManifest>(Files.readString(output.resolve("data/v1/manifest.json")))
         val descriptor = manifest.datasets.getValue("dorm_meal")
         assertEquals("READY", descriptor.state)
+        assertEquals(1, descriptor.revision)
         assertTrue(descriptor.url.matches(Regex("dorm-meal/[0-9a-f]{64}\\.json")))
-        assertTrue(Files.exists(output.resolve("data/v1").resolve(descriptor.url)))
-        val status = Json.decodeFromString<DormitoryMealSubmissionStatus>(
-            Files.readString(output.resolve("data/v1/dorm-submissions/submission-1.json")),
+        assertEquals(
+            dormitoryPayload(),
+            Json.decodeFromString<DormitoryMealPayload>(Files.readString(output.resolve("data/v1").resolve(descriptor.url))),
         )
-        assertEquals("PUBLISHED", status.state)
-        val approval = Json.decodeFromString<DormitoryMealApprovalRecord>(
-            Files.readString(output.resolve("data/v1/dorm-review-approvals/submission-1.json")),
+        assertEquals(
+            status,
+            Json.decodeFromString<DormitoryMealSubmissionStatus>(
+                Files.readString(output.resolve("data/v1/dorm-submissions/submission-1.json")),
+            ),
         )
-        assertEquals(candidateHash, approval.candidateSha256)
-        assertEquals("repository-reviewer", approval.approvedBy)
+        assertEquals(false, Files.exists(output.resolve("data/v1/dorm-review-candidates")))
+        assertEquals(false, Files.exists(output.resolve("data/v1/dorm-review-approvals")))
     }
 
     @Test
-    fun `후보 파일이나 승인 해시가 바뀌면 게시를 거부한다`() {
-        val output = Files.createTempDirectory("dima-dorm-tamper")
+    fun `대상 주차나 원본 주소가 맞지 않으면 마지막 정상 기숙사 식단을 보존한다`() {
+        val output = Files.createTempDirectory("dima-dorm-publish-guard")
         val publisher = StaticDataPublisher(output)
-        val candidateHash = publisher.stageDormitoryMealReviewCandidate(
-            payload = dormitoryPayload(),
-            submissionId = "submission-1",
-            sourceImageSha256 = "a".repeat(64),
-            createdAt = Instant.parse("2026-08-27T03:00:00Z"),
-        )
+        publisher.publishDormitoryMealSubmission(dormitoryPayload(), "submission-1", Instant.parse("2026-08-27T04:00:00Z"))
+        val before = Files.readString(output.resolve("data/v1/manifest.json"))
 
-        assertThrows(IllegalArgumentException::class.java) {
-            publisher.approveDormitoryMeal(
-                submissionId = "submission-1",
-                expectedCandidateSha256 = "b".repeat(64),
-                approvedBy = "repository-reviewer",
-                approvedAt = Instant.parse("2026-08-27T04:00:00Z"),
-            )
-        }
-        Files.writeString(
-            output.resolve("data/v1/dorm-review-candidates/submission-1.json"),
-            "{}",
+        val invalid = listOf(
+            // The target week has moved on (Thursday of the following week).
+            Triple(dormitoryPayload().copy(sourceImageUrl = dormitorySourceUrl("late")), "late", "2026-09-03T04:00:00Z"),
+            // Saturday targets the next Monday's week, so the ending week is no longer publishable.
+            Triple(dormitoryPayload().copy(sourceImageUrl = dormitorySourceUrl("weekend")), "weekend", "2026-08-29T04:00:00Z"),
+            Triple(dormitoryPayload().copy(weekEnd = "2026-08-31", sourceImageUrl = dormitorySourceUrl("range")), "range", "2026-08-27T04:00:00Z"),
+            Triple(
+                dormitoryPayload().copy(
+                    sourceImageUrl = dormitorySourceUrl("outside"),
+                    days = listOf(DormitoryMealDayPayload("2026-08-31", listOf(DormitoryMealSectionPayload("조식", null, listOf("떡국"))))),
+                ),
+                "outside",
+                "2026-08-27T04:00:00Z",
+            ),
+            Triple(dormitoryPayload().copy(sourceImageUrl = "https://example.invalid/evil.jpg"), "evil", "2026-08-27T04:00:00Z"),
+            Triple(dormitoryPayload(), "different-id", "2026-08-27T04:00:00Z"),
+            Triple(dormitoryPayload(), "../escape", "2026-08-27T04:00:00Z"),
         )
-        assertThrows(IllegalArgumentException::class.java) {
-            publisher.approveDormitoryMeal(
-                submissionId = "submission-1",
-                expectedCandidateSha256 = candidateHash,
-                approvedBy = "repository-reviewer",
-                approvedAt = Instant.parse("2026-08-27T04:00:00Z"),
-            )
+        for ((payload, submissionId, at) in invalid) {
+            assertThrows(submissionId, IllegalArgumentException::class.java) {
+                publisher.publishDormitoryMealSubmission(payload, submissionId, Instant.parse(at))
+            }
         }
-        assertEquals(false, Files.exists(output.resolve("data/v1/manifest.json")))
+        assertEquals(before, Files.readString(output.resolve("data/v1/manifest.json")))
     }
 
     @Test
-    fun `같은 제출 ID의 후보 교체와 승인 없는 PUBLISHED 상태를 거부한다`() {
-        val output = Files.createTempDirectory("dima-dorm-candidate-replace")
+    fun `게시 없이 PUBLISHED나 폐지된 검토 대기 상태를 쓸 수 없다`() {
+        val output = Files.createTempDirectory("dima-dorm-status-guard")
         val publisher = StaticDataPublisher(output)
-        publisher.stageDormitoryMealReviewCandidate(
-            payload = dormitoryPayload(),
-            submissionId = "submission-1",
-            sourceImageSha256 = "a".repeat(64),
-            createdAt = Instant.parse("2026-08-27T03:00:00Z"),
+        for (state in listOf("PUBLISHED", "PENDING_REVIEW", "READY")) {
+            assertThrows(state, IllegalArgumentException::class.java) {
+                publisher.publishDormitorySubmissionStatus(
+                    DormitoryMealSubmissionStatus("submission-1", state, null, "2026-08-27T04:00:00Z"),
+                )
+            }
+        }
+        publisher.publishDormitorySubmissionStatus(
+            DormitoryMealSubmissionStatus("submission-1", "REJECTED", "기숙사 식단표가 아니에요", "2026-08-27T04:00:00Z"),
         )
-
-        assertThrows(IllegalArgumentException::class.java) {
-            publisher.stageDormitoryMealReviewCandidate(
-                payload = dormitoryPayload().copy(weekEnd = "2026-08-31"),
-                submissionId = "submission-1",
-                sourceImageSha256 = "a".repeat(64),
-                createdAt = Instant.parse("2026-08-27T03:01:00Z"),
-            )
-        }
-        assertThrows(IllegalArgumentException::class.java) {
-            publisher.publishDormitorySubmissionStatus(
-                DormitoryMealSubmissionStatus("submission-1", "PUBLISHED", null, "2026-08-27T04:00:00Z"),
-            )
-        }
-        assertThrows(IllegalArgumentException::class.java) {
-            publisher.stageDormitoryMealReviewCandidate(
-                payload = dormitoryPayload().copy(sourceImageUrl = "https://example.invalid/submission-evil.jpg"),
-                submissionId = "submission-evil",
-                sourceImageSha256 = "b".repeat(64),
-                createdAt = Instant.parse("2026-08-27T03:02:00Z"),
-            )
-        }
-        assertEquals(false, Files.exists(output.resolve("data/v1/manifest.json")))
-    }
-
-    @Test
-    fun `운영자 승인 시점에 대상 주차가 지난 후보는 게시하지 않는다`() {
-        val output = Files.createTempDirectory("dima-dorm-stale-approval")
-        val publisher = StaticDataPublisher(output)
-        val candidateHash = publisher.stageDormitoryMealReviewCandidate(
-            payload = dormitoryPayload(),
-            submissionId = "submission-1",
-            sourceImageSha256 = "a".repeat(64),
-            createdAt = Instant.parse("2026-08-27T03:00:00Z"),
-        )
-
-        assertThrows(IllegalArgumentException::class.java) {
-            publisher.approveDormitoryMeal(
-                submissionId = "submission-1",
-                expectedCandidateSha256 = candidateHash,
-                approvedBy = "repository-reviewer",
-                approvedAt = Instant.parse("2026-09-03T04:00:00Z"),
-            )
-        }
         assertEquals(false, Files.exists(output.resolve("data/v1/manifest.json")))
     }
 
@@ -228,9 +166,10 @@ class StaticDataPublisherTest {
     fun `현재 주 기숙사 식단이 있으면 새 Gemini 처리를 막는다`() {
         val output = Files.createTempDirectory("dima-dorm-dedupe")
         val publisher = StaticDataPublisher(output)
-        publishApprovedDormitoryMeal(publisher, dormitoryPayload(), "seed-1", Instant.parse("2026-08-27T04:00:00Z"))
+        publishDormitoryMeal(publisher, dormitoryPayload(), "seed-1", Instant.parse("2026-08-27T04:00:00Z"))
 
         assertTrue(publisher.hasCurrentDormitoryMeal(LocalDate.of(2026, 8, 27)))
+        assertEquals(false, publisher.hasCurrentDormitoryMeal(LocalDate.of(2026, 8, 29)))
         assertEquals(false, publisher.hasCurrentDormitoryMeal(LocalDate.of(2026, 8, 31)))
     }
 
@@ -245,9 +184,25 @@ class StaticDataPublisherTest {
                 DormitoryMealDayPayload("2026-08-31", listOf(DormitoryMealSectionPayload("중식", null, listOf("제육볶음")))),
             ),
         )
-        publishApprovedDormitoryMeal(publisher, payload, "seed-2", Instant.parse("2026-08-30T04:00:00Z"))
+        publishDormitoryMeal(publisher, payload, "seed-2", Instant.parse("2026-08-30T04:00:00Z"))
 
+        assertTrue(publisher.hasCurrentDormitoryMeal(LocalDate.of(2026, 8, 29)))
         assertTrue(publisher.hasCurrentDormitoryMeal(LocalDate.of(2026, 8, 30)))
+        assertTrue(publisher.hasCurrentDormitoryMeal(LocalDate.of(2026, 9, 4)))
+    }
+
+    @Test
+    fun `기숙사 주차 규칙은 평일 이번 주, 주말 다음 월요일 주차 하나뿐이다`() {
+        val expected = mapOf(
+            "2026-08-24" to "2026-08-24", // Monday
+            "2026-08-28" to "2026-08-24", // Friday
+            "2026-08-29" to "2026-08-31", // Saturday
+            "2026-08-30" to "2026-08-31", // Sunday
+            "2026-08-31" to "2026-08-31", // Monday
+        )
+        expected.forEach { (today, weekStart) ->
+            assertEquals(today, LocalDate.parse(weekStart), dormitoryMealTargetWeekStart(LocalDate.parse(today)))
+        }
     }
 
     @Test
@@ -341,19 +296,17 @@ class StaticDataPublisherTest {
         ),
     )
 
-    private fun publishApprovedDormitoryMeal(
+    private fun publishDormitoryMeal(
         publisher: StaticDataPublisher,
         payload: DormitoryMealPayload,
         submissionId: String,
-        approvedAt: Instant,
+        publishedAt: Instant,
     ) {
-        val candidateHash = publisher.stageDormitoryMealReviewCandidate(
+        publisher.publishDormitoryMealSubmission(
             payload = payload.copy(sourceImageUrl = dormitorySourceUrl(submissionId)),
             submissionId = submissionId,
-            sourceImageSha256 = "a".repeat(64),
-            createdAt = approvedAt.minusSeconds(60),
+            publishedAt = publishedAt,
         )
-        publisher.approveDormitoryMeal(submissionId, candidateHash, "test-reviewer", approvedAt)
     }
 
     private fun dormitorySourceUrl(submissionId: String): String =

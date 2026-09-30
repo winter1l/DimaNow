@@ -25,19 +25,7 @@ on:
         required: true
         default: all
         type: choice
-        options: [all, shuttle, meal, notice, dorm-approve, deploy-only]
-      submission_id:
-        description: 기숙사 식단 승인 시 제출 ID
-        required: false
-        type: string
-      candidate_sha256:
-        description: 기숙사 식단 승인 시 검토 후보 SHA-256
-        required: false
-        type: string
-      approval:
-        description: 기숙사 식단 승인 시 APPROVE 입력
-        required: false
-        type: string
+        options: [all, shuttle, meal, notice, deploy-only]
 
 permissions:
   contents: write
@@ -93,7 +81,11 @@ jobs:
         run: |
           if [[ "$EVENT_NAME" == "push" && "$REF_NAME" == "dorm-submissions" ]]; then value=dorm
           elif [[ "$EVENT_NAME" == "push" ]]; then value=shuttle
-          elif [[ "$EVENT_NAME" == "workflow_dispatch" ]]; then value="$REQUESTED"
+          elif [[ "$EVENT_NAME" == "workflow_dispatch" ]]; then
+            case "$REQUESTED" in
+              all|shuttle|meal|notice|deploy-only) value="$REQUESTED" ;;
+              *) echo "지원하지 않는 수동 게시 대상입니다." >&2; exit 1 ;;
+            esac
           elif [[ "$SCHEDULE_EXPRESSION" == "43 0 * * *" ]]; then value=notice
           else value=meal
           fi
@@ -116,6 +108,9 @@ jobs:
         id: dorm_submission
         if: steps.target.outputs.value == 'dorm'
         shell: bash
+        env:
+          REPOSITORY: ${{ github.repository }}
+          COMMIT_SHA: ${{ github.sha }}
         run: |
           path="$(git -C submission diff-tree --no-commit-id --name-only -r HEAD | grep -E '^dorm-submissions/[A-Za-z0-9_-]{1,64}\.(jpg|jpeg|png|webp)$' | head -n 1)"
           [[ -n "$path" ]] || { echo "처리할 기숙사 식단 이미지가 없습니다." >&2; exit 1; }
@@ -130,8 +125,8 @@ jobs:
           echo "path=$path" >> "$GITHUB_OUTPUT"
           echo "submission_id=$submission_id" >> "$GITHUB_OUTPUT"
           echo "mime=$mime" >> "$GITHUB_OUTPUT"
-          echo "source_url=https://raw.githubusercontent.com/${{ github.repository }}/${{ github.sha }}/$path" >> "$GITHUB_OUTPUT"
-      - name: 기숙사 식단 검토 후보 생성
+          echo "source_url=https://raw.githubusercontent.com/$REPOSITORY/$COMMIT_SHA/$path" >> "$GITHUB_OUTPUT"
+      - name: 기숙사 식단 검증 및 자동 게시
         if: steps.target.outputs.value == 'dorm'
         working-directory: source
         env:
@@ -141,44 +136,6 @@ jobs:
           SOURCE_IMAGE_URL: ${{ steps.dorm_submission.outputs.source_url }}
           MIME_TYPE: ${{ steps.dorm_submission.outputs.mime }}
         run: bash ./gradlew :data-pipeline:run --args="publish-dorm-meal $IMAGE_PATH $GITHUB_WORKSPACE/site $SUBMISSION_ID $SOURCE_IMAGE_URL $MIME_TYPE"
-      - name: 기숙사 식단 검토 정보 기록
-        if: steps.target.outputs.value == 'dorm'
-        shell: bash
-        env:
-          SUBMISSION_ID: ${{ steps.dorm_submission.outputs.submission_id }}
-          SOURCE_IMAGE_URL: ${{ steps.dorm_submission.outputs.source_url }}
-        run: |
-          candidate="$GITHUB_WORKSPACE/site/data/v1/dorm-review-candidates/$SUBMISSION_ID.json"
-          if [[ ! -f "$candidate" ]]; then
-            echo "모델 검증에서 거절되었거나 이미 게시된 주차여서 검토 후보가 생성되지 않았습니다." >> "$GITHUB_STEP_SUMMARY"
-            exit 0
-          fi
-          candidate_sha256="$(sha256sum "$candidate" | cut -d' ' -f1)"
-          {
-            echo "## 기숙사 식단 운영자 검토 필요"
-            echo
-            echo "- 제출 ID: \`$SUBMISSION_ID\`"
-            echo "- 후보 SHA-256: \`$candidate_sha256\`"
-            echo "- 원본 이미지: $SOURCE_IMAGE_URL"
-            echo
-            echo "원본 이미지와 후보 JSON을 확인한 뒤 수동 실행에서 dataset=dorm-approve, 제출 ID, 후보 SHA-256, APPROVE를 입력하세요."
-          } >> "$GITHUB_STEP_SUMMARY"
-      - name: 운영자 승인 기숙사 식단 게시
-        if: steps.target.outputs.value == 'dorm-approve' && github.event_name == 'workflow_dispatch'
-        working-directory: source
-        env:
-          SUBMISSION_ID: ${{ inputs.submission_id }}
-          CANDIDATE_SHA256: ${{ inputs.candidate_sha256 }}
-          APPROVAL: ${{ inputs.approval }}
-          APPROVED_BY: ${{ github.actor }}
-          EVENT_NAME: ${{ github.event_name }}
-        run: |
-          [[ "$EVENT_NAME" == "workflow_dispatch" ]] || { echo "수동 승인 실행만 허용됩니다." >&2; exit 1; }
-          [[ "$APPROVAL" == "APPROVE" ]] || { echo "승인 확인값이 일치하지 않습니다." >&2; exit 1; }
-          [[ "$SUBMISSION_ID" =~ ^[A-Za-z0-9_-]{1,64}$ ]] || { echo "제출 ID 형식이 잘못됐습니다." >&2; exit 1; }
-          [[ "$CANDIDATE_SHA256" =~ ^[0-9a-f]{64}$ ]] || { echo "후보 SHA-256 형식이 잘못됐습니다." >&2; exit 1; }
-          [[ "$APPROVED_BY" =~ ^[A-Za-z0-9]([A-Za-z0-9-]{0,37}[A-Za-z0-9])?$ ]] || { echo "GitHub 실행자 형식이 잘못됐습니다." >&2; exit 1; }
-          bash ./gradlew :data-pipeline:run --args="approve-dorm-meal ignored $GITHUB_WORKSPACE/site $SUBMISSION_ID $CANDIDATE_SHA256 $APPROVED_BY"
       - name: 공지 게시
         if: steps.target.outputs.value == 'notice' || steps.target.outputs.value == 'all'
         working-directory: source
@@ -186,13 +143,15 @@ jobs:
       - name: 생성 데이터 커밋
         id: generated
         shell: bash
+        env:
+          TARGET: ${{ steps.target.outputs.value }}
         run: |
           git -C site config user.name github-actions[bot]
           git -C site config user.email 41898282+github-actions[bot]@users.noreply.github.com
           git -C site add -- .
           if ! git -C site diff --cached --quiet; then
             echo "changed=true" >> "$GITHUB_OUTPUT"
-            git -C site commit -m "data: publish ${{ steps.target.outputs.value }}"
+            git -C site commit -m "data: publish $TARGET"
             git -C site push origin HEAD:data
           else
             echo "changed=false" >> "$GITHUB_OUTPUT"

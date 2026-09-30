@@ -17,23 +17,25 @@ import org.junit.Test
 
 class DormitoryMealHolidaySubmissionTest {
     @Test
-    fun `휴일 한 줄과 부분 휴무를 검토 후 게시할 때 원문 그대로 보존한다`() = withSubmission(
+    fun `휴일 한 줄과 부분 휴무를 자동 게시할 때 원문 그대로 보존한다`() = withSubmission(
         thursdaySections = """[{"name":"안내","menuLines":["추석 공휴일"]}]""",
-    ) { result, publisher, output ->
-        assertEquals("PENDING_REVIEW", result.state)
-        val candidateBytes = Files.readAllBytes(output.resolve("data/v1/dorm-review-candidates/holiday-test.json"))
-        val candidate = Json.decodeFromString<DormitoryMealReviewCandidate>(candidateBytes.decodeToString())
-        assertEquals(listOf("추석 공휴일"), candidate.payload.days[3].sections.single().menuLines)
-        assertEquals(null, candidate.payload.days[3].sections.single().hours)
-        assertEquals(listOf("쌀밥", "된장국"), candidate.payload.days[0].sections[0].menuLines)
-        assertEquals(listOf("휴무"), candidate.payload.days[0].sections[1].menuLines)
-        assertFalse(Files.exists(output.resolve("data/v1/manifest.json")))
-        publisher.approveDormitoryMeal("holiday-test", candidateBytes.sha256(), "test-reviewer", NOW)
+    ) { result, _, output ->
+        assertEquals("PUBLISHED", result.state)
+        assertEquals(null, result.message)
         val manifest = Json.decodeFromString<CampusDataManifest>(Files.readString(output.resolve("data/v1/manifest.json")))
         val descriptor = manifest.datasets.getValue("dorm_meal")
         assertEquals("READY", descriptor.state)
         val published = Json.decodeFromString<DormitoryMealPayload>(Files.readString(output.resolve("data/v1/${descriptor.url}")))
-        assertEquals(candidate.payload, published)
+        assertEquals("2026-09-21", published.weekStart)
+        assertEquals(listOf("추석 공휴일"), published.days[3].sections.single().menuLines)
+        assertEquals(null, published.days[3].sections.single().hours)
+        assertEquals(listOf("추석"), published.days[4].sections.single().menuLines)
+        assertEquals(listOf("쌀밥", "된장국"), published.days[0].sections[0].menuLines)
+        assertEquals(listOf("휴무"), published.days[0].sections[1].menuLines)
+        val status = Json.decodeFromString<DormitoryMealSubmissionStatus>(
+            Files.readString(output.resolve("data/v1/dorm-submissions/holiday-test.json")),
+        )
+        assertEquals(result, status)
     }
 
     @Test
@@ -46,7 +48,6 @@ class DormitoryMealHolidaySubmissionTest {
             Files.readString(output.resolve("data/v1/dorm-submissions/holiday-test.json")),
         )
         assertEquals(result, status)
-        assertFalse(Files.exists(output.resolve("data/v1/dorm-review-candidates/holiday-test.json")))
         assertFalse(Files.exists(output.resolve("data/v1/manifest.json")))
     }
 

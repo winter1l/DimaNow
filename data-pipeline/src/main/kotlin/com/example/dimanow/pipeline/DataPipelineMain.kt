@@ -8,11 +8,10 @@ import org.jsoup.Jsoup
 
 fun main(args: Array<String>) {
     val command = args.firstOrNull() ?: error("게시 명령이 필요합니다.")
-    val expectedSize = if (command in setOf("publish-dorm-meal", "approve-dorm-meal")) 6 else 3
+    val expectedSize = if (command == "publish-dorm-meal") 6 else 3
     require(args.size == expectedSize) {
         "publish-shuttle <input.csv> <site> | publish-meal ignored <site> | publish-notice ignored <site> | " +
-            "publish-dorm-meal <image> <site> <submission-id> <source-image-url> <mime-type> | " +
-            "approve-dorm-meal ignored <site> <submission-id> <candidate-sha256> <github-actor>"
+            "publish-dorm-meal <image> <site> <submission-id> <source-image-url> <mime-type>"
     }
     val site = Path.of(args[2])
     val publisher = StaticDataPublisher(site)
@@ -60,12 +59,6 @@ fun main(args: Array<String>) {
             )
             System.err.println("기숙사 식단 처리 실패: ${error.message}")
         }
-        "approve-dorm-meal" -> publisher.approveDormitoryMeal(
-            submissionId = args[3],
-            expectedCandidateSha256 = args[4],
-            approvedBy = args[5],
-            approvedAt = now,
-        )
         else -> error("알 수 없는 명령: $command")
     }
 }

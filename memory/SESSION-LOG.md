@@ -402,3 +402,6 @@ Observed: working tree (D-081..D-083 UI + 09-16..09-21 memory records) passes te
 
 ## 2026-09-30 — Remote divergence analysis (read-only)
 Observed after commits d6de094/42127d3: the five origin-only commits (257f819, 8545a2c, 1570bc5, 4a37f31, e0ce29e) are separately-committed versions of fixes already present locally (privacy guard/tools, meal recovery, dorm OCR resolution). The only origin-only text is one 00-INDEX line pointing to LOCAL-ONLY.md and a shorter git-privacy record. Material difference: origin's publish-data.yml and DormitoryMealSubmissionProcessor still auto-publish dormitory meals, while local implements D-070 operator approval (dorm-approve dispatch, PENDING_REVIEW candidates). Pushing local main would therefore change production dorm publication behavior. No merge or push performed.
+
+## 2026-09-30 — Merged origin/main locally (user-requested, local wins)
+Confirmed: merge b209598 resolves all five conflicts to local; auto-merged files and the final tree are identical to pre-merge local HEAD. Local main is now ahead 11 / behind 0 of origin/main. Not pushed: pushing activates D-070 operator-approved dormitory publication in production Actions and publishes D-064..D-088 app work.

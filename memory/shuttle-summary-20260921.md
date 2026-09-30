@@ -13,3 +13,6 @@ Campus shuttle-only notifications now summarize the immediate boarding leg: titl
 - APK: dist/DIMA-Now-1.5-shuttle-fix-20260921.apk; SHA2568EC0C3AA0EC705E126C0431902893987C7878E097FDBEA73FF9C15298B5E34E6. Includes the earlier meal repair.
 - Phone last-known endpoint did not respond. Physical One UI rendering and phone replacement are unverified; user reconnection remains pending. Do not claim Samsung Now Bar visual acceptance from notification-object tests.
 - Photos, ADB logs and builds remain ignored; evidence in .local/shuttle-summary-20260921/. Independent focused source review found no blocking issue.
+
+## 2026-09-21 — Phone update completed
+Observed wireless replacement installation and launch succeeded; installed artifact hash matched and original first-install time was preserved. This supersedes the pending phone installation above. Physical notification rendering remains unverified. See device-update-20260921.md.

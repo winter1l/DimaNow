@@ -15,6 +15,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import com.example.dimanow.theme.DIMANowTheme
+import com.example.dimanow.ui.motion.ProvideReducedMotion
 import com.example.dimanow.ui.DimaNowApp
 
 class MainActivity : ComponentActivity() {
@@ -34,29 +35,34 @@ class MainActivity : ComponentActivity() {
 
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)
-    intent.getStringExtra("TARGET_PAGE")?.let { targetPageEvent = it to System.nanoTime() }
+    // A recreated activity restores its saved tab; only a fresh launch follows the launch intent's deep link.
+    if (savedInstanceState == null) {
+      intent.getStringExtra("TARGET_PAGE")?.let { targetPageEvent = it to System.nanoTime() }
+    }
 
     enableEdgeToEdge()
     setContent {
       val application = application as DimaNowApplication
       DIMANowTheme {
         Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-          DimaNowApp(
-            repository = application.repository,
-            preferences = application.preferences,
-            shuttleSource = application.shuttleSource,
-            mealSource = application.mealSource,
-            noticeSource = application.noticeSource,
-            lmsCredentialStore = application.lmsCredentialStore,
-            lmsSessionController = application.lmsSessionController,
-            lmsLoginBridge = application.lmsLoginBridge,
-            lmsRenderedPageBridge = application.lmsRenderedPageBridge,
-            lmsAutoLoginCoordinator = application.lmsAutoLoginCoordinator,
-            lmsSource = application.lmsSource,
-            liveSurfaceController = application.liveSurfaceController,
-            appUpdateCoordinator = application.appUpdateCoordinator,
-            targetPageEvent = targetPageEvent,
-          )
+          ProvideReducedMotion {
+            DimaNowApp(
+              repository = application.repository,
+              preferences = application.preferences,
+              shuttleSource = application.shuttleSource,
+              mealSource = application.mealSource,
+              noticeSource = application.noticeSource,
+              lmsCredentialStore = application.lmsCredentialStore,
+              lmsSessionController = application.lmsSessionController,
+              lmsLoginBridge = application.lmsLoginBridge,
+              lmsRenderedPageBridge = application.lmsRenderedPageBridge,
+              lmsAutoLoginCoordinator = application.lmsAutoLoginCoordinator,
+              lmsSource = application.lmsSource,
+              liveSurfaceController = application.liveSurfaceController,
+              appUpdateCoordinator = application.appUpdateCoordinator,
+              targetPageEvent = targetPageEvent,
+            )
+          }
         }
       }
     }

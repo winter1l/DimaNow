@@ -108,11 +108,11 @@ class AppUpdateCoordinator(
                 } else {
                     saved.preparedPath?.let(::File)?.delete()
                     preferences.clearPreparedAppUpdate()
-                    AppUpdateUiState(currentVersion, AppUpdatePhase.UP_TO_DATE, release, message = "최신 버전입니다")
+                    AppUpdateUiState(currentVersion, AppUpdatePhase.UP_TO_DATE, release, message = "최신 버전이에요")
                 }
             }
-            .onFailure { error ->
-                mutableState.value = mutableState.value.copy(phase = AppUpdatePhase.ERROR, message = error.message ?: "업데이트 확인에 실패했습니다")
+            .onFailure { _ ->
+                mutableState.value = mutableState.value.copy(phase = AppUpdatePhase.ERROR, message = "업데이트를 확인하지 못했어요. 인터넷 연결을 확인하고 다시 시도해 주세요")
             }
     }
 
@@ -145,7 +145,7 @@ class AppUpdateCoordinator(
                 mutableState.value = mutableState.value.copy(
                     phase = AppUpdatePhase.ERROR,
                     downloadProgress = null,
-                    message = error.message ?: "업데이트 다운로드에 실패했습니다",
+                    message = "업데이트를 내려받지 못했어요. 인터넷 연결을 확인하고 다시 시도해 주세요",
                 )
             }
             downloadJob = null
@@ -159,14 +159,14 @@ class AppUpdateCoordinator(
     fun cancelDownload() {
         downloadJob?.cancel()
         installer.cleanupIncompleteDownloads()
-        mutableState.value = mutableState.value.copy(phase = AppUpdatePhase.AVAILABLE, downloadProgress = null, message = "다운로드를 취소했습니다")
+        mutableState.value = mutableState.value.copy(phase = AppUpdatePhase.AVAILABLE, downloadProgress = null, message = "다운로드를 취소했어요")
     }
 
     private fun requestInstall(prepared: PreparedUpdate) {
         mutableState.value = when (installer.requestInstall(prepared)) {
-            AppInstallRequestResult.INSTALLER_OPENED -> mutableState.value.copy(phase = AppUpdatePhase.INSTALLER_OPENED, message = "Android 설치 화면을 확인하세요")
-            AppInstallRequestResult.PERMISSION_REQUIRED -> mutableState.value.copy(phase = AppUpdatePhase.PERMISSION_REQUIRED, message = "이 앱에서 설치를 허용한 뒤 설치를 계속하세요")
-            AppInstallRequestResult.UNAVAILABLE -> mutableState.value.copy(phase = AppUpdatePhase.ERROR, message = "Android 설치 화면을 열 수 없습니다")
+            AppInstallRequestResult.INSTALLER_OPENED -> mutableState.value.copy(phase = AppUpdatePhase.INSTALLER_OPENED, message = "Android 설치 화면을 확인해 주세요")
+            AppInstallRequestResult.PERMISSION_REQUIRED -> mutableState.value.copy(phase = AppUpdatePhase.PERMISSION_REQUIRED, message = "이 앱에서 설치를 허용한 뒤 설치를 계속해 주세요")
+            AppInstallRequestResult.UNAVAILABLE -> mutableState.value.copy(phase = AppUpdatePhase.ERROR, message = "Android 설치 화면을 열지 못했어요. 잠시 후 설치 계속을 눌러 주세요")
         }
     }
 }

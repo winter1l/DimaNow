@@ -31,11 +31,11 @@ class AnonymousDormitoryMealApi(
 
     override suspend fun upload(image: DormitoryMealImage): DormitoryMealSubmission = withContext(Dispatchers.IO) {
         require(uploadRoot.startsWith("https://") || uploadRoot.startsWith("http://127.0.0.1:")) {
-            "기숙사 식단 업로드 서비스가 준비되지 않았습니다."
+            "기숙사 식단 업로드 서비스가 준비되지 않았어요."
         }
-        require(image.bytes.size in 1..MAX_IMAGE_BYTES) { "식단 이미지는 15MB 이하여야 합니다." }
+        require(image.bytes.size in 1..MAX_IMAGE_BYTES) { "식단 이미지는 15MB 이하여야 해요." }
         require(image.mimeType in MIME_EXTENSIONS.keys && MIME_EXTENSIONS.getValue(image.mimeType) == image.extension.lowercase()) {
-            "지원하지 않는 식단 이미지 형식입니다."
+            "지원하지 않는 식단 이미지 형식이에요."
         }
         val connection = URL("${uploadRoot.trimEnd('/')}/v1/dormitory-meals").openConnection() as HttpURLConnection
         try {
@@ -58,7 +58,7 @@ class AnonymousDormitoryMealApi(
             val response = json.parseToJsonElement(responseText).jsonObject
             val submissionId = response.getValue("submissionId").jsonPrimitive.content
             val uploadedAt = response.getValue("uploadedAt").jsonPrimitive.content
-            require(submissionId.matches(Regex("[A-Za-z0-9_-]{1,64}"))) { "식단 제출 번호가 올바르지 않습니다." }
+            require(submissionId.matches(Regex("[A-Za-z0-9_-]{1,64}"))) { "식단 제출 번호가 올바르지 않아요." }
             DormitoryMealSubmission(submissionId, Instant.parse(uploadedAt))
         } finally {
             connection.disconnect()
@@ -66,7 +66,7 @@ class AnonymousDormitoryMealApi(
     }
 
     override suspend fun submissionStatus(submissionId: String): DormitoryMealSubmissionStatus? = withContext(Dispatchers.IO) {
-        require(submissionId.matches(Regex("[A-Za-z0-9_-]{1,64}"))) { "식단 제출 번호가 올바르지 않습니다." }
+        require(submissionId.matches(Regex("[A-Za-z0-9_-]{1,64}"))) { "식단 제출 번호가 올바르지 않아요." }
         val connection = URL("$pagesRoot/dorm-submissions/$submissionId.json?t=${now().toEpochMilli()}").openConnection() as HttpURLConnection
         try {
             connection.requestMethod = "GET"

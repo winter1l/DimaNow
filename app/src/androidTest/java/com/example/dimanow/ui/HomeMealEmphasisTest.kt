@@ -9,7 +9,8 @@ import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
-import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.hasTestTag
+import androidx.compose.ui.test.performScrollToNode
 import androidx.test.platform.app.InstrumentationRegistry
 import com.example.dimanow.domain.CampusZoneId
 import com.example.dimanow.domain.DefaultSchedule
@@ -40,7 +41,7 @@ class HomeMealEmphasisTest {
         composeRule.setContent {
             DIMANowTheme(darkTheme = dark.value) {
                 DashboardScreen(
-                    schedule = DefaultSchedule.create(), zone = CampusZoneId.YEIN, automatic = true,
+                    schedule = DefaultSchedule.create(), zone = CampusZoneId.YEIN,
                     shuttle = ShuttleData(emptyList(), null, null, null, "https://example.invalid", null),
                     meal = MealData(emptyList(), null, null, null, "https://example.invalid", null, null),
                     dormitoryMeal = dormitory, now = now.value,
@@ -48,9 +49,12 @@ class HomeMealEmphasisTest {
             }
         }
         val card = composeRule.onNodeWithTag("dashboard_meal_card")
-        card.performScrollTo().assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "운영 시간 아님"))
+        // Home is a lazy list; scroll the list so the meal card is composed before asserting on it.
+        composeRule.onNodeWithTag("home_list").performScrollToNode(hasTestTag("dashboard_meal_card"))
+        card.assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "운영 시간 아님"))
         composeRule.runOnIdle { now.value = now.value.withHour(12).withMinute(0) }
-        card.performScrollTo().assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "운영 중"))
+        composeRule.onNodeWithTag("home_list").performScrollToNode(hasTestTag("dashboard_meal_card"))
+        card.assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "운영 중"))
         capture("meal-open-light.png")
         composeRule.runOnIdle { dark.value = true }
         composeRule.waitForIdle()

@@ -21,7 +21,7 @@ object LmsUrlPolicy {
     }.getOrDefault(false)
 
     fun requireAllowed(value: String): URI = URI.create(value).also {
-        require(isAllowed(value)) { "허용되지 않은 LMS 주소입니다" }
+        require(isAllowed(value)) { "허용되지 않은 LMS 주소예요" }
     }
 
     fun upgradeOfficialHttp(value: String): String? = runCatching {

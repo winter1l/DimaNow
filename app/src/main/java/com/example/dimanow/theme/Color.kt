@@ -63,9 +63,7 @@ val OutlineDark = Color(0xFF9E8C90)
 val OutlineVariantDark = Color(0xFF514347)
 val SurfaceBrightDark = Color(0xFF403739)
 
-// Status / Accent Colors
-val SuccessGreen = Color(0xFF10B981)
-val WarningAmber = Color(0xFFF59E0B)
+// Error colors
 val ErrorRedLight = Color(0xFFBA1A1A)
 val ErrorRedDark = Color(0xFFFFB4AB)
 // Complete matching roles for the existing error palette, rather than mixing fallback reds.

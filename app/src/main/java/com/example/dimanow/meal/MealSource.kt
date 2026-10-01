@@ -170,7 +170,7 @@ fun mealServiceStatus(date: LocalDate, hours: String?, now: ZonedDateTime): Meal
 }
 
 fun mealServiceStatus(day: MealDay?, time: LocalTime): MealServiceStatus {
-    day ?: return MealServiceStatus(MealServiceState.NO_MENU, "오늘은 제공 식단이 없습니다")
+    day ?: return MealServiceStatus(MealServiceState.NO_MENU, "오늘은 제공 식단이 없어요")
     val match = MEAL_HOURS_PATTERN.matchEntire(day.hours.trim())
         ?: return MealServiceStatus(MealServiceState.UNKNOWN_HOURS, day.hours)
     val start = LocalTime.parse(match.groupValues[1])
@@ -206,9 +206,9 @@ interface MealSource {
         MealRefreshPolicy.nextBackgroundCheckAt(data.first(), now)
     suspend fun refreshDormitory(): MealRefreshResult = MealRefreshResult.NotPublishedYet
     suspend fun submitDormitoryMeal(image: DormitoryMealImage): DormitoryMealSubmissionResult =
-        DormitoryMealSubmissionResult.Failure("기숙사 식단 업로드 서비스가 준비되지 않았습니다.")
+        DormitoryMealSubmissionResult.Failure("기숙사 식단 업로드 서비스가 준비되지 않았어요.")
     suspend fun dormitorySubmissionStatus(submissionId: String): DormitoryMealSubmissionResult =
-        DormitoryMealSubmissionResult.Failure("식단 처리 상태를 확인하지 못했습니다.")
+        DormitoryMealSubmissionResult.Failure("식단 처리 상태를 확인하지 못했어요.")
 }
 
 const val OFFICIAL_MEAL_SOURCE_URL = "https://www.dima.ac.kr/?p=1"
@@ -281,16 +281,16 @@ class StaticMealSource(
         val attempt = clock.instant()
         try {
             val manifest = json.decodeFromString<CampusDataManifest>(transport.get(MANIFEST_URL).decodeToString())
-            require(manifest.schemaVersion == 1) { "지원하지 않는 동기화 스키마입니다." }
+            require(manifest.schemaVersion == 1) { "지원하지 않는 동기화 스키마예요." }
             val descriptor = manifest.datasets.getValue(SOURCE_KEY)
-            require(descriptor.sourceUrl == OFFICIAL_MEAL_SOURCE_URL) { "허용되지 않은 식단 원문 주소입니다." }
+            require(descriptor.sourceUrl == OFFICIAL_MEAL_SOURCE_URL) { "허용되지 않은 식단 원문 주소예요." }
             val previousSync = dao.syncState(SOURCE_KEY)
             if (descriptor.state != "READY") {
                 val previousStatus = dao.sourceStatus(SOURCE_KEY)
                 val reason = descriptor.message ?: when (descriptor.state) {
                     "WAITING" -> NOT_PUBLISHED_MESSAGE
                     "NEEDS_REVIEW" -> "메뉴 확인 필요"
-                    else -> "식단 데이터가 준비되지 않았습니다."
+                    else -> "식단 데이터가 준비되지 않았어요."
                 }
                 database.withTransaction {
                     dao.putSourceStatus(
@@ -370,21 +370,21 @@ class StaticMealSource(
                 return@withContext MealRefreshResult.Success(week.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY)), attempt)
             }
             val relativeUrl = descriptor.url
-            require(relativeUrl.matches(Regex("meal/[0-9a-f]{64}\\.json"))) { "잘못된 식단 데이터 경로입니다." }
+            require(relativeUrl.matches(Regex("meal/[0-9a-f]{64}\\.json"))) { "잘못된 식단 데이터 경로예요." }
             val payloadBytes = transport.get("$DATA_ROOT/$relativeUrl")
-            require(payloadBytes.sha256() == descriptor.sha256) { "식단 데이터 무결성 검사에 실패했습니다." }
+            require(payloadBytes.sha256() == descriptor.sha256) { "식단 데이터 무결성 검사에 실패했어요." }
             val payload = json.decodeFromString<MealPayload>(payloadBytes.decodeToString())
-            require(payload.schemaVersion == 1) { "지원하지 않는 식단 스키마입니다." }
+            require(payload.schemaVersion == 1) { "지원하지 않는 식단 스키마예요." }
             val weekStart = LocalDate.parse(payload.weekStart)
             val weekEnd = LocalDate.parse(payload.weekEnd)
-            require(weekEnd == weekStart.plusDays(6) && payload.days.isNotEmpty() && payload.days.size <= 7) { "식단 주차가 올바르지 않습니다." }
-            require(payload.days.distinctBy { it.date }.size == payload.days.size) { "식단 날짜가 중복되었습니다." }
+            require(weekEnd == weekStart.plusDays(6) && payload.days.isNotEmpty() && payload.days.size <= 7) { "식단 주차가 올바르지 않아요." }
+            require(payload.days.distinctBy { it.date }.size == payload.days.size) { "식단 날짜가 중복됐어요." }
             val entities = payload.days.map { row ->
                 val date = LocalDate.parse(row.date)
-                require(date in weekStart..weekEnd) { "식단 날짜가 주차 범위를 벗어났습니다." }
+                require(date in weekStart..weekEnd) { "식단 날짜가 주차 범위를 벗어났어요." }
                 require(isValidStudentMealMenu(row.menuLines)) { "식단 메뉴 줄 수가 부족합니다." }
                 require(row.sourceUrl.startsWith("https://www.instagram.com/") || row.sourceUrl.startsWith("https://www.dima.ac.kr/")) {
-                    "허용되지 않은 식단 원문 주소입니다."
+                    "허용되지 않은 식단 원문 주소예요."
                 }
                 com.example.dimanow.data.MealDayEntity(
                     epochDay = date.toEpochDay(),
@@ -456,10 +456,10 @@ class StaticMealSource(
         try {
             (transport as? CachingStaticDataTransport)?.invalidateManifest()
             val manifest = json.decodeFromString<CampusDataManifest>(transport.get(MANIFEST_URL).decodeToString())
-            require(manifest.schemaVersion == 1) { "지원하지 않는 동기화 스키마입니다." }
+            require(manifest.schemaVersion == 1) { "지원하지 않는 동기화 스키마예요." }
             val descriptor = manifest.datasets[DORMITORY_SOURCE_KEY]
                 ?: return@withContext recordDormitoryWaiting(attempt, "등록된 식단 없음")
-            require(descriptor.sourceUrl == DORMITORY_MEAL_SOURCE_URL) { "허용되지 않은 기숙사 식단 원문 주소입니다." }
+            require(descriptor.sourceUrl == DORMITORY_MEAL_SOURCE_URL) { "허용되지 않은 기숙사 식단 원문 주소예요." }
             val previousSync = dao.syncState(DORMITORY_SOURCE_KEY)
             if (descriptor.state != "READY") {
                 return@withContext recordDormitoryWaiting(attempt, descriptor.message ?: "등록된 식단 없음", descriptor.state)
@@ -479,20 +479,20 @@ class StaticMealSource(
                 }
                 return@withContext MealRefreshResult.Success(weekStart, attempt)
             }
-            require(descriptor.url.matches(Regex("dorm-meal/[0-9a-f]{64}\\.json"))) { "잘못된 기숙사 식단 데이터 경로입니다." }
+            require(descriptor.url.matches(Regex("dorm-meal/[0-9a-f]{64}\\.json"))) { "잘못된 기숙사 식단 데이터 경로예요." }
             val payloadBytes = transport.get("$DATA_ROOT/${descriptor.url}")
-            require(payloadBytes.sha256() == descriptor.sha256) { "기숙사 식단 데이터 무결성 검사에 실패했습니다." }
+            require(payloadBytes.sha256() == descriptor.sha256) { "기숙사 식단 데이터 무결성 검사에 실패했어요." }
             val payload = json.decodeFromString<DormitoryMealPayload>(payloadBytes.decodeToString())
-            require(payload.schemaVersion == 1) { "지원하지 않는 기숙사 식단 스키마입니다." }
+            require(payload.schemaVersion == 1) { "지원하지 않는 기숙사 식단 스키마예요." }
             val weekStart = LocalDate.parse(payload.weekStart)
             val weekEnd = LocalDate.parse(payload.weekEnd)
-            require(weekEnd == weekStart.plusDays(6) && payload.days.isNotEmpty() && payload.days.size <= 7) { "기숙사 식단 주차가 올바르지 않습니다." }
-            require(payload.days.distinctBy { it.date }.size == payload.days.size) { "기숙사 식단 날짜가 중복되었습니다." }
+            require(weekEnd == weekStart.plusDays(6) && payload.days.isNotEmpty() && payload.days.size <= 7) { "기숙사 식단 주차가 올바르지 않아요." }
+            require(payload.days.distinctBy { it.date }.size == payload.days.size) { "기숙사 식단 날짜가 중복됐어요." }
             val entities = payload.days.map { row ->
                 val date = LocalDate.parse(row.date)
-                require(date in weekStart..weekEnd) { "기숙사 식단 날짜가 주차 범위를 벗어났습니다." }
+                require(date in weekStart..weekEnd) { "기숙사 식단 날짜가 주차 범위를 벗어났어요." }
                 require(row.sections.isNotEmpty() && row.sections.all { it.name.isNotBlank() && it.menuLines.isNotEmpty() && it.menuLines.all(String::isNotBlank) }) {
-                    "기숙사 식단 내용이 비어 있습니다."
+                    "기숙사 식단 내용이 비어 있어요."
                 }
                 DormitoryMealDayEntity(
                     epochDay = date.toEpochDay(),
@@ -540,11 +540,11 @@ class StaticMealSource(
 
     override suspend fun submitDormitoryMeal(image: DormitoryMealImage): DormitoryMealSubmissionResult =
         dormitorySubmissionService?.submit(image)
-            ?: DormitoryMealSubmissionResult.Failure("기숙사 식단 업로드 서비스가 준비되지 않았습니다.")
+            ?: DormitoryMealSubmissionResult.Failure("기숙사 식단 업로드 서비스가 준비되지 않았어요.")
 
     override suspend fun dormitorySubmissionStatus(submissionId: String): DormitoryMealSubmissionResult =
         dormitorySubmissionService?.status(submissionId)
-            ?: DormitoryMealSubmissionResult.Failure("식단 처리 상태를 확인하지 못했습니다.")
+            ?: DormitoryMealSubmissionResult.Failure("식단 처리 상태를 확인하지 못했어요.")
 
     private suspend fun recordDormitoryWaiting(attempt: Instant, message: String, state: String = "WAITING"): MealRefreshResult {
         val previous = dao.sourceStatus(DORMITORY_SOURCE_KEY)

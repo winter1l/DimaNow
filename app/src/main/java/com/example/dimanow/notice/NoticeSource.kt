@@ -74,10 +74,10 @@ class StaticNoticeSource(
         val attempt = clock.instant()
         try {
             val manifest = json.decodeFromString<CampusDataManifest>(transport.get(MANIFEST_URL).decodeToString())
-            require(manifest.schemaVersion == 1) { "지원하지 않는 동기화 스키마입니다." }
+            require(manifest.schemaVersion == 1) { "지원하지 않는 동기화 스키마예요." }
             val descriptor = manifest.datasets.getValue(SOURCE_KEY)
-            require(descriptor.state == "READY") { descriptor.message ?: "공지 데이터가 준비되지 않았습니다." }
-            require(descriptor.sourceUrl == OFFICIAL_NOTICE_SOURCE_URL) { "허용되지 않은 공지 원문 주소입니다." }
+            require(descriptor.state == "READY") { descriptor.message ?: "공지 데이터가 준비되지 않았어요." }
+            require(descriptor.sourceUrl == OFFICIAL_NOTICE_SOURCE_URL) { "허용되지 않은 공지 원문 주소예요." }
             val previousSync = dao.syncState(SOURCE_KEY)
             if (previousSync?.revision == descriptor.revision && previousSync.sha256 == descriptor.sha256) {
                 database.withTransaction {
@@ -87,17 +87,17 @@ class StaticNoticeSource(
                 return@withContext NoticeRefreshResult.Success(dao.noticeCount(), attempt)
             }
             val relativeUrl = descriptor.url
-            require(relativeUrl.matches(Regex("notices/[0-9a-f]{64}\\.json"))) { "잘못된 공지 데이터 경로입니다." }
+            require(relativeUrl.matches(Regex("notices/[0-9a-f]{64}\\.json"))) { "잘못된 공지 데이터 경로예요." }
             val payloadBytes = transport.get("$DATA_ROOT/$relativeUrl")
-            require(payloadBytes.sha256() == descriptor.sha256) { "공지 데이터 무결성 검사에 실패했습니다." }
+            require(payloadBytes.sha256() == descriptor.sha256) { "공지 데이터 무결성 검사에 실패했어요." }
             val payload = json.decodeFromString<NoticePayload>(payloadBytes.decodeToString())
             require(payload.schemaVersion == 1 && payload.notices.isNotEmpty() && payload.notices.size <= 10) {
-                "공지 데이터가 올바르지 않습니다."
+                "공지 데이터가 올바르지 않아요."
             }
-            require(payload.notices.distinctBy { it.id }.size == payload.notices.size) { "공지 ID가 중복되었습니다." }
+            require(payload.notices.distinctBy { it.id }.size == payload.notices.size) { "공지 ID가 중복됐어요." }
             val entities = payload.notices.mapIndexed { index, row ->
-                require(row.id.matches(Regex("[0-9]{1,32}"))) { "공지 ID가 올바르지 않습니다." }
-                require(row.url.startsWith("https://www.dima.ac.kr/")) { "허용되지 않은 공지 주소입니다." }
+                require(row.id.matches(Regex("[0-9]{1,32}"))) { "공지 ID가 올바르지 않아요." }
+                require(row.url.startsWith("https://www.dima.ac.kr/")) { "허용되지 않은 공지 주소예요." }
                 NoticeEntity(
                     id = row.id,
                     title = row.title,

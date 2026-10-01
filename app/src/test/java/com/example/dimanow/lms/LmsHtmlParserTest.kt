@@ -521,7 +521,7 @@ class LmsHtmlParserTest {
             parser.parseDetail(item, listHtml, item.detailUrl)
         }
 
-        assertEquals("정확한 게시글 내용을 찾지 못했습니다", error.message)
+        assertEquals("정확한 게시글 내용을 찾지 못했어요", error.message)
     }
 
     @Test
@@ -549,7 +549,7 @@ class LmsHtmlParserTest {
             parser.parseDetail(item, listHtml, item.detailUrl)
         }
 
-        assertEquals("정확한 게시글 내용을 찾지 못했습니다", error.message)
+        assertEquals("정확한 게시글 내용을 찾지 못했어요", error.message)
     }
 
     @Test

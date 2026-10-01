@@ -16,7 +16,7 @@ class LmsLoginFlowReducerTest {
         )
 
         val expected = LmsLoginResult.SessionTakeoverFailed(
-            "다른 로그인 세션을 전환하지 못했습니다",
+            "다른 기기의 로그인을 넘겨받지 못했어요. 다시 시도해 주세요",
         )
         assertEquals(LmsLoginFlowStage.TERMINAL_ERROR, transition.state.stage)
         assertEquals(1, transition.state.sessionTakeoverSubmissions)
@@ -77,7 +77,7 @@ class LmsLoginFlowReducerTest {
             ),
         )
 
-        val expected = LmsLoginResult.Failure("안전하지 않은 페이지가 차단되었습니다")
+        val expected = LmsLoginResult.Failure(LmsUserMessages.UNSAFE_PAGE_BLOCKED)
         assertEquals(LmsLoginFlowStage.TERMINAL_ERROR, transition.state.stage)
         assertEquals(expected, transition.state.result)
         assertEquals(LmsLoginFlowCommand.Complete(expected), transition.command)

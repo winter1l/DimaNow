@@ -6,7 +6,8 @@ import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
-import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.performScrollToNode
 import androidx.lifecycle.Lifecycle
 import com.example.dimanow.DimaNowApplication
 import com.example.dimanow.MainActivity
@@ -76,8 +77,11 @@ class NowBarSettingsActionTest {
 
     private fun openNowBarSetupGuide() {
         composeRule.onNodeWithTag("open_settings").performClick()
-        composeRule.onNodeWithText("고급 및 진단").performScrollTo().performClick()
-        composeRule.onNodeWithText("기기별 알림 도움말").performScrollTo().performClick()
+        // Settings is a lazy list: scroll the list until each row is composed, then tap it.
+        composeRule.onNodeWithTag("settings_list").performScrollToNode(hasText("고급 및 진단"))
+        composeRule.onNodeWithText("고급 및 진단").performClick()
+        composeRule.onNodeWithTag("settings_list").performScrollToNode(hasText("기기별 알림 도움말"))
+        composeRule.onNodeWithText("기기별 알림 도움말").performClick()
     }
 
     private fun topResumedComponent(): String {

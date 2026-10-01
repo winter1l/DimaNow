@@ -3,7 +3,6 @@ package com.example.dimanow.ui
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
-import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.performClick
 import com.example.dimanow.lms.LmsCompletionState
 import com.example.dimanow.lms.LmsItem
@@ -90,7 +89,8 @@ class HomeTodaySummaryTest {
         }
         composeRule.onNodeWithText("수업 정보를 불러오지 못했어요. 다시 시도해 주세요").assertIsDisplayed()
         composeRule.onNodeWithText("다가오는 마감이 없어요").assertDoesNotExist()
-        composeRule.onNodeWithContentDescription("수업 보기").performClick()
+        // D-094(9): the whole card is the target and announces "수업 보기".
+        composeRule.onNode(hasClickLabel("수업 보기")).performClick()
         assertEquals(1, coursesOpened)
     }
 
@@ -127,7 +127,7 @@ class HomeTodaySummaryTest {
             )
         }
         composeRule.onNodeWithText("수업").assertIsDisplayed()
-        composeRule.onNodeWithContentDescription("수업 보기").assertIsDisplayed()
+        composeRule.onNode(hasClickLabel("수업 보기")).assertIsDisplayed()
         composeRule.onNodeWithText("영상제작 · 1개").assertIsDisplayed()
         composeRule.onNodeWithText("사흘 뒤 과제").assertDoesNotExist()
         composeRule.onNodeWithText("다가오는 마감이 없어요").assertDoesNotExist()

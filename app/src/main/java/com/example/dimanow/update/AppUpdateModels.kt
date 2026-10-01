@@ -34,7 +34,7 @@ data class PreparedUpdate(val release: AppUpdateRelease, val absolutePath: Strin
 enum class AppInstallRequestResult { INSTALLER_OPENED, PERMISSION_REQUIRED, UNAVAILABLE }
 
 class AppVersion(value: String) : Comparable<AppVersion> {
-    private val components = value.split('.').map { part -> part.toIntOrNull() ?: throw IllegalArgumentException("잘못된 버전입니다: $value") }
+    private val components = value.split('.').map { part -> part.toIntOrNull() ?: throw IllegalArgumentException("잘못된 버전이에요: $value") }
         .dropLastWhile { it == 0 }
 
     override fun compareTo(other: AppVersion): Int {
@@ -114,26 +114,26 @@ class GitHubReleaseParser {
         val root = json.parseToJsonElement(payload) as? JsonObject ?: error("GitHub 릴리스 응답이 객체가 아닙니다.")
         val tagName = root.string("tag_name")
         require(!root.boolean("draft") && !root.boolean("prerelease")) { "안정 릴리스가 아닙니다." }
-        require(tagName.matches(Regex("v[0-9]+\\.[0-9]+(?:\\.[0-9]+)?"))) { "지원하지 않는 릴리스 태그입니다." }
+        require(tagName.matches(Regex("v[0-9]+\\.[0-9]+(?:\\.[0-9]+)?"))) { "지원하지 않는 릴리스 태그예요." }
         val version = tagName.removePrefix("v")
         val expectedAsset = "DIMA-Now-$tagName-optimized.apk"
         val assets = (root["assets"] as? JsonArray).orEmpty().mapNotNull { it as? JsonObject }.filter { it.string("name") == expectedAsset }
-        require(assets.size == 1) { "optimized APK asset을 하나만 선택할 수 있어야 합니다." }
+        require(assets.size == 1) { "optimized APK asset을 하나만 선택할 수 있어야 해요." }
         val asset = assets.single()
-        val size = (asset["size"] as? JsonPrimitive)?.long ?: error("APK 크기가 없습니다.")
+        val size = (asset["size"] as? JsonPrimitive)?.long ?: error("APK 크기가 없어요.")
         val downloadUrl = asset.string("browser_download_url")
         val htmlUrl = root.string("html_url")
-        require(size in 1..UpdateDownloadPolicy.MAX_APK_BYTES) { "APK 크기가 올바르지 않습니다." }
-        require(UpdateDownloadPolicy.isAllowedUrl(downloadUrl)) { "허용되지 않은 APK 주소입니다." }
-        require(htmlUrl.startsWith("https://github.com/winter1l/DimaNow/releases/")) { "허용되지 않은 릴리스 주소입니다." }
+        require(size in 1..UpdateDownloadPolicy.MAX_APK_BYTES) { "APK 크기가 올바르지 않아요." }
+        require(UpdateDownloadPolicy.isAllowedUrl(downloadUrl)) { "허용되지 않은 APK 주소예요." }
+        require(htmlUrl.startsWith("https://github.com/winter1l/DimaNow/releases/")) { "허용되지 않은 릴리스 주소예요." }
         val digest = (asset["digest"] as? JsonPrimitive)?.contentOrNull?.takeIf { it.matches(Regex("sha256:[0-9a-fA-F]{64}")) }
-            ?: throw IllegalArgumentException("GitHub asset SHA-256이 없습니다.")
+            ?: throw IllegalArgumentException("GitHub asset SHA-256이 없어요.")
         return AppUpdateRelease(version, htmlUrl, downloadUrl, size, digest.substringAfter(':').lowercase())
     }
 
     private fun JsonObject.string(key: String): String = (get(key) as? JsonPrimitive)?.contentOrNull
-        ?: throw IllegalArgumentException("GitHub 릴리스 응답에 $key 값이 없습니다.")
+        ?: throw IllegalArgumentException("GitHub 릴리스 응답에 $key 값이 없어요.")
 
     private fun JsonObject.boolean(key: String): Boolean = (get(key) as? JsonPrimitive)?.boolean
-        ?: throw IllegalArgumentException("GitHub 릴리스 응답에 $key 값이 없습니다.")
+        ?: throw IllegalArgumentException("GitHub 릴리스 응답에 $key 값이 없어요.")
 }

@@ -55,16 +55,18 @@ class MealWidgetProvider : AppWidgetProvider() {
                     views.setTextViewTextSize(R.id.meal_widget_menu, TypedValue.COMPLEX_UNIT_SP, layoutPlan.menuTextSp)
                     views.setTextViewText(
                         R.id.meal_widget_menu,
-                        meal?.menuLines?.joinToString("\n") ?: if (today.dayOfWeek.value >= 6) "오늘은 제공 식단이 없습니다" else "메뉴 확인 필요",
+                        meal?.menuLines?.joinToString("\n") ?: if (today.dayOfWeek.value >= 6) "주말에는 학생식당을 쉬어요" else "오늘 등록된 식단이 없어요",
                     )
                     // 위젯 헤더는 좁으므로 운영 전에는 접두어 없이 시작 시각만 짧게 표시한다
-                    val hoursLabel = if (serviceStatus.state == com.example.dimanow.meal.MealServiceState.BEFORE_OPEN) {
-                        serviceStatus.label.removePrefix("운영 전 · ")
-                    } else {
-                        serviceStatus.label
+                    val hoursLabel = when (serviceStatus.state) {
+                        com.example.dimanow.meal.MealServiceState.BEFORE_OPEN -> serviceStatus.label.removePrefix("운영 전 · ")
+                        // 식단이 없는 날은 본문이 한 번만 알린다 (D-094(14))
+                        com.example.dimanow.meal.MealServiceState.NO_MENU -> ""
+                        else -> serviceStatus.label
                     }
                     views.setTextViewText(R.id.meal_widget_hours, hoursLabel)
-                    views.setTextViewText(R.id.meal_widget_state, data.error.orEmpty())
+                    // 기술적인 오류 원문은 설정의 진단 카드에만 둔다 (D-094(14))
+                    views.setTextViewText(R.id.meal_widget_state, if (data.error == null) "" else "식단을 새로 받지 못했어요")
                     views.setViewVisibility(R.id.meal_widget_state, if (data.error == null) View.GONE else View.VISIBLE)
                     val openApp = Intent(context, MainActivity::class.java).apply {
                         putExtra("TARGET_PAGE", "MEAL")

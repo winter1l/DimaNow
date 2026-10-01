@@ -22,7 +22,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.setValue
 import com.example.dimanow.theme.DIMANowTheme
-import com.example.dimanow.ui.motion.staggeredEntrance
+import com.example.dimanow.ui.motion.dimaSharedAxisX
+import com.example.dimanow.ui.motion.entrance
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -40,7 +41,7 @@ class CardShadowTransitionTest {
                 expected = MaterialTheme.colorScheme.surfaceContainerLow
                 Box(Modifier.padding(24.dp)) {
                     ElevatedCard(
-                        modifier = Modifier.size(240.dp, 120.dp).testTag("moving_card").staggeredEntrance(0),
+                        modifier = Modifier.size(240.dp, 120.dp).testTag("moving_card").entrance(),
                         colors = CardDefaults.elevatedCardColors(containerColor = expected),
                     ) { Text("셔틀 카드", Modifier.padding(24.dp)) }
                 }
@@ -66,7 +67,7 @@ class CardShadowTransitionTest {
             Box(Modifier.size(200.dp).background(Color.Black).testTag("transition_scene")) {
                 AnimatedContent(
                     targetState = page,
-                    transitionSpec = { dimaTabContentTransform(targetState > initialState) },
+                    transitionSpec = { dimaSharedAxisX(targetState > initialState, slideDistancePx = 60) },
                     label = "tab_transition_test",
                 ) { target ->
                     Box(
@@ -83,7 +84,7 @@ class CardShadowTransitionTest {
         composeRule.runOnIdle { page = 1 }
         var blendedFrame: Int? = null
         // Sample a bounded number of actual frames, without assuming a duration-based midpoint.
-        // Both panels cover the center throughout this quarter-width slide. Over the black parent,
+        // Both panels cover the center throughout this short shared-axis slide. Over the black parent,
         // red + blue < 255 proves the outgoing layer fades too, rather than only the incoming one.
         for (frame in 0 until 20) {
             composeRule.mainClock.advanceTimeByFrame()

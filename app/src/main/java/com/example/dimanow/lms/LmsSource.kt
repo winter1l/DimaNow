@@ -206,10 +206,10 @@ class UrlConnectionLmsTransport(
         onProgress: (Long, Long?) -> Unit,
     ): LmsAttachmentDownloadResult {
         if (destination.exists()) {
-            return LmsAttachmentDownloadResult.Failure("첨부파일 캐시가 이미 존재합니다")
+            return LmsAttachmentDownloadResult.Failure("첨부파일 임시 파일이 이미 있어요")
         }
         return try {
-            require(!request.refererUrl.isNullOrBlank()) { "첨부파일 Referer가 없습니다" }
+            require(!request.refererUrl.isNullOrBlank()) { "첨부파일 요청 정보가 부족해요" }
             requireOfficialAttachmentUrl(request.url)
             requireOfficialAttachmentUrl(requireNotNull(request.refererUrl))
             val requestUrl = if (request.method == LmsHttpMethod.GET) {
@@ -231,11 +231,11 @@ class UrlConnectionLmsTransport(
             when {
                 bytesWritten == 0L -> {
                     destination.delete()
-                    LmsAttachmentDownloadResult.Failure("빈 첨부파일 응답입니다")
+                    LmsAttachmentDownloadResult.Failure("첨부파일이 비어 있어요")
                 }
                 declaredLength != null && declaredLength != bytesWritten -> {
                     destination.delete()
-                    LmsAttachmentDownloadResult.Failure("첨부파일 길이가 응답과 일치하지 않습니다")
+                    LmsAttachmentDownloadResult.Failure("첨부파일을 끝까지 받지 못했어요")
                 }
                 else -> LmsAttachmentDownloadResult.Success(
                     bytesWritten = bytesWritten,
@@ -252,7 +252,7 @@ class UrlConnectionLmsTransport(
             if (error is RejectedLmsAttachmentException && error.sessionExpired) {
                 LmsAttachmentDownloadResult.SessionExpired
             } else {
-                LmsAttachmentDownloadResult.Failure(error.message ?: "첨부파일을 저장하지 못했습니다")
+                LmsAttachmentDownloadResult.Failure(error.message ?: "첨부파일을 저장하지 못했어요")
             }
         }
     }
@@ -289,7 +289,7 @@ class UrlConnectionLmsTransport(
                             onProgress(count, total)
                         }
                         check(total == null || count == total) {
-                            "첨부파일 길이가 응답과 일치하지 않습니다"
+                            "첨부파일을 끝까지 받지 못했어요"
                         }
                     }
                 }
@@ -311,10 +311,10 @@ class UrlConnectionLmsTransport(
                     containsLoginForm(prefixText)
                 throw RejectedLmsAttachmentException(
                     sessionExpired = sessionExpired,
-                    message = if (sessionExpired) "로그인 세션이 만료되었습니다" else "첨부파일 대신 HTML 오류가 반환되었습니다",
+                    message = if (sessionExpired) "로그인이 만료됐어요" else "첨부파일 대신 오류 페이지가 왔어요",
                 )
             }
-            check(part.renameTo(destination)) { "첨부파일을 확정하지 못했습니다" }
+            check(part.renameTo(destination)) { "첨부파일을 저장하지 못했어요" }
             response
         } catch (error: Throwable) {
             part.delete()
@@ -365,7 +365,7 @@ class UrlConnectionLmsTransport(
                     connection.disconnect()
                     throw RejectedLmsAttachmentException(
                         sessionExpired = true,
-                        message = "로그인 세션이 만료되었습니다",
+                        message = "로그인이 만료됐어요",
                     )
                 }
                 current = redirectUrl
@@ -399,7 +399,7 @@ class UrlConnectionLmsTransport(
                 uri.host.equals(LMS_HOST, ignoreCase = true) &&
                 uri.userInfo == null &&
                 uri.port in setOf(-1, 443),
-        ) { "허용되지 않은 LMS 첨부파일 주소입니다" }
+        ) { "허용되지 않은 LMS 첨부파일 주소예요" }
     }
 
     private fun appendQueryFields(url: String, fields: Map<String, String>): String {
@@ -544,7 +544,7 @@ class RoomLmsSource(
             var html = response.htmlText()
             if (parser.isLoginPage(html, response.finalUrl)) {
                 sessionController.transition(LmsSessionState.EXPIRED)
-                dao.setSync(LmsSyncEntity(status = LmsSyncState.ERROR.name, lastSuccessAtMillis = prior?.lastSuccessAtMillis, errorMessage = "로그인이 필요합니다"))
+                dao.setSync(LmsSyncEntity(status = LmsSyncState.ERROR.name, lastSuccessAtMillis = prior?.lastSuccessAtMillis, errorMessage = LmsUserMessages.SIGN_IN_REQUIRED))
                 return@withLock LmsRefreshResult.SessionExpired
             }
             var parsed = parser.parseDashboard(html, LMS_ORIGIN)
@@ -578,7 +578,7 @@ class RoomLmsSource(
                     LmsSyncEntity(
                         status = LmsSyncState.ERROR.name,
                         lastSuccessAtMillis = prior?.lastSuccessAtMillis,
-                        errorMessage = "수업 목록 확인이 필요합니다",
+                        errorMessage = "수업 목록 확인이 필요해요",
                     ),
                 )
                 return@withLock LmsRefreshResult.CourseCatalogRequired
@@ -637,7 +637,7 @@ class RoomLmsSource(
             sessionController.transition(LmsSessionState.ACTIVE)
             LmsRefreshResult.Success
         } catch (error: Throwable) {
-            val message = error.message ?: "LMS를 불러오지 못했습니다"
+            val message = error.message ?: "LMS를 불러오지 못했어요"
             dao.setSync(LmsSyncEntity(status = LmsSyncState.ERROR.name, lastSuccessAtMillis = prior?.lastSuccessAtMillis, errorMessage = message))
             LmsRefreshResult.Failure(message)
         }
@@ -746,13 +746,13 @@ class RoomLmsSource(
             sessionController.transition(LmsSessionState.EXPIRED)
             LmsDetailLoadResult.SessionExpired
         } catch (error: InvalidLmsDetailException) {
-            LmsDetailLoadResult.Failure(error.message ?: "게시글 본문을 찾지 못했습니다")
+            LmsDetailLoadResult.Failure(error.message ?: "게시글 본문을 찾지 못했어요")
         } catch (error: Throwable) {
             if (cachedDetail != null) {
                 dao.markItemOpened(key)
                 LmsDetailLoadResult.Cached(cachedDetail)
             } else {
-                LmsDetailLoadResult.Failure(error.message ?: "글을 불러오지 못했습니다")
+                LmsDetailLoadResult.Failure(LmsUserMessages.DETAIL_FAILED)
             }
         }
     }
@@ -778,7 +778,7 @@ class RoomLmsSource(
         destination.delete()
         throw cancelled
     } catch (error: Throwable) {
-        LmsAttachmentDownloadResult.Failure(error.message ?: "첨부파일을 저장하지 못했습니다")
+        LmsAttachmentDownloadResult.Failure(error.message ?: "첨부파일을 저장하지 못했어요")
     }
 
     override suspend fun markItemOpened(item: LmsItem) {

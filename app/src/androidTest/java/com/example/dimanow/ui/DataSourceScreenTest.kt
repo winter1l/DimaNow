@@ -1,6 +1,11 @@
 package com.example.dimanow.ui
 
+import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.assertHeightIsAtLeast
+import androidx.compose.ui.test.assertIsNotSelected
+import androidx.compose.ui.test.assertIsSelected
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasAnyDescendant
 import androidx.compose.ui.test.hasScrollToNodeAction
@@ -13,8 +18,10 @@ import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.test.performClick
-import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipeDown
 import com.example.dimanow.domain.CampusZoneId
@@ -23,6 +30,7 @@ import com.example.dimanow.domain.MealValidationState
 import com.example.dimanow.domain.ShuttleDeparture
 import com.example.dimanow.meal.MealData
 import com.example.dimanow.meal.MealRefreshResult
+import com.example.dimanow.meal.MealRefreshTrigger
 import com.example.dimanow.meal.MealSource
 import com.example.dimanow.meal.DormitoryMealData
 import com.example.dimanow.meal.DormitoryMealDay
@@ -37,7 +45,9 @@ import java.time.LocalDate
 import java.time.LocalTime
 import java.time.ZoneId
 import java.time.ZonedDateTime
+import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.CompletableDeferred
 import org.junit.Rule
 import org.junit.Test
@@ -111,6 +121,23 @@ class DataSourceScreenTest {
     }
 
     @Test
+    fun diagnosticsCardShowsLoadingBeforeSourcesEmitAndLabelsRawErrorsAsDiagnostic() {
+        var shuttle by mutableStateOf<ShuttleData?>(null)
+        composeRule.setContent { DataAndSourcesCard(shuttleData = shuttle, mealData = null) }
+
+        // D-094(14): no "기록 없음" before the cache has answered
+        composeRule.onNodeWithTag("data_sources_shuttle_loading", useUnmergedTree = true).assertExists()
+        composeRule.onNodeWithTag("data_sources_meal_loading", useUnmergedTree = true).assertExists()
+        composeRule.onNodeWithText("기록 없음", substring = true).assertDoesNotExist()
+
+        composeRule.runOnIdle {
+            shuttle = ShuttleData(emptyList(), null, null, "HTTP 503", "https://www.dima.ac.kr/?p=97", null)
+        }
+        composeRule.onNodeWithText("진단 · 마지막 동기화 오류: HTTP 503").assertExists()
+        composeRule.onNodeWithTag("data_sources_shuttle_loading", useUnmergedTree = true).assertDoesNotExist()
+    }
+
+    @Test
     fun pullingTheShuttleListRefreshesOnceAndReportsTheResult() {
         val source = BlockingShuttleSource()
         composeRule.setContent {
@@ -130,10 +157,69 @@ class DataSourceScreenTest {
         }
 
         source.release.complete(Unit)
+        // D-094: 사용자가 당긴 새로고침만 쉬운 말의 스낵바로 알린다
         composeRule.waitUntil(5_000) {
-            composeRule.onAllNodesWithText("2건 저장 완료").fetchSemanticsNodes().isNotEmpty()
+            composeRule.onAllNodesWithText("셔틀 시간표를 새로 받았어요").fetchSemanticsNodes().isNotEmpty()
         }
+        composeRule.onNodeWithText("2건 저장 완료").assertDoesNotExist()
         assertEquals(1, source.refreshCount)
+    }
+
+    @Test
+    fun shuttleShowsLoadingUntilTheCacheEmitsInsteadOfNoServiceOrRefreshPrompts() {
+        val source = object : ShuttleSource {
+            override val data = flow<ShuttleData> { awaitCancellation() }
+            override suspend fun refresh() = ShuttleRefreshResult.Failure("unused", 0)
+        }
+        composeRule.setContent {
+            ShuttleScreen(shuttleSource = source, currentZone = CampusZoneId.MAIN)
+        }
+
+        composeRule.onNodeWithTag("shuttle_loading", useUnmergedTree = true).assertExists()
+        composeRule.onNodeWithText("운행하지 않아요", substring = true).assertDoesNotExist()
+        composeRule.onNodeWithText("새로고침", substring = true).assertDoesNotExist()
+    }
+
+    @Test
+    fun mealShowsLoadingUntilTheCacheEmitsInsteadOfAnEmptyWeek() {
+        val source = object : MealSource {
+            override val data = flow<MealData> { awaitCancellation() }
+            override val dormitoryData = flow<DormitoryMealData> { awaitCancellation() }
+            override suspend fun refresh() = MealRefreshResult.Failure("unused")
+            override suspend fun refreshIfDue(trigger: MealRefreshTrigger, now: Instant): MealRefreshResult? = null
+        }
+        composeRule.setContent {
+            MealScreen(mealSource = source, today = LocalDate.parse("2026-08-27"))
+        }
+
+        composeRule.onNodeWithTag("meal_loading", useUnmergedTree = true).assertExists()
+        composeRule.onNodeWithText("등록된 식단이 없어요").assertDoesNotExist()
+        composeRule.onNodeWithText("이번 주 식단을 아직 불러오지 못했어요").assertDoesNotExist()
+        composeRule.onNodeWithText("기숙사").performClick()
+        composeRule.onNodeWithTag("meal_loading", useUnmergedTree = true).assertExists()
+        composeRule.onNodeWithText("이번 주 기숙사 식단이 아직 없어요").assertDoesNotExist()
+    }
+
+    @Test
+    fun automaticMealRefreshOnTabVisitDoesNotShowASnackbar() {
+        var automaticRefreshes = 0
+        val source = object : MealSource {
+            override val data = MutableStateFlow(MealData(emptyList(), null, null, null, "https://www.dima.ac.kr/?p=1", null, null))
+            override suspend fun refresh() = MealRefreshResult.Success(LocalDate.parse("2026-08-24"), Instant.parse("2026-08-27T01:00:00Z"))
+            override suspend fun refreshIfDue(trigger: MealRefreshTrigger, now: Instant): MealRefreshResult? {
+                automaticRefreshes++
+                return refresh()
+            }
+        }
+        composeRule.setContent {
+            MealScreen(mealSource = source, today = LocalDate.parse("2026-08-27"))
+        }
+
+        composeRule.waitUntil(5_000) { automaticRefreshes > 0 }
+        composeRule.waitForIdle()
+        // D-094: 자동 새로고침 결과는 스낵바로 알리지 않는다
+        composeRule.onNodeWithText("식단을 새로 받았어요", substring = true).assertDoesNotExist()
+        composeRule.onNodeWithText("저장 완료", substring = true).assertDoesNotExist()
     }
 
     @Test
@@ -218,6 +304,57 @@ class DataSourceScreenTest {
         assertInDeparture(1, "20:00")
         composeRule.onNodeWithText("19:35 · 운동장 전환").assertExists()
         composeRule.onNodeWithText("20:00 (막차) · 운동장").assertExists()
+    }
+
+    @Test
+    fun timetableChipsAreTallEnoughAndStateTheirMeaningNotJustColour() {
+        val now = ZonedDateTime.now(ZoneId.of("Asia/Seoul"))
+            .withHour(19).withMinute(30).withSecond(0).withNano(0)
+        val departures = listOf(
+            departure("B", "university-headquarters", LocalTime.of(19, 20), CampusZoneId.MAIN, CampusZoneId.YEIN, now.dayOfWeek),
+            departure("B-evening", "stadium-stop", LocalTime.of(19, 35), CampusZoneId.MAIN, CampusZoneId.YEIN, now.dayOfWeek),
+            departure("B-evening", "stadium-stop", LocalTime.of(20, 0), CampusZoneId.MAIN, CampusZoneId.YEIN, now.dayOfWeek),
+        )
+        composeRule.setContent {
+            DIMANowTheme {
+                ShuttleScreen(
+                    shuttleSource = FakeShuttleSource(departures),
+                    currentZone = CampusZoneId.MAIN,
+                    now = now,
+                )
+            }
+        }
+
+        // D-094(10): past, next, stadium-switch and last-departure meaning is spoken, and every chip is at least 32dp.
+        composeRule.onNodeWithContentDescription("지난 시간 19:20", substring = true)
+            .assertExists().assertHeightIsAtLeast(32.dp)
+        composeRule.onNodeWithContentDescription("다음 출발 19:35, 운동장 전환")
+            .assertExists().assertHeightIsAtLeast(32.dp)
+        composeRule.onNodeWithContentDescription("20:00, 막차, 운동장")
+            .assertExists().assertHeightIsAtLeast(32.dp)
+        // The visible chip text is unchanged.
+        composeRule.onNodeWithText("19:35 · 운동장 전환").assertExists()
+    }
+
+    @Test
+    fun mealDaySelectorExposesSelectionAndToday() {
+        composeRule.setContent {
+            MealScreen(
+                mealSource = FakeMealSource(listOf(mealDay("2026-08-24", "제육볶음"))),
+                today = LocalDate.parse("2026-08-27"),
+            )
+        }
+
+        // D-094(11): the shared selector reports the selected cell and "오늘" as state.
+        composeRule.onNodeWithTag("meal_day_THURSDAY")
+            .assertIsSelected()
+            .assert(hasStateDescription("오늘, 선택됨"))
+            .assertHeightIsAtLeast(48.dp)
+        composeRule.onNodeWithTag("meal_day_MONDAY").assertIsNotSelected().performClick().assertIsSelected()
+        composeRule.onNodeWithTag("meal_day_THURSDAY")
+            .assertIsNotSelected()
+            .assert(hasStateDescription("오늘"))
+        composeRule.onNodeWithText("8월 24일 월요일").assertExists()
     }
 
     @Test

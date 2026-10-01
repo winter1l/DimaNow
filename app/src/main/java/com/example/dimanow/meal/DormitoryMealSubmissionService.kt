@@ -22,7 +22,7 @@ class DormitoryMealSubmissionService(
     suspend fun submit(image: DormitoryMealImage): DormitoryMealSubmissionResult {
         return runCatching { gateway.upload(image) }.fold(
             onSuccess = { DormitoryMealSubmissionResult.Submitted(it.submissionId) },
-            onFailure = { DormitoryMealSubmissionResult.Failure(it.message ?: "식단 사진 업로드에 실패했습니다.") },
+            onFailure = { DormitoryMealSubmissionResult.Failure(it.message ?: "식단 사진 업로드에 실패했어요.") },
         )
     }
 
@@ -30,14 +30,14 @@ class DormitoryMealSubmissionService(
         gateway.submissionStatus(submissionId)
     }.fold(
         onSuccess = { status -> status?.toResult() ?: DormitoryMealSubmissionResult.Processing },
-        onFailure = { DormitoryMealSubmissionResult.Failure(it.message ?: "식단 처리 상태를 확인하지 못했습니다.") },
+        onFailure = { DormitoryMealSubmissionResult.Failure(it.message ?: "식단 처리 상태를 확인하지 못했어요.") },
     )
 
     private fun DormitoryMealSubmissionStatus.toResult(): DormitoryMealSubmissionResult = when (state) {
         "PUBLISHED" -> DormitoryMealSubmissionResult.Published
         "DUPLICATE" -> DormitoryMealSubmissionResult.Duplicate
-        "REJECTED" -> DormitoryMealSubmissionResult.Rejected(message ?: "기숙사 식단표를 확인할 수 없습니다.")
-        "ERROR" -> DormitoryMealSubmissionResult.Failure(message ?: "식단 처리에 실패했습니다.")
+        "REJECTED" -> DormitoryMealSubmissionResult.Rejected(message ?: "기숙사 식단표를 확인할 수 없어요.")
+        "ERROR" -> DormitoryMealSubmissionResult.Failure(message ?: "식단 처리에 실패했어요.")
         else -> DormitoryMealSubmissionResult.Processing
     }
 }

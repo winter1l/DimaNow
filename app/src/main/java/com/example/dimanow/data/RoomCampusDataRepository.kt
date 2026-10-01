@@ -76,12 +76,12 @@ class RoomCampusDataRepository(
 
     override suspend fun setCourseOverride(override: com.example.dimanow.domain.CourseOverride) {
         database.withTransaction {
-            val term = dao.currentTerm() ?: error("학기를 찾을 수 없습니다.")
-            val course = dao.courseById(override.courseId)?.toDomain() ?: error("수업을 찾을 수 없습니다.")
+            val term = dao.currentTerm() ?: error("학기를 찾을 수 없어요.")
+            val course = dao.courseById(override.courseId)?.toDomain() ?: error("수업을 찾을 수 없어요.")
             require(override.date in term.startDate..term.endDate && override.date.dayOfWeek == course.weekday) { "학기 중 해당 수업 요일을 선택해 주세요." }
             val start = override.start ?: course.start
             val end = override.end ?: course.end
-            require(start < end) { "종료 시각은 시작 시각보다 늦어야 합니다." }
+            require(start < end) { "종료 시각은 시작 시각보다 늦어야 해요." }
             require(override.room == null || override.room.isNotBlank() && override.room.length <= 100) { "강의실을 확인해 주세요." }
             dao.putCourseOverride(CourseOverrideEntity(override.courseId, override.date.toEpochDay(), override.kind.name,
                 override.start?.let { it.hour * 60 + it.minute }, override.end?.let { it.hour * 60 + it.minute }, override.room?.trim()))

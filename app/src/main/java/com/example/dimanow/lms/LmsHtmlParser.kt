@@ -205,19 +205,19 @@ class LmsHtmlParser(private val zoneId: ZoneId = ZoneId.of("Asia/Seoul")) {
                 }
         val articleBody = document.selectFirst("#board_contents, .board_contents, .view_content, .report-content")
         if (item.kind == LmsItemKind.ASSIGNMENT && articleBody == null && labeledOfficialBody == null) {
-            throw InvalidLmsDetailException("정확한 과제 내용을 찾지 못했습니다")
+            throw InvalidLmsDetailException("정확한 과제 내용을 찾지 못했어요")
         }
         if (
             (item.kind == LmsItemKind.NOTICE || item.kind == LmsItemKind.MATERIAL) &&
             officialBoardTable == null &&
             articleBody == null
         ) {
-            throw InvalidLmsDetailException("정확한 게시글 내용을 찾지 못했습니다")
+            throw InvalidLmsDetailException("정확한 게시글 내용을 찾지 못했어요")
         }
         val body = articleBody
             ?: officialBoardBody
             ?: matchingRow
-            ?: throw InvalidLmsDetailException("게시글 본문을 찾지 못했습니다")
+            ?: throw InvalidLmsDetailException("게시글 본문을 찾지 못했어요")
         val attachmentScope = when {
             articleBody != null -> document
             officialBoardTable != null -> officialBoardTable

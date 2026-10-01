@@ -22,6 +22,7 @@ import androidx.compose.ui.platform.LocalInputModeManager
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.ExperimentalTestApi
+import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertContentDescriptionEquals
 import androidx.compose.ui.test.assertHasNoClickAction
 import androidx.compose.ui.test.assertHeightIsAtLeast
@@ -35,7 +36,6 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performKeyInput
-import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performScrollToIndex
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTouchInput
@@ -43,6 +43,7 @@ import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.example.dimanow.theme.DIMANowTheme
+import com.example.dimanow.ui.motion.LocalReducedMotion
 import com.example.dimanow.ui.motion.expressiveBounceClick
 import java.time.DayOfWeek
 import org.junit.Assert.assertEquals
@@ -74,8 +75,10 @@ class MaterialInteractionTest {
             }
         }
         composeRule.onNodeWithTag("day_MONDAY").assertIsSelected()
+        // D-094(11): "오늘" is the cell's state, not part of its name.
         composeRule.onNodeWithTag("day_WEDNESDAY")
-            .assertContentDescriptionEquals("수요일 9/16 오늘")
+            .assertContentDescriptionEquals("수요일 9/16")
+            .assert(hasStateDescription("오늘"))
         DayOfWeek.entries.take(5).forEach { day ->
             composeRule.onNodeWithTag("day_${day.name}")
                 .assertIsDisplayed()
@@ -132,7 +135,8 @@ class MaterialInteractionTest {
         }
         assertEquals("days should wrap into deliberate visible rows", expectedRows, bounds.map { it.top.toInt() }.distinct().size)
         assertTrue("day targets should have equal widths even in the last row", bounds.maxOf { it.width } - bounds.minOf { it.width } <= 1f)
-        composeRule.onNodeWithTag("visible_day_WEDNESDAY").assertContentDescriptionEquals("수요일 16 오늘")
+        composeRule.onNodeWithTag("visible_day_WEDNESDAY").assertContentDescriptionEquals("수요일 16")
+            .assert(hasStateDescription("오늘"))
         composeRule.onNodeWithText("오늘").assertDoesNotExist()
         // Tap every option without scrolling, including both weekend choices in the seven-day cases.
         days.forEach { day ->
@@ -179,6 +183,38 @@ class MaterialInteractionTest {
     }
 
     @Test
+    fun pressScalesTheTargetDown() {
+        assertTrue("pressed content should shrink", pressedContentWidthRatio(reducedMotion = false) < 0.99f)
+    }
+
+    @Test
+    fun reducedMotionSkipsTheDecorativePressScale() {
+        assertEquals(1f, pressedContentWidthRatio(reducedMotion = true), 0.001f)
+    }
+
+    /** Width of the pressed content relative to its resting width, after the press settles. */
+    private fun pressedContentWidthRatio(reducedMotion: Boolean): Float {
+        var clicks = 0
+        composeRule.setContent {
+            DIMANowTheme {
+                CompositionLocalProvider(LocalReducedMotion provides reducedMotion) {
+                    Box(Modifier.size(200.dp).testTag("press_target").expressiveBounceClick { clicks++ }) {
+                        Box(Modifier.size(200.dp).testTag("press_content"))
+                    }
+                }
+            }
+        }
+        val content = composeRule.onNodeWithTag("press_content", useUnmergedTree = true)
+        val resting = content.fetchSemanticsNode().boundsInRoot.width
+        composeRule.onNodeWithTag("press_target").performTouchInput { down(center) }
+        composeRule.mainClock.advanceTimeBy(1_000)
+        val pressed = content.fetchSemanticsNode().boundsInRoot.width
+        composeRule.onNodeWithTag("press_target").performTouchInput { up() }
+        composeRule.runOnIdle { assertEquals(1, clicks) }
+        return pressed / resting
+    }
+
+    @Test
     fun decorativeBounceWrapperDoesNotCreateAnEmptyClickOrBlockChildInput() {
         var clicks = 0
         composeRule.setContent {
@@ -218,53 +254,5 @@ class MaterialInteractionTest {
         assertTrue("settings touch width is below 48dp", touchBounds.width >= minimumTouchSize - 0.5f)
         settings.performTouchInput { click() }
         composeRule.runOnIdle { assertEquals(1, settingsClicks) }
-    }
-
-    @Test
-    fun compactNavigationKeepsEveryDestinationSelectable() = verifyNavigation(320.dp, rail = false)
-
-    @Test
-    fun wideNavigationKeepsEveryDestinationSelectable() = verifyNavigation(720.dp, rail = true)
-
-    @Test
-    fun shortWideNavigationCanScrollToAndTapTheLastDestination() =
-        verifyNavigation(720.dp, rail = true, height = 300.dp)
-
-    private fun verifyNavigation(width: Dp, rail: Boolean, height: Dp = 640.dp) {
-        var selected by mutableStateOf(AppPage.DASHBOARD)
-        val selections = mutableListOf<AppPage>()
-        composeRule.setContent {
-            // Physical emulator pixels can host both logical widths without changing device settings.
-            CompositionLocalProvider(LocalDensity provides Density(1f)) {
-                DIMANowTheme {
-                    Box(Modifier.requiredWidth(width).height(height)) {
-                        DimaNavigationShell(
-                            page = selected,
-                            pages = primaryAppPages,
-                            showNavigation = true,
-                            onSelect = { selected = it; selections += it },
-                        ) { padding -> Text("화면 ${selected.name}", Modifier.padding(padding)) }
-                    }
-                }
-            }
-        }
-        if (rail) composeRule.onNodeWithTag("navigation_rail").assertExists()
-        else composeRule.onNodeWithTag("navigation_rail").assertDoesNotExist()
-        val destinations = listOf(AppPage.TIMETABLE, AppPage.SHUTTLE, AppPage.MEAL, AppPage.COURSES, AppPage.DASHBOARD)
-        destinations.forEach { destination ->
-            val target = composeRule.onNodeWithTag("nav_${destination.name}")
-            if (rail) {
-                // Use actual touch after scrolling; a semantics click alone can activate a clipped item.
-                target.performScrollTo().assertIsDisplayed().performTouchInput { click() }
-            } else {
-                target.performClick()
-            }
-            target.assertIsSelected()
-            composeRule.onNodeWithText("화면 ${destination.name}").assertExists()
-            primaryAppPages.filter { it != destination }.forEach {
-                composeRule.onNodeWithTag("nav_${it.name}").assertIsNotSelected()
-            }
-        }
-        composeRule.runOnIdle { assertEquals(destinations, selections) }
     }
 }

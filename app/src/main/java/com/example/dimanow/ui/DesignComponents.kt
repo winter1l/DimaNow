@@ -1,12 +1,11 @@
 package com.example.dimanow.ui
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
+import com.example.dimanow.theme.DimaShapes
+import com.example.dimanow.theme.emphasized
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -14,69 +13,20 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.semantics.testTagsAsResourceId
-import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.dp
 import java.time.DayOfWeek
+import java.time.LocalDate
 
 /** App layout decisions, not prescribed Material component dimensions. */
 internal object DimaLayout {
     val readingWidth = 840.dp
-    val pageMargin = 16.dp
     val sectionGap = 16.dp
-}
-
-/** Navigation changes placement at the Material medium breakpoint; its role and actions stay stable. */
-@Composable
-internal fun DimaNavigationShell(
-    page: AppPage,
-    pages: List<AppPage>,
-    showNavigation: Boolean,
-    onSelect: (AppPage) -> Unit,
-    content: @Composable (PaddingValues) -> Unit,
-) {
-    BoxWithConstraints(Modifier.fillMaxSize().semantics { testTagsAsResourceId = true }) {
-        val useRail = maxWidth >= 600.dp
-        Scaffold(
-            contentWindowInsets = WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal + WindowInsetsSides.Bottom),
-            bottomBar = {
-                if (showNavigation && !useRail) {
-                    NavigationBar(containerColor = MaterialTheme.colorScheme.surfaceContainer, tonalElevation = 0.dp) {
-                        pages.forEach { item ->
-                            NavigationBarItem(
-                                modifier = Modifier.testTag("nav_${item.name}"),
-                                selected = page == item, onClick = { onSelect(item) },
-                                icon = { Icon(item.icon, contentDescription = null) },
-                                label = { Text(item.title, fontWeight = if (page == item) FontWeight.Bold else FontWeight.Medium) },
-                            )
-                        }
-                    }
-                }
-            },
-        ) { padding ->
-            Row(Modifier.fillMaxSize()) {
-                if (showNavigation && useRail) {
-                    NavigationRail(
-                        modifier = Modifier.fillMaxHeight().verticalScroll(rememberScrollState()).testTag("navigation_rail"),
-                        containerColor = MaterialTheme.colorScheme.surfaceContainer,
-                    ) {
-                        pages.forEach { item ->
-                            NavigationRailItem(
-                                modifier = Modifier.testTag("nav_${item.name}"),
-                                selected = page == item, onClick = { onSelect(item) },
-                                icon = { Icon(item.icon, contentDescription = null) },
-                                label = { Text(item.title) },
-                            )
-                        }
-                    }
-                }
-                Box(Modifier.weight(1f).fillMaxHeight().consumeWindowInsets(padding)) { content(padding) }
-            }
-        }
-    }
 }
 
 /** Stable Material 1.4 selection control; never imitates unavailable connected-toggle APIs. */
@@ -89,17 +39,61 @@ internal fun DimaDaySelector(
     itemTag: (DayOfWeek) -> String? = { null },
     today: DayOfWeek? = null,
     supportingLabel: (DayOfWeek) -> String? = { null },
+) = DimaDayCellSelector(
+    items = days,
+    selected = selected,
+    onSelect = onSelect,
+    weekday = { it },
+    modifier = modifier,
+    itemTag = itemTag,
+    isToday = { it == today },
+    supportingLabel = supportingLabel,
+)
+
+/**
+ * The same selector for concrete dates (the meal week, D-094(11)): each cell shows the weekday
+ * initial over the day of month, exposes its selected state and announces `오늘` as its state.
+ */
+@Composable
+internal fun DimaDateSelector(
+    dates: List<LocalDate>,
+    selected: LocalDate,
+    onSelect: (LocalDate) -> Unit,
+    today: LocalDate,
+    modifier: Modifier = Modifier,
+    itemTag: (LocalDate) -> String? = { null },
+) = DimaDayCellSelector(
+    items = dates,
+    selected = selected,
+    onSelect = onSelect,
+    weekday = { it.dayOfWeek },
+    modifier = modifier,
+    itemTag = itemTag,
+    isToday = { it == today },
+    supportingLabel = { it.dayOfMonth.toString() },
+)
+
+@Composable
+private fun <T> DimaDayCellSelector(
+    items: List<T>,
+    selected: T,
+    onSelect: (T) -> Unit,
+    weekday: (T) -> DayOfWeek,
+    modifier: Modifier,
+    itemTag: (T) -> String?,
+    isToday: (T) -> Boolean,
+    supportingLabel: (T) -> String?,
 ) {
-    if (days.isEmpty()) return
+    if (items.isEmpty()) return
     val density = LocalDensity.current
     val textMeasurer = rememberTextMeasurer()
-    val labelStyle = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold)
+    val labelStyle = MaterialTheme.typography.labelLarge.emphasized()
     val dateStyle = MaterialTheme.typography.labelSmall
-    val dateLabels = days.associateWith(supportingLabel)
-    val widestTextPx = remember(days, dateLabels, labelStyle, dateStyle, textMeasurer) {
-        days.maxOf { day ->
-            val labelWidth = textMeasurer.measure(koreanWeekdayLabel(day).take(1), labelStyle).size.width
-            val dateWidth = dateLabels[day]?.let { textMeasurer.measure(it, dateStyle).size.width } ?: 0
+    val dateLabels = items.associateWith(supportingLabel)
+    val widestTextPx = remember(items, dateLabels, labelStyle, dateStyle, textMeasurer) {
+        items.maxOf { item ->
+            val labelWidth = textMeasurer.measure(koreanWeekdayLabel(weekday(item)).take(1), labelStyle).size.width
+            val dateWidth = dateLabels[item]?.let { textMeasurer.measure(it, dateStyle).size.width } ?: 0
             maxOf(labelWidth, dateWidth)
         }
     }
@@ -111,28 +105,35 @@ internal fun DimaDaySelector(
     val columnGap = 4.dp
     BoxWithConstraints(modifier.fillMaxWidth().selectableGroup()) {
         val maximumColumns = ((maxWidth + columnGap) / (minimumCellWidth + columnGap))
-            .toInt().coerceIn(1, days.size)
-        val rowCount = (days.size + maximumColumns - 1) / maximumColumns
-        val columns = (days.size + rowCount - 1) / rowCount
+            .toInt().coerceIn(1, items.size)
+        val rowCount = (items.size + maximumColumns - 1) / maximumColumns
+        val columns = (items.size + rowCount - 1) / rowCount
         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            days.chunked(columns).forEach { rowDays ->
+            items.chunked(columns).forEach { rowItems ->
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(columnGap)) {
-                    rowDays.forEach { day ->
-                        val date = dateLabels[day]
-                        val description = listOfNotNull(koreanWeekdayLabel(day), date, "오늘".takeIf { day == today }).joinToString(" ")
-                        val isSelected = day == selected
-                        val isToday = day == today
+                    rowItems.forEach { item ->
+                        val day = weekday(item)
+                        val date = dateLabels[item]
+                        val isSelected = item == selected
+                        val today = isToday(item)
+                        val description = listOfNotNull(koreanWeekdayLabel(day), date).joinToString(" ")
                         FilterChip(
                             selected = isSelected,
-                            onClick = { onSelect(day) },
+                            onClick = { onSelect(item) },
+                            // Grows with the font scale; 52dp is only the resting minimum.
                             modifier = Modifier.weight(1f).heightIn(min = 52.dp)
-                                .then(itemTag(day)?.let { Modifier.testTag(it) } ?: Modifier)
-                                .semantics { contentDescription = description },
-                            shape = RoundedCornerShape(16.dp),
+                                .then(itemTag(item)?.let { Modifier.testTag(it) } ?: Modifier)
+                                .semantics {
+                                    contentDescription = description
+                                    // One of several exclusive cells, announced like a tab with its selection.
+                                    role = Role.Tab
+                                    if (today) stateDescription = if (isSelected) "오늘, 선택됨" else "오늘"
+                                },
+                            shape = DimaShapes.Tile,
                             border = FilterChipDefaults.filterChipBorder(
                                 enabled = true,
                                 selected = isSelected,
-                                borderColor = if (isToday && !isSelected) MaterialTheme.colorScheme.primary.copy(alpha = 0.4f) else Color.Transparent,
+                                borderColor = if (today && !isSelected) MaterialTheme.colorScheme.primary else Color.Transparent,
                                 selectedBorderColor = Color.Transparent,
                                 borderWidth = 1.dp,
                             ),
@@ -154,22 +155,18 @@ internal fun DimaDaySelector(
                                 ) {
                                     Text(
                                         text = koreanWeekdayLabel(day).take(1),
-                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.SemiBold,
-                                        style = MaterialTheme.typography.labelLarge,
+                                        style = if (isSelected) labelStyle else MaterialTheme.typography.labelLarge,
                                     )
                                     date?.let {
                                         Text(
                                             text = it,
                                             style = MaterialTheme.typography.labelSmall,
-                                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
                                         )
                                     }
                                     Spacer(Modifier.height(2.dp))
                                     Box(
                                         modifier = Modifier.size(5.dp).background(
-                                            color = if (isToday) {
-                                                if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.primary
-                                            } else Color.Transparent,
+                                            color = if (today) MaterialTheme.colorScheme.primary else Color.Transparent,
                                             shape = CircleShape,
                                         ),
                                     )
@@ -177,7 +174,7 @@ internal fun DimaDaySelector(
                             },
                         )
                     }
-                    repeat(columns - rowDays.size) { Spacer(Modifier.weight(1f)) }
+                    repeat(columns - rowItems.size) { Spacer(Modifier.weight(1f)) }
                 }
             }
         }

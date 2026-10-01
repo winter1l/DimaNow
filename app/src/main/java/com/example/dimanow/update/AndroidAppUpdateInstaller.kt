@@ -22,8 +22,8 @@ class AndroidAppUpdateInstaller(private val context: Context) : AppUpdateInstall
     private val updateDirectory = File(context.cacheDir, "updates")
 
     override suspend fun downloadAndVerify(release: AppUpdateRelease, onProgress: (Int) -> Unit): PreparedUpdate = withContext(Dispatchers.IO) {
-        require(release.sizeBytes in 1..UpdateDownloadPolicy.MAX_APK_BYTES) { "APK 크기가 올바르지 않습니다." }
-        require(UpdateDownloadPolicy.isAllowedUrl(release.downloadUrl)) { "허용되지 않은 APK 주소입니다." }
+        require(release.sizeBytes in 1..UpdateDownloadPolicy.MAX_APK_BYTES) { "APK 크기가 올바르지 않아요." }
+        require(UpdateDownloadPolicy.isAllowedUrl(release.downloadUrl)) { "허용되지 않은 APK 주소예요." }
         updateDirectory.mkdirs()
         cleanupIncompleteDownloads()
         val partial = File(updateDirectory, "DIMA-Now-${release.versionName}.apk.part")
@@ -32,10 +32,10 @@ class AndroidAppUpdateInstaller(private val context: Context) : AppUpdateInstall
         try {
             download(release, partial, onProgress)
             val actualHash = partial.inputStream().use(::sha256)
-            require(actualHash == release.sha256) { "APK SHA-256 검증에 실패했습니다." }
+            require(actualHash == release.sha256) { "APK SHA-256 검증에 실패했어요." }
             val preparedCandidate = PreparedUpdate(release, partial.absolutePath)
-            require(validatePrepared(preparedCandidate) == ApkValidationResult.Valid) { "APK 패키지 또는 서명 검증에 실패했습니다." }
-            require(partial.renameTo(target)) { "검증된 APK를 확정하지 못했습니다." }
+            require(validatePrepared(preparedCandidate) == ApkValidationResult.Valid) { "APK 패키지 또는 서명 검증에 실패했어요." }
+            require(partial.renameTo(target)) { "검증된 APK를 확정하지 못했어요." }
             PreparedUpdate(release, target.absolutePath)
         } catch (error: Exception) {
             partial.delete()
@@ -77,7 +77,7 @@ class AndroidAppUpdateInstaller(private val context: Context) : AppUpdateInstall
         var currentUrl = release.downloadUrl
         repeat(MAX_REDIRECTS + 1) { redirectCount ->
             coroutineContext.ensureActive()
-            require(UpdateDownloadPolicy.isAllowedUrl(currentUrl)) { "허용되지 않은 APK redirect입니다." }
+            require(UpdateDownloadPolicy.isAllowedUrl(currentUrl)) { "허용되지 않은 APK 리디렉션이에요." }
             val connection = URL(currentUrl).openConnection() as HttpURLConnection
             try {
                 connection.connectTimeout = 15_000
@@ -87,8 +87,8 @@ class AndroidAppUpdateInstaller(private val context: Context) : AppUpdateInstall
                 connection.setRequestProperty("User-Agent", "DIMA-Now/1.3")
                 val code = connection.responseCode
                 if (code in 300..399) {
-                    require(redirectCount < MAX_REDIRECTS) { "APK redirect가 너무 많습니다." }
-                    currentUrl = connection.getHeaderField("Location") ?: error("APK redirect 주소가 없습니다.")
+                    require(redirectCount < MAX_REDIRECTS) { "APK redirect가 너무 많아요." }
+                    currentUrl = connection.getHeaderField("Location") ?: error("APK redirect 주소가 없어요.")
                     return@repeat
                 }
                 require(code == HttpURLConnection.HTTP_OK) { "APK 다운로드 응답 $code" }
@@ -116,7 +116,7 @@ class AndroidAppUpdateInstaller(private val context: Context) : AppUpdateInstall
                 connection.disconnect()
             }
         }
-        error("APK 다운로드에 실패했습니다.")
+        error("APK 다운로드에 실패했어요.")
     }
 
     private fun validatePrepared(update: PreparedUpdate): ApkValidationResult = runCatching {

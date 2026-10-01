@@ -1,8 +1,5 @@
 package com.example.dimanow.ui
 
-import androidx.compose.ui.test.hasScrollToNodeAction
-import androidx.compose.ui.test.hasTestTag
-import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.performScrollToNode
 import android.graphics.Bitmap
 import androidx.compose.ui.graphics.asAndroidBitmap
@@ -30,7 +27,8 @@ class AppVisualReviewTest {
             compose.onNodeWithTag("nav_${page.name}").performClick().assertIsSelected()
             capture(page.name.lowercase())
             if (page == AppPage.TIMETABLE) {
-                compose.onNodeWithText("수업 추가").performClick()
+                // D-094: 수업 추가 is the Timetable FAB, expanded at the top of the list.
+                compose.onNodeWithTag("add_course").assertContentDescriptionEquals("수업 추가").performClick()
                 compose.onNodeWithText("수업명").performClick()
                 capture("course-editor-keyboard", dialog = true)
                 // Large text and the keyboard may require vertical form scrolling, never hidden horizontal days.
@@ -46,11 +44,12 @@ class AppVisualReviewTest {
         compose.onNodeWithTag("open_settings").performClick()
         compose.onNodeWithTag("close_settings").assertExists()
         capture("settings")
-        compose.onNodeWithText("고급 및 진단").performScrollTo().performClick()
+        // Settings is a lazy list: bring the section into composition through the list itself.
+        compose.onNodeWithTag("settings_list").performScrollToNode(hasText("고급 및 진단"))
+        compose.onNodeWithText("고급 및 진단").performClick()
         capture("settings-diagnostics")
-        // D-093: the close action lives in the list's first row, so return to it before closing.
-        compose.onAllNodes(hasScrollToNodeAction()).onFirst().performScrollToNode(hasTestTag("close_settings"))
-        compose.onNodeWithTag("close_settings").performClick()
+        // D-094: the back action is pinned in the top app bar, so it stays reachable after scrolling.
+        compose.onNodeWithTag("close_settings").assertIsDisplayed().performClick()
         compose.onNodeWithTag("nav_COURSES").assertIsSelected()
     }
 

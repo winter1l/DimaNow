@@ -41,6 +41,6 @@ class LmsRenderedPageBridge : LmsRenderedPageLoader {
     }
 
     fun cancel() {
-        complete(LmsRenderedPageResult.Failure("글 불러오기가 취소되었습니다"))
+        complete(LmsRenderedPageResult.Failure("글 불러오기를 취소했어요"))
     }
 }

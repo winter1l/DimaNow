@@ -1,73 +1,46 @@
 package com.example.dimanow.theme
 
-import androidx.compose.material3.Typography
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Typography
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 
-// Material 3 Expressive Typography scale
+private val baseline = Typography()
+
+/**
+ * DIMA type scale (D-094(8)): Material 3 baseline sizes and line heights.
+ *
+ * Body and label roles keep the baseline weights (body 400, label 500). Headline and title roles
+ * use Medium (500) so section and card titles read as titles without per-call overrides.
+ * Stronger weight is reserved for [emphasized] styles: page titles, next-departure countdowns,
+ * the primary Home briefing line and selected state.
+ */
 val Typography = Typography(
-    headlineLarge = androidx.compose.ui.text.TextStyle(
-        fontWeight = FontWeight.Bold,
-        fontSize = 32.sp,
-        lineHeight = 40.sp,
-        letterSpacing = 0.sp,
-    ),
-    headlineMedium = androidx.compose.ui.text.TextStyle(
-        fontWeight = FontWeight.Bold,
-        fontSize = 28.sp,
-        lineHeight = 36.sp,
-        letterSpacing = 0.sp,
-    ),
-    headlineSmall = androidx.compose.ui.text.TextStyle(
-        fontWeight = FontWeight.Bold,
-        fontSize = 24.sp,
-        lineHeight = 32.sp,
-        letterSpacing = 0.sp,
-    ),
-    titleLarge = androidx.compose.ui.text.TextStyle(
-        fontWeight = FontWeight.SemiBold,
-        fontSize = 22.sp,
-        lineHeight = 28.sp,
-        letterSpacing = 0.sp,
-    ),
-    titleMedium = androidx.compose.ui.text.TextStyle(
-        fontWeight = FontWeight.SemiBold,
-        fontSize = 16.sp,
-        lineHeight = 24.sp,
-        letterSpacing = 0.15.sp,
-    ),
-    titleSmall = androidx.compose.ui.text.TextStyle(
-        fontWeight = FontWeight.Medium,
-        fontSize = 14.sp,
-        lineHeight = 20.sp,
-        letterSpacing = 0.1.sp,
-    ),
-    labelLarge = androidx.compose.ui.text.TextStyle(
-        fontWeight = FontWeight.SemiBold,
-        fontSize = 14.sp,
-        lineHeight = 20.sp,
-        letterSpacing = 0.1.sp,
-    ),
-    labelMedium = androidx.compose.ui.text.TextStyle(
-        fontWeight = FontWeight.Medium,
-        fontSize = 12.sp,
-        lineHeight = 16.sp,
-        letterSpacing = 0.5.sp,
-    ),
-    labelSmall = androidx.compose.ui.text.TextStyle(
-        fontWeight = FontWeight.Medium,
-        fontSize = 11.sp,
-        lineHeight = 16.sp,
-        letterSpacing = 0.5.sp,
-    ),
+    headlineLarge = baseline.headlineLarge.copy(fontWeight = FontWeight.Medium),
+    headlineMedium = baseline.headlineMedium.copy(fontWeight = FontWeight.Medium),
+    headlineSmall = baseline.headlineSmall.copy(fontWeight = FontWeight.Medium),
+    titleLarge = baseline.titleLarge.copy(fontWeight = FontWeight.Medium, letterSpacing = 0.sp),
+    titleMedium = baseline.titleMedium.copy(fontWeight = FontWeight.Medium),
+    titleSmall = baseline.titleSmall.copy(fontWeight = FontWeight.Medium),
 )
+
+/** Weight used by every emphasized role (Material3 1.4 `*Emphasized` roles step up the weight). */
+val EmphasizedWeight: FontWeight = FontWeight.SemiBold
+
+/**
+ * The emphasized counterpart of a type role. Use only where emphasis carries meaning:
+ * page titles, the next departure countdown, the primary briefing line and selected state.
+ */
+fun TextStyle.emphasized(): TextStyle = copy(fontWeight = EmphasizedWeight)
 
 /**
  * Material3 1.4 TitleLargeEmphasized: 22sp / 28sp / SemiBold 600.
  */
 @Composable
-internal fun dimaPageTitleStyle(): TextStyle =
-    MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.SemiBold)
+internal fun dimaPageTitleStyle(): TextStyle = MaterialTheme.typography.titleLarge.emphasized()
+
+/** Page title for the in-content screen headers (headlineMedium, emphasized). */
+@Composable
+internal fun dimaScreenTitleStyle(): TextStyle = MaterialTheme.typography.headlineMedium.emphasized()

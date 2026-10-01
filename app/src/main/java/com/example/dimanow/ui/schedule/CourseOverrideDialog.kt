@@ -48,10 +48,10 @@ internal fun CourseOverrideDialog(
     termEnd: LocalDate,
     onDismiss: () -> Unit,
     onSave: (CourseOverride) -> Unit,
+    skipDates: Set<LocalDate> = emptySet(),
 ) {
-    val initialDate = remember(course, today, termStart, termEnd) {
-        maxOf(today, termStart).with(TemporalAdjusters.nextOrSame(course.weekday))
-            .takeIf { !it.isAfter(termEnd) }
+    val initialDate = remember(course, today, termStart, termEnd, skipDates) {
+        nextCourseOccurrence(course, today, termStart, termEnd, skipDates)
     }
     var date by remember(course, initialDate) { mutableStateOf(initialDate) }
     var kind by remember(course) { mutableStateOf(CourseOverrideKind.CANCELLED) }
@@ -74,7 +74,7 @@ internal fun CourseOverrideDialog(
         text = {
             Column(
                 modifier = Modifier.verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(10.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 Text(course.name, style = MaterialTheme.typography.titleSmall)
                 Text("선택한 날짜의 수업에만 적용돼요", style = MaterialTheme.typography.bodySmall)
@@ -143,7 +143,7 @@ internal fun CourseOverrideDialog(
         dismissButton = { TextButton(onClick = onDismiss) { Text("취소") } },
     )
 
-    if (pickingDate) {
+    if (pickingDate) KoreanLocale {
         val pickerState = rememberDatePickerState(
             initialSelectedDateMillis = date?.atStartOfDay(ZoneOffset.UTC)?.toInstant()?.toEpochMilli(),
             initialDisplayedMonthMillis = (date ?: termStart).atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli(),
@@ -167,9 +167,23 @@ internal fun CourseOverrideDialog(
                 ) { Text("선택") }
             },
             dismissButton = { TextButton(onClick = { pickingDate = false }) { Text("취소") } },
-        ) { DatePicker(state = pickerState) }
+        ) { DatePicker(state = pickerState, headline = { KoreanDatePickerHeadline(pickerState.selectedDateMillis) }) }
     }
 }
+
+/**
+ * The course's next class date on or after [today] inside the term, skipping [skipDates] (days
+ * already marked as no-class), or `null` when none is left.
+ */
+internal fun nextCourseOccurrence(
+    course: Course,
+    today: LocalDate,
+    termStart: LocalDate,
+    termEnd: LocalDate,
+    skipDates: Set<LocalDate> = emptySet(),
+): LocalDate? = generateSequence(maxOf(today, termStart).with(TemporalAdjusters.nextOrSame(course.weekday))) { it.plusWeeks(1) }
+    .takeWhile { !it.isAfter(termEnd) }
+    .firstOrNull { it !in skipDates }
 
 internal fun overrideKindLabel(kind: CourseOverrideKind): String = when (kind) {
     CourseOverrideKind.CANCELLED -> "휴강"

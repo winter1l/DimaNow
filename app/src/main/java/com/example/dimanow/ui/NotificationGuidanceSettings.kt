@@ -4,14 +4,13 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.shape.RoundedCornerShape
+import com.example.dimanow.theme.DimaShapes
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.example.dimanow.live.GuidanceKind
 import com.example.dimanow.live.NotificationGuidanceMode
@@ -25,16 +24,16 @@ fun NotificationGuidanceSettings(
 ) {
     ElevatedCard(
         modifier = modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(20.dp),
+        shape = DimaShapes.Card,
         colors = CardDefaults.elevatedCardColors(
             containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
         ),
     ) {
         Column(
-            modifier = Modifier.padding(18.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp),
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
-            Text("알림 종류", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            Text("알림 종류", style = MaterialTheme.typography.titleMedium)
             GuidanceModeRow("수업 안내", GuidanceKind.CLASS, policy.classGuidance, onModeChange)
             GuidanceModeRow("교내 셔틀", GuidanceKind.CAMPUS_SHUTTLE, policy.campusShuttle, onModeChange)
             GuidanceModeRow("4402 강남행", GuidanceKind.BUS_4402, policy.bus4402, onModeChange)
@@ -50,7 +49,7 @@ private fun GuidanceModeRow(
     onModeChange: (GuidanceKind, NotificationGuidanceMode) -> Unit,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        Text(title, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
+        Text(title, style = MaterialTheme.typography.labelLarge)
         SettingsChoice(
             options = listOf(
                 NotificationGuidanceMode.LIVE_UPDATE to "나우바",
@@ -71,7 +70,7 @@ fun TransitStopTestControls(
     modifier: Modifier = Modifier,
 ) {
     Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        Text("4402 정류장", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
+        Text("4402 정류장", style = MaterialTheme.typography.labelLarge)
         SettingsChoice(
             options = listOf(
                 null to "선택 안 함",

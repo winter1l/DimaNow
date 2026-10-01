@@ -187,13 +187,13 @@ class LmsAutoLoginCoordinatorTest {
         var attempts = 0
         val driver = object : LmsLoginDriver {
             override suspend fun authenticate(credentials: SavedLmsCredentials): LmsLoginResult =
-                if (attempts++ == 0) LmsLoginResult.Failure("안전하지 않은 페이지가 차단되었습니다")
+                if (attempts++ == 0) LmsLoginResult.Failure("안전하지 않은 페이지라서 열지 않았어요")
                 else LmsLoginResult.Success
         }
         val coordinator = LmsAutoLoginCoordinator(store, session, driver, fixedClock())
 
         coordinator.ensureActive(force = false)
-        assertEquals("안전하지 않은 페이지가 차단되었습니다", coordinator.errorMessage.value)
+        assertEquals("안전하지 않은 페이지라서 열지 않았어요", coordinator.errorMessage.value)
         coordinator.ensureActive(force = true)
 
         assertEquals(null, coordinator.errorMessage.value)

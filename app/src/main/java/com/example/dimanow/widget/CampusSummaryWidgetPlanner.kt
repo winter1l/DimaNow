@@ -92,8 +92,8 @@ class CampusSummaryWidgetPlanner {
         val mealTitle = "학생식당 (${mealStatus.label})"
         val mealContent = when {
             todayMeal != null && todayMeal.menuLines.isNotEmpty() -> todayMeal.menuLines.joinToString(" · ")
-            now.dayOfWeek.value >= 6 -> "주말은 식당을 운영하지 않습니다"
-            else -> "오늘 등록된 식단이 없습니다"
+            now.dayOfWeek.value >= 6 -> "주말에는 식당을 운영하지 않아요"
+            else -> "오늘 등록된 식단이 없어요"
         }
 
         return CampusSummaryWidgetPlan(

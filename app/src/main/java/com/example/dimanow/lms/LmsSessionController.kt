@@ -30,7 +30,7 @@ sealed interface LmsLoginResult {
     data object CredentialsRejected : LmsLoginResult
     data object SessionConflict : LmsLoginResult
     data class SessionTakeoverFailed(
-        val message: String = "다른 로그인 세션을 전환하지 못했습니다",
+        val message: String = "다른 기기의 로그인을 넘겨받지 못했어요. 다시 시도해 주세요",
     ) : LmsLoginResult
     data object InteractiveAuthenticationRequired : LmsLoginResult
     data class NetworkError(val message: String) : LmsLoginResult
@@ -42,8 +42,8 @@ internal fun LmsLoginResult.failureMessage(): String? = when (this) {
     LmsLoginResult.CredentialsRejected -> "계정 정보를 다시 확인해 주세요"
     LmsLoginResult.SessionConflict -> "다른 기기의 로그인 세션을 확인해 주세요"
     is LmsLoginResult.SessionTakeoverFailed -> message
-    LmsLoginResult.InteractiveAuthenticationRequired -> "공식 LMS에서 추가 인증이 필요합니다"
-    is LmsLoginResult.NetworkError -> message
+    LmsLoginResult.InteractiveAuthenticationRequired -> "공식 LMS에서 추가 인증이 필요해요"
+    is LmsLoginResult.NetworkError -> LmsUserMessages.NETWORK
     is LmsLoginResult.Failure -> message
 }
 
@@ -80,7 +80,7 @@ class LmsLoginBridge : LmsLoginDriver {
     }
 
     fun cancel() {
-        complete(LmsLoginResult.Failure("로그인이 취소되었습니다"))
+        complete(LmsLoginResult.Failure("로그인을 취소했어요"))
     }
 }
 
@@ -180,7 +180,7 @@ internal fun reduceLmsLoginFlow(
             )
         }
     } else if (!LmsUrlPolicy.isAllowedLoginNavigation(event.url)) {
-        val result = LmsLoginResult.Failure("안전하지 않은 페이지가 차단되었습니다")
+        val result = LmsLoginResult.Failure(LmsUserMessages.UNSAFE_PAGE_BLOCKED)
         LmsLoginFlowTransition(
             state.copy(stage = LmsLoginFlowStage.TERMINAL_ERROR, result = result),
             LmsLoginFlowCommand.Complete(result),
@@ -245,7 +245,7 @@ internal fun reduceLmsLoginFlow(
             LmsLoginFlowCommand.Complete(LmsLoginResult.Success),
         )
     } else {
-        val result = LmsLoginResult.Failure("수업 목록을 확인하지 못했습니다")
+        val result = LmsLoginResult.Failure(LmsUserMessages.COURSE_CATALOG_FAILED)
         LmsLoginFlowTransition(
             state.copy(stage = LmsLoginFlowStage.TERMINAL_ERROR, result = result),
             LmsLoginFlowCommand.Complete(result),

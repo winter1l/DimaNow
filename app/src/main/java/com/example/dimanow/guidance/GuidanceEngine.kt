@@ -635,7 +635,7 @@ class GuidanceEngine {
             CampusZoneId.YEIN -> "yein"
             CampusZoneId.MAIN -> "university-headquarters"
             CampusZoneId.ONE_ROOM -> "one-room"
-            CampusZoneId.OUTSIDE -> error("OUTSIDE에는 셔틀 정류장이 없습니다.")
+            CampusZoneId.OUTSIDE -> error("OUTSIDE에는 셔틀 정류장이 없어요.")
         }
     }
 }

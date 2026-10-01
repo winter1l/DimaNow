@@ -83,10 +83,10 @@ class StaticShuttleSource(
         val attempt = clock.instant()
         try {
             val manifest = json.decodeFromString<CampusDataManifest>(transport.get(MANIFEST_URL).decodeToString())
-            require(manifest.schemaVersion == 1) { "지원하지 않는 동기화 스키마입니다." }
+            require(manifest.schemaVersion == 1) { "지원하지 않는 동기화 스키마예요." }
             val descriptor = manifest.datasets.getValue(SOURCE_KEY)
-            require(descriptor.state == "READY") { descriptor.message ?: "셔틀 데이터가 준비되지 않았습니다." }
-            require(descriptor.sourceUrl == OFFICIAL_SHUTTLE_SOURCE_URL) { "허용되지 않은 셔틀 원문 주소입니다." }
+            require(descriptor.state == "READY") { descriptor.message ?: "셔틀 데이터가 준비되지 않았어요." }
+            require(descriptor.sourceUrl == OFFICIAL_SHUTTLE_SOURCE_URL) { "허용되지 않은 셔틀 원문 주소예요." }
             val previousSync = dao.syncState(SOURCE_KEY)
             if (previousSync?.revision == descriptor.revision && previousSync.sha256 == descriptor.sha256) {
                 val previousStatus = dao.sourceStatus(SOURCE_KEY)
@@ -113,20 +113,20 @@ class StaticShuttleSource(
             }
             val relativeUrl = requirePayloadUrl(descriptor.url, "shuttle")
             val payloadBytes = transport.get("$DATA_ROOT/$relativeUrl")
-            require(payloadBytes.sha256() == descriptor.sha256) { "셔틀 데이터 무결성 검사에 실패했습니다." }
+            require(payloadBytes.sha256() == descriptor.sha256) { "셔틀 데이터 무결성 검사에 실패했어요." }
             val payload = json.decodeFromString<ShuttlePayload>(payloadBytes.decodeToString())
             require(payload.schemaVersion == 1 && payload.departures.isNotEmpty() && payload.departures.size <= 2_000) {
-                "셔틀 데이터 행 수가 올바르지 않습니다."
+                "셔틀 데이터 행 수가 올바르지 않아요."
             }
             val entities = payload.departures.map { row ->
-                require(row.routeId.matches(Regex("[A-Za-z0-9_-]{1,40}"))) { "셔틀 노선 ID가 올바르지 않습니다." }
-                require(row.stopId.matches(Regex("[A-Za-z0-9_-]{1,80}"))) { "셔틀 정류장 ID가 올바르지 않습니다." }
+                require(row.routeId.matches(Regex("[A-Za-z0-9_-]{1,40}"))) { "셔틀 노선 ID가 올바르지 않아요." }
+                require(row.stopId.matches(Regex("[A-Za-z0-9_-]{1,80}"))) { "셔틀 정류장 ID가 올바르지 않아요." }
                 val origin = com.example.dimanow.domain.CampusZoneId.valueOf(row.originZone)
                 val destination = com.example.dimanow.domain.CampusZoneId.valueOf(row.destinationZone)
                 require(origin != com.example.dimanow.domain.CampusZoneId.OUTSIDE && destination != com.example.dimanow.domain.CampusZoneId.OUTSIDE) {
-                    "셔틀 구역이 올바르지 않습니다."
+                    "셔틀 구역이 올바르지 않아요."
                 }
-                require(row.direction == "TO_${destination.name}") { "셔틀 방향이 목적지와 일치하지 않습니다." }
+                require(row.direction == "TO_${destination.name}") { "셔틀 방향이 목적지와 일치하지 않아요." }
                 ShuttleDepartureEntity.fromDomain(
                     ShuttleDeparture(
                         sourceRouteId = row.routeId,
@@ -140,7 +140,7 @@ class StaticShuttleSource(
                     ),
                 )
             }
-            require(entities.distinctBy(ShuttleDepartureEntity::key).size == entities.size) { "셔틀 데이터에 중복 행이 있습니다." }
+            require(entities.distinctBy(ShuttleDepartureEntity::key).size == entities.size) { "셔틀 데이터에 중복 행이 있어요." }
             database.withTransaction {
                 dao.clearShuttleDepartures()
                 dao.insertShuttleDepartures(entities)
@@ -184,7 +184,7 @@ class StaticShuttleSource(
     } }
 
     private fun requirePayloadUrl(value: String, directory: String): String {
-        require(value.matches(Regex("$directory/[0-9a-f]{64}\\.json"))) { "잘못된 데이터 경로입니다." }
+        require(value.matches(Regex("$directory/[0-9a-f]{64}\\.json"))) { "잘못된 데이터 경로예요." }
         return value
     }
 

@@ -109,9 +109,10 @@ private val DarkColorScheme = darkColorScheme(
 /**
  * DIMA 브랜드 M3 Expressive 테마.
  *
- * 브랜드 정체성(#EC268F 시드 팔레트, D-024)을 유지하기 위해 dynamic color 대신
- * 고정 브랜드 스킴을 사용한다. 이 material3 버전에서는 MotionScheme API가
- * internal이므로 spring 물리 모션은 ui/motion/ExpressiveMotion에서 직접 적용한다.
+ * 브랜드 정체성(#EC268F 시드 팔레트, D-024·D-027)을 유지하기 위해 dynamic color 대신
+ * 고정 브랜드 스킴을 사용한다. 모양은 [Shapes]/`DimaShapes`, 글꼴은 [Typography]가 맡는다.
+ * material3 1.4.0에서는 `MotionScheme`이 internal이라 테마에 모션을 넣지 않고,
+ * 모든 애니메이션은 `ui/motion/ExpressiveMotion.kt`의 `DimaMotion` 토큰(spatial/effects spring)을 쓴다.
  */
 @Composable
 fun DIMANowTheme(

@@ -2,31 +2,36 @@ package com.example.dimanow.ui
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowForward
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.School
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.LocalContentColor
-import androidx.compose.material3.Text
 import androidx.compose.material3.Surface
-import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.SemanticsPropertyReceiver
+import androidx.compose.ui.semantics.onClick
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.example.dimanow.theme.DimaShapes
 import com.example.dimanow.lms.LmsCompletionState
 import com.example.dimanow.lms.LmsItem
 import com.example.dimanow.lms.LmsItemKind
@@ -39,7 +44,11 @@ import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
 import java.time.temporal.ChronoUnit
 
-/** A view of existing LMS deadlines; opening Home does not initiate an LMS sign-in. */
+/**
+ * A view of existing LMS deadlines; opening Home does not initiate an LMS sign-in.
+ * The whole card opens the Courses tab (D-094(9)). Signed out with nothing cached, it shrinks to a
+ * single-row prompt instead of a full card.
+ */
 @Composable
 @OptIn(ExperimentalLayoutApi::class)
 internal fun HomeTodaySummary(
@@ -49,7 +58,7 @@ internal fun HomeTodaySummary(
     modifier: Modifier = Modifier,
     sessionState: LmsSessionState = LmsSessionState.SIGNED_OUT,
 ) {
-    val secondaryColor = LocalContentColor.current.copy(alpha = 0.8f)
+    val secondaryColor = MaterialTheme.colorScheme.onSurfaceVariant
     val overview = remember(snapshot.items, now) { upcomingHomeTasks(snapshot.items, now.toInstant()) }
     val hasCache = snapshot.lastSuccessAt != null || snapshot.items.isNotEmpty()
     val stateMessage = when {
@@ -62,29 +71,38 @@ internal fun HomeTodaySummary(
         else -> null
     }
 
-    Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            Icon(Icons.Default.School, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(22.dp))
-            Text("수업", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
-            Box(Modifier.size(24.dp), contentAlignment = Alignment.Center) {
-                IconButton(onClick = onOpenCourses, modifier = Modifier.requiredSize(48.dp)) {
-                    Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = "수업 보기", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(14.dp))
-                }
-            }
-        }
+    if (!hasCache && sessionState == LmsSessionState.SIGNED_OUT && stateMessage != null &&
+        snapshot.syncState != LmsSyncState.ERROR && snapshot.syncState != LmsSyncState.SYNCING
+    ) {
+        HomeCompactPrompt(
+            icon = Icons.Default.School,
+            text = stateMessage,
+            onClick = onOpenCourses,
+            onClickLabel = COURSES_CLICK_LABEL,
+            modifier = modifier.testTag("dashboard_learning_prompt"),
+        )
+        return
+    }
+
+    HomeSummaryCard(
+        onClick = onOpenCourses,
+        onClickLabel = COURSES_CLICK_LABEL,
+        modifier = modifier.testTag("dashboard_learning_card"),
+    ) {
+        HomeCardHeader(icon = Icons.Default.School, title = "수업")
         if (overview.courses.isNotEmpty()) {
             FlowRow(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 overview.courses.forEach { course ->
-                    Surface(shape = RoundedCornerShape(8.dp), color = LocalContentColor.current.copy(alpha = 0.08f), contentColor = LocalContentColor.current) {
+                    Surface(shape = DimaShapes.Badge, color = MaterialTheme.colorScheme.surfaceContainerHigh, contentColor = MaterialTheme.colorScheme.onSurfaceVariant) {
                         Text("${course.courseName} · ${course.totalCount}개", style = MaterialTheme.typography.labelMedium,
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp))
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp))
                     }
                 }
             }
         }
         overview.items.forEach { item ->
-            Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                Text(item.title, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(item.title, style = MaterialTheme.typography.titleSmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
                 Text(
                     homeTaskDeadlineLabel(requireNotNull(item.dueAt), now.toInstant()),
                     style = MaterialTheme.typography.labelMedium,
@@ -99,6 +117,108 @@ internal fun HomeTodaySummary(
                 message,
                 style = MaterialTheme.typography.bodySmall,
                 color = secondaryColor,
+            )
+        }
+    }
+}
+
+/** Spoken action of the Home course card and its compact prompt. */
+internal const val COURSES_CLICK_LABEL = "수업 보기"
+
+/**
+ * One tap pattern for Home summary cards (D-094(9)): the whole card is the touch target and
+ * announces what it opens; there are no separate small arrow buttons inside.
+ */
+@Composable
+internal fun HomeSummaryCard(
+    onClick: () -> Unit,
+    onClickLabel: String,
+    modifier: Modifier = Modifier,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    val open = onClick
+    ElevatedCard(
+        onClick = open,
+        // Outer semantics override the card's own click action, so this only labels the same action.
+        modifier = modifier
+            .fillMaxWidth()
+            .semantics { labelClickAction(onClickLabel, open) },
+        shape = DimaShapes.Card,
+        colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+    ) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp), content = content)
+    }
+}
+
+/** Names the click action for screen readers ("double-tap to <label>") without adding a second action. */
+private fun SemanticsPropertyReceiver.labelClickAction(label: String, action: () -> Unit) {
+    onClick(label = label) { action(); true }
+}
+
+/** Icon + title + optional trailing status, ending in a decorative chevron that marks the card as openable. */
+@Composable
+internal fun HomeCardHeader(
+    icon: ImageVector,
+    title: String,
+    modifier: Modifier = Modifier,
+    showChevron: Boolean = true,
+    trailing: @Composable RowScope.() -> Unit = {},
+) {
+    Row(
+        modifier = modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(22.dp))
+        Text(title, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
+        trailing()
+        if (showChevron) {
+            Icon(
+                Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(24.dp),
+            )
+        }
+    }
+}
+
+/** A single-row Home prompt used where a full card would only say that nothing is there yet (D-094(9)). */
+@Composable
+internal fun HomeCompactPrompt(
+    icon: ImageVector,
+    text: String,
+    onClick: () -> Unit,
+    onClickLabel: String,
+    modifier: Modifier = Modifier,
+) {
+    val open = onClick
+    Surface(
+        onClick = open,
+        modifier = modifier
+            .fillMaxWidth()
+            .semantics { labelClickAction(onClickLabel, open) },
+        shape = DimaShapes.Tile,
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
+        contentColor = MaterialTheme.colorScheme.onSurface,
+    ) {
+        Row(
+            modifier = Modifier.heightIn(min = 56.dp).padding(horizontal = 16.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(22.dp))
+            Text(
+                text,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.weight(1f),
+            )
+            Icon(
+                Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(24.dp),
             )
         }
     }

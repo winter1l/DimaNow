@@ -1,20 +1,17 @@
-# Checkpoint — D-089..D-092 implemented locally — 2026-09-30
+# Checkpoint — D-094 UI/UX pass complete locally — 2026-10-01
 
 ## The story so far
-Observed: main was merged with origin and pushed (cd6e019); CI passed. Post-push review led to user decisions D-089 (automatic dorm publication), D-090 (restore 운동장 label), D-091 (remove shuttle reports) and D-092 (sensitive memory values in ignored `.local/memory-private/`). All four are implemented and verified locally but not committed.
+Observed: all seven D-094 phases are implemented in the working tree and verified on the emulator (247 unit tests, lint clean, optimized build, all 52 androidTest classes per class). DESIGN.md rewritten. Nothing committed; the phone still runs the 2026-09-30 build (45001629…).
 
 ## Decided
-- Dorm submissions auto-publish; the `dorm-submissions` branch keeps its older workflow file, which calls the same `publish-dorm-meal` command.
-- Worker deployment and APK install are separate operator steps.
+- D-094 supersedes D-093 only for mixed Settings toggles, 4402 clock-first pills and scrolling headers.
+- Material3 stays on stable 1.4.0.
 
 ## Waiting on the user
-Commit/push approval for the D-089..D-092 working tree.
+Commit/push in progress; phone runs the D-094 build (78718B5F…) since 2026-10-01 10:39.
 
 ## Next first action
-After approval: commit (code, docs, memory), push, confirm `검증` and `캠퍼스 데이터 게시` runs.
+Review the diff (57 modified, ~29 new files), commit in logical parts after approval, push, confirm CI.
 
 ## Open follow-ups
-- Worker deploy: D1 migration 0002, remove report endpoints, delete `SHUTTLE_REPORT_HMAC_KEY`, decide on unused `shuttle_reports` rows.
-- `prepareShuttleTopology` has no production caller after D-091.
-- Docs debt not yet fixed: SECURITY/README HTTPS-only LMS claim vs D-073, removed LMS 읽음 filter, One UI 8 device note, PRODUCT-TRUTH "private repo", D-009 duplicate ID, 00-INDEX missing files.
-- Sensitive values already in published Git history remain there.
+See OPEN-QUESTIONS "2026-10-01 — D-094 follow-ups" (baseline profiles, unused non-UI code, 4402 nearby colors, dorm rejection wording, emulator stability).

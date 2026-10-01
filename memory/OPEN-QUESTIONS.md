@@ -55,3 +55,10 @@ Resolved 2026-09-30 (same day): Q-011 by D-090 (stadium label restored), Q-012 a
 - Q-017 correction (observed 2026-09-30, phone via USB): the installed phone APK is the 9/21 shuttle-fix build (SHA-256 8EC0C3AA…, lastUpdate 2026-09-21 16:17). Its dex, like the 9/21 meal-fix build, has no `shuttle_times_toggle` or `표시할 출발 시각` and still has `ExpressiveToggleButton`. memory/gemini-redesign-handoff-20260916.md and gemini-install-20260917.md show the user requested a free Antigravity/Gemini frontend reconstruction on 9/16, reviewed and installed it on the phone on 9/17 (E13BB1D2…), and D-084 transferred that "current source" to Figma. So the current DimaNowApp.kt is most likely the user-requested Gemini redesign, not an accidental overwrite. Gap: no DECISIONS entry supersedes the D-081/D-082 visual specifics, so the D-082 tests were left stale. Pending user confirmation to record the Gemini UI as baseline and update the eight tests.
 
 Resolved 2026-09-30: Q-016/Q-017 by D-093 (user confirmed the Gemini reconstruction as UI baseline); the eight tests were updated and pass on the API 36 emulator.
+
+## 2026-10-01 — D-094 follow-ups
+- Baseline profiles in app/src/main/generated/baselineProfiles are stale (still list removed ExpressiveToggleButton/pulseBreath and pre-split class names); regenerate with the :benchmark generator.
+- Unused non-UI code left: LmsCacheDao.getItem/markItemRead, LmsHtmlParser.parseBoardItems, LmsAssignmentDates, isCompletedLmsLogin; two warnings in live/LiveSurfaceController.kt.
+- Nearby-stop 4402 card (primaryContainer) makes the secondaryContainer second capsule/chip blend in (D-083 colors) — needs a color decision.
+- Server-sent dormitory rejection reasons are still shown verbatim; update-check errors no longer keep raw detail for diagnostics.
+- Emulator system_server crashes (vold/keystore2 native crashes) during long instrumentation runs; run classes individually.

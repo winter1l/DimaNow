@@ -36,3 +36,5 @@ Purpose: durable project context that survives session and context changes.
 `shuttle-summary-20260921.md` — D-087 immediate-vehicle notification simplification and validation/device limits.
 
 `device-update-20260921.md` — Wireless replacement install, PC Tailscale startup preference, active-use screen policy and cellular ADB limits.
+
+`ui-review-20260930.md` — Read-only M3 Expressive UI/UX review of the D-093 baseline: observed screen defects, source audit, constraints.

@@ -1,5 +1,5 @@
 {
-    "generatedAt": "2026-10-06T05:08:19.566387457Z",
+    "generatedAt": "2026-10-06T06:49:56.631108383Z",
     "datasets": {
         "shuttle": {
             "revision": 2,
@@ -22,12 +22,13 @@
         },
         "notice": {
             "revision": 27,
-            "state": "READY",
+            "state": "ERROR",
             "publishedAt": "2026-10-03T05:43:00.761058460Z",
-            "lastAttemptAt": "2026-10-05T06:10:48.013568390Z",
+            "lastAttemptAt": "2026-10-06T06:49:56.631108383Z",
             "url": "notices/7a02d903da50eb36a8391dee27c6cac8e5e5e8a820b43c35ea2c0cb0186ea545.json",
             "sha256": "7a02d903da50eb36a8391dee27c6cac8e5e5e8a820b43c35ea2c0cb0186ea545",
-            "sourceUrl": "https://www.dima.ac.kr/?p=111"
+            "sourceUrl": "https://www.dima.ac.kr/?p=111",
+            "message": "공식 공지 목록을 찾지 못했습니다."
         },
         "dorm_meal": {
             "revision": 6,

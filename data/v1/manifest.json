@@ -1,5 +1,5 @@
 {
-    "generatedAt": "2026-10-08T05:08:07.908725161Z",
+    "generatedAt": "2026-10-08T06:37:21.687200291Z",
     "datasets": {
         "shuttle": {
             "revision": 2,
@@ -21,12 +21,12 @@
             "message": "식단 메뉴 줄 수가 부족합니다."
         },
         "notice": {
-            "revision": 28,
+            "revision": 29,
             "state": "READY",
-            "publishedAt": "2026-10-07T06:24:57.713601045Z",
-            "lastAttemptAt": "2026-10-07T06:24:57.713601045Z",
-            "url": "notices/ba760278f6927e50cb7582f215712910ef172ac751648bae8e2708838fefb15b.json",
-            "sha256": "ba760278f6927e50cb7582f215712910ef172ac751648bae8e2708838fefb15b",
+            "publishedAt": "2026-10-08T06:37:21.687200291Z",
+            "lastAttemptAt": "2026-10-08T06:37:21.687200291Z",
+            "url": "notices/cf54201ecbfc0688fdab8238080808588d9b890f741c8fc6ae694c156e2fea48.json",
+            "sha256": "cf54201ecbfc0688fdab8238080808588d9b890f741c8fc6ae694c156e2fea48",
             "sourceUrl": "https://www.dima.ac.kr/?p=111"
         },
         "dorm_meal": {

@@ -89,7 +89,7 @@ class CampusSummaryWidgetProvider : AppWidgetProvider() {
                         flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
                     }
                     val pendingIntent = PendingIntent.getActivity(context, 9101, openApp, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
-                    views.setOnClickPendingIntent(R.id.summary_widget_root, pendingIntent)
+                    views.setOnClickPendingIntent(android.R.id.background, pendingIntent)
 
                     manager.updateAppWidget(id, views)
                 }
@@ -129,16 +129,7 @@ internal fun campusSummaryWidgetViews(
         views.setTextViewText(R.id.summary_widget_compact_course, course)
         views.setTextViewText(R.id.summary_widget_compact_shuttle, shuttle)
         views.setTextViewText(R.id.summary_widget_compact_meal, meal)
-        listOf(
-            R.id.summary_widget_compact_course to course,
-            R.id.summary_widget_compact_shuttle to shuttle,
-            R.id.summary_widget_compact_meal to meal,
-        ).forEach { (viewId, text) ->
-            // Keep the complete summary available to accessibility when visual text is ellipsized.
-            views.setContentDescription(viewId, text)
-            // A short widget guarantees one whole line per summary; never show half a second line.
-            views.setInt(viewId, "setMaxLines", 1)
-        }
+        // Each summary is one line (layout maxLines); the root's spoken summary keeps the complete text.
     } else {
         views.setTextViewText(R.id.summary_widget_location, plan.headerLocationText)
         views.setTextViewText(R.id.summary_widget_date, plan.headerDateText)
@@ -149,5 +140,7 @@ internal fun campusSummaryWidgetViews(
         views.setTextViewText(R.id.summary_widget_meal_title, plan.mealTitle)
         views.setTextViewText(R.id.summary_widget_meal_content, plan.mealContent)
     }
+    // The whole widget is one tap target; TalkBack reads it once as a complete summary.
+    views.setContentDescription(android.R.id.background, plan.spokenSummary)
     return views
 }

@@ -45,8 +45,11 @@ class ShuttleWidgetDisplayPlannerTest {
         assertEquals("본관행", plan.rows[0].destinationTag)
         assertEquals("5분(09:23)", plan.rows[0].capsules[0].text)
         assertFalse(plan.rows[0].capsules[0].isLast)
+        assertEquals(ShuttleWidgetCapsuleTone.NEAREST, plan.rows[0].capsules[0].tone)
         assertEquals("30분(09:48)", plan.rows[0].capsules[1].text)
         assertTrue(plan.rows[0].capsules[1].isLast)
+        assertEquals(ShuttleWidgetCapsuleTone.LAST, plan.rows[0].capsules[1].tone)
+        assertEquals("DIMA 셔틀, 엔터관 출발. 본관행 5분 후 09:23, 다음 30분 후 09:48, 막차", plan.spokenSummary)
     }
 
     @Test
@@ -60,16 +63,19 @@ class ShuttleWidgetDisplayPlannerTest {
         assertEquals(1, plan.rows.size)
         assertEquals("본관행", plan.rows[0].destinationTag)
         assertEquals("운행 종료·막차 09:48", plan.rows[0].capsules[0].text)
+        assertEquals(ShuttleWidgetCapsuleTone.ENDED, plan.rows[0].capsules[0].tone)
+        assertEquals("DIMA 셔틀, 엔터관 출발. 본관행 운행 종료, 막차 09:48", plan.spokenSummary)
     }
 
     @Test
-    fun `no service today falls back to a plain terminal line`() {
+    fun `no service today says so in a plain sentence`() {
         val now = ZonedDateTime.of(2026, 8, 24, 22, 0, 0, 0, zoneId)
 
         val plan = ShuttleWidgetDisplayPlanner().plan(now, CampusZoneId.MAIN, ShuttleBoard(emptyList()), emptyList())
 
         assertTrue(plan.rows.isEmpty())
-        assertEquals("본관  운행 종료", plan.emptyText)
+        assertEquals("오늘은 운행하지 않아요", plan.emptyText)
+        assertEquals("DIMA 셔틀, 본관 출발. 오늘은 운행하지 않아요", plan.spokenSummary)
     }
 
     @Test
@@ -96,6 +102,10 @@ class ShuttleWidgetDisplayPlannerTest {
         assertEquals("5분(19:35)·운동장 전환", plan.rows[0].capsules[0].text)
         assertEquals("30분(20:00)·운동장", plan.rows[0].capsules[1].text)
         assertTrue(plan.rows[0].capsules[1].isLast)
+        assertEquals(
+            "DIMA 셔틀, 운동장 출발. 엔터관행 5분 후 19:35, 운동장 전환, 다음 30분 후 20:00, 막차, 운동장",
+            plan.spokenSummary,
+        )
     }
 
     @Test
@@ -134,6 +144,44 @@ class ShuttleWidgetDisplayPlannerTest {
     }
 
     @Test
+    fun `departures beyond an hour show the clock instead of a large minute count`() {
+        val now = ZonedDateTime.of(2026, 8, 24, 7, 0, 0, 0, zoneId)
+        val allDepartures = listOf(departure(8, 28), departure(9, 23))
+        val board = ShuttleBoard(
+            listOf(
+                ShuttleBoardRow(
+                    originZone = CampusZoneId.YEIN,
+                    destinationZone = CampusZoneId.MAIN,
+                    departures = listOf(ShuttleCountdown(allDepartures[0], 88), ShuttleCountdown(allDepartures[1], 143)),
+                ),
+            ),
+        )
+
+        val wide = ShuttleWidgetDisplayPlanner().plan(now, CampusZoneId.YEIN, board, allDepartures)
+        val compact = ShuttleWidgetDisplayPlanner().plan(now, CampusZoneId.YEIN, board, allDepartures, compact = true)
+
+        // D-069: no `88분`; the clock alone carries the time beyond 60 minutes
+        assertEquals("08:28", wide.rows[0].capsules[0].text)
+        assertEquals("09:23", wide.rows[0].capsules[1].text)
+        assertEquals("08:28", compact.rows[0].capsules[0].text)
+        assertEquals("DIMA 셔틀, 엔터관 출발. 본관행 08:28 출발, 다음 09:23 출발, 막차", wide.spokenSummary)
+    }
+
+    @Test
+    fun `exactly sixty minutes still counts down and a nearest last departure uses the strong error tone`() {
+        val now = ZonedDateTime.of(2026, 8, 24, 8, 48, 0, 0, zoneId)
+        val allDepartures = listOf(departure(8, 0), departure(9, 48))
+        val board = ShuttleBoard(
+            listOf(ShuttleBoardRow(CampusZoneId.YEIN, CampusZoneId.MAIN, listOf(ShuttleCountdown(allDepartures[1], 60)))),
+        )
+
+        val plan = ShuttleWidgetDisplayPlanner().plan(now, CampusZoneId.YEIN, board, allDepartures)
+
+        assertEquals("60분(09:48)", plan.rows[0].capsules[0].text)
+        assertEquals(ShuttleWidgetCapsuleTone.NEAREST_LAST, plan.rows[0].capsules[0].tone)
+    }
+
+    @Test
     fun `outside campus keeps the automatic guidance hint`() {
         val now = ZonedDateTime.of(2026, 8, 24, 9, 0, 0, 0, zoneId)
 
@@ -142,6 +190,7 @@ class ShuttleWidgetDisplayPlannerTest {
         assertEquals("DIMA 셔틀", plan.headerTagText)
         assertTrue(plan.rows.isEmpty())
         assertEquals("교내 진입 시 자동 안내", plan.emptyText)
+        assertEquals("DIMA 셔틀. 교내 진입 시 자동 안내", plan.spokenSummary)
     }
 
     private fun departure(hour: Int, minute: Int) = ShuttleDeparture(

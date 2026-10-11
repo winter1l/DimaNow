@@ -10,6 +10,7 @@ import java.time.DayOfWeek
 import java.time.Duration
 import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
+import com.example.dimanow.meal.MealServiceState
 import com.example.dimanow.meal.mealServiceStatus
 
 data class CampusSummaryWidgetPlan(
@@ -22,7 +23,16 @@ data class CampusSummaryWidgetPlan(
     val mealTitle: String,
     val mealContent: String,
     val requiresMinuteUpdate: Boolean,
-)
+) {
+    /** One spoken description for the whole widget; the visual lines may be ellipsized. */
+    val spokenSummary: String
+        get() = listOf(
+            "DIMA Now, ${headerLocationText.replace(": ", " ")}, $headerDateText",
+            "수업, ${courseTitle.replace(CampusSummaryWidgetPlanner.ONGOING_MARK, "진행 중 ")}, $courseDetail",
+            "$shuttleTitle, $shuttleContent",
+            "$mealTitle, $mealContent",
+        ).joinToString(". ")
+}
 
 class CampusSummaryWidgetPlanner {
     fun plan(
@@ -57,7 +67,7 @@ class CampusSummaryWidgetPlanner {
             (Duration.between(now, startsAt).seconds + 59) / 60
         }
         val courseTitle = when {
-            ongoingCourse != null -> "▶ ${ongoingCourse.name}"
+            ongoingCourse != null -> "$ONGOING_MARK${ongoingCourse.name}"
             upcomingCourse != null -> upcomingCourse.name
             else -> "오늘 수업 없음"
         }
@@ -83,13 +93,22 @@ class CampusSummaryWidgetPlanner {
         } else {
             shuttleBoard.rows.joinToString(" · ") { row ->
                 "${DisplayVocabulary.originName(row.destinationZone)}행 " +
-                    row.departures.joinToString(", ") { "${it.remainingMinutes}분" }
+                    row.departures.joinToString(", ") { countdown ->
+                        // D-069: minutes only within one hour, otherwise the departure clock
+                        when {
+                            countdown.remainingMinutes > ShuttleWidgetDisplayPlanner.COUNTDOWN_WINDOW_MINUTES ->
+                                countdown.departure.time.format(TIME)
+                            countdown.remainingMinutes <= 0 -> "곧 출발"
+                            else -> "${countdown.remainingMinutes}분"
+                        }
+                    }
             }
         }
 
         // 4. 식단 정보
         val mealStatus = mealServiceStatus(todayMeal, now.toLocalTime())
-        val mealTitle = "학생식당 (${mealStatus.label})"
+        // 식단이 없는 날은 본문이 한 번만 알린다 (D-094(14), 식단 위젯과 같은 규칙)
+        val mealTitle = if (mealStatus.state == MealServiceState.NO_MENU) "학생식당" else "학생식당 (${mealStatus.label})"
         val mealContent = when {
             todayMeal != null && todayMeal.menuLines.isNotEmpty() -> todayMeal.menuLines.joinToString(" · ")
             now.dayOfWeek.value >= 6 -> "주말에는 식당을 운영하지 않아요"
@@ -109,7 +128,9 @@ class CampusSummaryWidgetPlanner {
         )
     }
 
-    private companion object {
-        val TIME: DateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm")
+    companion object {
+        /** Marks an ongoing class (D-031); spoken as `진행 중`. */
+        const val ONGOING_MARK = "▶ "
+        private val TIME: DateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm")
     }
 }

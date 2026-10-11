@@ -7,6 +7,9 @@
     <color name="widget_text_secondary">#B3A4A8</color>
     <color name="widget_tag_bg">#8E004A</color>
     <color name="widget_tag_text">#FFD9E2</color>
+    <!-- D-040/D-083: the nearest departure is a solid primary capsule, solid error when it is the last -->
+    <color name="widget_on_accent">#650033</color>
+    <color name="widget_on_error">#690005</color>
     <color name="widget_accent">#FFB1C8</color>
     <color name="widget_error">#FFB4AB</color>
     <color name="widget_capsule">#31282A</color>

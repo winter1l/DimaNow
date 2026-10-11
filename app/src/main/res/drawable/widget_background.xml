@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <shape xmlns:android="http://schemas.android.com/apk/res/android"
     android:shape="rectangle">
-    <corners android:radius="28dp" />
+    <!-- Follows the launcher's widget corner radius (API 31+) instead of a fixed value -->
+    <corners android:radius="@android:dimen/system_app_widget_background_radius" />
     <solid android:color="@color/widget_bg" />
 </shape>

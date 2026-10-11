@@ -148,4 +148,58 @@ class CampusSummaryWidgetPlannerTest {
         assertEquals("현재 위치: 본관", plan.headerLocationText)
         assertEquals("셔틀 (운동장 출발)", plan.shuttleTitle)
     }
+
+    @Test
+    fun `shuttle line counts minutes only within an hour and names the clock beyond it`() {
+        val now = ZonedDateTime.of(2026, 8, 27, 9, 0, 0, 0, zoneId)
+        val soon = departureAt(9, 20)
+        val later = departureAt(10, 30)
+
+        val plan = CampusSummaryWidgetPlanner().plan(
+            now = now,
+            currentZone = CampusZoneId.YEIN,
+            todayCourses = emptyList(),
+            shuttleBoard = ShuttleBoard(
+                listOf(ShuttleBoardRow(CampusZoneId.YEIN, CampusZoneId.MAIN, listOf(ShuttleCountdown(soon, 20), ShuttleCountdown(later, 90)))),
+            ),
+            todayMeal = null,
+        )
+
+        // D-069: minutes only within 60 minutes, otherwise the clock
+        assertEquals("본관행 20분, 10:30", plan.shuttleContent)
+    }
+
+    @Test
+    fun `a day without a menu says so once and the widget reads as one spoken summary`() {
+        val now = ZonedDateTime.of(2026, 8, 27, 10, 30, 0, 0, zoneId)
+
+        val plan = CampusSummaryWidgetPlanner().plan(
+            now = now,
+            currentZone = CampusZoneId.YEIN,
+            todayCourses = listOf(course),
+            shuttleBoard = ShuttleBoard(listOf(ShuttleBoardRow(CampusZoneId.YEIN, CampusZoneId.MAIN, listOf(ShuttleCountdown(departureAt(10, 35), 5))))),
+            todayMeal = null,
+        )
+
+        assertEquals("학생식당", plan.mealTitle)
+        assertEquals("오늘 등록된 식단이 없어요", plan.mealContent)
+        assertEquals("▶ 미디어음악기초", plan.courseTitle)
+        assertEquals(
+            "DIMA Now, 현재 위치 엔터관, 8월 27일 (목). " +
+                "수업, 진행 중 미디어음악기초, 예술관 301호 · 12:00까지. " +
+                "셔틀 (엔터관 출발), 본관행 5분. " +
+                "학생식당, 오늘 등록된 식단이 없어요",
+            plan.spokenSummary,
+        )
+    }
+
+    private fun departureAt(hour: Int, minute: Int) = ShuttleDeparture(
+        sourceRouteId = "r1",
+        sourceStopId = "s1",
+        direction = "TO_MAIN",
+        serviceDay = DayOfWeek.THURSDAY,
+        time = LocalTime.of(hour, minute),
+        originZone = CampusZoneId.YEIN,
+        destinationZone = CampusZoneId.MAIN,
+    )
 }

@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!--
+        Home-screen widget type scale, roughly the app's Material 3 roles (DESIGN.md "Type").
+        Anything that carries data is at least 12sp; weight comes from the view
+        (sans-serif-medium for titles and labels, bold only for departure countdowns).
+    -->
+    <!-- labelMedium / bodySmall: tags, section labels, dates, clocks and supporting detail -->
+    <dimen name="widget_text_caption">12sp</dimen>
+    <!-- between bodySmall and bodyMedium: menus, one-line summaries and the 2x1 departure line -->
+    <dimen name="widget_text_body">13sp</dimen>
+    <!-- titleSmall: the primary line of a card (course name) -->
+    <dimen name="widget_text_title">14sp</dimen>
+    <!-- titleMedium: a single stand-alone message that fills the widget -->
+    <dimen name="widget_text_emphasis">16sp</dimen>
+</resources>

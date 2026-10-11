@@ -63,7 +63,7 @@ class GeminiDormitoryMealPayloadBuilder {
             weekEnd = weekStart.plusDays(6).toString(),
             sourceImageUrl = sourceImageUrl,
             days = days.map { (date, sections) -> DormitoryMealDayPayload(date.toString(), sections) },
-        )
+        ).also(DormitoryMealContentPolicy::requireAllowed)
     }
 
     private fun resolveDate(referenceDate: LocalDate, month: Int, day: Int): LocalDate =

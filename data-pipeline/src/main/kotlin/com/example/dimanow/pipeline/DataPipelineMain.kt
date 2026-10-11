@@ -8,10 +8,17 @@ import org.jsoup.Jsoup
 
 fun main(args: Array<String>) {
     val command = args.firstOrNull() ?: error("게시 명령이 필요합니다.")
-    val expectedSize = if (command == "publish-dorm-meal") 6 else 3
+    // publish-dorm-meal keeps its original 6-argument contract: the legacy workflow on the dorm-submissions branch
+    // still calls it with main's pipeline code. publish-dorm-pending is the backlog mode used by main's workflow.
+    val expectedSize = when (command) {
+        "publish-dorm-meal" -> 6
+        "publish-dorm-pending" -> 4
+        else -> 3
+    }
     require(args.size == expectedSize) {
         "publish-shuttle <input.csv> <site> | publish-meal ignored <site> | publish-notice ignored <site> | " +
-            "publish-dorm-meal <image> <site> <submission-id> <source-image-url> <mime-type>"
+            "publish-dorm-meal <image> <site> <submission-id> <source-image-url> <mime-type> | " +
+            "publish-dorm-pending <submission-checkout> <site> <index-file>"
     }
     val site = Path.of(args[2])
     val publisher = StaticDataPublisher(site)
@@ -58,6 +65,17 @@ fun main(args: Array<String>) {
                 ),
             )
             System.err.println("기숙사 식단 처리 실패: ${error.message}")
+        }
+        "publish-dorm-pending" -> {
+            val submissions = PendingDormitorySubmission.parseIndex(Files.readString(Path.of(args[3]))) {
+                System.err.println("형식이 올바르지 않은 기숙사 제출 항목을 건너뜁니다.")
+            }
+            val statuses = DormitoryMealSubmissionProcessor(
+                publisher = publisher,
+                geminiClient = GeminiDormitoryMealClient(System.getenv("GEMINI_API_KEY").orEmpty()),
+            ).processPending(submissionRoot = Path.of(args[1]), submissions = submissions)
+            statuses.forEach { println("기숙사 제출 ${it.submissionId}: ${it.state}") }
+            println("기숙사 제출 ${statuses.size}건 처리 (대기 목록 ${submissions.size}건)")
         }
         else -> error("알 수 없는 명령: $command")
     }

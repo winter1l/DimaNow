@@ -72,6 +72,8 @@ class StaticDataPublisher(private val outputRoot: Path) {
                     runCatching { LocalDate.parse(day.date) }.getOrNull()?.let { it in weekStart..weekStart.plusDays(6) } == true
                 },
         ) { "기숙사 식단 날짜가 게시 주차를 벗어났습니다." }
+        // Automatic publication (D-089) has no human reviewer: the content limits are enforced again at the boundary.
+        DormitoryMealContentPolicy.requireAllowed(payload)
         publish(
             "dorm_meal",
             "dorm-meal",
@@ -100,6 +102,19 @@ class StaticDataPublisher(private val outputRoot: Path) {
             "허용되지 않은 제출 상태입니다."
         }
         writeDormitorySubmissionStatus(status)
+    }
+
+    /** The status already published for [submissionId], or null when it has none (or an unreadable one). */
+    fun readDormitorySubmissionStatus(submissionId: String): DormitoryMealSubmissionStatus? {
+        requireValidSubmissionId(submissionId)
+        val path = outputRoot.resolve("data/v1/dorm-submissions/$submissionId.json")
+        if (!Files.exists(path)) return null
+        return runCatching { json.decodeFromString<DormitoryMealSubmissionStatus>(Files.readString(path)) }.getOrNull()
+    }
+
+    fun hasDormitorySubmissionStatus(submissionId: String): Boolean {
+        requireValidSubmissionId(submissionId)
+        return Files.exists(outputRoot.resolve("data/v1/dorm-submissions/$submissionId.json"))
     }
 
     private fun writeDormitorySubmissionStatus(status: DormitoryMealSubmissionStatus) {
@@ -215,7 +230,9 @@ class StaticDataPublisher(private val outputRoot: Path) {
         require(valid) { "제출 이미지의 불변 GitHub 원본 주소가 올바르지 않습니다." }
     }
 
-    private companion object {
+    internal companion object {
+        /** The only repository whose immutable `dorm-submissions` commits may be cited as a dormitory source image. */
+        const val DORMITORY_REPOSITORY = "winter1l/DimaNow"
         const val DORMITORY_SOURCE_URL = "https://github.com/winter1l/DimaNow/tree/dorm-submissions/dorm-submissions"
         val SUBMISSION_ID_PATTERN = Regex("[A-Za-z0-9_-]{1,64}")
         val KST: ZoneId = ZoneId.of("Asia/Seoul")

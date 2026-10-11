@@ -15,6 +15,7 @@ import kotlinx.serialization.json.Json
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertThrows
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class DormitoryMealSubmissionProcessorTest {
@@ -175,6 +176,187 @@ class DormitoryMealSubmissionProcessorTest {
         }
     }
 
+    @Test
+    fun `OCR 메뉴에 URL이 있으면 고정 사유로 거절하고 마지막 정상 식단을 유지한다`() {
+        val output = Files.createTempDirectory("dima-dorm-process-url")
+        FakeGemini(ocrResponse = week(8, 17)).use { process(output, it, Instant.parse("2026-08-18T03:00:00Z"), "last-good") }
+        val before = readManifest(output).datasets.getValue("dorm_meal")
+
+        for ((index, line) in listOf("쿠폰 https://bit.ly/x", "문의 010-1234-5678", "메뉴\u0007", "가".repeat(61)).withIndex()) {
+            FakeGemini(ocrResponse = week(8, 24, wednesdayLines = listOf(line))).use { gemini ->
+                val result = process(output, gemini, THURSDAY, "content-$index")
+
+                assertEquals(line, "REJECTED", result.state)
+                assertEquals(DormitoryMealContentPolicy.REJECTION_REASON, result.message)
+                assertEquals(before, readManifest(output).datasets.getValue("dorm_meal"))
+            }
+        }
+        FakeGemini(ocrResponse = week(8, 24, wednesdayLines = List(16) { "메뉴$it" })).use { gemini ->
+            assertEquals(DormitoryMealContentPolicy.REJECTION_REASON, process(output, gemini, THURSDAY, "too-many-lines").message)
+        }
+        assertEquals(before, readManifest(output).datasets.getValue("dorm_meal"))
+    }
+
+    @Test
+    fun `Gemini 거절 사유는 한 줄로 줄이고 링크가 있으면 고정 사유를 게시한다`() {
+        val output = Files.createTempDirectory("dima-dorm-process-reason")
+        val reasons = mapOf(
+            "자세한 안내는 https://evil.example 에서\n두 번째 줄" to DormitoryMealContentPolicy.FALLBACK_REASON,
+            "식단표가 잘려 있어요\n추가 설명" to "식단표가 잘려 있어요",
+            "가".repeat(200) to DormitoryMealContentPolicy.FALLBACK_REASON,
+        )
+        for ((index, entry) in reasons.entries.withIndex()) {
+            val validation = """{"동아방송예술대 기숙사 식단이 맞는가?":false,"식단표가 전부 보이는가?":true,""" +
+                """"모두 true가 아닌 경우 사용자에게 알려줄 간단 사유":${Json.encodeToString(entry.key)}}"""
+            FakeGemini(validationResponse = validation, ocrResponse = week(8, 24)).use { gemini ->
+                val result = process(output, gemini, THURSDAY, "reason-$index")
+
+                assertEquals("REJECTED", result.state)
+                assertEquals(entry.value, result.message)
+                assertEquals(result, readStatus(output, "reason-$index"))
+            }
+        }
+    }
+
+    @Test
+    fun `이미 최종 상태가 있는 제출은 다시 처리하지 않고 기존 상태를 돌려준다`() {
+        val output = Files.createTempDirectory("dima-dorm-process-idempotent")
+        val published = FakeGemini(ocrResponse = week(8, 24)).use { process(output, it, THURSDAY, "once") }
+        val manifest = readManifest(output)
+
+        FakeGemini(ocrResponse = week(8, 24)).use { gemini ->
+            assertEquals(published, process(output, gemini, THURSDAY.plusSeconds(60), "once"))
+            assertEquals(0, gemini.calls)
+        }
+        assertEquals(published, readStatus(output, "once"))
+        assertEquals(manifest, readManifest(output))
+    }
+
+    @Test
+    fun `레거시 6인자 publish-dorm-meal 명령 계약을 유지한다`() {
+        val output = Files.createTempDirectory("dima-dorm-cli-legacy")
+        val published = FakeGemini(ocrResponse = week(8, 24)).use { process(output, it, THURSDAY, "legacy") }
+
+        // The legacy workflow on the dorm-submissions branch still calls this exact shape with main's pipeline code.
+        main(arrayOf("publish-dorm-meal", image().toString(), output.toString(), "legacy", sourceUrl("legacy"), "image/jpeg"))
+
+        assertEquals(published, readStatus(output, "legacy"))
+        assertThrows(IllegalArgumentException::class.java) {
+            main(arrayOf("publish-dorm-meal", image().toString(), output.toString(), "legacy", sourceUrl("legacy")))
+        }
+    }
+
+    @Test
+    fun `대기 중인 두 제출을 오래된 순서로 모두 처리한다`() {
+        val output = Files.createTempDirectory("dima-dorm-batch-two")
+        val root = submissionRoot("older", "newer")
+        val submissions = listOf(
+            pending("newer", THURSDAY.minusSeconds(60), 'b'),
+            pending("older", THURSDAY.minusSeconds(3_600), 'a'),
+        )
+
+        FakeGemini(ocrResponse = week(8, 24)).use { gemini ->
+            val results = processor(output, gemini, THURSDAY).processPending(root, submissions)
+
+            assertEquals(listOf("older" to "PUBLISHED", "newer" to "DUPLICATE"), results.map { it.submissionId to it.state })
+            assertEquals(2, gemini.calls)
+            assertEquals("PUBLISHED", readStatus(output, "older").state)
+            assertEquals("DUPLICATE", readStatus(output, "newer").state)
+            val descriptor = readManifest(output).datasets.getValue("dorm_meal")
+            val payload = Json.decodeFromString<DormitoryMealPayload>(Files.readString(output.resolve("data/v1").resolve(descriptor.url)))
+            assertEquals(
+                "https://raw.githubusercontent.com/winter1l/DimaNow/${"a".repeat(40)}/dorm-submissions/older.jpg",
+                payload.sourceImageUrl,
+            )
+        }
+    }
+
+    @Test
+    fun `이미 상태가 있는 제출은 일괄 처리에서 건너뛴다`() {
+        val output = Files.createTempDirectory("dima-dorm-batch-skip")
+        val root = submissionRoot("done", "pending")
+        val existing = DormitoryMealSubmissionStatus("done", "ERROR", "식단 사진을 처리하지 못했습니다. 잠시 후 다시 시도해 주세요.", "2026-08-27T00:00:00Z")
+        StaticDataPublisher(output).publishDormitorySubmissionStatus(existing)
+
+        FakeGemini(ocrResponse = week(8, 24)).use { gemini ->
+            val results = processor(output, gemini, THURSDAY).processPending(
+                root,
+                listOf(pending("done", THURSDAY.minusSeconds(7_200), 'c'), pending("pending", THURSDAY.minusSeconds(60), 'd')),
+            )
+
+            assertEquals(listOf("pending"), results.map { it.submissionId })
+            assertEquals("PUBLISHED", readStatus(output, "pending").state)
+            assertEquals(existing, readStatus(output, "done"))
+        }
+    }
+
+    @Test
+    fun `일괄 처리는 실행당 상한을 지키고 남은 제출은 다음 실행에서 처리한다`() {
+        val output = Files.createTempDirectory("dima-dorm-batch-cap")
+        val ids = (1..12).map { "stale-%02d".format(it) }
+        val root = submissionRoot(*ids.toTypedArray())
+        // Committed in the previous target week: rejected without any Gemini call.
+        val submissions = ids.mapIndexed { index, id -> pending(id, Instant.parse("2026-08-18T03:00:00Z").plusSeconds(index * 60L), 'e') }
+
+        FakeGemini(ocrResponse = week(8, 24)).use { gemini ->
+            val first = processor(output, gemini, THURSDAY).processPending(root, submissions)
+            assertEquals(DormitoryMealSubmissionProcessor.MAX_SUBMISSIONS_PER_RUN, first.size)
+            assertEquals(ids.take(10), first.map { it.submissionId })
+            assertTrue(first.all { it.state == "REJECTED" && it.message == DormitoryMealSubmissionProcessor.STALE_SUBMISSION_REASON })
+            assertFalse(Files.exists(output.resolve("data/v1/dorm-submissions/stale-11.json")))
+
+            val second = processor(output, gemini, THURSDAY).processPending(root, submissions)
+            assertEquals(ids.drop(10), second.map { it.submissionId })
+            assertEquals(0, gemini.calls)
+            assertFalse(Files.exists(output.resolve("data/v1/manifest.json")))
+        }
+    }
+
+    @Test
+    fun `일괄 처리 중 한 제출이 실패해도 ERROR를 남기고 나머지를 계속 처리한다`() {
+        val output = Files.createTempDirectory("dima-dorm-batch-error")
+        val root = submissionRoot("present")
+        FakeGemini(ocrResponse = week(8, 24)).use { gemini ->
+            val results = processor(output, gemini, THURSDAY).processPending(
+                root,
+                listOf(pending("missing-file", THURSDAY.minusSeconds(600), 'f'), pending("present", THURSDAY.minusSeconds(60), '1')),
+            )
+
+            assertEquals(listOf("missing-file" to "ERROR", "present" to "PUBLISHED"), results.map { it.submissionId to it.state })
+            assertEquals(DormitoryMealSubmissionProcessor.PROCESSING_ERROR_REASON, readStatus(output, "missing-file").message)
+        }
+    }
+
+    @Test
+    fun `대기 목록은 정확한 커밋과 경로 형식만 받는다`() {
+        val sha = "0123456789abcdef0123456789abcdef01234567"
+        val invalid = mutableListOf<String>()
+        val parsed = PendingDormitorySubmission.parseIndex(
+            listOf(
+                "$sha 1788134625 dorm-submissions/ok-1.jpg",
+                "$sha 1788134625 dorm-submissions/../secret.jpg",
+                "$sha 1788134625 dorm-submissions/x.gif",
+                "${sha.uppercase()} 1788134625 dorm-submissions/upper.jpg",
+                "$sha -1 dorm-submissions/negative.jpg",
+                "$sha 1788134625 dorm-submissions/a.png extra",
+                "$sha 1788134625 dorm-submissions/ok-2.webp",
+            ).joinToString("\n"),
+        ) { invalid += it }
+
+        assertEquals(listOf("ok-1", "ok-2"), parsed.map { it.submissionId })
+        assertEquals(listOf("image/jpeg", "image/webp"), parsed.map { it.mimeType })
+        assertEquals("https://raw.githubusercontent.com/winter1l/DimaNow/$sha/dorm-submissions/ok-1.jpg", parsed.first().sourceImageUrl)
+        assertEquals(5, invalid.size)
+    }
+
+    private fun submissionRoot(vararg ids: String): Path = Files.createTempDirectory("dima-dorm-submissions").also { root ->
+        Files.createDirectories(root.resolve("dorm-submissions"))
+        ids.forEach { Files.write(root.resolve("dorm-submissions/$it.jpg"), byteArrayOf(7, 8, 9)) }
+    }
+
+    private fun pending(id: String, committedAt: Instant, shaChar: Char) =
+        PendingDormitorySubmission(shaChar.toString().repeat(40), committedAt, "dorm-submissions/$id.jpg")
+
     private fun process(output: Path, gemini: FakeGemini, now: Instant, submissionId: String): DormitoryMealSubmissionStatus =
         processor(output, gemini, now).process(image(), "image/jpeg", sourceUrl(submissionId), submissionId)
 
@@ -192,11 +374,12 @@ class DormitoryMealSubmissionProcessorTest {
     private fun readManifest(output: Path): CampusDataManifest =
         Json.decodeFromString(Files.readString(output.resolve("data/v1/manifest.json")))
 
-    private fun week(month: Int, mondayDay: Int): String {
+    private fun week(month: Int, mondayDay: Int, wednesdayLines: List<String>? = null): String {
         val monday = java.time.LocalDate.of(2026, month, mondayDay)
         return """{"days":[""" + (0L..4L).joinToString(",") { offset ->
             val date = monday.plusDays(offset)
-            """{"month":${date.monthValue},"day":${date.dayOfMonth},"sections":[{"name":"조식","menuLines":["메뉴$offset"]}]}"""
+            val lines = Json.encodeToString(if (offset == 2L && wednesdayLines != null) wednesdayLines else listOf("메뉴$offset"))
+            """{"month":${date.monthValue},"day":${date.dayOfMonth},"sections":[{"name":"조식","menuLines":$lines}]}"""
         } + "]}"
     }
 

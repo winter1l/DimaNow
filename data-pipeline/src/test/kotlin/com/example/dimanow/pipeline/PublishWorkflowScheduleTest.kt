@@ -2,6 +2,7 @@ package com.example.dimanow.pipeline
 
 import java.nio.file.Files
 import java.nio.file.Path
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -22,10 +23,36 @@ class PublishWorkflowScheduleTest {
     fun `dormitory submissions publish automatically without an operator approval path`() {
         val workflow = Files.readString(projectRoot().resolve(".github/workflows/publish-data.yml"))
 
-        assertTrue(workflow.contains("publish-dorm-meal \$IMAGE_PATH \$GITHUB_WORKSPACE/site \$SUBMISSION_ID \$SOURCE_IMAGE_URL \$MIME_TYPE"))
+        // main's workflow sweeps the backlog; the legacy single-image CLI stays for the dorm-submissions branch workflow.
+        assertTrue(workflow.contains("publish-dorm-pending \$RUNNER_TEMP/dorm-pending \$GITHUB_WORKSPACE/site \$RUNNER_TEMP/dorm-pending.txt"))
         for (removed in listOf("dorm-approve", "approve-dorm-meal", "dorm-review-candidates", "dorm-review-approvals", "candidate_sha256", "APPROVE")) {
             assertFalse(removed, workflow.contains(removed))
         }
+    }
+
+    @Test
+    fun `dormitory backlog is swept oldest first with a per-run cap and without checking out the submission branch`() {
+        val workflow = Files.readString(projectRoot().resolve(".github/workflows/publish-data.yml")).replace("\r\n", "\n")
+
+        assertTrue(workflow.contains("if [[ \"\$EVENT_NAME\" == \"schedule\" ]]; then dorm=true; fi"))
+        assertTrue(workflow.contains("options: [all, shuttle, meal, notice, dorm, deploy-only]"))
+        assertTrue(workflow.contains("[[ \"\$path\" =~ ^dorm-submissions/[A-Za-z0-9_-]{1,64}\\.(jpg|jpeg|png|webp)\$ ]] || continue"))
+        assertTrue(workflow.contains("[[ \"\$mode\" == 100644 && \"\$type\" == blob ]] || continue"))
+        assertTrue(workflow.contains("head -n 10 \"\$candidates\" > \"\$index\""))
+        assertFalse(workflow.contains("path: submission"))
+        assertFalse(workflow.contains("diff-tree --no-commit-id"))
+    }
+
+    @Test
+    fun `publish checkout keeps no credentials and only the data push receives the token`() {
+        val workflow = Files.readString(projectRoot().resolve(".github/workflows/publish-data.yml")).replace("\r\n", "\n")
+
+        val checkouts = Regex("""- uses: actions/checkout@[0-9a-f]{40}\n(?:\s{8}.*\n)+""").findAll(workflow).map { it.value }.toList()
+        assertTrue(checkouts.isNotEmpty())
+        checkouts.forEach { assertTrue(it, it.contains("persist-credentials: false")) }
+        assertEquals(1, Regex("""\$\{\{\s*github\.token\s*}}""").findAll(workflow).count())
+        assertTrue(workflow.contains("GIT_CONFIG_KEY_0=http.https://github.com/.extraheader"))
+        assertFalse(workflow.contains("secrets.GITHUB_TOKEN"))
     }
 
     @Test

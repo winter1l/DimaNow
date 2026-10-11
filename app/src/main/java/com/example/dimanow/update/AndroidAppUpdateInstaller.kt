@@ -85,7 +85,7 @@ class AndroidAppUpdateInstaller(private val context: Context) : AppUpdateInstall
                 connection.readTimeout = 30_000
                 connection.instanceFollowRedirects = false
                 connection.setRequestProperty("Accept", "application/vnd.android.package-archive")
-                connection.setRequestProperty("User-Agent", "DIMA-Now/1.3")
+                connection.setRequestProperty("User-Agent", "DIMA-Now/${com.example.dimanow.BuildConfig.VERSION_NAME}")
                 val code = connection.responseCode
                 if (code in 300..399) {
                     require(redirectCount < MAX_REDIRECTS) { "APK redirect가 너무 많아요." }

@@ -12,8 +12,8 @@ android {
         applicationId = "com.example.dimanow"
         minSdk = 31
         targetSdk = 36
-        versionCode = 6
-        versionName = "1.5"
+        versionCode = 7
+        versionName = "1.6"
     }
 
     buildTypes {
@@ -48,7 +48,7 @@ android {
     buildFeatures {
       compose = true
       aidl = false
-      buildConfig = false
+      buildConfig = true
       shaders = false
     }
 

@@ -9,6 +9,8 @@ const MAX_IMAGE_SIDE = 12000;
 const IMAGE_TOO_SMALL_MESSAGE = '식단 사진이 너무 작습니다. 원본 사진을 올려 주세요.';
 // Bounded opportunistic cleanup so expired salted address hashes do not wait for the daily prune.
 const EXPIRED_LEASE_DELETE_LIMIT = 100;
+// Fixed target: only main's publish workflow may be woken, never a repository taken from env or the request.
+const DORM_SUBMISSION_DISPATCH_URL = 'https://api.github.com/repos/winter1l/DimaNow/dispatches';
 const IMAGE_EXTENSIONS = new Map([
   ['image/jpeg', 'jpg'],
   ['image/png', 'png'],
@@ -30,10 +32,11 @@ export function createWorker(dependencies = {}) {
   const bodyReader = dependencies.bodyReader ?? readBoundedRequestBody;
 
   return {
-    async fetch(request, env) {
+    async fetch(request, env, context) {
       const url = new URL(request.url);
       if (url.pathname === '/v1/dormitory-meals') {
         return handleDormitoryMealUpload(request, env, {
+          context,
           now,
           randomUUID,
           fetchImpl,
@@ -212,6 +215,12 @@ async function handleDormitoryMealUpload(request, env, dependencies) {
       },
     );
     if (!response.ok) throw new Error(`GitHub content upload failed: ${response.status}`);
+    // Best effort: the photo is already stored, and main's scheduled sweep picks it up if this wake-up is lost.
+    const dispatch = dispatchDormitorySubmission(dependencies.fetchImpl, env, token).catch((error) => {
+      console.warn('Dormitory submission dispatch failed', error instanceof Error ? error.message : 'unknown error');
+    });
+    if (typeof dependencies.context?.waitUntil === 'function') dependencies.context.waitUntil(dispatch);
+    else await dispatch;
     return new Response(JSON.stringify({ submissionId, uploadedAt }), {
       status: 202,
       headers: jsonHeaders(),
@@ -225,6 +234,33 @@ async function handleDormitoryMealUpload(request, env, dependencies) {
     }
     await releaseLease();
     return jsonResponse(502, '사진을 올리지 못했습니다. 잠시 후 다시 시도해 주세요.');
+  }
+}
+
+/**
+ * Asks main's publish workflow to sweep pending dormitory submissions. The body carries only the event type:
+ * no submission id or other client-derived data reaches the workflow, which ignores client_payload anyway.
+ */
+async function dispatchDormitorySubmission(fetchImpl, env, token) {
+  if (env?.GITHUB_OWNER !== 'winter1l' || env?.GITHUB_REPOSITORY !== 'DimaNow') {
+    throw new Error('Unexpected dormitory dispatch repository');
+  }
+  const response = await fetchImpl(DORM_SUBMISSION_DISPATCH_URL, {
+    method: 'POST',
+    redirect: 'manual',
+    signal: AbortSignal.timeout(10000),
+    headers: {
+      Accept: 'application/vnd.github+json',
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+      'User-Agent': 'DIMA-Now-Meal-Upload',
+      'X-GitHub-Api-Version': '2022-11-28',
+    },
+    body: JSON.stringify({ event_type: 'dorm-submission' }),
+  });
+  if (response.status !== 204) {
+    await response.body?.cancel();
+    throw new Error(`Dormitory dispatch failed: ${response.status}`);
   }
 }
 

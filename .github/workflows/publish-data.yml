@@ -2,7 +2,9 @@ name: 캠퍼스 데이터 게시
 
 on:
   repository_dispatch:
-    types: [student-meal-publication-watch]
+    # dorm-submission: sent by the upload Worker after it writes a photo to dorm-submissions. Only the event type
+    # selects the dormitory sweep; client_payload is never read, and the schedule remains the fallback.
+    types: [student-meal-publication-watch, dorm-submission]
   push:
     branches: [main, dorm-submissions]
     paths:
@@ -75,9 +77,16 @@ jobs:
           SCHEDULE_EXPRESSION: ${{ github.event.schedule }}
           EVENT_NAME: ${{ github.event_name }}
           REF_NAME: ${{ github.ref_name }}
+          DISPATCH_TYPE: ${{ github.event.action }}
         run: |
           if [[ "$EVENT_NAME" == "push" && "$REF_NAME" == "dorm-submissions" ]]; then value=dorm
           elif [[ "$EVENT_NAME" == "push" ]]; then value=shuttle
+          elif [[ "$EVENT_NAME" == "repository_dispatch" ]]; then
+            case "$DISPATCH_TYPE" in
+              dorm-submission) value=dorm ;;
+              student-meal-publication-watch) value=meal ;;
+              *) echo "지원하지 않는 repository_dispatch 유형입니다." >&2; exit 1 ;;
+            esac
           elif [[ "$EVENT_NAME" == "workflow_dispatch" ]]; then
             case "$REQUESTED" in
               all|shuttle|meal|notice|dorm|deploy-only) value="$REQUESTED" ;;
@@ -87,7 +96,8 @@ jobs:
           else value=meal
           fi
           # The shared concurrency group replaces a pending run with a newer one, so the dormitory backlog is swept
-          # on dorm pushes, full manual runs and every scheduled run instead of trusting one run per push.
+          # on dorm pushes and dispatches, full manual runs and every scheduled run instead of trusting one run per
+          # submission.
           dorm=false
           case "$value" in dorm|all) dorm=true ;; esac
           if [[ "$EVENT_NAME" == "schedule" ]]; then dorm=true; fi

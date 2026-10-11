@@ -600,3 +600,122 @@ test('the D1 store deletes a bounded set of expired leases in the same batch as 
   assert.match(statements[1].sql, /INSERT INTO gateway_leases/);
   assert.equal(statements.some((statement) => /gateway_budgets/.test(statement.sql)), false);
 });
+
+function dispatchEnv(overrides = {}) {
+  return uploadEnv({ GITHUB_OWNER: 'winter1l', GITHUB_REPOSITORY: 'DimaNow', ...overrides });
+}
+
+function recordingGitHub(dispatchResponse = () => new Response(null, { status: 204 })) {
+  const calls = [];
+  const fetchImpl = async (url, init) => {
+    calls.push({ url: String(url), init });
+    if (String(url).endsWith('/dispatches')) return dispatchResponse();
+    return new Response('{}', { status: 201 });
+  };
+  return { calls, fetchImpl };
+}
+
+test('a stored submission wakes main\'s publish workflow with a payload-free dispatch', async () => {
+  const github = recordingGitHub();
+  const worker = uploadWorker(new FakeSecurityStore(), { randomUUID: () => 'submission-123', fetch: github.fetchImpl });
+  const pending = [];
+
+  const response = await worker.fetch(imageRequest(), dispatchEnv(), { waitUntil: (promise) => pending.push(promise) });
+  assert.equal(response.status, 202);
+  assert.equal(pending.length, 1);
+  await Promise.all(pending);
+
+  assert.deepEqual(github.calls.map((call) => call.url), [
+    'https://api.github.com/repos/winter1l/DimaNow/contents/dorm-submissions/submission-123.jpg',
+    'https://api.github.com/repos/winter1l/DimaNow/dispatches',
+  ]);
+  const dispatch = github.calls[1].init;
+  assert.equal(dispatch.method, 'POST');
+  assert.equal(dispatch.redirect, 'manual');
+  assert.deepEqual(dispatch.headers, {
+    Accept: 'application/vnd.github+json',
+    Authorization: 'Bearer server-installation-token',
+    'Content-Type': 'application/json',
+    'User-Agent': 'DIMA-Now-Meal-Upload',
+    'X-GitHub-Api-Version': '2022-11-28',
+  });
+  assert.equal(dispatch.body, '{"event_type":"dorm-submission"}');
+});
+
+test('rejected or failed uploads never dispatch the publish workflow', async () => {
+  const cases = [
+    { name: 'failed GitHub write', overrides: { fetch: null }, writeStatus: 422, expected: 502 },
+    { name: 'token failure', overrides: { githubTokenProvider: async () => { throw new Error('fixture'); } }, expected: 502 },
+    { name: 'published week', overrides: { dormitoryPublicationProvider: async () => true }, expected: 409 },
+    { name: 'exhausted budget', env: { UPLOAD_DAILY_LIMIT: '1' }, preload: true, expected: 429 },
+  ];
+  for (const testCase of cases) {
+    const security = new FakeSecurityStore();
+    if (testCase.preload) security.budgets.set('upload-day:2026-09-02', 1);
+    const calls = [];
+    const fetchImpl = async (url) => {
+      calls.push(String(url));
+      return new Response('{}', { status: testCase.writeStatus ?? 201 });
+    };
+    const worker = uploadWorker(security, { ...testCase.overrides, fetch: fetchImpl });
+    const pending = [];
+    const response = await worker.fetch(imageRequest(), dispatchEnv(testCase.env),
+      { waitUntil: (promise) => pending.push(promise) });
+    await Promise.all(pending);
+    assert.equal(response.status, testCase.expected, testCase.name);
+    assert.equal(pending.length, 0, testCase.name);
+    assert.equal(calls.some((url) => url.endsWith('/dispatches')), false, testCase.name);
+  }
+});
+
+test('a failed dispatch leaves the accepted upload and its budget untouched', async () => {
+  const failures = [
+    () => new Response('{"message":"Not Found"}', { status: 404 }),
+    () => new Response(null, { status: 302, headers: { Location: 'https://example.invalid/' } }),
+    () => { throw new TypeError('network down'); },
+  ];
+  const warnings = [];
+  const originalWarn = console.warn;
+  console.warn = (...args) => warnings.push(args.join(' '));
+  try {
+    for (const failure of failures) {
+      const security = new FakeSecurityStore();
+      const github = recordingGitHub(failure);
+      const worker = uploadWorker(security, { fetch: github.fetchImpl });
+      const pending = [];
+      const response = await worker.fetch(imageRequest(), dispatchEnv(),
+        { waitUntil: (promise) => pending.push(promise) });
+      await Promise.all(pending);
+
+      assert.equal(response.status, 202);
+      assert.ok((await response.json()).submissionId);
+      assert.equal(security.totalBudgetUsed(), 2);
+      assert.equal(security.releases.length, 0);
+      assert.equal(github.calls.filter((call) => call.url.endsWith('/dispatches')).length, 1);
+    }
+    // Without a waitUntil context the dispatch is awaited inline and still cannot fail the upload.
+    const github = recordingGitHub(failures[0]);
+    const response = await uploadWorker(new FakeSecurityStore(), { fetch: github.fetchImpl })
+      .fetch(imageRequest(), dispatchEnv());
+    assert.equal(response.status, 202);
+  } finally {
+    console.warn = originalWarn;
+  }
+  assert.equal(warnings.length, 4);
+  assert.ok(warnings.every((line) => line.startsWith('Dormitory submission dispatch failed')));
+  assert.ok(warnings.every((line) => !line.includes('server-installation-token')));
+});
+
+test('the dispatch is refused for any repository other than winter1l/DimaNow', async () => {
+  const github = recordingGitHub();
+  const worker = uploadWorker(new FakeSecurityStore(), { fetch: github.fetchImpl });
+  const originalWarn = console.warn;
+  console.warn = () => {};
+  try {
+    const response = await worker.fetch(imageRequest(), dispatchEnv({ GITHUB_OWNER: 'someone-else' }));
+    assert.equal(response.status, 202);
+  } finally {
+    console.warn = originalWarn;
+  }
+  assert.equal(github.calls.some((call) => call.url.endsWith('/dispatches')), false);
+});

@@ -9,6 +9,7 @@ Android 앱에서 GitHub 로그인 없이 식단 사진을 제출하기 위한 C
 - GitHub App 권한은 이 저장소의 `Contents: read and write`와 필수 `Metadata: read-only`만 사용합니다 설치 토큰은 이 저장소와 `contents: write`로만 범위를 좁혀 요청합니다.
 - `GITHUB_APP_PRIVATE_KEY`와 `RATE_LIMIT_SALT`는 Wrangler Secret으로만 저장합니다. APK, Git, 로그에 넣지 않습니다.
 - 업로드된 사진은 공개 저장소 브랜치와 GitHub Actions 처리 대상이 됩니다. 앱은 전송 전 공개 공유 사실을 확인합니다.
+- 사진 쓰기에 성공하면 같은 설치 토큰으로 `https://api.github.com/repos/winter1l/DimaNow/dispatches`에 `{"event_type":"dorm-submission"}`만 보내 `main`의 `publish-data.yml` 기숙사 sweep을 깨웁니다(`client_payload` 없음, 저장소는 코드에 고정). 이 호출은 `waitUntil`로 응답 뒤에 실행되는 best-effort이며 실패해도 업로드는 202로 끝나고, 정기 실행 sweep이 미처리 제출을 처리합니다.
 - 두 단계 모델 검증과 OCR, 현재 KST 주(주말에는 다음 주)·중복 주 확인을 통과한 사진만 GitHub Actions가 자동으로 `READY`와 `PUBLISHED`로 게시합니다(D-089). 실패는 짧은 사유와 함께 `REJECTED`/`ERROR`로 기록되고 기존 정상 식단은 유지됩니다.
 
 ## 검증

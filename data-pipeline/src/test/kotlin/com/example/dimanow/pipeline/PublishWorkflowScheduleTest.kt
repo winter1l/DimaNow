@@ -44,6 +44,18 @@ class PublishWorkflowScheduleTest {
     }
 
     @Test
+    fun `the upload Worker dispatch selects only the dormitory sweep and never reads its payload`() {
+        val workflow = Files.readString(projectRoot().resolve(".github/workflows/publish-data.yml")).replace("\r\n", "\n")
+
+        assertTrue(workflow.contains("types: [student-meal-publication-watch, dorm-submission]"))
+        assertTrue(workflow.contains("DISPATCH_TYPE: \${{ github.event.action }}"))
+        assertTrue(workflow.contains("              dorm-submission) value=dorm ;;\n"))
+        assertTrue(workflow.contains("              student-meal-publication-watch) value=meal ;;\n"))
+        assertTrue(workflow.contains("case \"\$value\" in dorm|all) dorm=true ;; esac"))
+        assertFalse(workflow.contains("event.client_payload"))
+    }
+
+    @Test
     fun `publish checkout keeps no credentials and only the data push receives the token`() {
         val workflow = Files.readString(projectRoot().resolve(".github/workflows/publish-data.yml")).replace("\r\n", "\n")
 

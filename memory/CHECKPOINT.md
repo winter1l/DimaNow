@@ -1,17 +1,16 @@
-# Checkpoint — D-094 UI/UX pass complete locally — 2026-10-01
+# Checkpoint — v1.6 released — 2026-10-12
 
 ## The story so far
-Observed: all seven D-094 phases are implemented in the working tree and verified on the emulator (247 unit tests, lint clean, optimized build, all 52 androidTest classes per class). DESIGN.md rewritten. Nothing committed; the phone still runs the 2026-09-30 build (45001629…).
+Observed: v1.6 (versionCode 7) is the latest GitHub release, signed with the new release key via v3 rotation (D-096). CI now runs JVM, pipeline, Worker and full instrumentation suites green. Worker c3c5b371 (security hardening) is live; D1 migration 0002 complete.
 
 ## Decided
-- D-094 supersedes D-093 only for mixed Settings toggles, 4402 clock-first pills and scrolling headers.
-- Material3 stays on stable 1.4.0.
+- D-095 card styling, D-096 release key rotation, D-097 content limits only for auto-published dorm menus.
 
 ## Waiting on the user
-Commit/push in progress; phone runs the D-094 build (78718B5F…) since 2026-10-01 10:39.
+Whether to install v1.6 on the phone now (one-time ADB/manual install; data kept). Owner actions: back up `.local/release-signing/` offline; decide on the old workflow file on the `dorm-submissions` branch.
 
 ## Next first action
-Review the diff (57 modified, ~29 new files), commit in logical parts after approval, push, confirm CI.
+Read the 17:07Z Worker tail log (scratchpad worker-tail.jsonl) to confirm the meal watch dispatches on the new Worker.
 
 ## Open follow-ups
-See OPEN-QUESTIONS "2026-10-01 — D-094 follow-ups" (baseline profiles, unused non-UI code, 4402 nearby colors, dorm rejection wording, emulator stability).
+OPEN-QUESTIONS: Q-001..Q-005/Q-010 physical observations, late-night class wrap edge case, Dependabot vs verification metadata, real dorm upload end to end on the new Worker.

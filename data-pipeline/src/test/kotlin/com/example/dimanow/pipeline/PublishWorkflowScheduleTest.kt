@@ -30,21 +30,53 @@ class PublishWorkflowScheduleTest {
 
     @Test
     fun `workflow expressions never expand inside shell scripts`() {
-        val lines = Files.readAllLines(projectRoot().resolve(".github/workflows/publish-data.yml"))
+        val workflows = Files.list(projectRoot().resolve(".github/workflows")).use { paths ->
+            paths.filter { it.fileName.toString().endsWith(".yml") || it.fileName.toString().endsWith(".yaml") }
+                .sorted().toList()
+        }
+        val names = workflows.map { it.fileName.toString() }
+        for (required in listOf("publish-data.yml", "validate.yml", "instrumentation.yml")) {
+            assertTrue("$required is scanned", required in names)
+        }
+        for (workflow in workflows) assertNoExpressionsInShell(workflow)
+    }
+
+    @Test
+    fun `instrumentation workflow runs the androidTest suite with least privilege`() {
+        val workflow = Files.readString(projectRoot().resolve(".github/workflows/instrumentation.yml")).replace("\r\n", "\n")
+
+        assertTrue(workflow.contains("permissions:\n  contents: read\n"))
+        assertTrue(workflow.contains("cancel-in-progress: true"))
+        assertTrue(workflow.contains("script: bash .github/scripts/instrumentation-shard.sh"))
+        assertTrue(Files.readString(projectRoot().resolve(".github/scripts/instrumentation-shard.sh"))
+            .contains(":app:connectedDebugAndroidTest"))
+        // Every third-party action is pinned to a full commit SHA, never a movable tag.
+        Regex("""uses:\s*(\S+)""").findAll(workflow).forEach { match ->
+            assertTrue("${match.value} is not SHA-pinned", Regex("""@[0-9a-f]{40}$""").containsMatchIn(match.groupValues[1]))
+        }
+        // Gated physical-device, live-network and private-fixture tests stay skipped on CI.
+        for (gate in listOf("physicalLivePromotion", "runNoticeNetworkProbe", "heicFixture", "secrets.")) {
+            assertFalse(gate, workflow.contains(gate))
+        }
+    }
+
+    /** `run:` and emulator-runner `script:` bodies are shell; expressions must reach them through `env:`. */
+    private fun assertNoExpressionsInShell(workflow: Path) {
+        val file = workflow.fileName.toString()
+        val lines = Files.readAllLines(workflow)
         var blockIndent = -1
         lines.forEachIndexed { index, line ->
             val indent = line.length - line.trimStart().length
             if (blockIndent >= 0 && (line.isBlank() || indent > blockIndent)) {
-                assertFalse("run block line ${index + 1} expands an expression", line.contains("\${{"))
+                assertFalse("$file shell block line ${index + 1} expands an expression", line.contains("\${{"))
                 return@forEachIndexed
             }
             blockIndent = -1
             val trimmed = line.trimStart().removePrefix("- ")
-            if (trimmed.startsWith("run:")) {
-                val inline = trimmed.removePrefix("run:").trim()
-                if (inline == "|" || inline == ">") blockIndent = indent
-                else assertFalse("run line ${index + 1} expands an expression", inline.contains("\${{"))
-            }
+            val key = listOf("run:", "script:").firstOrNull { trimmed.startsWith(it) } ?: return@forEachIndexed
+            val inline = trimmed.removePrefix(key).trim()
+            if (inline.startsWith("|") || inline.startsWith(">")) blockIndent = indent
+            else assertFalse("$file shell line ${index + 1} expands an expression", inline.contains("\${{"))
         }
     }
 

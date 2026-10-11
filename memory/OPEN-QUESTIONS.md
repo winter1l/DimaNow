@@ -1,5 +1,36 @@
 # OPEN QUESTIONS — registered, not remembered
 
+## Status summary — 2026-10-11
+
+Index only; the dated history below is unchanged and remains the evidence.
+
+| Item | Status | Resolved by / evidence |
+|---|---|---|
+| Q-001 Samsung Live/Now Bar/lock/AOD class rendering | Open | Production class-detail rendering still unobserved |
+| Q-002 Fixed-center 2-minute dwell/exit on campus | Open | Needs physical-site observation |
+| Q-003 Shuttle countdown accuracy and widget resize in One UI Home | Open | Needs real-trip/launcher observation |
+| Q-004 Compact pill and lock-screen order fit | Open | Unlocked visual fit and countdown option pending |
+| Q-005 One UI 9 vs One UI 8 status-pill width | Open | No controlled One UI 8 baseline |
+| Q-006 Folded One UI 9 Now Bar stale minute text | Resolved 2026-09-08 | D-066; `nowbar-refresh-fix-20260908.md` |
+| Q-007 LMS WebView test timeout in full order | Resolved 2026-09-14 | Test helper fix; full 165-test order OK |
+| Q-008 Stale dormitory assertion in `GuidanceCardTest` | Resolved 2026-09-14 | Test updated to D-067 split semantics |
+| Q-009 Debug APK left on the phone | Resolved | Observed: optimized builds replace-installed on the phone since 2026-09-14 21:08 KST (`lms-recovery-20260914.md`); latest is the D-094 build 78718B5F6F70EF39 on 2026-10-01 10:39 KST (SESSION-LOG) |
+| Q-010 Samsung eligibility without the developer test option | Open (unknown) | `nowbar-metadata-experiment-20260914.md` |
+| Kakao room label / notification access (2026-09-14) | Obsolete | D-072 removed Kakao intake |
+| D-080 history rewrite scope (2026-09-16) | Resolved locally; host-side residual open | Local/published refs rewritten 2026-09-16; GitHub server-managed refs and cached commits need GitHub's assessment (`git-privacy-cleanup-20260916.md`) |
+| Q-011 Stadium boarding label | Resolved 2026-09-30 | D-090 |
+| Q-012 Stranded dormitory submissions | Resolved 2026-09-30 | D-089 |
+| Q-013 D-070 approval idempotency/weekend window | Resolved 2026-09-30 | D-089 (approval path removed; one weekend→next-week rule) |
+| Q-014 Repo Worker differs from deployed Worker | Resolved 2026-10-11 | Repo Worker deployed (active 32e9b5a5), migration 0002 complete (SESSION-LOG 2026-10-11) |
+| Q-015 Shuttle reporter identity by IP HMAC | Resolved 2026-09-30 | D-091 (shuttle reports removed) |
+| Q-016 Eight failing instrumentation tests | Resolved 2026-09-30 | D-093; tests updated and passing |
+| Q-017 Committed UI lacks D-081..D-083 | Resolved 2026-09-30 | D-093 (Gemini reconstruction is the baseline) |
+| Docs debt (2026-09-30) | Resolved 2026-10-11 | PRIVACY/SECURITY/README updated for D-073, D-058, D-089 and the test device; PRODUCT-TRUTH visibility correction appended; sensitive values moved under D-092 |
+| D-094 follow-ups (2026-10-01) | Resolved 2026-10-01 | Profiles regenerated, unused LMS code removed, rejection wording mapped, D-095 |
+| Unused `shuttle_reports` D1 rows | Resolved 2026-10-11 | Observed 0 rows; table kept as history per D-091 |
+| First real dorm upload and scheduled meal-watch run on the new Worker | Open | Not yet observed |
+| `preview_urls: false` in `wrangler.jsonc` | Open | Needs a decision |
+
 | ID | Question | Opened | Status |
 |---|---|---|---|
 | Q-001 | Does an eligible active class notification appear in Samsung Live notifications, Now Bar, lock screen, and AOD? | 2026-08-26 | Promotion, unlocked countdown pill, and DIMA Now lock-screen/AOD bar physically verified; synthetic expanded bar showed app name only, so production class-detail rendering remains pending |
@@ -67,3 +98,6 @@ Resolved 2026-10-01: baseline profiles regenerated; unused LMS code removed; dor
 - 2026-10-11 (observed): production D1 is in a partial migration-0002 state — gateway_budgets (+index) exists, gateway_leases (+index) missing. Harmless for the currently deployed Worker; the new Worker must not be deployed until gateway_leases exists. Deploy also needs wrangler login and a ≥32-char RATE_LIMIT_SALT.
 
 Resolved 2026-10-11: Worker deployed from repo (active 32e9b5a5), migration 0002 complete, RATE_LIMIT_SALT rotated, SHUTTLE_REPORT_HMAC_KEY deleted. Open: confirm the next real dorm upload and scheduled meal-watch run on the new Worker; decide whether to set `preview_urls: false` in wrangler.jsonc.
+
+## 2026-10-11 — Status sweep
+Resolved 2026-10-11: Q-009 — the phone has run optimized builds since 2026-09-14 21:08 KST (`lms-recovery-20260914.md`); the latest is the D-094 build on 2026-10-01 (SESSION-LOG). The 2026-09-14 Kakao note is obsolete under D-072. The 2026-09-30 docs debt is closed by the README/SECURITY update and the PRODUCT-TRUTH correction of 2026-10-11. See the status summary at the top.

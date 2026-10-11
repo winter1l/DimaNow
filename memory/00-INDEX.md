@@ -21,6 +21,19 @@ Purpose: durable project context that survives session and context changes.
 | `lms-silent-auth-20260914.md` | D-074 invisible automatic authentication, tests and phone update evidence | Append dated evidence |
 | `lms-recovery-20260914.md` | D-072 and D-073 login repair and Kakao removal evidence | Append dated evidence |
 | `daily-features-20260914.md` | D-071 feature implementation, tests, and phone verification boundaries | Append dated evidence |
+| `meal-refresh-20260908.md` | D-062 student cafeteria publication watch: school posting-time evidence and schedule | Append dated evidence |
+| `nowbar-duplicate-audit-20260908.md` | Read-only investigation of the locked Now Bar repeating the first shuttle countdown (resolved by D-065) | Historical; append dated notes only |
+| `nowbar-refresh-fix-20260908.md` | D-066 folded Now Bar minute-text refresh repair and One UI 9 evidence (closes Q-006) | Append dated evidence |
+| `shuttle-report-audit-20260908.md` | Read-only investigation of an 18:45 missed-shuttle report card absent from the timetable (reports later removed by D-091) | Historical; append dated notes only |
+| `meal-delay-fix-20260914.md` | Diagnosis and repair of delayed student meal publication over wireless ADB | Append dated evidence |
+| `nowbar-metadata-experiment-20260914.md` | Samsung Now Bar metadata-only experiment without the developer test option (Q-010) | Append dated evidence |
+| `heic-support-20260915.md` | D-076 HEIC sample conversion, phone/public upload and HIGH/LOW Gemini comparison evidence | Append dated evidence |
+| `gemini-redesign-handoff-20260916.md` | User-requested Antigravity/Gemini frontend reconstruction handoff (basis of D-093) | Historical; append dated notes only |
+| `gemini-install-20260917.md` | Review of the completed Gemini redesign and its 2026-09-17 phone install | Historical; append dated notes only |
+| `meal-recovery-20260921.md` | Sep21 official meal recovery, Cloudflare runtime fix, student/dorm holiday validation, publication and device evidence | Append dated evidence |
+| `shuttle-summary-20260921.md` | D-087 immediate-vehicle notification simplification and validation/device limits | Append dated evidence |
+| `device-update-20260921.md` | Wireless replacement install, PC Tailscale startup preference, active-use screen policy and cellular ADB limits | Append dated evidence |
+| `ui-review-20260930.md` | Read-only M3 Expressive UI/UX review of the D-093 baseline (findings implemented by D-094) | Append dated evidence |
 | `checkpoints/` | Append-only archive of superseded checkpoints | Add a timestamped copy before replacing `CHECKPOINT.md` |
 
 ## Operating principles
@@ -29,12 +42,3 @@ Purpose: durable project context that survives session and context changes.
 2. Keep user-confirmed decisions separate from agent assumptions.
 3. Label claims as confirmed, observed, assumed, hearsay, or unknown.
 4. Product capability claims require code, test, or device evidence.
-`heic-support-20260915.md` — D-076 HEIC sample conversion, phone/public upload and HIGH/LOW Gemini comparison evidence.
-
-`meal-recovery-20260921.md` — Sep21 official meal recovery, Cloudflare runtime fix, student/dorm holiday validation, publication and device evidence.
-
-`shuttle-summary-20260921.md` — D-087 immediate-vehicle notification simplification and validation/device limits.
-
-`device-update-20260921.md` — Wireless replacement install, PC Tailscale startup preference, active-use screen policy and cellular ADB limits.
-
-`ui-review-20260930.md` — Read-only M3 Expressive UI/UX review of the D-093 baseline: observed screen defects, source audit, constraints.

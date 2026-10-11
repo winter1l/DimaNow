@@ -514,3 +514,6 @@ Confirmed: the user asked to fix every finding in ui-review-20260930.md, sequent
 
 ## D-095 — 4402 current-stop card uses a light container with a primary border — 2026-10-01
 Confirmed: the user chose to restyle the nearby/current-stop 4402 card like the campus current-location card (D-029): a light surface container with a solid primary border instead of a primaryContainer fill, so the secondaryContainer second capsule and chips stay distinguishable. The first-departure primary emphasis and last-service error colors stay. Supersedes only D-083's "nearby-stop primaryContainer" clause.
+
+## D-009 ID correction — 2026-10-11
+Record-keeping correction, not a product decision. Two entries carry the header `D-009`: the first (Classroom chip is invariant across lock state) keeps the ID D-009; the second (Navigation re-architecture, weekday meals, and simplified location settings) is referenced as D-009b from now on. Both original headers stay unchanged under the append-only rule.

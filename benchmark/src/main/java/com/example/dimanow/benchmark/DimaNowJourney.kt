@@ -20,8 +20,12 @@ internal fun MacrobenchmarkScope.runDimaNowJourney() {
         12,
     )
     openTab(device, "MEAL")
-    openTab(device, "SETTINGS")
+    openTab(device, "TIMETABLE")
+    openTab(device, "COURSES")
     openTab(device, "DASHBOARD")
+    // D-094: Settings opens from the top-bar gear and closes with the leading back action.
+    clickRes(device, "open_settings")
+    clickRes(device, "close_settings")
 }
 
 private fun dismissFirstRunDialogs(device: UiDevice) {
@@ -30,9 +34,11 @@ private fun dismissFirstRunDialogs(device: UiDevice) {
     device.waitForIdle()
 }
 
-private fun openTab(device: UiDevice, label: String) {
-    checkNotNull(device.wait(Until.findObject(By.res("nav_$label")), 5_000)) {
-        "Bottom navigation tab was not found: $label"
+private fun openTab(device: UiDevice, label: String) = clickRes(device, "nav_$label")
+
+private fun clickRes(device: UiDevice, resourceId: String) {
+    checkNotNull(device.wait(Until.findObject(By.res(resourceId)), 5_000)) {
+        "UI element was not found: $resourceId"
     }.click()
     device.waitForIdle()
 }

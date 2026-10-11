@@ -2,6 +2,8 @@
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "dima-now-meal-upload",
   "main": "src/index.mjs",
+  // Version preview URLs are not used; keep only the production route.
+  "preview_urls": false,
   "compatibility_date": "2026-09-02",
   "compatibility_flags": ["nodejs_compat"],
   "observability": {

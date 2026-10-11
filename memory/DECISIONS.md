@@ -517,3 +517,9 @@ Confirmed: the user chose to restyle the nearby/current-stop 4402 card like the 
 
 ## D-009 ID correction — 2026-10-11
 Record-keeping correction, not a product decision. Two entries carry the header `D-009`: the first (Classroom chip is invariant across lock state) keeps the ID D-009; the second (Navigation re-architecture, weekday meals, and simplified location settings) is referenced as D-009b from now on. Both original headers stay unchanged under the append-only rule.
+
+## D-096 — Dedicated release signing key with v3 rotation — 2026-10-11
+Confirmed: after the security review found releases signed with the local debug keystore (well-known password), the user chose a dedicated release key with APK Signature Scheme v3 proof-of-rotation from the debug key, so existing installs update in place. Key, password file and lineage live only in ignored `.local/release-signing/`; the user backs them up offline. Gradle builds keep debug signing for CI/dev; release assets are re-signed by `tools/Sign-Release.ps1`. The updater accepts a candidate whose signing history contains the installed signer. Because installed v1.5 compares current signers exactly, v1.6 must be installed once outside the in-app updater.
+
+## D-097 — Auto-published dorm menus get content limits only — 2026-10-11
+Confirmed: for the review finding that a forged dorm menu could be auto-published (D-089) and lock the week, the user chose content limits only (section/line counts, lengths, URL/phone/control-character rejection, capped rejection reasons) without adding a revoke/approval path. Residual risk: a well-formed forged menu can still occupy the current week until the next week.

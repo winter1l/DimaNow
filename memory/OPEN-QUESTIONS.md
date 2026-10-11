@@ -105,3 +105,5 @@ Resolved 2026-10-11: Q-009 — the phone has run optimized builds since 2026-09-
 - 2026-10-12 (observed, low): GuidanceEngine class guidance uses same-day LocalTime windows, so a class starting within ~15 minutes before midnight KST yields phase NONE (window wraps past midnight). No real class is scheduled that late; LiveClassMinuteUpdateTest now skips when its fixture would cross midnight. Fix only if late-night classes become possible.
 
 Resolved 2026-10-12: dorm-submissions branch pruned to images only (1015a56); processing triggered from main via Worker repository_dispatch. Open: user decision on keeping the D-096 release key vs reverting to debug signing (must be decided before the phone installs v1.6).
+
+Resolved 2026-10-12: new Worker scheduled meal watch confirmed by the 17:07Z repository_dispatch run.

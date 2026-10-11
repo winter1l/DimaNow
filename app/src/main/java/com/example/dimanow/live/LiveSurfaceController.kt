@@ -315,7 +315,7 @@ class AndroidLiveSurfaceController(private val context: Context) : LiveSurfaceCo
         val title = if (snapshot.kind == com.example.dimanow.domain.GuidanceKind.BUS_4402) {
             firstShuttle?.text ?: "4402 강남행"
         } else if (simpleCampusShuttle) {
-            "${firstShuttle!!.origin} → ${firstShuttle.destination!!.removeSuffix("행")}"
+            "${firstShuttle.origin} → ${firstShuttle.destination!!.removeSuffix("행")}"
         } else if (classroomFirst && classContent?.startTime != null && classContent.room != null) {
             "${classContent.startTime} · ${classContent.room}"
         } else {
@@ -331,7 +331,7 @@ class AndroidLiveSurfaceController(private val context: Context) : LiveSurfaceCo
                 // All notification surfaces describe the same immediate boarding leg.
                 // The engine keeps later vehicles and transfers for the full schedule.
                 add(buildString {
-                    val minutes = requireNotNull(firstShuttle?.minutes)
+                    val minutes = requireNotNull(firstShuttle.minutes)
                     append(if (minutes <= 0) "곧 출발" else "${minutes}분 후 출발")
                     snapshot.countdownTarget?.atZone(com.example.dimanow.time.MinuteTicker.CAMPUS_ZONE)?.let {
                         append(" · ${it.format(java.time.format.DateTimeFormatter.ofPattern("HH:mm"))}")

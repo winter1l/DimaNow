@@ -140,13 +140,6 @@ class LmsHtmlParser(private val zoneId: ZoneId = ZoneId.of("Asia/Seoul")) {
         }
         .distinctBy { it.completionState }
 
-    fun parseBoardItems(
-        html: String,
-        origin: String,
-        course: LmsCourse,
-        kind: LmsItemKind,
-    ): List<LmsItem> = parseBoardPage(html, origin, course, kind).items
-
     fun parseBoardPage(
         html: String,
         origin: String,

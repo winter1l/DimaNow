@@ -271,9 +271,6 @@ internal fun lmsLoginPageAction(
     }
 }
 
-internal fun isCompletedLmsLogin(url: String, pageFinished: Boolean, authenticatedMain: Boolean): Boolean =
-    lmsLoginPageAction(url, pageFinished, authenticatedMain) == LmsLoginPageAction.EXTRACT_COURSES
-
 internal fun isExactOfficialLmsSessionConflictUrl(url: String): Boolean = runCatching {
     val uri = URI.create(url)
     val queryParts = uri.rawQuery?.split('&').orEmpty()

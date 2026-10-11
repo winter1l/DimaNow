@@ -90,12 +90,6 @@ interface LmsCacheDao {
     @Query("SELECT * FROM lms_sync WHERE id = 1")
     suspend fun getSync(): LmsSyncEntity?
 
-    @Query("SELECT * FROM lms_items WHERE `key` = :key")
-    suspend fun getItem(key: String): LmsItemEntity?
-
-    @Query("UPDATE lms_items SET isRead = 1 WHERE `key` = :key")
-    suspend fun markItemRead(key: String)
-
     @Query("UPDATE lms_items SET isRead = 1, changeState = 'NONE' WHERE `key` = :key")
     suspend fun markItemOpened(key: String)
 

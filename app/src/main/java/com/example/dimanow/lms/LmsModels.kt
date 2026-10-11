@@ -1,7 +1,6 @@
 package com.example.dimanow.lms
 
 import java.time.Instant
-import java.time.LocalDate
 
 data class SavedLmsCredentials(
     val username: String,
@@ -119,9 +118,4 @@ data class LmsSnapshot(
     val syncState: LmsSyncState = LmsSyncState.IDLE,
     val lastSuccessAt: Instant? = null,
     val errorMessage: String? = null,
-)
-
-data class LmsAssignmentDates(
-    val start: LocalDate? = null,
-    val end: LocalDate? = null,
 )

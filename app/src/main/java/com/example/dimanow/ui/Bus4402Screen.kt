@@ -1,5 +1,6 @@
 package com.example.dimanow.ui
 
+import androidx.compose.foundation.border
 import android.content.ActivityNotFoundException
 import android.content.Intent
 import androidx.core.net.toUri
@@ -122,11 +123,14 @@ private fun Bus4402StopCard(
     val estimated = departures.firstOrNull()?.estimated == true
 
     ElevatedCard(
-        modifier = Modifier.fillMaxWidth().testTag("bus4402_stop_${stop.stopNumber}"),
+        modifier = Modifier
+            .fillMaxWidth()
+            .then(if (isNearby) Modifier.border(1.5.dp, MaterialTheme.colorScheme.primary, DimaShapes.Card) else Modifier)
+            .testTag("bus4402_stop_${stop.stopNumber}"),
         shape = DimaShapes.Card,
         colors = CardDefaults.elevatedCardColors(
-            // D-083: 가까운 정류장은 primaryContainer로 강조한다
-            containerColor = if (isNearby) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerLow,
+            // D-095: 가까운 정류장은 연한 컨테이너 + primary 테두리로 강조해 안쪽 칸과 칩이 묻히지 않게 한다
+            containerColor = if (isNearby) MaterialTheme.colorScheme.surfaceContainerHigh else MaterialTheme.colorScheme.surfaceContainerLow,
         ),
     ) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -140,6 +144,7 @@ private fun Bus4402StopCard(
                     Text(
                         stop.displayName,
                         style = MaterialTheme.typography.titleMedium,
+                        color = if (isNearby) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
                         modifier = Modifier.weight(1f, fill = false),
                     )
                     if (isNearby) {

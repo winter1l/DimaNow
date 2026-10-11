@@ -1,5 +1,6 @@
 package com.example.dimanow.ui
 
+import androidx.compose.foundation.border
 import com.example.dimanow.ui.motion.DimaMotion
 import com.example.dimanow.theme.DimaShapes
 import com.example.dimanow.theme.emphasized
@@ -317,7 +318,10 @@ private fun ShuttleRouteCard(
     val upcomingTimes = upcomingCountdowns.map { it.departure.time }
 
     ElevatedCard(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            // D-029/D-095: 현재 위치 출발 카드는 연한 컨테이너 + primary 테두리로 강조한다
+            .then(if (isCurrentLocation) Modifier.border(1.5.dp, MaterialTheme.colorScheme.primary, DimaShapes.Card) else Modifier),
         shape = DimaShapes.Card,
         colors = CardDefaults.elevatedCardColors(
             containerColor = if (isCurrentLocation) MaterialTheme.colorScheme.surfaceContainerHigh else MaterialTheme.colorScheme.surfaceContainerLow,

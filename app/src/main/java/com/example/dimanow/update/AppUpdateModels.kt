@@ -67,11 +67,20 @@ class AppUpdatePolicy {
     ): Boolean = preparedVersion == latestRelease.versionName && cachedRelease == latestRelease
 }
 
+/**
+ * Package identity used to decide whether a downloaded APK may replace the installed app.
+ *
+ * [signerSha256] holds the SHA-256 digests of the current signing certificates
+ * (`SigningInfo.apkContentsSigners`). [signerHistorySha256] holds the APK Signature Scheme v3
+ * proof-of-rotation lineage (`SigningInfo.signingCertificateHistory`), oldest first and ending
+ * with the current signer; it is just the current signer when the package has no past signers.
+ */
 data class InstalledAppIdentity(
     val packageName: String,
     val versionName: String,
     val versionCode: Long,
     val signerSha256: Set<String>,
+    val signerHistorySha256: List<String> = signerSha256.toList(),
 )
 
 sealed interface ApkValidationResult {
@@ -87,8 +96,22 @@ class ApkValidationPolicy {
         candidate.packageName != current.packageName -> ApkValidationResult.PackageMismatch
         candidate.versionName != release.versionName -> ApkValidationResult.VersionNameMismatch
         candidate.versionCode <= current.versionCode -> ApkValidationResult.NotNewer
-        candidate.signerSha256.isEmpty() || current.signerSha256.isEmpty() || candidate.signerSha256 != current.signerSha256 -> ApkValidationResult.SignerMismatch
+        !isTrustedSigner(current, candidate) -> ApkValidationResult.SignerMismatch
         else -> ApkValidationResult.Valid
+    }
+
+    /**
+     * Accepts the candidate when it keeps the installed signer, or when it has exactly one current
+     * signer whose verified rotation lineage contains the installed signer as an ancestor.
+     * Multiple-signer APKs are never accepted because v3 rotation does not apply to them.
+     */
+    private fun isTrustedSigner(current: InstalledAppIdentity, candidate: InstalledAppIdentity): Boolean {
+        val installedSigner = current.signerSha256.singleOrNull() ?: return false
+        val candidateSigner = candidate.signerSha256.singleOrNull() ?: return false
+        if (candidateSigner == installedSigner) return true
+        val lineage = candidate.signerHistorySha256
+        return lineage.size >= 2 && lineage.last() == candidateSigner &&
+            installedSigner in lineage.subList(0, lineage.size - 1)
     }
 }
 

@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageInfo
 import android.content.pm.PackageManager
+import android.content.pm.Signature
 import android.net.Uri
 import android.os.Build
 import android.provider.Settings
@@ -151,11 +152,18 @@ class AndroidAppUpdateInstaller(private val context: Context) : AppUpdateInstall
     }
 
     private fun PackageInfo.toIdentity(verifiedSigningInfo: SigningInfo? = signingInfo): InstalledAppIdentity {
-        val signers = verifiedSigningInfo?.apkContentsSigners.orEmpty().map { signature ->
-            MessageDigest.getInstance("SHA-256").digest(signature.toByteArray()).joinToString("") { "%02x".format(it) }
-        }.toSet()
-        return InstalledAppIdentity(packageName, versionName.orEmpty(), longVersionCode, signers)
+        val signers = verifiedSigningInfo?.apkContentsSigners.orEmpty().map(::certificateSha256).toSet()
+        // signingCertificateHistory is only meaningful for a single signer with a v3 rotation proof.
+        val history = if (verifiedSigningInfo != null && !verifiedSigningInfo.hasMultipleSigners() &&
+            verifiedSigningInfo.hasPastSigningCertificates()
+        ) {
+            verifiedSigningInfo.signingCertificateHistory.orEmpty().map(::certificateSha256)
+        } else signers.toList()
+        return InstalledAppIdentity(packageName, versionName.orEmpty(), longVersionCode, signers, history)
     }
+
+    private fun certificateSha256(signature: Signature): String =
+        MessageDigest.getInstance("SHA-256").digest(signature.toByteArray()).joinToString("") { "%02x".format(it) }
 
     private fun sha256(input: java.io.InputStream): String {
         val digest = MessageDigest.getInstance("SHA-256")

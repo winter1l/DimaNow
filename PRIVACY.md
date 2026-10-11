@@ -22,7 +22,7 @@ DIMA Now는 개인용 비공식 Android 앱입니다.
 
 학교 통합 로그인에는 `sso.dima.ac.kr:8080`의 두 SSO 경로를 사용하는 HTTP 구간이 있습니다. 이 구간의 로그인 티켓은 통신 중 암호화되지 않습니다. 사용자가 승인한 해당 로그인 경로만 예외로 허용하며, 계정 입력 페이지와 LMS 정보·첨부파일 요청은 HTTPS를 사용합니다.
 
-앱은 `winter1l.github.io`의 정적 JSON과 GitHub 공개 Releases API를 확인하고, 사용자가 원문 버튼을 누르면 Android 브라우저로 DIMA 또는 Instagram 공개 페이지를 엽니다. 수업 탭을 사용하면 공식 `lms.dima.ac.kr`과 통합 인증의 `portal.dima.ac.kr`에 로그인 정보와 세션 쿠키가 전송됩니다. 자동 로그인과 수업 동기화는 앱이 화면에 있을 때만 동작하며 백그라운드 작업으로 계정에 접속하지 않습니다. 업데이트 다운로드는 사용자가 직접 요청한 경우에만 GitHub release asset에서 실행됩니다. 기숙사 사진을 올릴 때는 Cloudflare Worker가 요청 IP를 중복 제한용 단방향 해시로 최대 10분 처리합니다. GitHub Pages, GitHub API, Cloudflare와 외부 브라우저 서비스에는 해당 서비스의 접속 기록 정책이 적용될 수 있습니다.
+앱은 `winter1l.github.io`의 정적 JSON과 GitHub 공개 Releases API를 확인하고, 사용자가 원문 버튼을 누르면 Android 브라우저로 DIMA 또는 Instagram 공개 페이지를 엽니다. 수업 탭을 사용하면 공식 `lms.dima.ac.kr`과 통합 인증의 `portal.dima.ac.kr`에 로그인 정보와 세션 쿠키가 전송됩니다. 자동 로그인과 수업 동기화는 앱이 화면에 있을 때만 동작하며 백그라운드 작업으로 계정에 접속하지 않습니다. 업데이트 다운로드는 사용자가 직접 요청한 경우에만 GitHub release asset에서 실행됩니다. 기숙사 사진을 올릴 때는 Cloudflare Worker가 요청 IP(IPv6는 앞 64비트 대역)를 비밀 salt와 함께 단방향 해시로 바꿔 10분 중복 제한에만 사용합니다. 10분 제한이 끝난 해시는 다음 업로드 요청이나 최대 2시간 간격의 정기 정리 때 삭제되므로, 정리 작업이 정상 동작하는 한 업로드 후 최대 약 2시간 10분까지만 저장됩니다. GitHub Pages, GitHub API, Cloudflare와 외부 브라우저 서비스에는 해당 서비스의 접속 기록 정책이 적용될 수 있습니다.
 
 공식 DIMA 페이지 수집과 공개 Instagram 이미지 OCR은 앱이 아니라 GitHub Actions에서 실행됩니다. 식단표 이미지는 구조화된 메뉴 JSON을 만들기 위해 Google Gemini API로 전송됩니다. 이때 앱 사용자의 위치·시간표·설정·기기 정보는 전송하지 않으며, Instagram 자격 증명도 사용하지 않습니다.
 

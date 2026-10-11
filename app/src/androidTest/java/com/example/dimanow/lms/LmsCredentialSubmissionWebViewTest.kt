@@ -89,7 +89,35 @@ class LmsCredentialSubmissionWebViewTest {
         assertEquals("\"interactive|||\"", result)
     }
 
-    private fun evaluate(html: String, script: String): String {
+    @Test(timeout = WEB_VIEW_TEST_TIMEOUT_MS)
+    fun documentOutsideTheExactLoginPageNeverReceivesCredentials() {
+        val html = """
+            <html><body>
+              <input id="txtID" />
+              <input id="txtPwd" type="password" />
+              <script>function Login(mode){ window.loginMode = mode; }</script>
+            </body></html>
+        """.trimIndent()
+        for (baseUrl in listOf(
+            "http://sso.dima.ac.kr:8080/sso/pmi-sso.jsp",
+            "https://portal.dima.ac.kr/find/id_find.aspx",
+            "https://portal.dima.ac.kr:8443/",
+            "https://lms.dima.ac.kr/login/doLoginPage.dunet",
+        )) {
+            val result = evaluate(
+                html = html,
+                script = lmsCredentialSubmissionScript("fixture-user", "fixture-password", portal = true),
+                baseUrl = baseUrl,
+            )
+            assertEquals(baseUrl, "\"origin-mismatch|||\"", result)
+        }
+    }
+
+    private fun evaluate(
+        html: String,
+        script: String,
+        baseUrl: String = "https://portal.dima.ac.kr/",
+    ): String {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val completed = CompletableFuture<String>()
         val evaluationStarted = AtomicBoolean(false)
@@ -115,7 +143,7 @@ class LmsCredentialSubmissionWebViewTest {
                 }
             }
             createdWebView.loadDataWithBaseURL(
-                "https://portal.dima.ac.kr/",
+                baseUrl,
                 html,
                 "text/html",
                 "UTF-8",

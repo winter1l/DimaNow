@@ -2,6 +2,13 @@ import { createStudentMealPublicationWatch, STUDENT_MEAL_WATCH_CRONS } from './m
 
 const MAX_IMAGE_BYTES = 15 * 1024 * 1024;
 const RATE_LIMIT_SECONDS = 10 * 60;
+// A photographed weekly menu is never this small; tiny or extreme bodies are probes or junk.
+const MIN_IMAGE_BYTES = 20 * 1024;
+const MIN_IMAGE_SIDE = 320;
+const MAX_IMAGE_SIDE = 12000;
+const IMAGE_TOO_SMALL_MESSAGE = '식단 사진이 너무 작습니다. 원본 사진을 올려 주세요.';
+// Bounded opportunistic cleanup so expired salted address hashes do not wait for the daily prune.
+const EXPIRED_LEASE_DELETE_LIMIT = 100;
 const IMAGE_EXTENSIONS = new Map([
   ['image/jpeg', 'jpg'],
   ['image/png', 'png'],
@@ -41,8 +48,17 @@ export function createWorker(dependencies = {}) {
     scheduled(event, env, context) {
       if (STUDENT_MEAL_WATCH_CRONS.includes(event.cron)) {
         context.waitUntil(studentMealWatch(env).then((result) => console.info('Student meal publication watch', result)));
-        // Reuse the daily 17:07 UTC watch slot for maintenance, keeping three Cron Triggers.
-        if (new Date(event.scheduledTime).getUTCHours() !== 17) return;
+        // Reuse the daily 17:07 UTC watch slot for full maintenance, keeping three Cron Triggers.
+        // Every other watch slot (at most two hours apart) still drops expired address leases.
+        if (new Date(event.scheduledTime).getUTCHours() !== 17) {
+          context.waitUntil((async () => {
+            const securityStore = securityStoreFactory(env);
+            await securityStore.pruneExpiredLeases?.(Math.floor(now().getTime() / 1000));
+          })().catch((error) => {
+            console.error('Scheduled lease cleanup failed', error instanceof Error ? error.message : error);
+          }));
+          return;
+        }
       }
       context.waitUntil((async () => {
         const securityStore = securityStoreFactory(env);
@@ -55,6 +71,7 @@ export function createWorker(dependencies = {}) {
 }
 
 async function handleDormitoryMealUpload(request, env, dependencies) {
+  // Cheap, side-effect-free validation first: nothing below may touch D1 until the request is well formed.
   if (request.method !== 'POST') {
     return jsonResponse(405, 'POST 요청만 지원합니다.', { Allow: 'POST' });
   }
@@ -64,14 +81,24 @@ async function handleDormitoryMealUpload(request, env, dependencies) {
   if (!expectedExtension || requestedExtension !== expectedExtension) {
     return jsonResponse(415, '지원하지 않는 식단 이미지 형식입니다.');
   }
-  const contentLength = Number(request.headers.get('Content-Length'));
-  if (Number.isFinite(contentLength) && contentLength > MAX_IMAGE_BYTES) {
-    return jsonResponse(413, '식단 이미지는 15MB 이하여야 합니다.');
+  const declaredLength = request.headers.get('Content-Length');
+  const contentLength = Number(declaredLength);
+  if (declaredLength !== null && Number.isFinite(contentLength)) {
+    if (contentLength > MAX_IMAGE_BYTES) return jsonResponse(413, '식단 이미지는 15MB 이하여야 합니다.');
+    if (contentLength < MIN_IMAGE_BYTES) return jsonResponse(400, IMAGE_TOO_SMALL_MESSAGE);
   }
-  const clientAddress = request.headers.get('CF-Connecting-IP')?.trim();
-  if (!clientAddress) return jsonResponse(400, '업로드 요청을 확인할 수 없습니다.');
+  const clientKey = rateLimitClientKey(request.headers.get('CF-Connecting-IP'));
+  if (!clientKey) return jsonResponse(400, '업로드 요청을 확인할 수 없습니다.');
   const rateLimitSalt = env.RATE_LIMIT_SALT?.trim();
   if (!rateLimitSalt || rateLimitSalt.length < 32) {
+    return jsonResponse(503, '업로드 서비스가 준비되지 않았습니다.');
+  }
+  let weeklyLimit;
+  let dailyLimit;
+  try {
+    weeklyLimit = positiveLimit(env.UPLOAD_WEEKLY_LIMIT, 40);
+    dailyLimit = positiveLimit(env.UPLOAD_DAILY_LIMIT, 20);
+  } catch {
     return jsonResponse(503, '업로드 서비스가 준비되지 않았습니다.');
   }
 
@@ -84,8 +111,18 @@ async function handleDormitoryMealUpload(request, env, dependencies) {
   const current = dependencies.now();
   const nowSeconds = Math.floor(current.getTime() / 1000);
   const leaseOwner = dependencies.randomUUID();
-  const addressHash = await sha256Hex(`${rateLimitSalt}:${clientAddress}`);
+  // IPv6 clients are keyed by their /64 so one subscriber prefix cannot rotate addresses past the lease.
+  const addressHash = await sha256Hex(`${rateLimitSalt}:${clientKey}`);
   const leaseScope = `upload-address:${addressHash}`;
+  const releaseLease = async () => {
+    try {
+      await securityStore.releaseLease(leaseScope, leaseOwner);
+    } catch (error) {
+      console.error('Dormitory meal lease release failed', error instanceof Error ? error.message : error);
+    }
+  };
+
+  // The per-client lease remains the first throttle and the first D1 write.
   try {
     const claimed = await securityStore.claimLease(
       leaseScope,
@@ -95,21 +132,6 @@ async function handleDormitoryMealUpload(request, env, dependencies) {
     );
     if (!claimed) {
       return jsonResponse(429, '잠시 후 다시 시도해 주세요.', { 'Retry-After': String(RATE_LIMIT_SECONDS) });
-    }
-    const windows = uploadBudgetWindows(current);
-    const weeklyLimit = positiveLimit(env.UPLOAD_WEEKLY_LIMIT, 40);
-    const dailyLimit = positiveLimit(env.UPLOAD_DAILY_LIMIT, 20);
-    if (!await securityStore.consumeUploadBudgets({
-      dayScope: `upload-day:${windows.date}`,
-      dayLimit: dailyLimit,
-      dayExpiresAt: windows.dayExpiresAt,
-      weekScope: `upload-week:${windows.weekStart}`,
-      weekLimit: weeklyLimit,
-      weekExpiresAt: windows.weekExpiresAt,
-    })) {
-      return jsonResponse(429, '현재 익명 식단 처리 한도에 도달했습니다.', {
-        'Retry-After': String(Math.max(1, windows.dayExpiresAt - nowSeconds)),
-      });
     }
   } catch (error) {
     console.error('Dormitory meal admission failed', error instanceof Error ? error.message : error);
@@ -122,7 +144,7 @@ async function handleDormitoryMealUpload(request, env, dependencies) {
     }
   } catch (error) {
     console.error('Dormitory publication check failed', error instanceof Error ? error.message : error);
-    await securityStore.releaseLease(leaseScope, leaseOwner);
+    await releaseLease();
     return jsonResponse(503, '현재 식단 게시 상태를 확인하지 못했습니다.');
   }
 
@@ -136,6 +158,31 @@ async function handleDormitoryMealUpload(request, env, dependencies) {
   if (image.byteLength === 0) return jsonResponse(400, '식단 사진이 비어 있습니다.');
   if (!hasExpectedImageSignature(image, mimeType)) {
     return jsonResponse(415, '사진 파일 형식을 확인해 주세요.');
+  }
+  const imageProblem = imageSanityProblem(image, mimeType);
+  if (imageProblem) return jsonResponse(imageProblem.status, imageProblem.message);
+
+  // The shared daily/weekly budget is consumed only for a body that passed every local check,
+  // and is refunded below if the GitHub write does not succeed.
+  const windows = uploadBudgetWindows(current);
+  const budget = {
+    dayScope: `upload-day:${windows.date}`,
+    dayLimit: dailyLimit,
+    dayExpiresAt: windows.dayExpiresAt,
+    weekScope: `upload-week:${windows.weekStart}`,
+    weekLimit: weeklyLimit,
+    weekExpiresAt: windows.weekExpiresAt,
+  };
+  try {
+    if (!await securityStore.consumeUploadBudgets(budget)) {
+      return jsonResponse(429, '현재 익명 식단 처리 한도에 도달했습니다.', {
+        'Retry-After': String(Math.max(1, windows.dayExpiresAt - nowSeconds)),
+      });
+    }
+  } catch (error) {
+    console.error('Dormitory meal budget admission failed', error instanceof Error ? error.message : error);
+    await releaseLease();
+    return jsonResponse(503, '업로드 서비스가 준비되지 않았습니다.');
   }
 
   const submissionId = dependencies.randomUUID();
@@ -170,10 +217,77 @@ async function handleDormitoryMealUpload(request, env, dependencies) {
       headers: jsonHeaders(),
     });
   } catch (error) {
-    await securityStore.releaseLease(leaseScope, leaseOwner);
     console.error('Dormitory meal upload failed', error instanceof Error ? error.message : error);
+    try {
+      await securityStore.refundUploadBudgets(budget);
+    } catch (refundError) {
+      console.error('Dormitory meal budget refund failed', refundError instanceof Error ? refundError.message : refundError);
+    }
+    await releaseLease();
     return jsonResponse(502, '사진을 올리지 못했습니다. 잠시 후 다시 시도해 주세요.');
   }
+}
+
+/**
+ * Address key for the per-client lease: the full address for IPv4 (including IPv4-mapped
+ * IPv6) and the /64 network prefix for IPv6. Returns null when the address is not parseable.
+ */
+export function rateLimitClientKey(rawAddress) {
+  const address = rawAddress?.trim();
+  if (!address || address.length > 64) return null;
+  const ipv4 = parseIpv4(address);
+  if (ipv4) return `v4:${ipv4.join('.')}`;
+  const hextets = parseIpv6(address);
+  if (!hextets) return null;
+  if (hextets.slice(0, 5).every((value) => value === 0) && hextets[5] === 0xffff) {
+    return `v4:${[hextets[6] >> 8, hextets[6] & 0xff, hextets[7] >> 8, hextets[7] & 0xff].join('.')}`;
+  }
+  return `v6:${hextets.slice(0, 4).map((value) => value.toString(16)).join(':')}::/64`;
+}
+
+function parseIpv4(address) {
+  const parts = address.split('.');
+  if (parts.length !== 4) return null;
+  const octets = [];
+  for (const part of parts) {
+    if (!/^\d{1,3}$/.test(part)) return null;
+    const value = Number(part);
+    if (value > 255) return null;
+    octets.push(value);
+  }
+  return octets;
+}
+
+function parseIpv6(rawAddress) {
+  const address = rawAddress.replace(/^\[|\]$/g, '').split('%', 1)[0].toLowerCase();
+  if (!/^[0-9a-f:.]+$/.test(address)) return null;
+  const halves = address.split('::');
+  if (halves.length > 2) return null;
+  const parseGroups = (text, allowTrailingIpv4) => {
+    if (text === '') return [];
+    const groups = [];
+    const parts = text.split(':');
+    for (let index = 0; index < parts.length; index += 1) {
+      const part = parts[index];
+      if (allowTrailingIpv4 && index === parts.length - 1 && part.includes('.')) {
+        const ipv4 = parseIpv4(part);
+        if (!ipv4) return null;
+        groups.push((ipv4[0] << 8) | ipv4[1], (ipv4[2] << 8) | ipv4[3]);
+      } else {
+        if (!/^[0-9a-f]{1,4}$/.test(part)) return null;
+        groups.push(parseInt(part, 16));
+      }
+    }
+    return groups;
+  };
+  if (halves.length === 1) {
+    const groups = parseGroups(halves[0], true);
+    return groups?.length === 8 ? groups : null;
+  }
+  const head = parseGroups(halves[0], false);
+  const tail = parseGroups(halves[1], true);
+  if (!head || !tail || head.length + tail.length > 7) return null;
+  return [...head, ...new Array(8 - head.length - tail.length).fill(0), ...tail];
 }
 
 function positiveLimit(value, fallback) {
@@ -207,15 +321,30 @@ function createD1SecurityStore(database) {
   if (!database) throw new Error('SHUTTLE_REPORTS D1 binding is required for gateway admission');
   return {
     async claimLease(scope, owner, nowSeconds, expiresAtSeconds) {
-      const result = await database.prepare(`
-        INSERT INTO gateway_leases (scope, owner, expires_at)
-        VALUES (?, ?, ?)
-        ON CONFLICT(scope) DO UPDATE SET
-          owner = excluded.owner,
-          expires_at = excluded.expires_at
-        WHERE gateway_leases.expires_at <= ?
-      `).bind(scope, owner, expiresAtSeconds, nowSeconds).run();
+      // One D1 batch (a single transaction): drop a bounded set of expired leases, which hold
+      // salted address hashes, then atomically claim this client's lease.
+      const [, result] = await database.batch([
+        expiredLeaseDeleteStatement(database, nowSeconds),
+        database.prepare(`
+          INSERT INTO gateway_leases (scope, owner, expires_at)
+          VALUES (?, ?, ?)
+          ON CONFLICT(scope) DO UPDATE SET
+            owner = excluded.owner,
+            expires_at = excluded.expires_at
+          WHERE gateway_leases.expires_at <= ?
+        `).bind(scope, owner, expiresAtSeconds, nowSeconds),
+      ]);
       return Number(result.meta?.changes ?? 0) > 0;
+    },
+    async refundUploadBudgets(budget) {
+      // Atomic decrement of both windows; never below zero.
+      await database.prepare(`
+        UPDATE gateway_budgets SET used = used - 1
+        WHERE scope IN (?, ?) AND used > 0
+      `).bind(budget.dayScope, budget.weekScope).run();
+    },
+    async pruneExpiredLeases(nowSeconds) {
+      await expiredLeaseDeleteStatement(database, nowSeconds).run();
     },
     async releaseLease(scope, owner) {
       await database.prepare('DELETE FROM gateway_leases WHERE scope = ? AND owner = ?')
@@ -249,6 +378,15 @@ function createD1SecurityStore(database) {
       await database.prepare('DELETE FROM gateway_budgets WHERE expires_at <= ?').bind(nowSeconds).run();
     },
   };
+}
+
+function expiredLeaseDeleteStatement(database, nowSeconds) {
+  return database.prepare(`
+    DELETE FROM gateway_leases
+    WHERE scope IN (
+      SELECT scope FROM gateway_leases WHERE expires_at <= ? ORDER BY expires_at LIMIT ?
+    )
+  `).bind(nowSeconds, EXPIRED_LEASE_DELETE_LIMIT);
 }
 
 async function hasCurrentDormitoryPublication(fetchImpl, current) {
@@ -352,14 +490,23 @@ async function createGitHubInstallationToken(env, fetchImpl, now) {
     new TextEncoder().encode(signingInput),
   );
   const jwt = `${signingInput}.${base64UrlBytes(new Uint8Array(signature))}`;
-  const response = await fetchImpl(`https://api.github.com/app/installations/${installationId}/access_tokens`, {
+  const repository = env.GITHUB_REPOSITORY ?? 'DimaNow';
+  if (!/^[A-Za-z0-9._-]{1,100}$/.test(repository)) throw new Error('GITHUB_REPOSITORY is invalid');
+  const response = await fetchImpl(`https://api.github.com/app/installations/${encodeURIComponent(installationId)}/access_tokens`, {
     method: 'POST',
     headers: {
       Accept: 'application/vnd.github+json',
       Authorization: `Bearer ${jwt}`,
+      'Content-Type': 'application/json',
       'User-Agent': 'DIMA-Now-Meal-Upload',
       'X-GitHub-Api-Version': '2022-11-28',
     },
+    // Down-scope the installation token to this one repository and contents:write, which covers
+    // both the submission-branch file write and repository_dispatch, whatever the App is granted.
+    body: JSON.stringify({
+      repositories: [repository],
+      permissions: { contents: 'write' },
+    }),
   });
   if (!response.ok) {
     throw new Error(`GitHub installation token failed: ${response.status}`);
@@ -382,6 +529,106 @@ function hasExpectedImageSignature(bytes, mimeType) {
       && String.fromCharCode(...bytes.slice(8, 12)) === 'WEBP';
   }
   return false;
+}
+
+/**
+ * Header-only sanity checks after the signature matched: a minimum body size and parseable,
+ * plausible pixel dimensions. Workers cannot re-encode, so this does not prove the rest of
+ * the file decodes; it only rejects tiny probes, degenerate headers and decompression bombs.
+ */
+function imageSanityProblem(bytes, mimeType) {
+  if (bytes.byteLength < MIN_IMAGE_BYTES) return { status: 400, message: IMAGE_TOO_SMALL_MESSAGE };
+  const dimensions = imageDimensions(bytes, mimeType);
+  if (!dimensions) return { status: 415, message: '사진 파일 형식을 확인해 주세요.' };
+  const { width, height } = dimensions;
+  if (width < MIN_IMAGE_SIDE || height < MIN_IMAGE_SIDE) {
+    return { status: 400, message: IMAGE_TOO_SMALL_MESSAGE };
+  }
+  if (width > MAX_IMAGE_SIDE || height > MAX_IMAGE_SIDE) {
+    return { status: 400, message: '식단 사진의 해상도가 너무 큽니다.' };
+  }
+  return null;
+}
+
+export function imageDimensions(bytes, mimeType) {
+  if (mimeType === 'image/jpeg') return jpegDimensions(bytes);
+  if (mimeType === 'image/png') return pngDimensions(bytes);
+  if (mimeType === 'image/webp') return webpDimensions(bytes);
+  return null;
+}
+
+function uint16BE(bytes, offset) {
+  return (bytes[offset] << 8) | bytes[offset + 1];
+}
+
+function uint32BE(bytes, offset) {
+  return ((bytes[offset] << 24) >>> 0) + (bytes[offset + 1] << 16) + (bytes[offset + 2] << 8) + bytes[offset + 3];
+}
+
+function uint24LE(bytes, offset) {
+  return bytes[offset] | (bytes[offset + 1] << 8) | (bytes[offset + 2] << 16);
+}
+
+function fourCC(bytes, offset) {
+  return String.fromCharCode(bytes[offset], bytes[offset + 1], bytes[offset + 2], bytes[offset + 3]);
+}
+
+function pngDimensions(bytes) {
+  // Signature, then the mandatory first chunk: length 13, type IHDR, width, height.
+  if (bytes.length < 33 || uint32BE(bytes, 8) !== 13 || fourCC(bytes, 12) !== 'IHDR') return null;
+  return { width: uint32BE(bytes, 16), height: uint32BE(bytes, 20) };
+}
+
+const JPEG_SOF_MARKERS = new Set([0xc0, 0xc1, 0xc2, 0xc3, 0xc5, 0xc6, 0xc7, 0xc9, 0xca, 0xcb, 0xcd, 0xce, 0xcf]);
+
+function jpegDimensions(bytes) {
+  let offset = 2;
+  while (offset + 3 < bytes.length) {
+    if (bytes[offset] !== 0xff) return null;
+    let marker = bytes[offset + 1];
+    // Fill bytes before a marker.
+    while (marker === 0xff && offset + 2 < bytes.length) {
+      offset += 1;
+      marker = bytes[offset + 1];
+    }
+    if (marker === 0x01 || (marker >= 0xd0 && marker <= 0xd8)) {
+      offset += 2;
+      continue;
+    }
+    // Scan data or end of image before any frame header: no usable dimensions.
+    if (marker === 0xd9 || marker === 0xda) return null;
+    if (offset + 3 >= bytes.length) return null;
+    const length = uint16BE(bytes, offset + 2);
+    if (length < 2) return null;
+    if (JPEG_SOF_MARKERS.has(marker)) {
+      if (length < 8 || offset + 8 >= bytes.length) return null;
+      return { width: uint16BE(bytes, offset + 7), height: uint16BE(bytes, offset + 5) };
+    }
+    offset += 2 + length;
+  }
+  return null;
+}
+
+function webpDimensions(bytes) {
+  if (bytes.length < 30) return null;
+  const chunk = fourCC(bytes, 12);
+  if (chunk === 'VP8 ') {
+    // Key frame tag (bit 0 clear), start code 9d 01 2a, then 14-bit width and height.
+    if ((bytes[20] & 0x01) !== 0 || bytes[23] !== 0x9d || bytes[24] !== 0x01 || bytes[25] !== 0x2a) return null;
+    return {
+      width: (bytes[26] | (bytes[27] << 8)) & 0x3fff,
+      height: (bytes[28] | (bytes[29] << 8)) & 0x3fff,
+    };
+  }
+  if (chunk === 'VP8L') {
+    if (bytes[20] !== 0x2f) return null;
+    const bits = (bytes[21] | (bytes[22] << 8) | (bytes[23] << 16) | (bytes[24] << 24)) >>> 0;
+    return { width: (bits & 0x3fff) + 1, height: ((bits >>> 14) & 0x3fff) + 1 };
+  }
+  if (chunk === 'VP8X') {
+    return { width: uint24LE(bytes, 24) + 1, height: uint24LE(bytes, 27) + 1 };
+  }
+  return null;
 }
 
 async function sha256Hex(value) {

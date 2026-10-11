@@ -17,7 +17,7 @@
 - 검증 실패 시 마지막 정상 Room 캐시를 유지합니다.
 - GitHub Actions workflow는 고정 commit SHA의 Actions를 사용하며 최소 권한을 선언합니다.
 - 식단 OCR용 `GEMINI_API_KEY`는 GitHub Actions Secret으로만 주입하고 요청 본문·로그·아티팩트에 기록하지 않습니다.
-- 기숙사 사진은 인증 없는 Cloudflare Worker endpoint로 제출합니다. Worker는 이미지 형식·크기와 짧은 IP 해시 기반 중복 제한을 확인하고, 이 저장소에만 설치된 최소 권한 GitHub App의 단기 설치 토큰으로 `dorm-submissions` 브랜치의 신규 이미지 경로만 씁니다. GitHub App 개인 키와 rate-limit salt는 Wrangler Secret으로만 보관하며 APK·Git·로그에 포함하지 않습니다.
+- 기숙사 사진은 인증 없는 Cloudflare Worker endpoint로 제출합니다. Worker는 먼저 경로·형식·선언 크기를 확인하고, 짧은 IP 해시(IPv4는 전체 주소, IPv6는 /64 대역) 기반 10분 중복 제한을 적용한 뒤 이미지 서명, 20 KB 이상 크기와 헤더의 가로·세로(320–12000 px)를 검사합니다. 일간·주간 전체 처리 예산은 이 검사를 통과한 요청에만 소비하고 GitHub 쓰기가 실패하면 원자적으로 되돌립니다. 만료된 IP 해시는 업로드 요청과 최대 2시간 간격의 정기 작업에서 삭제합니다. Workers에서는 재인코딩을 하지 않으므로 헤더 이후 이미지 데이터의 정상성은 보장하지 않습니다. GitHub 쓰기는 이 저장소에만 설치된 최소 권한 GitHub App의 단기 설치 토큰을 요청 시 `DimaNow` 저장소와 `contents: write` 권한으로 다시 좁혀 발급받아 `dorm-submissions` 브랜치의 신규 이미지 경로만 씁니다. GitHub App 개인 키와 rate-limit salt는 Wrangler Secret으로만 보관하며 APK·Git·로그에 포함하지 않습니다.
 - 제출 workflow는 직렬 실행하고, OCR 전에 현재 주 기숙사 식단 존재 여부를 다시 확인합니다. 검증 실패 사진은 정상 식단 캐시를 덮어쓰지 않습니다.
 - 앱 업데이트는 공개 GitHub latest stable release의 이름 규칙과 asset SHA-256을 확인합니다.
 - 업데이트 다운로드는 허용된 GitHub HTTPS 호스트와 128 MiB 상한으로 제한하고, 완료 전 `.part` 파일은 설치 대상으로 사용하지 않습니다.

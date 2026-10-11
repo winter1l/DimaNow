@@ -52,7 +52,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import com.example.dimanow.ui.DimaLayout
 import com.example.dimanow.ui.ScreenScaffold
-import org.json.JSONObject
 
 @Composable
 internal fun LmsLoginScreen(
@@ -440,19 +439,63 @@ internal fun LmsAuthenticationWebView(
     }
 }
 
+/** Exact `protocol//host/pathname` values on which stored credentials may be written. */
+internal val PORTAL_CREDENTIAL_PAGES = listOf(
+    "https://portal.dima.ac.kr/",
+    "https://portal.dima.ac.kr/default.aspx",
+)
+internal val LMS_CREDENTIAL_PAGES = listOf("https://lms.dima.ac.kr/login/doLoginPage.dunet")
+
+/**
+ * First statement of the credential script. The Kotlin caller already checked the
+ * onPageFinished URL, but the document may have navigated since then (D-073 allows an HTTP
+ * SSO hop in this WebView), so the script re-checks the live document location itself before
+ * touching any field or calling the site's login function. Only `===` comparisons on the
+ * unforgeable `location` object are used, so page-overridable prototypes cannot widen it.
+ */
+internal fun lmsCredentialPageGuard(portal: Boolean): String {
+    val allowed = if (portal) PORTAL_CREDENTIAL_PAGES else LMS_CREDENTIAL_PAGES
+    val condition = allowed.joinToString("||") { "page===${jsStringLiteral(it)}" }
+    return "var page=location.protocol+'//'+location.host+location.pathname;" +
+        "if(!($condition))return 'origin-mismatch';"
+}
+
+/** JavaScript string literal for an arbitrary value (pure Kotlin so JVM unit tests can build scripts). */
+internal fun jsStringLiteral(value: String): String = buildString(value.length + 2) {
+    append('"')
+    value.forEach { character ->
+        when (character) {
+            '"' -> append("\\\"")
+            '\\' -> append("\\\\")
+            '\n' -> append("\\n")
+            '\r' -> append("\\r")
+            '\t' -> append("\\t")
+            '<', '>', ' ', ' ' -> append("\\u%04x".format(character.code))
+            else -> if (character < ' ' || character == '\u007f') {
+                append("\\u%04x".format(character.code))
+            } else {
+                append(character)
+            }
+        }
+    }
+    append('"')
+}
+
 internal fun lmsCredentialSubmissionScript(
     username: String,
     password: String,
     portal: Boolean,
 ): String {
-    val user = JSONObject.quote(username)
-    val secret = JSONObject.quote(password)
+    val user = jsStringLiteral(username)
+    val secret = jsStringLiteral(password)
+    val guard = lmsCredentialPageGuard(portal)
     val userSelector = if (portal) "#txtID" else "#id"
     val passwordSelector = if (portal) "#txtPwd" else "#pass"
     val submitCheck = if (portal) "typeof Login==='function'" else "typeof login_proc==='function'"
     val submit = if (portal) "Login('N')" else "login_proc()"
     return """
         (function(){
+          $guard
           var i=document.querySelector('$userSelector'),p=document.querySelector('$passwordSelector');
           if(!i||!p||!($submitCheck))return 'interactive';
           function isHidden(control){

@@ -6,6 +6,7 @@ import { STUDENT_MEAL_WATCH_CRONS } from '../src/meal-publication-watch.mjs';
 test('scheduled Monday watch reaches authenticated collection without a user request', async () => {
   const pending = [];
   const dispatches = [];
+  const leasePrunes = [];
   const worker = createWorker({
     now: () => new Date('2026-09-14T01:37:00Z'),
     githubTokenProvider: async () => 'test-token',
@@ -16,7 +17,10 @@ test('scheduled Monday watch reaches authenticated collection without a user req
       dispatches.push({ url, init });
       return new Response(null, { status: 204 });
     },
-    securityStoreFactory: () => { throw new Error('Morning watch must not start daily maintenance'); },
+    securityStoreFactory: () => ({
+      prune: async () => { throw new Error('Morning watch must not start daily maintenance'); },
+      pruneExpiredLeases: async (seconds) => leasePrunes.push(seconds),
+    }),
   });
   worker.scheduled({ cron: STUDENT_MEAL_WATCH_CRONS[0], scheduledTime: Date.parse('2026-09-14T01:37:00Z') },
     { GITHUB_OWNER: 'winter1l', GITHUB_REPOSITORY: 'DimaNow' }, { waitUntil: (promise) => pending.push(promise) });
@@ -24,6 +28,7 @@ test('scheduled Monday watch reaches authenticated collection without a user req
   assert.equal(dispatches.length, 1);
   assert.equal(dispatches[0].url, 'https://api.github.com/repos/winter1l/DimaNow/dispatches');
   assert.equal(JSON.parse(dispatches[0].init.body).event_type, 'student-meal-publication-watch');
+  assert.deepEqual(leasePrunes, [Date.parse('2026-09-14T01:37:00Z') / 1000]);
 });
 
 test('daily watch slot also preserves gateway maintenance', async () => {

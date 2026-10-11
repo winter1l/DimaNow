@@ -5,8 +5,8 @@ Android 앱에서 GitHub 로그인 없이 식단 사진을 제출하기 위한 C
 ## 보안 경계
 
 - JPEG, PNG, WebP만 허용하며 파일 시그니처와 15 MiB 제한을 확인합니다.
-- Cloudflare가 제공한 요청 IP의 단방향 해시를 D1에서 원자적으로 claim해 10분 중복 제출을 막고, 일간 20건·주간 40건의 전체 처리 예산을 GitHub 권한보다 먼저 적용합니다.
-- GitHub App 권한은 이 저장소의 `Contents: read and write`와 필수 `Metadata: read-only`만 사용합니다.
+- 요청 IP(IPv6는 /64 단위)를 `RATE_LIMIT_SALT`로 단방향 해시해 D1에서 원자적으로 claim하고 10분 중복 제출을 막습니다. 경로·형식·크기 검사와 이번 주 게시 여부 확인을 먼저 하고, 이미지 크기(320~12000px)까지 통과한 요청만 일간 20건·주간 40건 예산을 쓰며, GitHub 쓰기에 실패하면 예산을 되돌립니다.
+- GitHub App 권한은 이 저장소의 `Contents: read and write`와 필수 `Metadata: read-only`만 사용합니다 설치 토큰은 이 저장소와 `contents: write`로만 범위를 좁혀 요청합니다.
 - `GITHUB_APP_PRIVATE_KEY`와 `RATE_LIMIT_SALT`는 Wrangler Secret으로만 저장합니다. APK, Git, 로그에 넣지 않습니다.
 - 업로드된 사진은 공개 저장소 브랜치와 GitHub Actions 처리 대상이 됩니다. 앱은 전송 전 공개 공유 사실을 확인합니다.
 - 두 단계 모델 검증과 OCR, 현재 KST 주(주말에는 다음 주)·중복 주 확인을 통과한 사진만 GitHub Actions가 자동으로 `READY`와 `PUBLISHED`로 게시합니다(D-089). 실패는 짧은 사유와 함께 `REJECTED`/`ERROR`로 기록되고 기존 정상 식단은 유지됩니다.

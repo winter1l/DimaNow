@@ -289,7 +289,8 @@ internal fun isExactOfficialLmsSessionConflictUrl(url: String): Boolean = runCat
 
 internal fun isOfficialLmsCredentialPage(url: String): Boolean = runCatching {
     val uri = URI.create(url)
-    uri.scheme == "https" && when (uri.host) {
+    // Must stay in step with PORTAL_CREDENTIAL_PAGES / LMS_CREDENTIAL_PAGES, which the injected script re-checks.
+    uri.scheme == "https" && uri.userInfo == null && uri.port in setOf(-1, 443) && when (uri.host) {
         "portal.dima.ac.kr" -> uri.path.isNullOrBlank() || uri.path == "/" || uri.path == "/default.aspx"
         "lms.dima.ac.kr" -> uri.path == "/login/doLoginPage.dunet"
         else -> false

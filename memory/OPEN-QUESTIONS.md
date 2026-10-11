@@ -62,3 +62,8 @@ Resolved 2026-09-30: Q-016/Q-017 by D-093 (user confirmed the Gemini reconstruct
 - Nearby-stop 4402 card (primaryContainer) makes the secondaryContainer second capsule/chip blend in (D-083 colors) — needs a color decision.
 - Server-sent dormitory rejection reasons are still shown verbatim; update-check errors no longer keep raw detail for diagnostics.
 - Emulator system_server crashes (vold/keystore2 native crashes) during long instrumentation runs; run classes individually.
+
+Resolved 2026-10-01: baseline profiles regenerated; unused LMS code removed; dormitory rejection wording mapped; 4402 nearby color decided (D-095). Still open: Worker production deploy (needs user wrangler login), shuttle_reports D1 rows left in place.
+- 2026-10-11 (observed): production D1 is in a partial migration-0002 state — gateway_budgets (+index) exists, gateway_leases (+index) missing. Harmless for the currently deployed Worker; the new Worker must not be deployed until gateway_leases exists. Deploy also needs wrangler login and a ≥32-char RATE_LIMIT_SALT.
+
+Resolved 2026-10-11: Worker deployed from repo (active 32e9b5a5), migration 0002 complete, RATE_LIMIT_SALT rotated, SHUTTLE_REPORT_HMAC_KEY deleted. Open: confirm the next real dorm upload and scheduled meal-watch run on the new Worker; decide whether to set `preview_urls: false` in wrangler.jsonc.

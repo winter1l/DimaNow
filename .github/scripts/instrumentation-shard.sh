@@ -32,6 +32,9 @@ prepare_device() {
   adb shell wm dismiss-keyguard
   adb shell svc power stayon true
   adb shell settings put system screen_off_timeout 2147483647
+  # Layout assertions and captures assume the pixel_6 profile (1080x2400, 420 dpi); log what booted.
+  adb shell wm size
+  adb shell wm density
 }
 
 run_shard() {

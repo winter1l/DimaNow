@@ -12,12 +12,16 @@ import com.example.dimanow.domain.ShuttleLine
 import java.time.Instant
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import kotlinx.coroutines.flow.first
 
 @RunWith(AndroidJUnit4::class)
 class LiveSurfacePresentationTest {
+    // Several tests read NotificationManager.activeNotifications; a fresh install posts nothing.
+    @get:Rule val notificationPermission = NotificationPermissionRule()
+
     @Test
     fun guidanceNotificationOffersAnImmutableOccurrenceDismissAction() {
         val context = ApplicationProvider.getApplicationContext<android.content.Context>()
@@ -71,17 +75,25 @@ class LiveSurfacePresentationTest {
                         kotlinx.coroutines.delay(50)
                     }
                 }
-                val runtime = app.guidanceRuntimeCoordinator.awaitSnapshot().copy(
-                    bus4402Schedule = com.example.dimanow.transit.Bus4402Schedule.official.copy(
-                        timesByServiceType = com.example.dimanow.transit.Bus4402ServiceType.entries.associateWith {
-                            (0 until 1440).map { java.time.LocalTime.ofSecondOfDay(it * 60L) }
-                        },
-                    ),
+                val everyMinute = com.example.dimanow.transit.Bus4402Schedule.official.copy(
+                    timesByServiceType = com.example.dimanow.transit.Bus4402ServiceType.entries.associateWith {
+                        (0 until 1440).map { java.time.LocalTime.ofSecondOfDay(it * 60L) }
+                    },
                 )
-                app.guidanceRuntimeCoordinator.update(runtime)
-                app.guidanceOrchestrator.refresh(runtime)
+                suspend fun postEveryMinuteBus() {
+                    val runtime = app.guidanceRuntimeCoordinator.awaitSnapshot().copy(bus4402Schedule = everyMinute)
+                    app.guidanceRuntimeCoordinator.update(runtime)
+                    app.guidanceOrchestrator.refresh(runtime)
+                }
+                postEveryMinuteBus()
                 // Android can defer a new FGS notification for ten seconds.
                 kotlinx.coroutines.delay(12_000)
+                // While the activity starts, the app's own runtime flow can re-emit (static data
+                // loads, preferences settle) with the official 4402 timetable. Late at night that
+                // timetable has no bus within the hour and rightly cancels the card, so the result
+                // depended on the time of day. Re-apply the fixture, then read: a service keeper
+                // started by the first post would still be listed next to the card.
+                postEveryMinuteBus()
                 assertEquals(listOf(AndroidLiveSurfaceController.NOTIFICATION_ID), manager.activeNotifications.map { it.id }.sorted())
                 assertEquals(0, manager.activeNotifications.single().notification.flags and Notification.FLAG_FOREGROUND_SERVICE)
             }
@@ -89,6 +101,17 @@ class LiveSurfacePresentationTest {
             preferences.setTestTransitStop(previousStop)
             preferences.setTestLocationMode(previousMode == com.example.dimanow.location.LocationMode.TEST, previousZone)
             preferences.setNotificationGuidanceMode(GuidanceKind.BUS_4402, previousPolicy.bus4402)
+            // Let the app's runtime apply the restored preferences inside this test. Its debounced
+            // refresh cancels notification 6201 asynchronously and would otherwise land in the
+            // next test that posts 6201 (distantBusRemovesExistingCardAndSixtyMinuteBusReturns).
+            kotlinx.coroutines.withTimeoutOrNull(5_000) {
+                while (app.guidanceRuntimeCoordinator.awaitSnapshot().nearbyTransitStop?.stopNumber !=
+                    previousStop?.takeIf { previousMode == com.example.dimanow.location.LocationMode.TEST }
+                ) {
+                    kotlinx.coroutines.delay(50)
+                }
+            }
+            kotlinx.coroutines.delay(1_000)
             app.liveSurfaceController.cancel()
         }
     }

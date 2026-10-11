@@ -1,9 +1,11 @@
 package com.example.dimanow.ui
 
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollToNode
 import com.example.dimanow.DimaNowApplication
 import com.example.dimanow.MainActivity
 import com.example.dimanow.guidance.HomeBase
@@ -30,9 +32,12 @@ class LmsTabTest {
 
         composeRule.onNodeWithTag("nav_COURSES").performClick()
 
-        composeRule.onNodeWithText("학번").assertExists()
-        composeRule.onNodeWithText("비밀번호").assertExists()
-        composeRule.onNodeWithText("계정을 이 기기에 암호화해 저장해요").assertExists()
+        // The login form is a LazyColumn; scroll so a short screen still composes each row.
+        val loginList = composeRule.onNodeWithTag("lms_login_list")
+        listOf("학번", "비밀번호", "계정을 이 기기에 암호화해 저장해요").forEach {
+            loginList.performScrollToNode(hasText(it))
+            composeRule.onNodeWithText(it).assertExists()
+        }
         composeRule.onNodeWithTag("nav_SETTINGS").assertDoesNotExist()
     }
 }

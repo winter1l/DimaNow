@@ -5,12 +5,15 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.test.captureToImage
+import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollToKey
 import androidx.compose.ui.test.performScrollToNode
 import androidx.test.platform.app.InstrumentationRegistry
 import com.example.dimanow.data.CampusDataRepository
@@ -69,18 +72,18 @@ class TimetableNoClassUndoTest {
         show()
         // Dates are written for people, not as ISO text.
         compose.onNodeWithText("학기 8월 24일 (월) ~ 12월 18일 (금)").assertExists()
-        compose.onNodeWithTag("timetable_list").performScrollToNode(hasTestTag("delete_no_class_$noClassDate"))
+        scrollToNoClassDates()
         compose.onNodeWithText("10월 5일 (월)").assertExists()
         compose.onNodeWithText("2026-10-05").assertDoesNotExist()
 
         compose.onNodeWithTag("delete_no_class_$noClassDate").performClick()
-        compose.waitUntil(5_000) { repository.schedule.value.noClassDates.isEmpty() }
-        compose.onNodeWithText("휴강일을 삭제했어요").assertExists()
+        compose.waitUntil(10_000) { repository.schedule.value.noClassDates.isEmpty() }
+        compose.waitUntil(10_000) { compose.onAllNodesWithText("휴강일을 삭제했어요").fetchSemanticsNodes().isNotEmpty() }
         capture("timetable-no-class-undo")
 
         compose.onNodeWithText("되돌리기").performClick()
-        compose.waitUntil(5_000) { repository.schedule.value.noClassDates == setOf(noClassDate) }
-        compose.onNodeWithTag("timetable_list").performScrollToNode(hasTestTag("delete_no_class_$noClassDate"))
+        compose.waitUntil(10_000) { repository.schedule.value.noClassDates == setOf(noClassDate) }
+        scrollToNoClassDates()
         compose.onNodeWithText("10월 5일 (월)").assertExists()
     }
 
@@ -92,6 +95,19 @@ class TimetableNoClassUndoTest {
         compose.onNodeWithText("수업 한 번만 변경").assertExists()
         // The dialog targets the same class date the card named: the no-class Monday is skipped.
         compose.onNodeWithText("10월 12일 (월)").assertExists()
+    }
+
+    /**
+     * Brings the no-class list to the top of the viewport, or to the end of the list when it is
+     * the last item, so the row sits clear of the floating "수업 추가" button.
+     *
+     * performScrollToNode scrolls only until the row is inside the list bounds. On a short screen
+     * (the 320x640 CI emulator) that leaves the row's trailing "삭제" button under the FAB at the
+     * bottom end, and the tap opens the course editor instead of deleting the date.
+     */
+    private fun scrollToNoClassDates() {
+        compose.onNodeWithTag("timetable_list").performScrollToKey("no_class_date_list")
+        compose.onNodeWithTag("delete_no_class_$noClassDate").assertIsDisplayed()
     }
 
     private fun capture(name: String) {

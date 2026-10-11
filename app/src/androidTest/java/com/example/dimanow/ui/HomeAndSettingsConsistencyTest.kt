@@ -2,11 +2,14 @@ package com.example.dimanow.ui
 
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.requiredWidth
+import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
@@ -24,7 +27,6 @@ import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
-import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performSemanticsAction
@@ -63,20 +65,26 @@ class HomeAndSettingsConsistencyTest {
             }
         }
 
+        // Home is a LazyColumn: scroll to each card first so a short screen still composes it
+        // and its centre is on screen for the click.
+        val homeList = composeRule.onNodeWithTag("home_list")
         // Signed out with nothing cached: a compact single-row prompt, not a full card.
+        homeList.performScrollToNode(hasTestTag("dashboard_learning_prompt"))
         val prompt = composeRule.onNodeWithTag("dashboard_learning_prompt").assert(hasClickLabel("수업 보기"))
         assertTrue("the signed-out prompt stays a single compact row", prompt.getUnclippedBoundsInRoot().height <= 96.dp)
         prompt.performClick()
         composeRule.onNodeWithTag("dashboard_learning_card").assertDoesNotExist()
 
+        homeList.performScrollToNode(hasTestTag("dashboard_shuttle_card"))
         composeRule.onNodeWithTag("dashboard_shuttle_card")
             .assert(hasClickLabel("셔틀 전체 시간표 보기"))
             .performClick()
-        composeRule.onNodeWithTag("home_list").performScrollToNode(hasTestTag("dashboard_meal_card"))
+        homeList.performScrollToNode(hasTestTag("dashboard_meal_card"))
         composeRule.onNodeWithTag("dashboard_meal_card")
             .assert(hasClickLabel("식단 보기"))
             .performClick()
         // The labelled action is the card's own action, not a second one.
+        homeList.performScrollToNode(hasTestTag("dashboard_shuttle_card"))
         composeRule.onNodeWithTag("dashboard_shuttle_card").performSemanticsAction(SemanticsActions.OnClick)
         composeRule.runOnIdle {
             assertEquals(listOf(AppPage.COURSES, AppPage.SHUTTLE, AppPage.MEAL, AppPage.SHUTTLE), opened)
@@ -98,8 +106,15 @@ class HomeAndSettingsConsistencyTest {
             val density = LocalDensity.current.density
             CompositionLocalProvider(LocalDensity provides Density(density, fontScale)) {
                 DIMANowTheme {
-                    // A phone-width Settings column (412dp window minus the 16dp page margins).
-                    Box(Modifier.requiredWidth(380.dp)) {
+                    // A phone-width Settings column (412dp window minus the 16dp page margins),
+                    // start-aligned so a narrower test screen clips its end instead of centring
+                    // it at a negative offset.
+                    Box(
+                        Modifier
+                            .wrapContentWidth(Alignment.Start, unbounded = true)
+                            .requiredWidth(380.dp)
+                            .testTag(ZONE_COLUMN_TAG),
+                    ) {
                         LocationTestCard(
                             testMode = testMode,
                             testZone = zone,
@@ -113,15 +128,21 @@ class HomeAndSettingsConsistencyTest {
             }
         }
 
-        val rootRight = composeRule.onRoot().fetchSemanticsNode().boundsInRoot.right
+        // The claim is "all four fit a 380dp column without horizontal scrolling", so bounds are
+        // measured against that column, not against the test device's screen width.
+        // Unclipped bounds keep the check meaningful on a screen narrower than the column.
+        val column = composeRule.onNodeWithTag(ZONE_COLUMN_TAG).getUnclippedBoundsInRoot()
         CampusZoneId.entries.forEach {
             // No option sits inside a horizontally scrolling container that could hide it.
             val option = composeRule.onNode(
                 hasTestTag("test_zone_${it.name}") and
                     !hasAnyAncestor(SemanticsMatcher.keyIsDefined(SemanticsProperties.HorizontalScrollAxisRange)),
             ).assertIsDisplayed().assertIsNotEnabled()
-            val bounds = option.fetchSemanticsNode().boundsInRoot
-            assertTrue("${it.name} must be fully on screen at font $fontScale", bounds.left >= 0f && bounds.right <= rootRight + 0.5f)
+            val bounds = option.getUnclippedBoundsInRoot()
+            assertTrue(
+                "${it.name} must fit inside the 380dp column at font $fontScale",
+                bounds.left >= column.left - 0.5.dp && bounds.right <= column.right + 0.5.dp,
+            )
         }
         composeRule.onNodeWithText("테스트 모드").performClick()
         composeRule.onNodeWithTag("test_zone_MAIN").assertIsEnabled().assertIsSelected()
@@ -131,5 +152,9 @@ class HomeAndSettingsConsistencyTest {
             assertTrue(testMode)
             assertEquals(listOf(CampusZoneId.OUTSIDE), chosen)
         }
+    }
+
+    private companion object {
+        const val ZONE_COLUMN_TAG = "test_zone_column"
     }
 }

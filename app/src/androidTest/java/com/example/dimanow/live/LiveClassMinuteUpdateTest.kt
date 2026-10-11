@@ -1,6 +1,5 @@
 package com.example.dimanow.live
 
-import android.Manifest
 import android.app.AlarmManager
 import android.app.Notification
 import android.app.NotificationManager
@@ -27,18 +26,28 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Assume.assumeTrue
+import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 
 @RunWith(AndroidJUnit4::class)
 class LiveClassMinuteUpdateTest {
+    @get:Rule val notificationPermission = NotificationPermissionRule()
+
     @Test
     fun classTextUpdatesInBackgroundAndReachesInClassWithoutAnotherAlarm() = runBlocking {
         // This end-to-end fixture replaces the emulator timetable. Never run it on a user's phone.
         assumeTrue(Build.HARDWARE == "ranchu" || Build.HARDWARE == "goldfish")
+        // The fixture class starts about two minutes from now on the real clock. Course times are
+        // same-day LocalTimes, so a class whose window crosses midnight (Asia/Seoul) never reaches
+        // "수업 중" (observed on CI at 23:47 KST). Skip that window instead of failing on the clock.
+        val campusNow = ZonedDateTime.now(MinuteTicker.CAMPUS_ZONE)
+        assumeTrue(
+            "The fixture class would cross midnight in Asia/Seoul",
+            campusNow.plusMinutes(3 + FIXTURE_CLASS_MINUTES).toLocalDate() == campusNow.toLocalDate(),
+        )
         val app = ApplicationProvider.getApplicationContext<DimaNowApplication>()
         val instrumentation = InstrumentationRegistry.getInstrumentation()
-        instrumentation.uiAutomation.grantRuntimePermission(app.packageName, Manifest.permission.POST_NOTIFICATIONS)
         val repository = app.repository
         repository.ensureSeeded()
         val original = repository.schedule.first()
@@ -62,7 +71,7 @@ class LiveClassMinuteUpdateTest {
             val startsAt = ZonedDateTime.now(MinuteTicker.CAMPUS_ZONE)
                 .withSecond(0).withNano(0).plusMinutes(2)
             repository.saveCourse(Course(
-                startsAt.dayOfWeek, startsAt.toLocalTime(), startsAt.plusMinutes(50).toLocalTime(),
+                startsAt.dayOfWeek, startsAt.toLocalTime(), startsAt.plusMinutes(FIXTURE_CLASS_MINUTES).toLocalTime(),
                 "분 갱신 검증", "덕성관 402", "테스트", CampusZoneId.MAIN,
             ))
             val runtime = withTimeout(10_000) {
@@ -119,5 +128,10 @@ class LiveClassMinuteUpdateTest {
             delay(100)
         }
         error("Expected notification '$expected', last subtext=${last?.extras?.getCharSequence(Notification.EXTRA_SUB_TEXT)}")
+    }
+
+    private companion object {
+        /** Longer than the 15-minute in-class guidance window, short enough to keep the skip window small. */
+        const val FIXTURE_CLASS_MINUTES = 20L
     }
 }

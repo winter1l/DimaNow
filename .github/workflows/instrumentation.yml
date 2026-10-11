@@ -33,6 +33,10 @@ jobs:
         shard: [0, 1]
     # The emulator stays on API 36: LiveSurfacePresentationTest reads
     # Notification.shortCriticalText, which does not exist before API 36.
+    # The pixel_6 profile (1080x2400, 420 dpi) matches the local medium_phone AVD. Without a
+    # profile avdmanager creates a 320x640 screen, so layouts and captures differed from local
+    # runs. force-avd-creation is false, so a profile change must also change the AVD cache key,
+    # or a cached AVD keeps its old screen.
     env:
       SHARD_COUNT: "2"
       SHARD_INDEX: ${{ matrix.shard }}
@@ -60,7 +64,7 @@ jobs:
           path: |
             ~/.android/avd/*
             ~/.android/adb*
-          key: avd-api36-google_apis-x86_64-ram4096-v1
+          key: avd-api36-google_apis-x86_64-pixel_6-ram4096-v2
       - name: AVD 스냅샷 생성
         if: steps.avd-cache.outputs.cache-hit != 'true'
         uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d
@@ -68,6 +72,7 @@ jobs:
           api-level: 36
           target: google_apis
           arch: x86_64
+          profile: pixel_6
           cores: 3
           ram-size: 4096M
           force-avd-creation: false
@@ -81,6 +86,7 @@ jobs:
           api-level: 36
           target: google_apis
           arch: x86_64
+          profile: pixel_6
           cores: 3
           ram-size: 4096M
           force-avd-creation: false

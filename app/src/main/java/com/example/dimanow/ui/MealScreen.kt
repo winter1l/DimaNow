@@ -72,6 +72,7 @@ import com.example.dimanow.domain.MealValidationState
 import com.example.dimanow.meal.MealData
 import com.example.dimanow.meal.DormitoryMealData
 import com.example.dimanow.meal.DormitoryMealImage
+import com.example.dimanow.meal.DormitoryMealSubmissionMessages
 import com.example.dimanow.meal.DormitoryMealSubmissionResult
 import com.example.dimanow.meal.MealSource
 import com.example.dimanow.meal.mealServiceStatus
@@ -158,15 +159,15 @@ fun MealScreen(
                             }
                             DormitoryMealSubmissionResult.Duplicate -> {
                                 mealSource.refreshDormitory()
-                                refreshMessage = "이미 이번 주 식단이 등록되어 있어요"
+                                refreshMessage = DormitoryMealSubmissionMessages.DUPLICATE
                                 return
                             }
                             is DormitoryMealSubmissionResult.Rejected -> {
-                                refreshMessage = status.reason
+                                refreshMessage = DormitoryMealSubmissionMessages.rejected(status.reason)
                                 return
                             }
                             is DormitoryMealSubmissionResult.Failure -> {
-                                refreshMessage = "식단표를 확인하지 못했어요. 잠시 후 다시 올려 주세요."
+                                refreshMessage = DormitoryMealSubmissionMessages.ERROR
                                 return
                             }
                             else -> Unit

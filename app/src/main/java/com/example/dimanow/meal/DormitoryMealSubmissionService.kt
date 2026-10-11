@@ -12,7 +12,8 @@ sealed interface DormitoryMealSubmissionResult {
     data object Processing : DormitoryMealSubmissionResult
     data object Published : DormitoryMealSubmissionResult
     data object Duplicate : DormitoryMealSubmissionResult
-    data class Rejected(val reason: String) : DormitoryMealSubmissionResult
+    /** [reason] is the server text as sent; show it through [DormitoryMealSubmissionMessages.rejected]. */
+    data class Rejected(val reason: String?) : DormitoryMealSubmissionResult
     data class Failure(val message: String) : DormitoryMealSubmissionResult
 }
 
@@ -36,7 +37,7 @@ class DormitoryMealSubmissionService(
     private fun DormitoryMealSubmissionStatus.toResult(): DormitoryMealSubmissionResult = when (state) {
         "PUBLISHED" -> DormitoryMealSubmissionResult.Published
         "DUPLICATE" -> DormitoryMealSubmissionResult.Duplicate
-        "REJECTED" -> DormitoryMealSubmissionResult.Rejected(message ?: "기숙사 식단표를 확인할 수 없어요.")
+        "REJECTED" -> DormitoryMealSubmissionResult.Rejected(message)
         "ERROR" -> DormitoryMealSubmissionResult.Failure(message ?: "식단 처리에 실패했어요.")
         else -> DormitoryMealSubmissionResult.Processing
     }

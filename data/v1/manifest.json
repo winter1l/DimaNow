@@ -1,5 +1,5 @@
 {
-    "generatedAt": "2026-10-12T02:08:02.380765160Z",
+    "generatedAt": "2026-10-12T06:28:32.119089931Z",
     "datasets": {
         "shuttle": {
             "revision": 2,
@@ -20,12 +20,12 @@
             "sourceUrl": "https://www.dima.ac.kr/?p=1"
         },
         "notice": {
-            "revision": 29,
+            "revision": 30,
             "state": "READY",
-            "publishedAt": "2026-10-08T06:37:21.687200291Z",
-            "lastAttemptAt": "2026-10-11T06:23:57.492179557Z",
-            "url": "notices/cf54201ecbfc0688fdab8238080808588d9b890f741c8fc6ae694c156e2fea48.json",
-            "sha256": "cf54201ecbfc0688fdab8238080808588d9b890f741c8fc6ae694c156e2fea48",
+            "publishedAt": "2026-10-12T06:28:32.119089931Z",
+            "lastAttemptAt": "2026-10-12T06:28:32.119089931Z",
+            "url": "notices/48910b3c2d831b72aa6d71f2d22b65e88b61866e5ec9c0ad273f585b7ce3eb14.json",
+            "sha256": "48910b3c2d831b72aa6d71f2d22b65e88b61866e5ec9c0ad273f585b7ce3eb14",
             "sourceUrl": "https://www.dima.ac.kr/?p=111"
         },
         "dorm_meal": {

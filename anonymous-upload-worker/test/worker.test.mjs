@@ -719,3 +719,59 @@ test('the dispatch is refused for any repository other than winter1l/DimaNow', a
   }
   assert.equal(github.calls.some((call) => call.url.endsWith('/dispatches')), false);
 });
+
+function reportRequest(body, address = '203.0.113.7', contentType = 'application/json') {
+  return new Request('https://upload.example/v1/dormitory-meal-reports', {
+    method: 'POST',
+    headers: { 'Content-Type': contentType, 'CF-Connecting-IP': address },
+    body: typeof body === 'string' ? body : JSON.stringify(body),
+  });
+}
+
+test('a dormitory report for the current week dispatches a payload-free event naming the reason', async () => {
+  const github = recordingGitHub();
+  const security = new FakeSecurityStore();
+  const worker = uploadWorker(security, { fetch: github.fetchImpl });
+
+  const response = await worker.fetch(reportRequest({ weekStart: '2026-08-31', reason: 'WRONG_MENU', extra: 'x' }), dispatchEnv());
+  assert.equal(response.status, 202);
+  assert.deepEqual(github.calls.map((call) => call.url), ['https://api.github.com/repos/winter1l/DimaNow/dispatches']);
+  assert.deepEqual(JSON.parse(github.calls[0].init.body), { event_type: 'dorm-report-wrong-menu' });
+  assert.equal(security.totalBudgetUsed(), 2);
+});
+
+test('a repeated report from the same address is accepted without a second dispatch', async () => {
+  const github = recordingGitHub();
+  const worker = uploadWorker(new FakeSecurityStore(), { fetch: github.fetchImpl });
+  const body = { weekStart: '2026-08-31', reason: 'OFFENSIVE' };
+  assert.equal((await worker.fetch(reportRequest(body), dispatchEnv())).status, 202);
+  assert.equal((await worker.fetch(reportRequest(body), dispatchEnv())).status, 202);
+  assert.equal(github.calls.filter((call) => call.url.endsWith('/dispatches')).length, 1);
+});
+
+test('dormitory reports reject other weeks, unknown reasons and malformed bodies before D1', async () => {
+  const worker = uploadWorker(null, {
+    securityStoreFactory: () => { throw new Error('invalid reports must not reach D1'); },
+  });
+  for (const [body, contentType] of [
+    [{ weekStart: '2026-08-24', reason: 'WRONG_MENU' }, 'application/json'],
+    [{ weekStart: '2026-09-14', reason: 'WRONG_MENU' }, 'application/json'],
+    [{ weekStart: '2026-09-01', reason: 'WRONG_MENU' }, 'application/json'],
+    [{ weekStart: '2026-08-31', reason: 'SPAM' }, 'application/json'],
+    ['not json', 'application/json'],
+    [{ weekStart: '2026-08-31', reason: 'WRONG_MENU' }, 'text/plain'],
+    ['x'.repeat(300), 'application/json'],
+  ]) {
+    const response = await worker.fetch(reportRequest(body, '203.0.113.7', contentType), dispatchEnv());
+    assert.ok([400, 413, 415].includes(response.status), JSON.stringify(body));
+  }
+});
+
+test('the weekend-published next week can be reported', async () => {
+  const github = recordingGitHub();
+  const worker = uploadWorker(new FakeSecurityStore(), { fetch: github.fetchImpl });
+  const response = await worker.fetch(reportRequest({ weekStart: '2026-09-07', reason: 'NOT_DORMITORY' }), dispatchEnv());
+  assert.equal(response.status, 202);
+  assert.equal(github.calls.length, 1);
+});
+

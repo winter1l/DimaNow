@@ -34,6 +34,9 @@ export function createWorker(dependencies = {}) {
   return {
     async fetch(request, env, context) {
       const url = new URL(request.url);
+      if (url.pathname === '/v1/dormitory-meal-reports') {
+        return handleDormitoryMealReport(request, env, { context, now, randomUUID, fetchImpl, githubTokenProvider, securityStoreFactory });
+      }
       if (url.pathname === '/v1/dormitory-meals') {
         return handleDormitoryMealUpload(request, env, {
           context,
@@ -237,11 +240,100 @@ async function handleDormitoryMealUpload(request, env, dependencies) {
   }
 }
 
+// The reason travels as the repository_dispatch event type, so the workflow never reads a client payload.
+const REPORT_EVENT_TYPES = new Map([
+  ['WRONG_MENU', 'dorm-report-wrong-menu'],
+  ['NOT_DORMITORY', 'dorm-report-not-dormitory'],
+  ['OFFENSIVE', 'dorm-report-offensive'],
+  ['OTHER', 'dorm-report-other'],
+]);
+const MAX_REPORT_BODY_BYTES = 256;
+
+/**
+ * Anonymous report of a published dormitory week (D-099 clause 10). One report per address per week (a lease that
+ * expires at the end of that week), a shared daily/weekly report budget, then a payload-free `dorm-report-*`
+ * repository_dispatch whose event type names the reason. The owner reviews the issue the workflow opens and
+ * can take the week down with the `dorm-revoke` workflow; nothing here changes published data.
+ */
+async function handleDormitoryMealReport(request, env, dependencies) {
+  if (request.method !== 'POST') return jsonResponse(405, 'POST 요청만 지원합니다.', { Allow: 'POST' });
+  const mimeType = request.headers.get('Content-Type')?.split(';', 1)[0]?.trim().toLowerCase();
+  if (mimeType !== 'application/json') return jsonResponse(415, 'JSON 요청만 지원합니다.');
+  let body;
+  try {
+    const text = await request.text();
+    if (text.length > MAX_REPORT_BODY_BYTES) return jsonResponse(413, '신고 내용이 너무 깁니다.');
+    body = JSON.parse(text);
+  } catch {
+    return jsonResponse(400, '신고 내용을 읽지 못했습니다.');
+  }
+  const weekStart = typeof body?.weekStart === 'string' ? body.weekStart : '';
+  const reason = typeof body?.reason === 'string' ? body.reason : '';
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(weekStart) || !REPORT_EVENT_TYPES.has(reason)) {
+    return jsonResponse(400, '신고 내용을 확인할 수 없습니다.');
+  }
+  const current = dependencies.now();
+  const windows = uploadBudgetWindows(current);
+  const reportedWeek = new Date(`${weekStart}T00:00:00+09:00`);
+  const ageDays = (new Date(`${windows.weekStart}T00:00:00+09:00`).getTime() - reportedWeek.getTime()) / 86400000;
+  // Only the current or the next (weekend-published) week can be reported.
+  if (Number.isNaN(ageDays) || reportedWeek.getUTCDay() !== 0 /* Monday 00:00 KST is Sunday 15:00 UTC */ || ageDays < -7 || ageDays > 0) {
+    return jsonResponse(400, '신고할 수 있는 주차가 아닙니다.');
+  }
+  const clientKey = rateLimitClientKey(request.headers.get('CF-Connecting-IP'));
+  if (!clientKey) return jsonResponse(400, '신고 요청을 확인할 수 없습니다.');
+  const rateLimitSalt = env.RATE_LIMIT_SALT?.trim();
+  if (!rateLimitSalt || rateLimitSalt.length < 32) return jsonResponse(503, '신고 서비스가 준비되지 않았습니다.');
+  let securityStore;
+  try {
+    securityStore = dependencies.securityStoreFactory(env);
+  } catch {
+    return jsonResponse(503, '신고 서비스가 준비되지 않았습니다.');
+  }
+  const nowSeconds = Math.floor(current.getTime() / 1000);
+  const addressHash = await sha256Hex(`${rateLimitSalt}:${clientKey}`);
+  const weekEnd = Math.floor(reportedWeek.getTime() / 1000) + 7 * 86400;
+  try {
+    const claimed = await securityStore.claimLease(
+      `dorm-report:${weekStart}:${addressHash}`,
+      dependencies.randomUUID(),
+      nowSeconds,
+      Math.max(weekEnd, nowSeconds + 60),
+    );
+    // A repeated report from the same address is accepted silently: the owner already has it.
+    if (!claimed) return jsonResponse(202, '신고를 받았습니다.');
+    const budgetAccepted = await securityStore.consumeUploadBudgets({
+      dayScope: `report-day:${windows.date}`,
+      dayLimit: positiveLimit(env.REPORT_DAILY_LIMIT, 30),
+      dayExpiresAt: windows.dayExpiresAt,
+      weekScope: `report-week:${windows.weekStart}`,
+      weekLimit: positiveLimit(env.REPORT_WEEKLY_LIMIT, 100),
+      weekExpiresAt: windows.weekExpiresAt,
+    });
+    if (!budgetAccepted) return jsonResponse(202, '신고를 받았습니다.');
+  } catch (error) {
+    console.error('Dormitory report admission failed', error instanceof Error ? error.message : error);
+    return jsonResponse(503, '신고 서비스가 준비되지 않았습니다.');
+  }
+  try {
+    const token = await dependencies.githubTokenProvider(env);
+    await dispatchRepositoryEvent(dependencies.fetchImpl, env, token, { event_type: REPORT_EVENT_TYPES.get(reason) });
+  } catch (error) {
+    console.error('Dormitory report dispatch failed', error instanceof Error ? error.message : error);
+    return jsonResponse(502, '신고를 전달하지 못했습니다. 잠시 후 다시 시도해 주세요.');
+  }
+  return jsonResponse(202, '신고를 받았습니다.');
+}
+
 /**
  * Asks main's publish workflow to sweep pending dormitory submissions. The body carries only the event type:
  * no submission id or other client-derived data reaches the workflow, which ignores client_payload anyway.
  */
 async function dispatchDormitorySubmission(fetchImpl, env, token) {
+  return dispatchRepositoryEvent(fetchImpl, env, token, { event_type: 'dorm-submission' });
+}
+
+async function dispatchRepositoryEvent(fetchImpl, env, token, event) {
   if (env?.GITHUB_OWNER !== 'winter1l' || env?.GITHUB_REPOSITORY !== 'DimaNow') {
     throw new Error('Unexpected dormitory dispatch repository');
   }
@@ -256,7 +348,7 @@ async function dispatchDormitorySubmission(fetchImpl, env, token) {
       'User-Agent': 'DIMA-Now-Meal-Upload',
       'X-GitHub-Api-Version': '2022-11-28',
     },
-    body: JSON.stringify({ event_type: 'dorm-submission' }),
+    body: JSON.stringify(event),
   });
   if (response.status !== 204) {
     await response.body?.cancel();

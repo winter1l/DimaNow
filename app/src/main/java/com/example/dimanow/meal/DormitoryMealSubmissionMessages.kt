@@ -29,6 +29,22 @@ internal object DormitoryMealSubmissionMessages {
     )
     private val RETAKE_HINTS = listOf("촬영", "찍어", "찍으", "다시")
 
+    const val UPLOAD_NETWORK = "식단 사진을 올리지 못했어요. 인터넷 연결을 확인하고 다시 시도해 주세요."
+
+    /** Maps the upload gateway's own reason (rate limit, daily budget, duplicate week, file checks) to plain words. */
+    fun uploadFailure(message: String?): String {
+        val text = message.orEmpty()
+        return when {
+            "처리 한도" in text -> "오늘은 올라온 사진이 많아 잠시 쉬고 있어요. 내일 다시 올려 주세요."
+            "잠시 후 다시 시도" in text && "올리지 못했" !in text -> "방금 올린 사진이 있어요. 10분 뒤에 다시 올려 주세요."
+            "이미 등록" in text -> "이번 주 기숙사 식단이 이미 올라와 있어요."
+            "15MB" in text -> "15MB 이하의 사진을 올려 주세요."
+            "해상도" in text || "너무 작" in text -> "식단표가 잘 보이는 원본 사진을 올려 주세요."
+            "형식" in text -> "JPG, PNG, WebP, HEIC 사진을 올려 주세요."
+            else -> UPLOAD_NETWORK
+        }
+    }
+
     fun rejected(reason: String?): String {
         val line = reason
             ?.lineSequence()

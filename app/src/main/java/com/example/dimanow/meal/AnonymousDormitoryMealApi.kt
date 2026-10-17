@@ -65,6 +65,25 @@ class AnonymousDormitoryMealApi(
         }
     }
 
+    override suspend fun report(weekStart: java.time.LocalDate, reason: DormitoryMealReportReason): Unit = withContext(Dispatchers.IO) {
+        require(uploadRoot.startsWith("https://") || uploadRoot.startsWith("http://127.0.0.1:")) { "신고 서비스가 준비되지 않았어요." }
+        val connection = URL("${uploadRoot.trimEnd('/')}/v1/dormitory-meal-reports").openConnection() as HttpURLConnection
+        try {
+            connection.requestMethod = "POST"
+            connection.connectTimeout = 15_000
+            connection.readTimeout = 20_000
+            connection.doOutput = true
+            connection.setRequestProperty("Accept", "application/json")
+            connection.setRequestProperty("Content-Type", "application/json")
+            val body = """{"weekStart":"$weekStart","reason":"${reason.name}"}""".toByteArray()
+            connection.setFixedLengthStreamingMode(body.size)
+            connection.outputStream.use { it.write(body) }
+            require(connection.responseCode == HttpURLConnection.HTTP_ACCEPTED) { "식단 신고 응답 ${connection.responseCode}" }
+        } finally {
+            connection.disconnect()
+        }
+    }
+
     override suspend fun submissionStatus(submissionId: String): DormitoryMealSubmissionStatus? = withContext(Dispatchers.IO) {
         require(submissionId.matches(Regex("[A-Za-z0-9_-]{1,64}"))) { "식단 제출 번호가 올바르지 않아요." }
         val connection = URL("$pagesRoot/dorm-submissions/$submissionId.json?t=${now().toEpochMilli()}").openConnection() as HttpURLConnection

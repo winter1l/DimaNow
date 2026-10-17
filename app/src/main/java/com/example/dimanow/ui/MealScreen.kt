@@ -51,6 +51,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.foundation.selection.selectable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.material3.LocalContentColor
@@ -110,6 +111,7 @@ fun MealScreen(
     var uploadPreflight by remember { mutableStateOf(false) }
     var showDormitoryPhotoSource by remember { mutableStateOf(false) }
     var pendingImage by remember { mutableStateOf<DormitoryMealImage?>(null) }
+    var reportWeek by remember { mutableStateOf<LocalDate?>(null) }
     var preparingDormitoryImage by remember { mutableStateOf(false) }
     var uploadingDormitoryMeal by remember { mutableStateOf(false) }
     var cameraOutput by remember { mutableStateOf<Uri?>(null) }
@@ -175,7 +177,7 @@ fun MealScreen(
                     }
                     refreshMessage = "식단 확인이 계속되고 있어요. 잠시 후 새로고침해 주세요."
                 }
-                is DormitoryMealSubmissionResult.Failure -> refreshMessage = "식단 사진을 올리지 못했어요. 인터넷 연결을 확인하고 다시 시도해 주세요."
+                is DormitoryMealSubmissionResult.Failure -> refreshMessage = DormitoryMealSubmissionMessages.uploadFailure(submitted.message)
                 else -> Unit
             }
         } finally {
@@ -326,6 +328,7 @@ fun MealScreen(
                         }
                     },
                     uploadEnabled = !refreshing && !uploadPreflight && !uploadingDormitoryMeal && !preparingDormitoryImage,
+                    onReport = { reportWeek = it },
                 )
             } else if (meal != null) {
                 if (!meal.hasCurrentStudentWeek(today) || meal.error != null) {
@@ -373,11 +376,34 @@ fun MealScreen(
             },
         )
     }
+    reportWeek?.let { week ->
+        DormitoryReportDialog(
+            onDismiss = { reportWeek = null },
+            onReport = { reason ->
+                reportWeek = null
+                scope.launch {
+                    refreshMessage = if (mealSource.reportDormitoryMeal(week, reason)) {
+                        "신고했어요. 운영자가 확인한 뒤 필요하면 식단을 내려요."
+                    } else {
+                        "신고를 보내지 못했어요. 인터넷 연결을 확인하고 다시 시도해 주세요."
+                    }
+                }
+            },
+        )
+    }
     pendingImage?.let { image ->
         AlertDialog(
             onDismissRequest = { pendingImage = null },
             title = { Text("기숙사 식단 올리기") },
-            text = { Text("사진은 식단 확인 후 공개 데이터로 공유돼요.") },
+            // D-099: 즉시·영구 공개, AI 처리, 촬영 정보 제거를 올리기 전에 분명히 알린다
+            text = {
+                Text(
+                    "사진은 올리는 즉시 공개 GitHub 저장소에 저장되고 지울 수 없어요. " +
+                        "Google Gemini가 사진을 읽어 메뉴를 만들고, 통과하면 모든 사용자에게 게시돼요. " +
+                        "위치·촬영 시각 같은 사진 정보는 지운 뒤 올려요. 사람이나 개인정보가 찍히지 않았는지 확인해 주세요.",
+                    modifier = Modifier.testTag("dorm_upload_consent"),
+                )
+            },
             confirmButton = {
                 Button(
                     enabled = !uploadingDormitoryMeal,
@@ -516,6 +542,7 @@ private fun androidx.compose.foundation.lazy.LazyListScope.dormitoryDayContent(
     statuses: List<MealServiceStatus>,
     onUpload: (() -> Unit)?,
     uploadEnabled: Boolean,
+    onReport: ((LocalDate) -> Unit)? = null,
 ) {
     val weekStart = date.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY))
     val week = meal.days.filter { it.date in weekStart..weekStart.plusDays(4) }
@@ -542,6 +569,10 @@ private fun androidx.compose.foundation.lazy.LazyListScope.dormitoryDayContent(
         ) {
             DormitoryMealPeriodContent(block, status)
         }
+    }
+    // D-099: 학생이 올린 식단은 누구나 신고할 수 있고, 운영자가 확인해 내린다
+    if (onReport != null) item(key = "dorm-report-$date") {
+        TextButton(onClick = { onReport(weekStart) }, modifier = Modifier.testTag("dorm_report")) { Text("식단이 이상해요") }
     }
 }
 
@@ -708,4 +739,35 @@ private fun DormitoryUploadProgressCard(modifier: Modifier = Modifier) {
             }
         }
     }
+}
+
+@Composable
+private fun DormitoryReportDialog(onDismiss: () -> Unit, onReport: (com.example.dimanow.meal.DormitoryMealReportReason) -> Unit) {
+    var selected by remember { mutableStateOf<com.example.dimanow.meal.DormitoryMealReportReason?>(null) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("이 식단을 신고할까요?") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text("익명으로 운영자에게 전달돼요.", style = MaterialTheme.typography.bodySmall)
+                com.example.dimanow.meal.DormitoryMealReportReason.entries.forEach { reason ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .selectable(selected = selected == reason, onClick = { selected = reason }, role = androidx.compose.ui.semantics.Role.RadioButton)
+                            .padding(vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        androidx.compose.material3.RadioButton(selected = selected == reason, onClick = null)
+                        Text(reason.label)
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Button(enabled = selected != null, onClick = { selected?.let(onReport) }, modifier = Modifier.testTag("dorm_report_send")) { Text("신고") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("취소") } },
+    )
 }

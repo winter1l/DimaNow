@@ -14,7 +14,11 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
 
-/** Prepares a selected photo for the existing dormitory submission gateway. */
+/**
+ * Prepares a selected photo for the dormitory submission gateway. Every accepted format is decoded and re-encoded
+ * as JPEG (D-099 clause 4), so EXIF/XMP metadata such as GPS position, capture time and device model never reaches
+ * the public `dorm-submissions` branch. Orientation is applied while decoding and resolution is kept.
+ */
 class DormitoryMealImageReader(private val context: Context) {
     suspend fun read(uri: Uri): DormitoryMealImage = withContext(Dispatchers.IO) {
         val bytes = context.contentResolver.openInputStream(uri)?.use { it.readWithLimit() }
@@ -22,22 +26,17 @@ class DormitoryMealImageReader(private val context: Context) {
         require(bytes.isNotEmpty()) { "사진이 비어 있어요. 다른 사진을 선택해 주세요." }
         ensureActive()
         // A provider's MIME/extension can be missing or incorrect. Inspect the actual file.
-        when {
-            bytes.startsWith(0xff, 0xd8, 0xff) -> DormitoryMealImage(bytes, "image/jpeg", "jpg")
-            bytes.startsWith(0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a) ->
-                DormitoryMealImage(bytes, "image/png", "png")
-            bytes.size >= 12 && bytes.ascii(0, 4) == "RIFF" && bytes.ascii(8, 4) == "WEBP" ->
-                DormitoryMealImage(bytes, "image/webp", "webp")
-            bytes.isHeif() -> {
-                val result = convertHeif(bytes)
-                ensureActive()
-                result
-            }
-            else -> error("JPG, PNG, WebP, HEIC 사진을 선택해 주세요.")
-        }
+        val supported = bytes.startsWith(0xff, 0xd8, 0xff) ||
+            bytes.startsWith(0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a) ||
+            (bytes.size >= 12 && bytes.ascii(0, 4) == "RIFF" && bytes.ascii(8, 4) == "WEBP") ||
+            bytes.isHeif()
+        require(supported) { "JPG, PNG, WebP, HEIC 사진을 선택해 주세요." }
+        val result = reencodeWithoutMetadata(bytes)
+        ensureActive()
+        result
     }
 
-    private fun convertHeif(bytes: ByteArray): DormitoryMealImage {
+    private fun reencodeWithoutMetadata(bytes: ByteArray): DormitoryMealImage {
         val bitmap = try {
             ImageDecoder.decodeBitmap(ImageDecoder.createSource(ByteBuffer.wrap(bytes))) { decoder, info, _ ->
                 val pixels = info.size.width.toLong() * info.size.height
@@ -53,7 +52,7 @@ class DormitoryMealImageReader(private val context: Context) {
         } catch (invalid: IllegalArgumentException) {
             throw invalid
         } catch (failure: Exception) {
-            throw IllegalArgumentException("HEIC 사진을 읽지 못했어요. 다른 사진을 선택해 주세요.", failure)
+            throw IllegalArgumentException("사진을 읽지 못했어요. 다른 사진을 선택해 주세요.", failure)
         }
         return try {
             val output = LimitedImageOutput()

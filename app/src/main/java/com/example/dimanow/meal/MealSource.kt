@@ -209,6 +209,8 @@ interface MealSource {
         DormitoryMealSubmissionResult.Failure("기숙사 식단 업로드 서비스가 준비되지 않았어요.")
     suspend fun dormitorySubmissionStatus(submissionId: String): DormitoryMealSubmissionResult =
         DormitoryMealSubmissionResult.Failure("식단 처리 상태를 확인하지 못했어요.")
+    /** Returns true when the report reached the gateway. */
+    suspend fun reportDormitoryMeal(weekStart: LocalDate, reason: DormitoryMealReportReason): Boolean = false
 }
 
 const val OFFICIAL_MEAL_SOURCE_URL = "https://www.dima.ac.kr/?p=1"
@@ -223,7 +225,8 @@ class StaticMealSource(
 ) : MealSource {
     private val dao = database.scheduleDao()
     private val refreshMutex = Mutex()
-    private val json = Json { ignoreUnknownKeys = false }
+    // Tolerates fields added by a later publisher (D-099); schemaVersion still gates incompatible payloads.
+    private val json = Json { ignoreUnknownKeys = true }
 
     override val data: Flow<MealData> = combine(
         dao.observeMealDays(),
@@ -461,6 +464,11 @@ class StaticMealSource(
                 ?: return@withContext recordDormitoryWaiting(attempt, "등록된 식단 없음")
             require(descriptor.sourceUrl == DORMITORY_MEAL_SOURCE_URL) { "허용되지 않은 기숙사 식단 원문 주소예요." }
             val previousSync = dao.syncState(DORMITORY_SOURCE_KEY)
+            if (descriptor.state == "REVOKED") {
+                // D-099: the owner took the week down after a report; drop the cached copy so it is not shown.
+                val weekStart = dormitoryMealWeekStart(MealRefreshClock.today(clock))
+                dao.deleteDormitoryMealWeek(weekStart.toEpochDay(), weekStart.plusDays(6).toEpochDay())
+            }
             if (descriptor.state != "READY") {
                 return@withContext recordDormitoryWaiting(attempt, descriptor.message ?: "등록된 식단 없음", descriptor.state)
             }
@@ -541,6 +549,9 @@ class StaticMealSource(
     override suspend fun submitDormitoryMeal(image: DormitoryMealImage): DormitoryMealSubmissionResult =
         dormitorySubmissionService?.submit(image)
             ?: DormitoryMealSubmissionResult.Failure("기숙사 식단 업로드 서비스가 준비되지 않았어요.")
+
+    override suspend fun reportDormitoryMeal(weekStart: LocalDate, reason: DormitoryMealReportReason): Boolean =
+        dormitorySubmissionService?.report(weekStart, reason) ?: false
 
     override suspend fun dormitorySubmissionStatus(submissionId: String): DormitoryMealSubmissionResult =
         dormitorySubmissionService?.status(submissionId)

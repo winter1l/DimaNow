@@ -73,23 +73,33 @@ class DormitoryMealImageReaderTest {
         }
     }
 
-    @Test fun existingFormatsKeepTheirOriginalBytesEvenWithMisleadingFileNames() = runBlocking {
+    @Test fun everyFormatIsReencodedAsJpegWithoutMetadataEvenWithMisleadingFileNames() = runBlocking {
+        // D-099: no upload keeps the original bytes, so EXIF such as GPS never reaches the public branch.
         val bitmap = Bitmap.createBitmap(80, 60, Bitmap.Config.ARGB_8888).apply { eraseColor(Color.WHITE) }
         try {
-            listOf(
-                Triple(Bitmap.CompressFormat.JPEG, "image/jpeg", "jpg"),
-                Triple(Bitmap.CompressFormat.PNG, "image/png", "png"),
-                Triple(Bitmap.CompressFormat.WEBP_LOSSLESS, "image/webp", "webp"),
-            ).forEach { (format, mime, extension) ->
-                val file = File(context.cacheDir, "actual-$extension.heic")
-                try {
-                    file.outputStream().use { bitmap.compress(format, 100, it) }
-                    val image = DormitoryMealImageReader(context).read(Uri.fromFile(file))
-                    assertEquals(mime, image.mimeType)
-                    assertEquals(extension, image.extension)
-                    assertArrayEquals(file.readBytes(), image.bytes)
-                } finally { file.delete() }
-            }
+            listOf("jpg" to Bitmap.CompressFormat.JPEG, "png" to Bitmap.CompressFormat.PNG, "webp" to Bitmap.CompressFormat.WEBP_LOSSLESS)
+                .forEach { (extension, format) ->
+                    val file = File(context.cacheDir, "actual-$extension.heic")
+                    try {
+                        file.outputStream().use { bitmap.compress(format, 100, it) }
+                        if (format == Bitmap.CompressFormat.JPEG) {
+                            val withExif = android.media.ExifInterface(file)
+                            withExif.setAttribute(android.media.ExifInterface.TAG_MODEL, "TestPhone")
+                            withExif.setAttribute(android.media.ExifInterface.TAG_GPS_LATITUDE, "37/1,3/1,0/1")
+                            withExif.setAttribute(android.media.ExifInterface.TAG_GPS_LATITUDE_REF, "N")
+                            withExif.saveAttributes()
+                        }
+                        val image = DormitoryMealImageReader(context).read(Uri.fromFile(file))
+                        assertEquals("image/jpeg", image.mimeType)
+                        assertEquals("jpg", image.extension)
+                        val out = File(context.cacheDir, "reencoded-$extension.jpg").apply { writeBytes(image.bytes) }
+                        try {
+                            val exif = android.media.ExifInterface(out)
+                            assertEquals(null, exif.getAttribute(android.media.ExifInterface.TAG_GPS_LATITUDE))
+                            assertEquals(null, exif.getAttribute(android.media.ExifInterface.TAG_MODEL))
+                        } finally { out.delete() }
+                    } finally { file.delete() }
+                }
         } finally { bitmap.recycle() }
     }
 
@@ -101,7 +111,7 @@ class DormitoryMealImageReaderTest {
                 DormitoryMealImageReader(context).read(Uri.fromFile(file))
                 fail("Corrupt HEIC must not produce an upload image")
             } catch (failure: IllegalArgumentException) {
-                assertTrue(failure.message.orEmpty().contains("HEIC 사진을 읽지 못했어요"))
+                assertTrue(failure.message.orEmpty().contains("사진을 읽지 못했어요"))
             }
         } finally { file.delete() }
     }

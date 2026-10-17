@@ -5,7 +5,7 @@ import androidx.test.uiautomator.By
 import androidx.test.uiautomator.UiDevice
 import androidx.test.uiautomator.Until
 
-internal const val TARGET_PACKAGE = "com.example.dimanow"
+internal const val TARGET_PACKAGE = "io.github.winter1l.dimanow"
 
 internal fun MacrobenchmarkScope.runDimaNowJourney() {
     pressHome()

@@ -9,11 +9,11 @@ android {
     namespace = "com.example.dimanow"
     compileSdk = 36
     defaultConfig {
-        applicationId = "com.example.dimanow"
+        applicationId = "io.github.winter1l.dimanow"
         minSdk = 31
         targetSdk = 36
-        versionCode = 7
-        versionName = "1.6"
+        versionCode = 8
+        versionName = "2.0"
     }
 
     buildTypes {

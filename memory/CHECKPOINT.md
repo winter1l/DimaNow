@@ -1,16 +1,16 @@
-# Checkpoint — launch readiness reviewed — 2026-10-17
+# Checkpoint — v2.0 public release — 2026-10-18
 
 ## The story so far
-Observed: v1.6 (versionCode 7) is the latest GitHub release (0 downloads), signed with the release key via v3 rotation; D-098 keeps that key. The user asked what an actual public launch needs. The read-only review in `launch-readiness-20261017.md` found blockers for both channels (personal seed timetable, term-end handling, holiday/vacation calendars, photo metadata on public uploads, forward compatibility of the first public build, unverified key backup, missing in-app disclosures). No code changed.
+Observed: v2.0 (`io.github.winter1l.dimanow`, versionCode 8) is the latest GitHub release, immutable, signed with the release key alone (asset sha256 b3973a90…, 5,940,492 bytes). It implements every D-099 recommendation except Google Play. CI (validate, instrumentation 2 shards, publish) passed on 154b705; Pages serves the calendar and app_release datasets, the download page and privacy.html; Worker 815eb7a7 serves the dormitory report endpoint.
 
 ## Decided
-- D-098 keep the D-096 release key.
+- D-098 keep the release key; D-099 public GitHub launch without Google Play.
 
 ## Waiting on the user
-Distribution channel (GitHub APK, Google Play or both) and applicationId change; dorm-menu report path (D-097); D-073 at multi-user scale; whether to contact the school. Owner action: offline backup of `.local/release-signing/` with a restore check. Phone v1.6 install still pending.
+Phone migration: install v2.0 alongside v1.x (new package), import `.local/migration/my-timetable-2026-2.json`, check, then remove v1.x. Owner actions: offline backup of `.local/release-signing/`; decide a privacy contact email; fill vacation shuttle suspensions and 2027 terms in `data-source/calendar.json` when DIMA publishes them.
 
 ## Next first action
-After the user's decisions, start the proposed order in `launch-readiness-20261017.md` (empty first run and term setup first) and record a decision superseding D-001's multi-user/store exclusions.
+If the user asks for the phone install, connect the phone and install `dist/DIMA-Now-v2.0-optimized.apk`, then import the timetable file.
 
 ## Open follow-ups
-OPEN-QUESTIONS: launch decisions (2026-10-17), Q-001..Q-005/Q-010 physical observations, late-night class wrap, Dependabot vs verification metadata, real dorm upload end to end on the new Worker.
+OPEN-QUESTIONS 2026-10-18 entries; Q-001..Q-005/Q-010 physical observations; real dorm upload and report end to end on Worker 815eb7a7.

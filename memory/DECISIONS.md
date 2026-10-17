@@ -523,3 +523,21 @@ Confirmed: after the security review found releases signed with the local debug 
 
 ## D-097 — Auto-published dorm menus get content limits only — 2026-10-11
 Confirmed: for the review finding that a forged dorm menu could be auto-published (D-089) and lock the week, the user chose content limits only (section/line counts, lengths, URL/phone/control-character rejection, capped rejection reasons) without adding a revoke/approval path. Residual risk: a well-formed forged menu can still occupy the current week until the next week.
+
+## D-098 — Keep the D-096 release key — 2026-10-17
+Confirmed: asked whether to revert to debug signing, the user chose to keep the dedicated release key with v3 rotation (D-096) while preparing an actual public launch. No re-signing or replacement of the v1.6 asset. Owner actions from D-096 stand: back up `.local/release-signing/` offline; the phone needs one v1.6 install outside the in-app updater (data kept). Closes the 2026-10-12 signing question.
+
+## D-099 — Public GitHub launch without Google Play — 2026-10-17
+Confirmed: after the launch-readiness review (`launch-readiness-20261017.md`), the user asked to carry out every recommendation except Google Play distribution. This supersedes D-001's exclusion of multi-user distribution (store release stays excluded) and the README out-of-scope list. Scope, following the review's recommendations:
+1. Channel: direct APK from GitHub Releases with the in-app updater; no Play build, AAB or Play Console work.
+2. applicationId changes from `com.example.dimanow` to `io.github.winter1l.dimanow` before the first public build (a new app; the old package cannot update in place). The first public build is v2.0.
+3. No personal seed timetable; first run sets up the term, and an ended term prompts for a new one.
+4. Every dormitory upload is re-encoded without metadata; consent text states immediate permanent publication and Gemini processing.
+5. In-app unofficial notice, privacy policy, open-source licences, contact channel and data-accuracy notice.
+6. LMS credential saving is opt-in with a consent text that names the HTTP SSO step (D-073 kept with disclosure); a duplicate-session takeover asks the user first instead of D-052's automatic single takeover.
+7. Service calendar (public holidays, campus-shuttle holiday exclusion, no-service periods, term dates) published as a new data set, with a bundled fallback.
+8. Update metadata published on GitHub Pages; failed checks back off; data parsing tolerates unknown fields.
+9. Backup/restore, timetable export/import, delete-all, LMS logout without saved credentials, per-course campus and a commuter home base.
+10. Repository rulesets, immutable releases, Dependabot clean-up and failure alerts; a report and take-down path for dorm menus (supersedes D-097's no-revoke clause).
+11. Updated README/PRIVACY/SECURITY, hosted privacy policy and download page.
+Publishing a release, pushing and phone installs still need the user's go-ahead.

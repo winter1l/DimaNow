@@ -34,6 +34,7 @@ Purpose: durable project context that survives session and context changes.
 | `shuttle-summary-20260921.md` | D-087 immediate-vehicle notification simplification and validation/device limits | Append dated evidence |
 | `device-update-20260921.md` | Wireless replacement install, PC Tailscale startup preference, active-use screen policy and cellular ADB limits | Append dated evidence |
 | `ui-review-20260930.md` | Read-only M3 Expressive UI/UX review of the D-093 baseline (findings implemented by D-094) | Append dated evidence |
+| `launch-readiness-20261017.md` | Read-only public-launch readiness review: blockers, decisions needed, external requirements and proposed order | Append dated evidence |
 | `checkpoints/` | Append-only archive of superseded checkpoints | Add a timestamped copy before replacing `CHECKPOINT.md` |
 
 ## Operating principles

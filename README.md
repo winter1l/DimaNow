@@ -154,7 +154,7 @@ LMS는 학교가 운영하는 외부 시스템입니다. 서버 화면·세션 �
 
 ## 앱 업데이트 경로
 
-업데이트 정보는 데이터 게시 workflow가 GitHub의 latest stable release를 읽어 GitHub Pages의 `app_release` 데이터셋으로 게시하고, 앱은 이것을 먼저 읽습니다(학교처럼 여러 학생이 같은 IP를 쓰면 비인증 GitHub API의 시간당 60회 제한에 걸리기 때문). Pages에 정보가 없거나 검증에 실패하면 GitHub Releases API를 대신 씁니다. draft와 prerelease는 받지 않으며, 태그는 `vMAJOR.MINOR` 또는 `vMAJOR.MINOR.PATCH`, asset 이름은 `DIMA-Now-v<버전>-optimized.apk` 하나와 일치해야 합니다. 다운로드는 GitHub HTTPS 호스트로만 제한하고 128 MiB를 넘는 파일, GitHub digest가 없는 asset, 해시·패키지·버전·서명이 다른 APK는 삭제하고 설치하지 않습니다.
+업데이트 정보는 데이터 게시 workflow가 GitHub의 latest stable release를 읽어 GitHub Pages의 `app_release` 데이터셋으로 게시하고(매일 공지 게시 때 자동, 릴리스 직후에는 `캠퍼스 데이터 게시`를 `release`로 수동 실행), 앱은 이것을 먼저 읽습니다(학교처럼 여러 학생이 같은 IP를 쓰면 비인증 GitHub API의 시간당 60회 제한에 걸리기 때문). Pages에 정보가 없거나 검증에 실패하면 GitHub Releases API를 대신 씁니다. draft와 prerelease는 받지 않으며, 태그는 `vMAJOR.MINOR` 또는 `vMAJOR.MINOR.PATCH`, asset 이름은 `DIMA-Now-v<버전>-optimized.apk` 하나와 일치해야 합니다. 다운로드는 GitHub HTTPS 호스트로만 제한하고 128 MiB를 넘는 파일, GitHub digest가 없는 asset, 해시·패키지·버전·서명이 다른 APK는 삭제하고 설치하지 않습니다.
 
 이 기능은 Google Play의 무인 업데이트가 아닙니다. 다운로드와 Android 설치 확인은 항상 사용자 동작이 필요하고, 시스템의 설치 차단이나 확인 화면을 우회하지 않습니다.
 

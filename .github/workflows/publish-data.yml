@@ -7,9 +7,6 @@ on:
     # dorm-report-*: an anonymous report of the published dormitory week; the reason is the event type itself, so
     # no client_payload is read here either.
     types: [student-meal-publication-watch, dorm-submission, dorm-report-wrong-menu, dorm-report-not-dormitory, dorm-report-offensive, dorm-report-other]
-  release:
-    # app_release: the in-app updater reads the latest stable release from Pages (D-099 clause 8).
-    types: [published, edited, deleted, released, unpublished]
   push:
     branches: [main, dorm-submissions]
     paths:
@@ -92,7 +89,6 @@ jobs:
         run: |
           if [[ "$EVENT_NAME" == "push" && "$REF_NAME" == "dorm-submissions" ]]; then value=dorm
           elif [[ "$EVENT_NAME" == "push" ]]; then value=shuttle
-          elif [[ "$EVENT_NAME" == "release" ]]; then value=release
           elif [[ "$EVENT_NAME" == "repository_dispatch" ]]; then
             case "$DISPATCH_TYPE" in
               dorm-submission) value=dorm ;;
@@ -113,7 +109,8 @@ jobs:
           # submission.
           dorm=false
           case "$value" in dorm|all) dorm=true ;; esac
-          # The latest release is re-read on release events, full runs and the daily notice run.
+          # app_release (D-099): the latest release is re-read on manual release/all runs and the daily notice run.
+          # A release event cannot be used: it runs on the tag ref, which the github-pages environment rejects.
           release=false
           case "$value" in release|all|notice) release=true ;; esac
           echo "release=$release" >> "$GITHUB_OUTPUT"

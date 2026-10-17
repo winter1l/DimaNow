@@ -4,11 +4,20 @@ on:
   repository_dispatch:
     # dorm-submission: sent by the upload Worker after it writes a photo to dorm-submissions. Only the event type
     # selects the dormitory sweep; client_payload is never read, and the schedule remains the fallback.
-    types: [student-meal-publication-watch, dorm-submission]
+    # dorm-report-*: an anonymous report of the published dormitory week; the reason is the event type itself, so
+    # no client_payload is read here either.
+    types: [student-meal-publication-watch, dorm-submission, dorm-report-wrong-menu, dorm-report-not-dormitory, dorm-report-offensive, dorm-report-other]
+  release:
+    # app_release: the in-app updater reads the latest stable release from Pages (D-099 clause 8).
+    types: [published, edited, deleted, released, unpublished]
   push:
     branches: [main, dorm-submissions]
     paths:
       - data-source/shuttle.csv
+      - data-source/calendar.json
+      - pages/**
+      - PRIVACY.md
+      - tools/render_privacy_page.py
       - data-pipeline/**
       - sync-contract/**
       - dorm-submissions/**
@@ -27,12 +36,14 @@ on:
         required: true
         default: all
         type: choice
-        options: [all, shuttle, meal, notice, dorm, deploy-only]
+        options: [all, shuttle, meal, notice, dorm, release, dorm-revoke, deploy-only]
 
 permissions:
   contents: write
   pages: write
   id-token: write
+  # Only the final status step uses it, to open or update one "데이터 게시 확인 필요" issue for the owner.
+  issues: write
 
 concurrency:
   group: dima-now-data-publish
@@ -81,15 +92,17 @@ jobs:
         run: |
           if [[ "$EVENT_NAME" == "push" && "$REF_NAME" == "dorm-submissions" ]]; then value=dorm
           elif [[ "$EVENT_NAME" == "push" ]]; then value=shuttle
+          elif [[ "$EVENT_NAME" == "release" ]]; then value=release
           elif [[ "$EVENT_NAME" == "repository_dispatch" ]]; then
             case "$DISPATCH_TYPE" in
               dorm-submission) value=dorm ;;
               student-meal-publication-watch) value=meal ;;
+              dorm-report-wrong-menu|dorm-report-not-dormitory|dorm-report-offensive|dorm-report-other) value=dorm-report ;;
               *) echo "지원하지 않는 repository_dispatch 유형입니다." >&2; exit 1 ;;
             esac
           elif [[ "$EVENT_NAME" == "workflow_dispatch" ]]; then
             case "$REQUESTED" in
-              all|shuttle|meal|notice|dorm|deploy-only) value="$REQUESTED" ;;
+              all|shuttle|meal|notice|dorm|release|dorm-revoke|deploy-only) value="$REQUESTED" ;;
               *) echo "지원하지 않는 수동 게시 대상입니다." >&2; exit 1 ;;
             esac
           elif [[ "$SCHEDULE_EXPRESSION" == "43 0 * * *" ]]; then value=notice
@@ -100,13 +113,36 @@ jobs:
           # submission.
           dorm=false
           case "$value" in dorm|all) dorm=true ;; esac
+          # The latest release is re-read on release events, full runs and the daily notice run.
+          release=false
+          case "$value" in release|all|notice) release=true ;; esac
+          echo "release=$release" >> "$GITHUB_OUTPUT"
           if [[ "$EVENT_NAME" == "schedule" ]]; then dorm=true; fi
           echo "value=$value" >> "$GITHUB_OUTPUT"
           echo "dorm=$dorm" >> "$GITHUB_OUTPUT"
       - name: 셔틀 게시
         if: steps.target.outputs.value == 'shuttle' || steps.target.outputs.value == 'all'
         working-directory: source
-        run: bash ./gradlew :data-pipeline:run --args="publish-shuttle $GITHUB_WORKSPACE/source/data-source/shuttle.csv $GITHUB_WORKSPACE/site"
+        run: |
+          bash ./gradlew :data-pipeline:run --args="publish-shuttle $GITHUB_WORKSPACE/source/data-source/shuttle.csv $GITHUB_WORKSPACE/site"
+          bash ./gradlew :data-pipeline:run --args="publish-calendar $GITHUB_WORKSPACE/source/data-source/calendar.json $GITHUB_WORKSPACE/site"
+      - name: 최신 릴리스 읽기
+        id: latest_release
+        if: steps.target.outputs.release == 'true'
+        shell: bash
+        # Public data, read without a token so no step that runs build or pipeline code ever holds one.
+        run: |
+          set -uo pipefail
+          if curl -fsSL --max-time 30 -H "Accept: application/vnd.github+json"               "https://api.github.com/repos/$GITHUB_REPOSITORY/releases/latest" -o "$RUNNER_TEMP/latest-release.json"; then
+            echo "found=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "최신 안정 릴리스가 없어 앱 릴리스 정보를 건너뜁니다."
+            echo "found=false" >> "$GITHUB_OUTPUT"
+          fi
+      - name: 앱 릴리스 정보 게시
+        if: steps.latest_release.outputs.found == 'true'
+        working-directory: source
+        run: bash ./gradlew :data-pipeline:run --args="publish-app-release $RUNNER_TEMP/latest-release.json $GITHUB_WORKSPACE/site"
       - name: 식단 게시
         if: steps.target.outputs.value == 'meal' || steps.target.outputs.value == 'all'
         working-directory: source
@@ -166,6 +202,19 @@ jobs:
         if: steps.target.outputs.value == 'notice' || steps.target.outputs.value == 'all'
         working-directory: source
         run: bash ./gradlew :data-pipeline:run --args="publish-notice ignored $GITHUB_WORKSPACE/site"
+      - name: 기숙사 식단 내리기
+        # Owner-only manual action after reviewing a report: the current dormitory week stops being published and
+        # apps drop it, so a new photo can be uploaded. The photo itself stays in dorm-submissions history.
+        if: steps.target.outputs.value == 'dorm-revoke'
+        working-directory: source
+        run: bash ./gradlew :data-pipeline:run --args="revoke-dorm-meal ignored $GITHUB_WORKSPACE/site"
+      - name: 안내 페이지 복사
+        shell: bash
+        # pages/ in main holds the download and install page; privacy.html is rendered from PRIVACY.md so the
+        # Markdown file stays the only copy of the policy.
+        run: |
+          cp -R source/pages/. site/
+          python3 source/tools/render_privacy_page.py source/PRIVACY.md site/privacy.html
       - name: 생성 데이터 커밋
         id: generated
         shell: bash
@@ -216,3 +265,59 @@ jobs:
         if: steps.generated.outputs.changed == 'true' || github.event_name == 'workflow_dispatch'
         id: deployment
         uses: actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e
+      - name: 신고와 게시 상태 알림
+        # The only other step with a token: it runs nothing but the gh CLI on fixed text to open, update or close
+        # owner issues. Event type and manifest states are the only inputs; no client payload is read.
+        if: always()
+        shell: bash
+        env:
+          ISSUE_TOKEN: ${{ github.token }}
+          JOB_STATUS: ${{ job.status }}
+          DISPATCH_TYPE: ${{ github.event.action }}
+          TARGET: ${{ steps.target.outputs.value }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -uo pipefail
+          export GH_TOKEN="$ISSUE_TOKEN"
+          repo="$GITHUB_REPOSITORY"
+          manifest="site/data/v1/manifest.json"
+          if [[ "$TARGET" == "dorm-report" ]]; then
+            case "$DISPATCH_TYPE" in
+              dorm-report-wrong-menu) label="메뉴가 사진이나 실제와 달라요" ;;
+              dorm-report-not-dormitory) label="기숙사 식단이 아니에요" ;;
+              dorm-report-offensive) label="부적절한 내용이 있어요" ;;
+              *) label="기타" ;;
+            esac
+            week="$(jq -r '.datasets.dorm_meal.publishedAt // "알 수 없음"' "$manifest" 2>/dev/null || echo "알 수 없음")"
+            title="기숙사 식단 신고"
+            existing="$(gh issue list --repo "$repo" --state open --search "in:title $title" --json number --jq '.[0].number // empty')"
+            if [[ -n "$existing" ]]; then
+              gh issue comment "$existing" --repo "$repo" --body "추가 신고: $label (게시 시각 $week)"
+            else
+              {
+                echo "익명 신고: $label"
+                echo "신고된 식단의 게시 시각: $week"
+                echo
+                echo "확인 후 내려야 하면 Actions의 '캠퍼스 데이터 게시'를 dorm-revoke로 실행해 주세요."
+              } > "$RUNNER_TEMP/report.md"
+              gh issue create --repo "$repo" --title "$title" --body-file "$RUNNER_TEMP/report.md"
+            fi
+          fi
+          title="데이터 게시 확인 필요"
+          problems_file="$RUNNER_TEMP/publish-problems.md"
+          : > "$problems_file"
+          if [[ "$JOB_STATUS" != "success" ]]; then echo "- 게시 작업이 실패했어요 ($JOB_STATUS)." >> "$problems_file"; fi
+          if [[ -f "$manifest" ]]; then
+            # WAITING is the normal "not posted yet" state; NEEDS_REVIEW and ERROR need the owner.
+            jq -r '.datasets | to_entries[] | select(.value.state == "NEEDS_REVIEW" or .value.state == "ERROR")
+              | "- \(.key): \(.value.state) — \(.value.message // "사유 없음")"' "$manifest" >> "$problems_file"
+          fi
+          existing="$(gh issue list --repo "$repo" --state open --search "in:title $title" --json number --jq '.[0].number // empty')"
+          if [[ -s "$problems_file" ]]; then
+            { echo; echo "최근 실행: $RUN_URL"; } >> "$problems_file"
+            if [[ -n "$existing" ]]; then gh issue edit "$existing" --repo "$repo" --body-file "$problems_file"
+            else gh issue create --repo "$repo" --title "$title" --body-file "$problems_file"
+            fi
+          elif [[ -n "$existing" && "$JOB_STATUS" == "success" ]]; then
+            gh issue close "$existing" --repo "$repo" --comment "다음 실행에서 정상으로 돌아왔어요: $RUN_URL"
+          fi

@@ -35,7 +35,7 @@ class PublishWorkflowScheduleTest {
         val workflow = Files.readString(projectRoot().resolve(".github/workflows/publish-data.yml")).replace("\r\n", "\n")
 
         assertTrue(workflow.contains("if [[ \"\$EVENT_NAME\" == \"schedule\" ]]; then dorm=true; fi"))
-        assertTrue(workflow.contains("options: [all, shuttle, meal, notice, dorm, deploy-only]"))
+        assertTrue(workflow.contains("options: [all, shuttle, meal, notice, dorm, release, dorm-revoke, deploy-only]"))
         assertTrue(workflow.contains("[[ \"\$path\" =~ ^dorm-submissions/[A-Za-z0-9_-]{1,64}\\.(jpg|jpeg|png|webp)\$ ]] || continue"))
         assertTrue(workflow.contains("[[ \"\$mode\" == 100644 && \"\$type\" == blob ]] || continue"))
         assertTrue(workflow.contains("head -n 10 \"\$candidates\" > \"\$index\""))
@@ -47,7 +47,7 @@ class PublishWorkflowScheduleTest {
     fun `the upload Worker dispatch selects only the dormitory sweep and never reads its payload`() {
         val workflow = Files.readString(projectRoot().resolve(".github/workflows/publish-data.yml")).replace("\r\n", "\n")
 
-        assertTrue(workflow.contains("types: [student-meal-publication-watch, dorm-submission]"))
+        assertTrue(workflow.contains("types: [student-meal-publication-watch, dorm-submission, dorm-report-wrong-menu, dorm-report-not-dormitory, dorm-report-offensive, dorm-report-other]"))
         assertTrue(workflow.contains("DISPATCH_TYPE: \${{ github.event.action }}"))
         assertTrue(workflow.contains("              dorm-submission) value=dorm ;;\n"))
         assertTrue(workflow.contains("              student-meal-publication-watch) value=meal ;;\n"))
@@ -62,7 +62,11 @@ class PublishWorkflowScheduleTest {
         val checkouts = Regex("""- uses: actions/checkout@[0-9a-f]{40}\n(?:\s{8}.*\n)+""").findAll(workflow).map { it.value }.toList()
         assertTrue(checkouts.isNotEmpty())
         checkouts.forEach { assertTrue(it, it.contains("persist-credentials: false")) }
-        assertEquals(1, Regex("""\$\{\{\s*github\.token\s*}}""").findAll(workflow).count())
+        // The data push and the owner-issue step are the only steps with a token, and neither runs build or pipeline code.
+        assertEquals(2, Regex("""\$\{\{\s*github\.token\s*}}""").findAll(workflow).count())
+        val steps = workflow.split("\n      - ").filter { Regex("""\$\{\{\s*github\.token\s*}}""").containsMatchIn(it) }
+        assertEquals(2, steps.size)
+        steps.forEach { step -> assertFalse(step, step.contains("gradlew")) }
         assertTrue(workflow.contains("GIT_CONFIG_KEY_0=http.https://github.com/.extraheader"))
         assertFalse(workflow.contains("secrets.GITHUB_TOKEN"))
     }

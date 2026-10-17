@@ -1,0 +1,22 @@
+name: 셔틀·식단 정보 오류
+description: 셔틀 시간, 공휴일 운행, 식단 내용이 실제와 다를 때
+title: "[데이터] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        기숙사 식단은 앱의 기숙사 식단 화면 아래 **식단이 이상해요**로 익명 신고할 수도 있어요. 개인정보는 적지 말아 주세요.
+  - type: dropdown
+    id: kind
+    attributes:
+      label: 어떤 정보인가요?
+      options: [교내 셔틀, 4402, 공휴일·방학 운행, 학생식당 식단, 기숙사 식단, 학사 일정, 기타]
+    validations:
+      required: true
+  - type: textarea
+    id: detail
+    attributes:
+      label: 무엇이 다른가요?
+      description: 날짜, 시간, 앱에 보인 내용과 실제 내용을 적어 주세요. 공식 안내 링크가 있으면 함께 적어 주세요.
+    validations:
+      required: true

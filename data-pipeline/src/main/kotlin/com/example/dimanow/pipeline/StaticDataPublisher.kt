@@ -8,6 +8,8 @@ import com.example.dimanow.sync.isValidStudentMealMenu
 import com.example.dimanow.sync.NoticePayload
 import com.example.dimanow.sync.DormitoryMealPayload
 import com.example.dimanow.sync.DormitoryMealSubmissionStatus
+import com.example.dimanow.sync.ServiceCalendarPayload
+import com.example.dimanow.sync.serviceCalendarProblem
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.StandardCopyOption
@@ -20,6 +22,16 @@ import java.time.ZoneId
 import java.time.temporal.TemporalAdjusters
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.booleanOrNull
+import kotlinx.serialization.json.buildJsonArray
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.longOrNull
+import kotlinx.serialization.json.put
 
 class StaticDataPublisher(private val outputRoot: Path) {
     private val json = Json { prettyPrint = true }
@@ -27,6 +39,56 @@ class StaticDataPublisher(private val outputRoot: Path) {
     fun publishShuttle(csv: String, revision: Long, publishedAt: Instant) {
         val payloadBytes = json.encodeToString(ShuttlePayload(departures = ShuttleScheduleCsv.parse(csv))).toByteArray()
         publish("shuttle", "shuttle", payloadBytes, revision, publishedAt, "https://www.dima.ac.kr/?p=97")
+    }
+
+    /** Validates the admin-maintained `data-source/calendar.json` and publishes it as the `calendar` dataset. */
+    fun publishCalendar(source: String, revision: Long, publishedAt: Instant) {
+        val payload = Json.decodeFromString<ServiceCalendarPayload>(source)
+        serviceCalendarProblem(payload)?.let { throw IllegalArgumentException(it) }
+        publish("calendar", "calendar", json.encodeToString(payload).toByteArray(), revision, publishedAt, CALENDAR_SOURCE_URL)
+    }
+
+    /**
+     * Publishes the latest stable GitHub release as the `app_release` dataset (D-099 clause 8), so installed apps
+     * check for updates through GitHub Pages instead of the rate-limited unauthenticated GitHub API.
+     * The payload keeps the GitHub release shape (only the fields the app's parser reads) and is validated with the
+     * same naming rules the app applies.
+     */
+    fun publishAppRelease(releaseJson: String, revision: Long, publishedAt: Instant) {
+        val root = Json.parseToJsonElement(releaseJson).jsonObject
+        fun text(obj: JsonObject, key: String) = obj[key]?.jsonPrimitive?.contentOrNull ?: error("릴리스 응답에 $key 값이 없습니다.")
+        val tag = text(root, "tag_name")
+        require(tag.matches(Regex("""v[0-9]+\.[0-9]+(?:\.[0-9]+)?"""))) { "지원하지 않는 릴리스 태그입니다: $tag" }
+        require(root["draft"]?.jsonPrimitive?.booleanOrNull == false && root["prerelease"]?.jsonPrimitive?.booleanOrNull == false) {
+            "안정 릴리스가 아닙니다."
+        }
+        val htmlUrl = text(root, "html_url")
+        require(htmlUrl.startsWith("https://github.com/$DORMITORY_REPOSITORY/releases/")) { "허용되지 않은 릴리스 주소입니다." }
+        val assetName = "DIMA-Now-$tag-optimized.apk"
+        val asset = root["assets"]?.jsonArray.orEmpty().map { it.jsonObject }.singleOrNull { text(it, "name") == assetName }
+            ?: error("$assetName asset이 하나 있어야 합니다.")
+        val digest = text(asset, "digest")
+        require(digest.matches(Regex("sha256:[0-9a-fA-F]{64}"))) { "asset SHA-256이 없습니다." }
+        val downloadUrl = text(asset, "browser_download_url")
+        require(downloadUrl.startsWith("https://github.com/$DORMITORY_REPOSITORY/releases/download/$tag/")) { "허용되지 않은 다운로드 주소입니다." }
+        val size = asset["size"]?.jsonPrimitive?.longOrNull ?: error("asset 크기가 없습니다.")
+        require(size in 1..128L * 1024 * 1024) { "asset 크기가 올바르지 않습니다." }
+        val trimmed = buildJsonObject {
+            put("tag_name", tag)
+            put("draft", false)
+            put("prerelease", false)
+            put("html_url", htmlUrl)
+            root["published_at"]?.jsonPrimitive?.contentOrNull?.let { put("published_at", it) }
+            put("assets", buildJsonArray {
+                add(buildJsonObject {
+                    put("name", assetName)
+                    put("size", size)
+                    put("browser_download_url", downloadUrl)
+                    put("digest", digest.lowercase())
+                })
+            })
+        }
+        publish("app_release", "app-release", json.encodeToString(JsonObject.serializer(), trimmed).toByteArray(), revision, publishedAt, RELEASES_SOURCE_URL)
     }
 
     fun publishMeal(payload: MealPayload, revision: Long, publishedAt: Instant) {
@@ -133,12 +195,21 @@ class StaticDataPublisher(private val outputRoot: Path) {
         return LocalDate.parse(payload.weekStart) == dormitoryMealTargetWeekStart(today)
     }
 
+    /**
+     * Owner take-down after a report (D-099 clause 10): marks the dormitory dataset REVOKED so apps drop the cached
+     * week and uploads reopen. The payload file stays in the data branch history.
+     */
+    fun revokeDormitoryMeal(at: Instant) {
+        require(readManifest()?.datasets?.get("dorm_meal")?.state == "READY") { "내릴 기숙사 식단이 없습니다." }
+        recordFailure("dorm_meal", "REVOKED", REVOKED_MESSAGE, at)
+    }
+
     fun publishNotices(payload: NoticePayload, revision: Long, publishedAt: Instant) {
         publish("notice", "notices", json.encodeToString(payload).toByteArray(), revision, publishedAt, "https://www.dima.ac.kr/?p=111")
     }
 
     fun recordFailure(dataset: String, state: String, message: String, attemptedAt: Instant) {
-        require(state in setOf("WAITING", "NEEDS_REVIEW", "ERROR")) { "잘못된 데이터 상태입니다." }
+        require(state in setOf("WAITING", "NEEDS_REVIEW", "ERROR", "REVOKED")) { "잘못된 데이터 상태입니다." }
         val current = readManifest()
         val previous = current?.datasets?.get(dataset)
         val sourceUrl = previous?.sourceUrl ?: when (dataset) {
@@ -146,6 +217,8 @@ class StaticDataPublisher(private val outputRoot: Path) {
             "meal" -> "https://www.dima.ac.kr/?p=1"
             "notice" -> "https://www.dima.ac.kr/?p=111"
             "dorm_meal" -> DORMITORY_SOURCE_URL
+            "calendar" -> CALENDAR_SOURCE_URL
+            "app_release" -> RELEASES_SOURCE_URL
             else -> error("알 수 없는 데이터셋입니다.")
         }
         val descriptor = (previous ?: DatasetDescriptor(0, state, attemptedAt.toString(), attemptedAt.toString(), "", "", sourceUrl))
@@ -200,10 +273,6 @@ class StaticDataPublisher(private val outputRoot: Path) {
         Files.writeString(temporary, json.encodeToString(manifest))
         runCatching { Files.move(temporary, target, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE) }
             .getOrElse { Files.move(temporary, target, StandardCopyOption.REPLACE_EXISTING) }
-        Files.writeString(
-            outputRoot.resolve("index.html"),
-            """<!doctype html><meta charset="utf-8"><title>DIMA Now 데이터</title><h1>DIMA Now 데이터</h1><p>동아방송예술대학교의 공식 앱이 아닙니다.</p><p><a href="data/v1/manifest.json">manifest.json</a></p>""",
-        )
     }
 
     private fun writeAtomically(target: Path, bytes: ByteArray) {
@@ -233,6 +302,9 @@ class StaticDataPublisher(private val outputRoot: Path) {
     internal companion object {
         /** The only repository whose immutable `dorm-submissions` commits may be cited as a dormitory source image. */
         const val DORMITORY_REPOSITORY = "winter1l/DimaNow"
+        const val REVOKED_MESSAGE = "신고를 확인해 이번 주 식단을 내렸어요. 새 사진을 올려 주세요"
+        const val RELEASES_SOURCE_URL = "https://github.com/winter1l/DimaNow/releases"
+        const val CALENDAR_SOURCE_URL = "https://www.dima.ac.kr/?p=78"
         const val DORMITORY_SOURCE_URL = "https://github.com/winter1l/DimaNow/tree/dorm-submissions/dorm-submissions"
         val SUBMISSION_ID_PATTERN = Regex("[A-Za-z0-9_-]{1,64}")
         val KST: ZoneId = ZoneId.of("Asia/Seoul")

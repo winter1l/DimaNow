@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 보안 문제 비공개 제보
+    url: https://github.com/winter1l/DimaNow/security/advisories/new
+    about: 취약점은 공개 이슈 대신 여기로 알려 주세요.
+  - name: 개인정보 처리방침
+    url: https://winter1l.github.io/DimaNow/privacy.html
+    about: 앱이 다루는 정보와 삭제 요청 방법

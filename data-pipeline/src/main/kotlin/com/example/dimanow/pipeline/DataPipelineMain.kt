@@ -16,7 +16,7 @@ fun main(args: Array<String>) {
         else -> 3
     }
     require(args.size == expectedSize) {
-        "publish-shuttle <input.csv> <site> | publish-meal ignored <site> | publish-notice ignored <site> | " +
+        "publish-shuttle <input.csv> <site> | publish-calendar <calendar.json> <site> | publish-app-release <release.json> <site> | publish-meal ignored <site> | publish-notice ignored <site> | " +
             "publish-dorm-meal <image> <site> <submission-id> <source-image-url> <mime-type> | " +
             "publish-dorm-pending <submission-checkout> <site> <index-file>"
     }
@@ -29,8 +29,11 @@ fun main(args: Array<String>) {
     }
     when (command) {
         "publish-shuttle" -> publisher.publishShuttle(Files.readString(Path.of(args[1])), publisher.nextRevision("shuttle"), now)
+        "publish-app-release" -> publisher.publishAppRelease(Files.readString(Path.of(args[1])), publisher.nextRevision("app_release"), now)
+        "revoke-dorm-meal" -> publisher.revokeDormitoryMeal(now)
+        "publish-calendar" -> publisher.publishCalendar(Files.readString(Path.of(args[1])), publisher.nextRevision("calendar"), now)
         "publish-notice" -> runCatching {
-            val html = Jsoup.connect("https://www.dima.ac.kr/?p=111").userAgent("DIMA-Now/1.4 GitHub data pipeline").get().outerHtml()
+            val html = Jsoup.connect("https://www.dima.ac.kr/?p=111").userAgent("DIMA-Now GitHub data pipeline").get().outerHtml()
             publisher.publishNotices(NoticePayloadBuilder().build(html), publisher.nextRevision("notice"), now)
         }.getOrElse { error ->
             publisher.recordFailure("notice", "ERROR", error.message ?: error.javaClass.simpleName, now)

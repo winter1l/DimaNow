@@ -1,1 +1,93 @@
-<!doctype html><meta charset="utf-8"><title>DIMA Now 데이터</title><h1>DIMA Now 데이터</h1><p>동아방송예술대학교의 공식 앱이 아닙니다.</p><p><a href="data/v1/manifest.json">manifest.json</a></p>
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DIMA Now 내려받기</title>
+<meta name="description" content="동아방송예술대학교 학생이 만든 비공식 앱: 시간표, 셔틀, 4402, 식단, 공지를 한곳에서.">
+<style>
+:root { color-scheme: light dark; --bg: #fbf8f9; --card: #ffffff; --fg: #211a1d; --muted: #5c5357; --line: #e4dadf;
+  --accent: #b31169; --on-accent: #ffffff; --warn-bg: #fff1c2; --warn-fg: #3d2e00; }
+@media (prefers-color-scheme: dark) { :root { --bg: #191114; --card: #231a1e; --fg: #efdfe5; --muted: #c9b9c0; --line: #3d3036;
+  --accent: #ffb1c8; --on-accent: #5e1134; --warn-bg: #4a3b00; --warn-fg: #fff1c2; } }
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--fg); font: 16px/1.6 system-ui, "Apple SD Gothic Neo", "Noto Sans KR", sans-serif; }
+main { max-width: 720px; margin: 0 auto; padding: 32px 16px 64px; }
+h1 { font-size: 2rem; margin: 0 0 4px; } h2 { font-size: 1.15rem; margin: 0 0 8px; }
+.lead { color: var(--muted); margin: 0 0 20px; }
+.card { background: var(--card); border: 1px solid var(--line); border-radius: 20px; padding: 20px; margin: 16px 0; }
+.button { display: inline-block; background: var(--accent); color: var(--on-accent); text-decoration: none; font-weight: 600;
+  padding: 14px 22px; border-radius: 999px; min-height: 48px; }
+.notice { background: var(--warn-bg); color: var(--warn-fg); border-radius: 12px; padding: 12px 14px; font-size: .95rem; }
+.meta { color: var(--muted); font-size: .85rem; overflow-wrap: anywhere; }
+ol, ul { padding-left: 1.3rem; } li { margin: 4px 0; }
+a { color: var(--accent); }
+footer { color: var(--muted); font-size: .85rem; margin-top: 32px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>DIMA Now</h1>
+  <p class="lead">수업 시간표, 교내 셔틀·4402, 본관 학생식당·기숙사 식단, 학교 공지를 한곳에서 보는 Android 앱이에요.</p>
+  <p class="notice">학생이 만든 <strong>비공식 앱</strong>이에요. 동아방송예술대학교가 만들거나 운영하지 않아요. 셔틀·식단 정보는 틀릴 수 있으니 중요한 일정은 학교 공지로 확인해 주세요.</p>
+
+  <section class="card" aria-labelledby="download">
+    <h2 id="download">내려받기</h2>
+    <p id="release-line">최신 버전을 확인하고 있어요…</p>
+    <p><a class="button" id="download-button" href="https://github.com/winter1l/DimaNow/releases/latest">APK 내려받기</a></p>
+    <p class="meta" id="release-meta">Android 12 이상 · 갤럭시 기준으로 만들었어요.</p>
+  </section>
+
+  <section class="card" aria-labelledby="install">
+    <h2 id="install">갤럭시에서 설치하기</h2>
+    <ol>
+      <li>위 버튼으로 APK 파일을 받아요.</li>
+      <li><strong>자동 차단 잠시 끄기</strong>: 설정 → 보안 및 개인정보 보호 → 자동 차단(Auto Blocker)을 꺼요. 켜져 있으면 Play 스토어·Galaxy Store 밖의 앱을 설치하거나 업데이트할 수 없어요.</li>
+      <li>받은 파일을 열고, 처음이면 브라우저(또는 내 파일)에 <strong>출처를 알 수 없는 앱 설치</strong>를 허용해요.</li>
+      <li>설치가 끝나면 <strong>자동 차단을 다시 켜요</strong>.</li>
+    </ol>
+    <p class="meta">새 버전은 앱이 알려 줘요(설정 → 앱 업데이트). 업데이트할 때도 잠시 자동 차단을 꺼야 할 수 있어요. 앱은 내려받은 파일의 SHA-256과 서명이 맞을 때만 설치 화면을 열어요.</p>
+  </section>
+
+  <section class="card" aria-labelledby="features">
+    <h2 id="features">할 수 있는 것</h2>
+    <ul>
+      <li>다음 수업 시작 알림과 잠금화면 실시간 알림</li>
+      <li>있는 곳에서 바로 탈 셔틀·4402의 남은 시간 (공휴일 미운행 안내 포함)</li>
+      <li>본관 학생식당과 기숙사 식단 (기숙사는 학생이 올린 사진으로 만들어요)</li>
+      <li>학교 공지, 선택하면 LMS 과제·공지 모아 보기</li>
+      <li>홈 화면 위젯</li>
+    </ul>
+  </section>
+
+  <section class="card" aria-labelledby="privacy">
+    <h2 id="privacy">개인정보</h2>
+    <p>시간표와 위치는 휴대폰 안에서만 써요. 광고·분석 도구가 없어요. 자세한 내용은 <a href="privacy.html">개인정보 처리방침</a>을 확인해 주세요.</p>
+  </section>
+
+  <footer>
+    <p><a href="https://github.com/winter1l/DimaNow">소스 코드 (Apache License 2.0)</a> · <a href="https://github.com/winter1l/DimaNow/issues">문의·오류 제보</a> · <a href="data/v1/manifest.json">공개 데이터</a></p>
+  </footer>
+</main>
+<script>
+(async () => {
+  const line = document.getElementById('release-line');
+  const meta = document.getElementById('release-meta');
+  const button = document.getElementById('download-button');
+  try {
+    const manifest = await (await fetch('data/v1/manifest.json', { cache: 'no-store' })).json();
+    const entry = manifest.datasets && manifest.datasets.app_release;
+    if (!entry || entry.state !== 'READY' || !/^app-release\/[0-9a-f]{64}\.json$/.test(entry.url)) throw new Error('no release');
+    const release = await (await fetch('data/v1/' + entry.url)).json();
+    const asset = release.assets[0];
+    if (!/^https:\/\/github\.com\/winter1l\/DimaNow\/releases\/download\//.test(asset.browser_download_url)) throw new Error('bad url');
+    line.textContent = '최신 버전 ' + release.tag_name.replace(/^v/, '') + (release.published_at ? ' · ' + release.published_at.slice(0, 10) : '');
+    button.href = asset.browser_download_url;
+    meta.textContent = 'Android 12 이상 · ' + (asset.size / 1048576).toFixed(1) + 'MB · SHA-256 ' + asset.digest.replace(/^sha256:/, '');
+  } catch (e) {
+    line.textContent = 'GitHub 릴리스 페이지에서 최신 버전을 받아 주세요.';
+  }
+})();
+</script>
+</body>
+</html>

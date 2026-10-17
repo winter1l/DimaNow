@@ -1,11 +1,11 @@
 {
-    "generatedAt": "2026-10-17T04:57:14.954519418Z",
+    "generatedAt": "2026-10-17T15:21:34.054586288Z",
     "datasets": {
         "shuttle": {
             "revision": 2,
             "state": "READY",
             "publishedAt": "2026-09-08T04:05:22.381366544Z",
-            "lastAttemptAt": "2026-10-11T16:09:25.800889104Z",
+            "lastAttemptAt": "2026-10-17T15:21:31.624774415Z",
             "url": "shuttle/eaf4754e62fb743b4f65af9e907a3c2ceba484d3e3dd2121afbe49b84e92c487.json",
             "sha256": "eaf4754e62fb743b4f65af9e907a3c2ceba484d3e3dd2121afbe49b84e92c487",
             "sourceUrl": "https://www.dima.ac.kr/?p=97"
@@ -36,6 +36,15 @@
             "url": "dorm-meal/2d2d2eddfba5c6038b7a2a1e28b7e9491bf52c22870b9bd96640e6f5a759aa7a.json",
             "sha256": "2d2d2eddfba5c6038b7a2a1e28b7e9491bf52c22870b9bd96640e6f5a759aa7a",
             "sourceUrl": "https://github.com/winter1l/DimaNow/tree/dorm-submissions/dorm-submissions"
+        },
+        "calendar": {
+            "revision": 1,
+            "state": "READY",
+            "publishedAt": "2026-10-17T15:21:34.054586288Z",
+            "lastAttemptAt": "2026-10-17T15:21:34.054586288Z",
+            "url": "calendar/3c4d6c4e83acebaa2b0b6f0991836f152c59fc69f0842a917f45e757c8203061.json",
+            "sha256": "3c4d6c4e83acebaa2b0b6f0991836f152c59fc69f0842a917f45e757c8203061",
+            "sourceUrl": "https://www.dima.ac.kr/?p=78"
         }
     }
 }

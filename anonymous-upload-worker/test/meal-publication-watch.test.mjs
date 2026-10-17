@@ -31,7 +31,7 @@ function fixture(options = {}) {
         ?? Response.json(manifest);
       if (url === `${ROOT}/${descriptor.url}`) return options.mealResponse?.()
         ?? new Response(body);
-      if (url === 'https://api.github.com/repos/winter1l/DimaNow/dispatches') {
+      if (url === 'https://api.github.com/repos/winter1l/DimaNow/actions/workflows/publish-data.yml/dispatches') {
         return new Response(null, { status: options.dispatchStatus ?? 204 });
       }
       throw new Error(`Unexpected URL ${url}`);
@@ -46,9 +46,7 @@ test('10:00 collection failure and missing week dispatches authenticated collect
   const dispatch = f.calls.at(-1);
   assert.equal(dispatch.init.method, 'POST');
   assert.equal(dispatch.init.headers.Authorization, 'Bearer test-installation-token');
-  assert.deepEqual(JSON.parse(dispatch.init.body), {
-    event_type: 'student-meal-publication-watch', client_payload: { week_start: '2026-09-14' },
-  });
+  assert.deepEqual(JSON.parse(dispatch.init.body), { ref: 'main', inputs: { dataset: 'meal-watch' } });
   assert.equal(f.tokenCount(), 1);
 });
 

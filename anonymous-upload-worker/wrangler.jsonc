@@ -17,10 +17,13 @@
     "GITHUB_INSTALLATION_ID": "157828401",
     "GITHUB_OWNER": "winter1l",
     "GITHUB_REPOSITORY": "DimaNow",
-    "GITHUB_SUBMISSION_BRANCH": "dorm-submissions",
     "UPLOAD_DAILY_LIMIT": "20",
     "UPLOAD_WEEKLY_LIMIT": "40"
   },
+  // D-100: dormitory photos are stored privately here and deleted after 30 days.
+  "r2_buckets": [
+    { "binding": "DORM_PHOTOS", "bucket_name": "dima-now-dorm-photos" }
+  ],
   "d1_databases": [
     {
       "binding": "SHUTTLE_REPORTS",

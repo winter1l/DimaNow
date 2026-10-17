@@ -1,4 +1,5 @@
 import { createStudentMealPublicationWatch, STUDENT_MEAL_WATCH_CRONS } from './meal-publication-watch.mjs';
+import { dispatchPublishWorkflow } from './github-dispatch.mjs';
 
 const MAX_IMAGE_BYTES = 15 * 1024 * 1024;
 const RATE_LIMIT_SECONDS = 10 * 60;
@@ -9,8 +10,10 @@ const MAX_IMAGE_SIDE = 12000;
 const IMAGE_TOO_SMALL_MESSAGE = '식단 사진이 너무 작습니다. 원본 사진을 올려 주세요.';
 // Bounded opportunistic cleanup so expired salted address hashes do not wait for the daily prune.
 const EXPIRED_LEASE_DELETE_LIMIT = 100;
-// Fixed target: only main's publish workflow may be woken, never a repository taken from env or the request.
-const DORM_SUBMISSION_DISPATCH_URL = 'https://api.github.com/repos/winter1l/DimaNow/dispatches';
+// D-100: photos live in the private R2 bucket under this prefix and are deleted after this many days.
+const PHOTO_PREFIX = 'submissions/';
+const PHOTO_RETENTION_DAYS = 30;
+const PHOTO_KEY_PATTERN = /^submissions\/([A-Za-z0-9_-]{1,64})\.(jpg|png|webp)$/;
 const IMAGE_EXTENSIONS = new Map([
   ['image/jpeg', 'jpg'],
   ['image/png', 'png'],
@@ -34,6 +37,9 @@ export function createWorker(dependencies = {}) {
   return {
     async fetch(request, env, context) {
       const url = new URL(request.url);
+      if (url.pathname === '/v1/internal/dormitory-photos' || url.pathname.startsWith('/v1/internal/dormitory-photos/')) {
+        return handleInternalPhotoRead(request, env, url);
+      }
       if (url.pathname === '/v1/dormitory-meal-reports') {
         return handleDormitoryMealReport(request, env, { context, now, randomUUID, fetchImpl, githubTokenProvider, securityStoreFactory });
       }
@@ -69,6 +75,7 @@ export function createWorker(dependencies = {}) {
       context.waitUntil((async () => {
         const securityStore = securityStoreFactory(env);
         await securityStore.prune?.(Math.floor(now().getTime() / 1000));
+        await prunePhotos(env.DORM_PHOTOS, now());
       })().catch((error) => {
         console.error('Scheduled gateway maintenance failed', error instanceof Error ? error.message : error);
       }));
@@ -95,6 +102,7 @@ async function handleDormitoryMealUpload(request, env, dependencies) {
   }
   const clientKey = rateLimitClientKey(request.headers.get('CF-Connecting-IP'));
   if (!clientKey) return jsonResponse(400, '업로드 요청을 확인할 수 없습니다.');
+  if (!env.DORM_PHOTOS) return jsonResponse(503, '업로드 서비스가 준비되지 않았습니다.');
   const rateLimitSalt = env.RATE_LIMIT_SALT?.trim();
   if (!rateLimitSalt || rateLimitSalt.length < 32) {
     return jsonResponse(503, '업로드 서비스가 준비되지 않았습니다.');
@@ -194,32 +202,16 @@ async function handleDormitoryMealUpload(request, env, dependencies) {
   const submissionId = dependencies.randomUUID();
   const uploadedAt = current.toISOString();
   try {
-    const token = await dependencies.githubTokenProvider(env);
-    const owner = env.GITHUB_OWNER ?? 'winter1l';
-    const repository = env.GITHUB_REPOSITORY ?? 'DimaNow';
-    const branch = env.GITHUB_SUBMISSION_BRANCH ?? 'dorm-submissions';
-    const path = `dorm-submissions/${submissionId}.${expectedExtension}`;
-    const response = await dependencies.fetchImpl(
-      `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repository)}/contents/${path}`,
-      {
-        method: 'PUT',
-        headers: {
-          Accept: 'application/vnd.github+json',
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
-          'User-Agent': 'DIMA-Now-Meal-Upload',
-          'X-GitHub-Api-Version': '2022-11-28',
-        },
-        body: JSON.stringify({
-          message: `dormitory meal submission ${submissionId}`,
-          content: bytesToBase64(image),
-          branch,
-        }),
-      },
-    );
-    if (!response.ok) throw new Error(`GitHub content upload failed: ${response.status}`);
+    // D-100: the photo goes to the private R2 bucket; nothing is written to GitHub.
+    await env.DORM_PHOTOS.put(`${PHOTO_PREFIX}${submissionId}.${expectedExtension}`, image, {
+      httpMetadata: { contentType: mimeType },
+      customMetadata: { uploadedAt },
+    });
     // Best effort: the photo is already stored, and main's scheduled sweep picks it up if this wake-up is lost.
-    const dispatch = dispatchDormitorySubmission(dependencies.fetchImpl, env, token).catch((error) => {
+    const dispatch = (async () => {
+      const token = await dependencies.githubTokenProvider(env);
+      await dispatchDormitorySubmission(dependencies.fetchImpl, env, token);
+    })().catch((error) => {
       console.warn('Dormitory submission dispatch failed', error instanceof Error ? error.message : 'unknown error');
     });
     if (typeof dependencies.context?.waitUntil === 'function') dependencies.context.waitUntil(dispatch);
@@ -240,12 +232,12 @@ async function handleDormitoryMealUpload(request, env, dependencies) {
   }
 }
 
-// The reason travels as the repository_dispatch event type, so the workflow never reads a client payload.
+// The reason travels as the workflow_dispatch choice itself, so the workflow never reads a client value.
 const REPORT_EVENT_TYPES = new Map([
-  ['WRONG_MENU', 'dorm-report-wrong-menu'],
-  ['NOT_DORMITORY', 'dorm-report-not-dormitory'],
-  ['OFFENSIVE', 'dorm-report-offensive'],
-  ['OTHER', 'dorm-report-other'],
+  ['WRONG_MENU', 'report-wrong-menu'],
+  ['NOT_DORMITORY', 'report-not-dormitory'],
+  ['OFFENSIVE', 'report-offensive'],
+  ['OTHER', 'report-other'],
 ]);
 const MAX_REPORT_BODY_BYTES = 256;
 
@@ -317,7 +309,8 @@ async function handleDormitoryMealReport(request, env, dependencies) {
   }
   try {
     const token = await dependencies.githubTokenProvider(env);
-    await dispatchRepositoryEvent(dependencies.fetchImpl, env, token, { event_type: REPORT_EVENT_TYPES.get(reason) });
+    if (env?.GITHUB_OWNER !== 'winter1l' || env?.GITHUB_REPOSITORY !== 'DimaNow') throw new Error('Unexpected report repository');
+    await dispatchPublishWorkflow(dependencies.fetchImpl, token, REPORT_EVENT_TYPES.get(reason), 'DIMA-Now-Meal-Upload');
   } catch (error) {
     console.error('Dormitory report dispatch failed', error instanceof Error ? error.message : error);
     return jsonResponse(502, '신고를 전달하지 못했습니다. 잠시 후 다시 시도해 주세요.');
@@ -330,30 +323,78 @@ async function handleDormitoryMealReport(request, env, dependencies) {
  * no submission id or other client-derived data reaches the workflow, which ignores client_payload anyway.
  */
 async function dispatchDormitorySubmission(fetchImpl, env, token) {
-  return dispatchRepositoryEvent(fetchImpl, env, token, { event_type: 'dorm-submission' });
-}
-
-async function dispatchRepositoryEvent(fetchImpl, env, token, event) {
   if (env?.GITHUB_OWNER !== 'winter1l' || env?.GITHUB_REPOSITORY !== 'DimaNow') {
     throw new Error('Unexpected dormitory dispatch repository');
   }
-  const response = await fetchImpl(DORM_SUBMISSION_DISPATCH_URL, {
-    method: 'POST',
-    redirect: 'manual',
-    signal: AbortSignal.timeout(10000),
-    headers: {
-      Accept: 'application/vnd.github+json',
-      Authorization: `Bearer ${token}`,
-      'Content-Type': 'application/json',
-      'User-Agent': 'DIMA-Now-Meal-Upload',
-      'X-GitHub-Api-Version': '2022-11-28',
-    },
-    body: JSON.stringify(event),
-  });
-  if (response.status !== 204) {
-    await response.body?.cancel();
-    throw new Error(`Dormitory dispatch failed: ${response.status}`);
+  await dispatchPublishWorkflow(fetchImpl, token, 'dorm', 'DIMA-Now-Meal-Upload');
+}
+
+/**
+ * Read-only access for main's publish workflow (D-100): `GET /v1/internal/dormitory-photos` lists stored photos
+ * and `GET /v1/internal/dormitory-photos/<id>.<ext>` returns one. Requires `Authorization: Bearer
+ * <PHOTO_READ_TOKEN>` (a Worker secret of at least 40 characters, compared in constant time). Photos are never
+ * served publicly; any other caller gets the same 404 as an unknown route.
+ */
+async function handleInternalPhotoRead(request, env, url) {
+  if (request.method !== 'GET') return jsonResponse(404, '요청한 경로가 없습니다.');
+  const expected = env.PHOTO_READ_TOKEN ?? '';
+  const header = request.headers.get('Authorization') ?? '';
+  const provided = header.startsWith('Bearer ') ? header.slice(7) : '';
+  if (expected.length < 40 || !(await constantTimeEqual(provided, expected))) return jsonResponse(404, '요청한 경로가 없습니다.');
+  if (!env.DORM_PHOTOS) return jsonResponse(503, '사진 저장소가 준비되지 않았습니다.');
+  if (url.pathname === '/v1/internal/dormitory-photos') {
+    const photos = [];
+    let cursor;
+    do {
+      const page = await env.DORM_PHOTOS.list({ prefix: PHOTO_PREFIX, cursor, limit: 1000 });
+      for (const object of page.objects) {
+        const match = PHOTO_KEY_PATTERN.exec(object.key);
+        if (match) photos.push({ id: match[1], extension: match[2], uploadedAt: new Date(object.uploaded).toISOString() });
+      }
+      cursor = page.truncated ? page.cursor : undefined;
+    } while (cursor);
+    photos.sort((a, b) => a.uploadedAt.localeCompare(b.uploadedAt) || a.id.localeCompare(b.id));
+    return new Response(JSON.stringify({ photos }), { status: 200, headers: jsonHeaders() });
   }
+  const key = `${PHOTO_PREFIX}${url.pathname.slice('/v1/internal/dormitory-photos/'.length)}`;
+  if (!PHOTO_KEY_PATTERN.test(key)) return jsonResponse(404, '요청한 경로가 없습니다.');
+  const object = await env.DORM_PHOTOS.get(key);
+  if (!object) return jsonResponse(404, '요청한 경로가 없습니다.');
+  return new Response(object.body, {
+    status: 200,
+    headers: { 'Content-Type': object.httpMetadata?.contentType ?? 'application/octet-stream', 'Cache-Control': 'no-store' },
+  });
+}
+
+/** Deletes photos older than the retention period (D-100); an R2 lifecycle rule is the second safety net. */
+export async function prunePhotos(bucket, current) {
+  if (!bucket) return 0;
+  const cutoff = current.getTime() - PHOTO_RETENTION_DAYS * 86400000;
+  let deleted = 0;
+  let cursor;
+  do {
+    const page = await bucket.list({ prefix: PHOTO_PREFIX, cursor, limit: 1000 });
+    const expired = page.objects.filter((object) => new Date(object.uploaded).getTime() < cutoff).map((object) => object.key);
+    if (expired.length) {
+      await bucket.delete(expired);
+      deleted += expired.length;
+    }
+    cursor = page.truncated ? page.cursor : undefined;
+  } while (cursor);
+  return deleted;
+}
+
+async function constantTimeEqual(a, b) {
+  const encoder = new TextEncoder();
+  const [left, right] = await Promise.all([
+    crypto.subtle.digest('SHA-256', encoder.encode(a)),
+    crypto.subtle.digest('SHA-256', encoder.encode(b)),
+  ]);
+  const x = new Uint8Array(left);
+  const y = new Uint8Array(right);
+  let difference = a.length === b.length ? 0 : 1;
+  for (let index = 0; index < x.length; index++) difference |= x[index] ^ y[index];
+  return difference === 0;
 }
 
 /**
@@ -629,11 +670,11 @@ async function createGitHubInstallationToken(env, fetchImpl, now) {
       'User-Agent': 'DIMA-Now-Meal-Upload',
       'X-GitHub-Api-Version': '2022-11-28',
     },
-    // Down-scope the installation token to this one repository and contents:write, which covers
-    // both the submission-branch file write and repository_dispatch, whatever the App is granted.
+    // D-100: down-scope the installation token to this one repository and actions:write, which covers
+    // workflow_dispatch only; the Worker no longer writes repository contents.
     body: JSON.stringify({
       repositories: [repository],
-      permissions: { contents: 'write' },
+      permissions: { actions: 'write' },
     }),
   });
   if (!response.ok) {

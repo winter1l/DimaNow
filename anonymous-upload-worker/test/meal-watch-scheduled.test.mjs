@@ -26,8 +26,8 @@ test('scheduled Monday watch reaches authenticated collection without a user req
     { GITHUB_OWNER: 'winter1l', GITHUB_REPOSITORY: 'DimaNow' }, { waitUntil: (promise) => pending.push(promise) });
   await Promise.all(pending);
   assert.equal(dispatches.length, 1);
-  assert.equal(dispatches[0].url, 'https://api.github.com/repos/winter1l/DimaNow/dispatches');
-  assert.equal(JSON.parse(dispatches[0].init.body).event_type, 'student-meal-publication-watch');
+  assert.equal(dispatches[0].url, 'https://api.github.com/repos/winter1l/DimaNow/actions/workflows/publish-data.yml/dispatches');
+  assert.deepEqual(JSON.parse(dispatches[0].init.body).inputs, { dataset: 'meal-watch' });
   assert.deepEqual(leasePrunes, [Date.parse('2026-09-14T01:37:00Z') / 1000]);
 });
 

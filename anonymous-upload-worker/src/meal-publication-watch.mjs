@@ -1,5 +1,6 @@
+import { dispatchPublishWorkflow } from './github-dispatch.mjs';
+
 const DATA_ROOT = 'https://winter1l.github.io/DimaNow/data/v1';
-const DISPATCH_URL = 'https://api.github.com/repos/winter1l/DimaNow/dispatches';
 const DAY_MILLIS = 86400000;
 const MANIFEST_MAX_BYTES = 64 * 1024;
 const MEAL_MAX_BYTES = 512 * 1024;
@@ -59,26 +60,7 @@ export function createStudentMealPublicationWatch(dependencies = {}) {
     if (typeof githubTokenProvider !== 'function') throw new Error('GitHub token provider required');
     const token = await githubTokenProvider(env);
     if (typeof token !== 'string' || !token) throw new Error('GitHub installation token unavailable');
-    const response = await fetchImpl(DISPATCH_URL, {
-      method: 'POST',
-      redirect: 'manual',
-      signal: AbortSignal.timeout(10000),
-      headers: {
-        Accept: 'application/vnd.github+json',
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
-        'User-Agent': 'DIMA-Now-Meal-Publication-Watch',
-        'X-GitHub-Api-Version': '2022-11-28',
-      },
-      body: JSON.stringify({
-        event_type: 'student-meal-publication-watch',
-        client_payload: { week_start: weekStart },
-      }),
-    });
-    if (response.status !== 204) {
-      await response.body?.cancel();
-      throw new Error(`Student meal dispatch failed: ${response.status}`);
-    }
+    await dispatchPublishWorkflow(fetchImpl, token, 'meal-watch', 'DIMA-Now-Meal-Publication-Watch');
     return { status: 'dispatched', weekStart };
   };
 }

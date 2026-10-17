@@ -45,8 +45,35 @@ class FakeSecurityStore {
   }
 }
 
+/** In-memory stand-in for the private R2 bucket binding (D-100). */
+class FakeBucket {
+  constructor() {
+    this.objects = new Map();
+    this.putCalls = 0;
+  }
+  async put(key, value, options = {}) {
+    this.putCalls += 1;
+    if (this.failPut) throw new Error('R2 put failed');
+    const bytes = value instanceof Uint8Array ? value : new Uint8Array(await new Response(value).arrayBuffer());
+    this.objects.set(key, { key, bytes, httpMetadata: options.httpMetadata, customMetadata: options.customMetadata,
+      uploaded: this.uploadedAt ?? new Date('2026-09-02T01:15:00Z') });
+  }
+  async get(key) {
+    const object = this.objects.get(key);
+    return object ? { body: object.bytes, httpMetadata: object.httpMetadata } : null;
+  }
+  async list({ prefix = '', cursor } = {}) {
+    const objects = [...this.objects.values()].filter((o) => o.key.startsWith(prefix)).map((o) => ({ key: o.key, uploaded: o.uploaded }));
+    return { objects, truncated: false, cursor };
+  }
+  async delete(keys) {
+    for (const key of [].concat(keys)) this.objects.delete(key);
+  }
+}
+
 function uploadEnv(overrides = {}) {
   return {
+    DORM_PHOTOS: new FakeBucket(),
     RATE_LIMIT_SALT: 'test-rate-limit-salt-at-least-32-characters',
     UPLOAD_DAILY_LIMIT: '20',
     UPLOAD_WEEKLY_LIMIT: '40',
@@ -152,7 +179,7 @@ test('scheduled maintenance prunes only gateway admission state', async () => {
   assert.equal(security.prunedAt, Date.parse('2026-09-02T09:55:00Z') / 1000);
 });
 
-test('anonymous image upload uses only the server-side GitHub token', async () => {
+test('an anonymous upload is stored privately in R2 and never written to GitHub', async () => {
   const calls = [];
   const security = new FakeSecurityStore();
   const worker = createWorker({
@@ -163,21 +190,13 @@ test('anonymous image upload uses only the server-side GitHub token', async () =
     dormitoryPublicationProvider: async () => false,
     fetch: async (url, init) => {
       calls.push({ url: String(url), init });
-      return new Response('{}', { status: 201 });
+      return new Response(null, { status: 204 });
     },
   });
-  const env = uploadEnv({
-    GITHUB_APP_ID: '4774955',
-    GITHUB_INSTALLATION_ID: '157828401',
-    GITHUB_APP_PRIVATE_KEY: 'server-only',
-  });
+  const env = uploadEnv({ GITHUB_OWNER: 'winter1l', GITHUB_REPOSITORY: 'DimaNow' });
   const request = new Request('https://upload.example/v1/dormitory-meals', {
     method: 'POST',
-    headers: {
-      'Content-Type': 'image/jpeg',
-      'X-Dima-Image-Extension': 'jpg',
-      'CF-Connecting-IP': '203.0.113.7',
-    },
+    headers: { 'Content-Type': 'image/jpeg', 'X-Dima-Image-Extension': 'jpg', 'CF-Connecting-IP': '203.0.113.7' },
     body: jpegImage(),
   });
 
@@ -186,8 +205,11 @@ test('anonymous image upload uses only the server-side GitHub token', async () =
 
   assert.equal(response.status, 202);
   assert.equal(payload.submissionId, 'submission-123');
+  const stored = env.DORM_PHOTOS.objects.get('submissions/submission-123.jpg');
+  assert.ok(stored);
+  assert.equal(stored.httpMetadata.contentType, 'image/jpeg');
+  assert.equal(calls.some((call) => call.url.includes('/contents/')), false);
   assert.equal(calls.length, 1);
-  assert.equal(calls[0].url, 'https://api.github.com/repos/winter1l/DimaNow/contents/dorm-submissions/submission-123.jpg');
   assert.equal(calls[0].init.headers.Authorization, 'Bearer server-installation-token');
   assert.equal(request.headers.get('Authorization'), null);
 });
@@ -221,17 +243,16 @@ test('a second anonymous submission from the same address is rate limited', asyn
   assert.equal((await worker.fetch(makeRequest(), env)).status, 429);
 });
 
-test('parallel anonymous uploads acquire one atomic address lease and make one GitHub write', async () => {
+test('parallel anonymous uploads acquire one atomic address lease and make one R2 write', async () => {
   const security = new FakeSecurityStore();
   let sequence = 0;
-  let githubWrites = 0;
   const worker = createWorker({
     now: () => new Date('2026-09-02T01:15:00Z'),
     randomUUID: () => `submission-${++sequence}`,
     securityStoreFactory: () => security,
     dormitoryPublicationProvider: async () => false,
     githubTokenProvider: async () => 'server-installation-token',
-    fetch: async () => { githubWrites += 1; return new Response('{}', { status: 201 }); },
+    fetch: async () => new Response(null, { status: 204 }),
   });
   const env = uploadEnv();
 
@@ -241,7 +262,7 @@ test('parallel anonymous uploads acquire one atomic address lease and make one G
   ]);
 
   assert.deepEqual(responses.map((response) => response.status).sort(), [202, 429]);
-  assert.equal(githubWrites, 1);
+  assert.equal(env.DORM_PHOTOS.putCalls, 1);
 });
 
 test('a failed upload cannot release a newer owner lease', async () => {
@@ -251,14 +272,16 @@ test('a failed upload cannot release a newer owner lease', async () => {
     randomUUID: () => 'original-owner',
     securityStoreFactory: () => security,
     dormitoryPublicationProvider: async () => false,
-    githubTokenProvider: async () => {
-      const scope = [...security.leases.keys()].at(0);
-      security.leases.set(scope, { owner: 'newer-owner', expiresAtSeconds: Number.MAX_SAFE_INTEGER });
-      throw new Error('fixture failure');
-    },
+    githubTokenProvider: async () => 'server-installation-token',
   });
+  const env = uploadEnv();
+  env.DORM_PHOTOS.put = async () => {
+    const scope = [...security.leases.keys()].at(0);
+    security.leases.set(scope, { owner: 'newer-owner', expiresAtSeconds: Number.MAX_SAFE_INTEGER });
+    throw new Error('fixture failure');
+  };
 
-  const response = await worker.fetch(imageRequest(), uploadEnv());
+  const response = await worker.fetch(imageRequest(), env);
   const surviving = [...security.leases.values()].at(0);
 
   assert.equal(response.status, 502);
@@ -454,35 +477,32 @@ test('a rejected image body releases nothing from the shared budget', async () =
   }
 });
 
-test('a failed GitHub write refunds the shared budget atomically', async () => {
+test('a failed R2 write refunds the shared budget atomically', async () => {
   const security = new FakeSecurityStore();
-  const worker = uploadWorker(security, {
-    fetch: async () => new Response('{}', { status: 500 }),
-  });
+  const worker = uploadWorker(security);
   const env = uploadEnv({ UPLOAD_DAILY_LIMIT: '1', UPLOAD_WEEKLY_LIMIT: '1' });
+  env.DORM_PHOTOS.failPut = true;
 
   assert.equal((await worker.fetch(imageRequest('203.0.113.7'), env)).status, 502);
   assert.equal(security.consumeCalls, 1);
   assert.equal(security.totalBudgetUsed(), 0);
   assert.equal(security.leases.size, 0);
 
-  const healthy = uploadWorker(security);
-  assert.equal((await healthy.fetch(imageRequest('203.0.113.8'), env)).status, 202);
+  env.DORM_PHOTOS.failPut = false;
+  assert.equal((await worker.fetch(imageRequest('203.0.113.8'), env)).status, 202);
   assert.equal(security.totalBudgetUsed(), 2);
 });
 
-test('a token failure refunds the budget and an exhausted budget is reported after the body check', async () => {
+test('a token outage cannot lose a stored photo and an exhausted budget is reported after the body check', async () => {
   const security = new FakeSecurityStore();
   const failing = uploadWorker(security, {
     githubTokenProvider: async () => { throw new Error('token outage'); },
   });
   const env = uploadEnv({ UPLOAD_DAILY_LIMIT: '1', UPLOAD_WEEKLY_LIMIT: '1' });
-  assert.equal((await failing.fetch(imageRequest('203.0.113.7'), env)).status, 502);
-  assert.equal(security.totalBudgetUsed(), 0);
-
-  const healthy = uploadWorker(security);
-  assert.equal((await healthy.fetch(imageRequest('203.0.113.8'), env)).status, 202);
-  assert.equal((await healthy.fetch(imageRequest('203.0.113.9'), env)).status, 429);
+  // The photo is already in R2; only the wake-up dispatch fails and the scheduled sweep picks it up.
+  assert.equal((await failing.fetch(imageRequest('203.0.113.7'), env)).status, 202);
+  assert.equal(env.DORM_PHOTOS.objects.size, 1);
+  assert.equal((await failing.fetch(imageRequest('203.0.113.9'), env)).status, 429);
 });
 
 test('image dimensions are parsed from JPEG, PNG and every WebP variant', () => {
@@ -515,7 +535,7 @@ test('dimension bounds accept ordinary photos and reject tiny or oversized frame
   }
 });
 
-test('the installation token request is scoped to one repository and contents:write', async () => {
+test('the installation token request is scoped to one repository and actions:write', async () => {
   const keyPair = await crypto.subtle.generateKey(
     { name: 'RSASSA-PKCS1-v1_5', modulusLength: 2048, publicExponent: new Uint8Array([1, 0, 1]), hash: 'SHA-256' },
     true,
@@ -552,7 +572,7 @@ test('the installation token request is scoped to one repository and contents:wr
   assert.equal(calls[0].init.headers['Content-Type'], 'application/json');
   assert.deepEqual(JSON.parse(calls[0].init.body), {
     repositories: ['DimaNow'],
-    permissions: { contents: 'write' },
+    permissions: { actions: 'write' },
   });
   assert.equal(calls[1].init.headers.Authorization, 'Bearer scoped-installation-token');
 });
@@ -615,7 +635,7 @@ function recordingGitHub(dispatchResponse = () => new Response(null, { status: 2
   return { calls, fetchImpl };
 }
 
-test('a stored submission wakes main\'s publish workflow with a payload-free dispatch', async () => {
+test('a stored submission wakes main\'s publish workflow with a fixed workflow_dispatch choice', async () => {
   const github = recordingGitHub();
   const worker = uploadWorker(new FakeSecurityStore(), { randomUUID: () => 'submission-123', fetch: github.fetchImpl });
   const pending = [];
@@ -626,10 +646,9 @@ test('a stored submission wakes main\'s publish workflow with a payload-free dis
   await Promise.all(pending);
 
   assert.deepEqual(github.calls.map((call) => call.url), [
-    'https://api.github.com/repos/winter1l/DimaNow/contents/dorm-submissions/submission-123.jpg',
-    'https://api.github.com/repos/winter1l/DimaNow/dispatches',
+    'https://api.github.com/repos/winter1l/DimaNow/actions/workflows/publish-data.yml/dispatches',
   ]);
-  const dispatch = github.calls[1].init;
+  const dispatch = github.calls[0].init;
   assert.equal(dispatch.method, 'POST');
   assert.equal(dispatch.redirect, 'manual');
   assert.deepEqual(dispatch.headers, {
@@ -639,13 +658,12 @@ test('a stored submission wakes main\'s publish workflow with a payload-free dis
     'User-Agent': 'DIMA-Now-Meal-Upload',
     'X-GitHub-Api-Version': '2022-11-28',
   });
-  assert.equal(dispatch.body, '{"event_type":"dorm-submission"}');
+  assert.equal(dispatch.body, '{"ref":"main","inputs":{"dataset":"dorm"}}');
 });
 
 test('rejected or failed uploads never dispatch the publish workflow', async () => {
   const cases = [
-    { name: 'failed GitHub write', overrides: { fetch: null }, writeStatus: 422, expected: 502 },
-    { name: 'token failure', overrides: { githubTokenProvider: async () => { throw new Error('fixture'); } }, expected: 502 },
+    { name: 'failed R2 write', failPut: true, expected: 502 },
     { name: 'published week', overrides: { dormitoryPublicationProvider: async () => true }, expected: 409 },
     { name: 'exhausted budget', env: { UPLOAD_DAILY_LIMIT: '1' }, preload: true, expected: 429 },
   ];
@@ -659,7 +677,9 @@ test('rejected or failed uploads never dispatch the publish workflow', async () 
     };
     const worker = uploadWorker(security, { ...testCase.overrides, fetch: fetchImpl });
     const pending = [];
-    const response = await worker.fetch(imageRequest(), dispatchEnv(testCase.env),
+    const env = dispatchEnv(testCase.env);
+    env.DORM_PHOTOS.failPut = testCase.failPut === true;
+    const response = await worker.fetch(imageRequest(), env,
       { waitUntil: (promise) => pending.push(promise) });
     await Promise.all(pending);
     assert.equal(response.status, testCase.expected, testCase.name);
@@ -735,8 +755,8 @@ test('a dormitory report for the current week dispatches a payload-free event na
 
   const response = await worker.fetch(reportRequest({ weekStart: '2026-08-31', reason: 'WRONG_MENU', extra: 'x' }), dispatchEnv());
   assert.equal(response.status, 202);
-  assert.deepEqual(github.calls.map((call) => call.url), ['https://api.github.com/repos/winter1l/DimaNow/dispatches']);
-  assert.deepEqual(JSON.parse(github.calls[0].init.body), { event_type: 'dorm-report-wrong-menu' });
+  assert.deepEqual(github.calls.map((call) => call.url), ['https://api.github.com/repos/winter1l/DimaNow/actions/workflows/publish-data.yml/dispatches']);
+  assert.deepEqual(JSON.parse(github.calls[0].init.body), { ref: 'main', inputs: { dataset: 'report-wrong-menu' } });
   assert.equal(security.totalBudgetUsed(), 2);
 });
 
@@ -773,5 +793,51 @@ test('the weekend-published next week can be reported', async () => {
   const response = await worker.fetch(reportRequest({ weekStart: '2026-09-07', reason: 'NOT_DORMITORY' }), dispatchEnv());
   assert.equal(response.status, 202);
   assert.equal(github.calls.length, 1);
+});
+
+test('the publish workflow reads stored photos only with the secret token', async () => {
+  const worker = uploadWorker(new FakeSecurityStore());
+  const token = 'photo-read-token-'.padEnd(48, 'x');
+  const env = uploadEnv({ PHOTO_READ_TOKEN: token });
+  await env.DORM_PHOTOS.put('submissions/abc.jpg', new Uint8Array([1, 2, 3]), { httpMetadata: { contentType: 'image/jpeg' } });
+  const get = (path, auth) => worker.fetch(new Request(`https://upload.example${path}`, {
+    headers: auth ? { Authorization: `Bearer ${auth}` } : {},
+  }), env);
+
+  assert.equal((await get('/v1/internal/dormitory-photos')).status, 404);
+  assert.equal((await get('/v1/internal/dormitory-photos', 'wrong-token'.padEnd(48, 'y'))).status, 404);
+  const list = await get('/v1/internal/dormitory-photos', token);
+  assert.equal(list.status, 200);
+  assert.deepEqual((await list.json()).photos.map((photo) => [photo.id, photo.extension]), [['abc', 'jpg']]);
+  const photo = await get('/v1/internal/dormitory-photos/abc.jpg', token);
+  assert.equal(photo.status, 200);
+  assert.deepEqual([...new Uint8Array(await photo.arrayBuffer())], [1, 2, 3]);
+  assert.equal((await get('/v1/internal/dormitory-photos/..%2Fsecret.jpg', token)).status, 404);
+  // A short configured token disables the endpoint entirely.
+  const weak = uploadEnv({ PHOTO_READ_TOKEN: 'short' });
+  assert.equal((await worker.fetch(new Request('https://upload.example/v1/internal/dormitory-photos', {
+    headers: { Authorization: 'Bearer short' },
+  }), weak)).status, 404);
+});
+
+test('photos older than 30 days are deleted by the daily maintenance', async () => {
+  const { prunePhotos } = await import('../src/index.mjs');
+  const bucket = new FakeBucket();
+  bucket.uploadedAt = new Date('2026-08-01T00:00:00Z');
+  await bucket.put('submissions/old.jpg', new Uint8Array([1]));
+  bucket.uploadedAt = new Date('2026-09-20T00:00:00Z');
+  await bucket.put('submissions/new.jpg', new Uint8Array([2]));
+
+  assert.equal(await prunePhotos(bucket, new Date('2026-09-25T00:00:00Z')), 1);
+  assert.deepEqual([...bucket.objects.keys()], ['submissions/new.jpg']);
+});
+
+test('an upload without the R2 binding is refused before any admission work', async () => {
+  const worker = uploadWorker(null, {
+    securityStoreFactory: () => { throw new Error('must not reach D1'); },
+  });
+  const env = uploadEnv();
+  delete env.DORM_PHOTOS;
+  assert.equal((await worker.fetch(imageRequest(), env)).status, 503);
 });
 

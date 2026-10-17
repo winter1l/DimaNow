@@ -113,7 +113,7 @@ internal fun SettingsScreen(
                     Text("수업이 끝난 뒤 안내할 셔틀 방향이에요.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     // 설정의 단일 선택은 모두 같은 SettingsChoice를 쓴다 (D-094(6))
                     SettingsChoice(
-                        options = listOf(HomeBase.YEIN to "엔터관 방향", HomeBase.ONE_ROOM to "원룸촌 방향"),
+                        options = listOf(HomeBase.YEIN to "엔터관 방향", HomeBase.ONE_ROOM to "원룸촌 방향", HomeBase.COMMUTE to "통학"),
                         selected = homeBase,
                         onSelect = onHomeBaseChange,
                         itemTag = { "home_base_${it.name}" },
@@ -162,10 +162,12 @@ internal fun SettingsScreen(
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
-                    if (lmsCredentialState == CredentialState.SAVED) {
-                        OutlinedButton(onClick = { confirmDeleteLmsAccount = true }, modifier = Modifier.fillMaxWidth()) {
-                            Text("저장된 계정 삭제")
-                        }
+                    // D-099: 계정을 저장하지 않고 로그인한 경우에도 로그아웃과 수업 정보 삭제를 할 수 있다
+                    OutlinedButton(
+                        onClick = { confirmDeleteLmsAccount = true },
+                        modifier = Modifier.fillMaxWidth().testTag("delete_lms_account"),
+                    ) {
+                        Text(if (lmsCredentialState == CredentialState.SAVED) "저장된 계정 삭제" else "로그아웃하고 수업 정보 지우기")
                     }
                 }
             }
@@ -180,6 +182,8 @@ internal fun SettingsScreen(
                 onCancelDownload = onCancelDownload,
             )
         }
+        item(key = "about") { AboutCard() }
+        item(key = "app_data") { AppDataCard() }
         item(key = "diagnostics_toggle") {
             SettingsExpander(
                 title = "고급 및 진단",
@@ -211,8 +215,8 @@ internal fun SettingsScreen(
     if (confirmDeleteLmsAccount) {
         AlertDialog(
             onDismissRequest = { confirmDeleteLmsAccount = false },
-            title = { Text("저장된 계정을 삭제할까요?") },
-            text = { Text("저장된 계정과 이 기기의 수업 정보가 삭제돼요.") },
+            title = { Text(if (lmsCredentialState == CredentialState.SAVED) "저장된 계정을 삭제할까요?" else "로그아웃할까요?") },
+            text = { Text("저장된 계정, 로그인 상태와 이 기기의 수업 정보가 삭제돼요.") },
             confirmButton = {
                 // 되돌릴 수 없는 삭제는 error 색으로 구분한다 (D-094(6))
                 Button(
@@ -236,7 +240,7 @@ internal fun NowBarSetupDialog(
     onComplete: () -> Unit,
 ) {
     AlertDialog(
-        onDismissRequest = {},
+        onDismissRequest = onComplete,
         title = { Text("나우바 설정") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -244,7 +248,10 @@ internal fun NowBarSetupDialog(
                 OutlinedButton(onClick = onOpenLockScreenNotifications, modifier = Modifier.fillMaxWidth()) {
                     Text("잠금화면 알림 설정 열기")
                 }
-                Text("개발자 옵션에서 ‘모든 앱의 실시간 정보 보기’를 켜세요.")
+                Text(
+                    "(선택) Samsung 나우바에 띄우려면 개발자 옵션의 ‘모든 앱의 실시간 정보 보기’가 필요할 수 있어요. " +
+                        "켜지 않아도 일반 알림으로 안내돼요. 일부 앱은 개발자 옵션이 켜져 있으면 실행되지 않을 수 있어요.",
+                )
                 OutlinedButton(onClick = onOpenDeveloperOptions, modifier = Modifier.fillMaxWidth()) {
                     Text("개발자 옵션 열기")
                 }

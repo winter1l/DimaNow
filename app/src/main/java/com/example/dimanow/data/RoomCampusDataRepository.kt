@@ -1,7 +1,7 @@
 package com.example.dimanow.data
 
 import androidx.room.withTransaction
-import com.example.dimanow.domain.DefaultSchedule
+import com.example.dimanow.calendar.AcademicTerms
 import com.example.dimanow.domain.DefaultCampusZones
 import com.example.dimanow.domain.CampusZone
 import com.example.dimanow.domain.Course
@@ -13,6 +13,8 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.first
+
+private val KST: java.time.ZoneId = java.time.ZoneId.of("Asia/Seoul")
 
 class RoomCampusDataRepository(
     private val database: DimaDatabase,
@@ -45,15 +47,11 @@ class RoomCampusDataRepository(
 
     override suspend fun ensureSeeded() {
         database.withTransaction {
-            if (dao.courseCount() == 0) {
-                val seed = DefaultSchedule.create()
-                dao.putTerm(
-                    TermSettingsEntity(
-                        startEpochDay = seed.termStart.toEpochDay(),
-                        endEpochDay = seed.termEnd.toEpochDay(),
-                    ),
-                )
-                dao.insertCourses(seed.courses.map(CourseEntity::fromDomain))
+            // D-099: a new install starts with an empty timetable and the suggested current semester.
+            // Existing installs keep their term and courses; deleting every course no longer re-seeds anything.
+            if (dao.currentTerm() == null) {
+                val term = AcademicTerms.suggest(LocalDate.now(KST))
+                dao.putTerm(TermSettingsEntity(startEpochDay = term.start.toEpochDay(), endEpochDay = term.end.toEpochDay()))
             }
             val savedZoneIds = dao.campusZoneIds().toSet()
             DefaultCampusZones.all

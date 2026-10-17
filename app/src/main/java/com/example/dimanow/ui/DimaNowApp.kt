@@ -53,7 +53,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.dimanow.data.AppPreferences
 import com.example.dimanow.data.CampusDataRepository
 import com.example.dimanow.domain.CampusZoneId
-import com.example.dimanow.domain.DefaultSchedule
+import com.example.dimanow.domain.emptyTermSchedule
 import com.example.dimanow.guidance.HomeBase
 import com.example.dimanow.live.LiveDisplayOptions
 import com.example.dimanow.live.LiveSurfaceController
@@ -337,7 +337,7 @@ private fun DashboardRoute(
     modifier: Modifier,
     now: ZonedDateTime,
 ) {
-    val schedule by repository.schedule.collectRetainedAsState(initialValue = DefaultSchedule.create())
+    val schedule by repository.schedule.collectRetainedAsState(initialValue = remember { emptyTermSchedule() })
     val homeLms by lmsSource.snapshot.collectRetainedAsState(initialValue = com.example.dimanow.lms.LmsSnapshot())
     val homeLmsSession by lmsSessionController.state.collectAsStateWithLifecycle()
     val resolvedZone by preferences.effectiveZone.collectRetainedAsState(initialValue = CampusZoneId.OUTSIDE)
@@ -368,7 +368,7 @@ private fun DashboardRoute(
 
 @Composable
 private fun TimetableRoute(repository: CampusDataRepository, modifier: Modifier) {
-    val schedule by repository.schedule.collectRetainedAsState(initialValue = DefaultSchedule.create())
+    val schedule by repository.schedule.collectRetainedAsState(initialValue = remember { emptyTermSchedule() })
     TimetableScreen(repository, schedule, modifier)
 }
 

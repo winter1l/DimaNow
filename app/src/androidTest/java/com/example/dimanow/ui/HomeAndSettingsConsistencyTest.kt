@@ -34,7 +34,7 @@ import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import com.example.dimanow.domain.CampusZoneId
-import com.example.dimanow.domain.DefaultSchedule
+import com.example.dimanow.domain.SampleSchedule
 import com.example.dimanow.meal.MealData
 import com.example.dimanow.shuttle.ShuttleData
 import com.example.dimanow.theme.DIMANowTheme
@@ -55,7 +55,7 @@ class HomeAndSettingsConsistencyTest {
         composeRule.setContent {
             DIMANowTheme {
                 DashboardScreen(
-                    schedule = DefaultSchedule.create(),
+                    schedule = SampleSchedule.create(),
                     zone = CampusZoneId.MAIN,
                     shuttle = ShuttleData(emptyList(), null, null, null, "https://example.invalid", null),
                     meal = MealData(emptyList(), null, null, null, "https://example.invalid", null, null),

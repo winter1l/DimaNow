@@ -21,7 +21,7 @@ class RoomCampusDataRepositoryTest {
         val name = "course-override-migration-${java.util.UUID.randomUUID()}.db"
         val original = Room.databaseBuilder(context, DimaDatabase::class.java, name).build()
         val originalRepository = RoomCampusDataRepository(original)
-        originalRepository.ensureSeeded()
+        originalRepository.seedSample()
         val before = originalRepository.schedule.first()
         original.close()
         // v5 has the same existing tables and no occurrence overrides.
@@ -46,7 +46,7 @@ class RoomCampusDataRepositoryTest {
 
     @Test
     fun oneClassCancellationSurvivesRepositoryRecreationAndLeavesNextWeekIntact() = runTest {
-        repository.ensureSeeded()
+        repository.seedSample()
         val before = repository.schedule.first()
         val course = before.courses.first()
         val date = LocalDate.of(2026, 9, 14)
@@ -102,15 +102,29 @@ class RoomCampusDataRepositoryTest {
     }
 
     @Test
-    fun firstLaunchSeedsTheApprovedScheduleOnlyOnce() = runTest {
+    fun firstLaunchStartsWithAnEmptyTimetableAndNeverReseedsCourses() = runTest {
         repository.ensureSeeded()
         repository.ensureSeeded()
 
+        // D-099: no personal seed; a term is suggested so the timetable screen has dates to edit.
         val schedule = repository.schedule.first()
-        assertEquals(LocalDate.of(2026, 8, 24), schedule.termStart)
-        assertEquals(LocalDate.of(2026, 12, 18), schedule.termEnd)
-        assertEquals(6, schedule.courses.size)
-        assertEquals("조명기초및실습", schedule.courses.first().name)
+        assertEquals(0, schedule.courses.size)
+        assertEquals(false, schedule.termEnd.isBefore(schedule.termStart))
+
+        repository.setTerm(LocalDate.of(2026, 8, 24), LocalDate.of(2026, 12, 18))
+        val id = repository.saveCourse(com.example.dimanow.domain.SampleSchedule.create().courses.first())
+        repository.deleteCourse(id)
+        repository.ensureSeeded()
+        val after = repository.schedule.first()
+        assertEquals(0, after.courses.size)
+        assertEquals(LocalDate.of(2026, 8, 24), after.termStart)
+    }
+
+    private suspend fun CampusDataRepository.seedSample() {
+        ensureSeeded()
+        val sample = com.example.dimanow.domain.SampleSchedule.create()
+        setTerm(sample.termStart, sample.termEnd)
+        sample.courses.forEach { saveCourse(it) }
     }
 
     @Test
@@ -135,7 +149,7 @@ class RoomCampusDataRepositoryTest {
 
     @Test
     fun bundledZoneInstallReplacesOnlyZoneRowsAndPreservesOtherCampusData() = runTest {
-        repository.ensureSeeded()
+        repository.seedSample()
         val pause = GuidancePause(LocalDate.of(2026, 8, 27), LocalDate.of(2026, 8, 30))
         repository.setGuidancePause(pause)
         database.scheduleDao().putZone(

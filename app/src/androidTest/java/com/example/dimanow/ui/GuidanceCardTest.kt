@@ -26,7 +26,7 @@ import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import com.example.dimanow.domain.CampusZoneId
-import com.example.dimanow.domain.DefaultSchedule
+import com.example.dimanow.domain.SampleSchedule
 import com.example.dimanow.domain.ShuttleDeparture
 import com.example.dimanow.meal.MealData
 import com.example.dimanow.meal.DormitoryMealData
@@ -71,7 +71,7 @@ class GuidanceCardTest {
         )
         composeRule.setContent {
             DashboardScreen(
-                schedule = DefaultSchedule.create(),
+                schedule = SampleSchedule.create(),
                 zone = CampusZoneId.YEIN,
                 shuttle = ShuttleData(emptyList(), null, null, null, "https://www.dima.ac.kr/?p=97", null),
                 meal = MealData(emptyList(), null, null, null, "https://www.dima.ac.kr/?p=1", null, null),
@@ -97,7 +97,7 @@ class GuidanceCardTest {
         )
         composeRule.setContent {
             DashboardScreen(
-                schedule = DefaultSchedule.create(),
+                schedule = SampleSchedule.create(),
                 zone = CampusZoneId.MAIN,
                 shuttle = ShuttleData(departures, Instant.parse("2026-08-26T12:00:10Z"), null, null, "https://www.dima.ac.kr/?p=97", null),
                 meal = MealData(emptyList(), null, null, null, "https://www.dima.ac.kr/?p=1", null, null),
@@ -120,7 +120,7 @@ class GuidanceCardTest {
         )
         composeRule.setContent {
             DashboardScreen(
-                schedule = DefaultSchedule.create(),
+                schedule = SampleSchedule.create(),
                 zone = CampusZoneId.YEIN,
                 shuttle = ShuttleData(departures, Instant.parse("2026-08-26T12:00:10Z"), null, null, "https://www.dima.ac.kr/?p=97", null),
                 meal = MealData(emptyList(), null, null, null, "https://www.dima.ac.kr/?p=1", null, null),
@@ -162,7 +162,7 @@ class GuidanceCardTest {
     fun dashboardShowsValidShuttleCacheInsteadOfAskingForRefresh() {
         composeRule.setContent {
             DashboardScreen(
-                schedule = DefaultSchedule.create(),
+                schedule = SampleSchedule.create(),
                 zone = CampusZoneId.YEIN,
                 shuttle = ShuttleData(
                     departures = listOf(
@@ -203,7 +203,7 @@ class GuidanceCardTest {
         )
         composeRule.setContent {
             DashboardScreen(
-                schedule = DefaultSchedule.create(),
+                schedule = SampleSchedule.create(),
                 zone = CampusZoneId.MAIN,
                 shuttle = ShuttleData(
                     departures = departures,
@@ -243,7 +243,7 @@ class GuidanceCardTest {
         composeRule.setContent {
             DIMANowTheme(darkTheme = false) {
                 DashboardScreen(
-                    schedule = DefaultSchedule.create(),
+                    schedule = SampleSchedule.create(),
                     zone = CampusZoneId.MAIN,
                     shuttle = null,
                     meal = null,
@@ -262,14 +262,14 @@ class GuidanceCardTest {
             .let { assertEquals(0, it.size) }
         composeRule.onNodeWithText("오늘은 제공 식단이 없어요", useUnmergedTree = true).assertDoesNotExist()
         composeRule.onNodeWithText("오늘 등록된 식단이 없어요", useUnmergedTree = true).assertDoesNotExist()
-        composeRule.onNodeWithText("공지를 확인하고 있어요", useUnmergedTree = true).assertDoesNotExist()
+        composeRule.onNodeWithText("인터넷에 연결되면 공지를 받아요", useUnmergedTree = true).assertDoesNotExist()
     }
 
     @Test
     fun dashboardEmptyShuttleCachePointsToTheShuttleTabInsteadOfAskingToRefreshHere() {
         composeRule.setContent {
             DashboardScreen(
-                schedule = DefaultSchedule.create(),
+                schedule = SampleSchedule.create(),
                 zone = CampusZoneId.MAIN,
                 shuttle = ShuttleData(emptyList(), null, null, null, "https://www.dima.ac.kr/?p=97", null),
                 meal = MealData(emptyList(), null, null, null, "https://www.dima.ac.kr/?p=1", null, null),
@@ -293,7 +293,7 @@ class GuidanceCardTest {
             CompositionLocalProvider(LocalDensity provides Density(density.density, fontScale)) {
                 DIMANowTheme(darkTheme = false) {
                     DashboardScreen(
-                        schedule = DefaultSchedule.create(),
+                        schedule = SampleSchedule.create(),
                         zone = CampusZoneId.MAIN,
                         shuttle = ShuttleData(departures, Instant.parse("2026-08-26T12:00:10Z"), null, null, "https://www.dima.ac.kr/?p=97", null),
                         meal = MealData(emptyList(), null, null, null, "https://www.dima.ac.kr/?p=1", null, null),
@@ -336,7 +336,7 @@ class GuidanceCardTest {
     fun dashboardOmitsSourceStatusBecauseItLivesInSettings() {
         composeRule.setContent {
             DashboardScreen(
-                schedule = DefaultSchedule.create(),
+                schedule = SampleSchedule.create(),
                 zone = CampusZoneId.OUTSIDE,
                 shuttle = ShuttleData(
                     departures = emptyList(),

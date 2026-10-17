@@ -72,7 +72,7 @@ class LiveClassMinuteUpdateTest {
                 .withSecond(0).withNano(0).plusMinutes(2)
             repository.saveCourse(Course(
                 startsAt.dayOfWeek, startsAt.toLocalTime(), startsAt.plusMinutes(FIXTURE_CLASS_MINUTES).toLocalTime(),
-                "분 갱신 검증", "덕성관 402", "테스트", CampusZoneId.MAIN,
+                "분 갱신 검증", "본관 301", "테스트", CampusZoneId.MAIN,
             ))
             val runtime = withTimeout(10_000) {
                 while (true) {
@@ -95,14 +95,14 @@ class LiveClassMinuteUpdateTest {
                 PendingIntent.FLAG_NO_CREATE or PendingIntent.FLAG_IMMUTABLE)?.let(alarms::cancel)
 
             val minute = awaitText(manager, "시작까지 1분", timeoutMillis = 70_000)
-            assertEquals("시작까지 1분 · 덕성관 402", minute.extras.getCharSequence(Notification.EXTRA_TEXT).toString())
-            assertEquals("시작까지 1분 · 덕성관 402", minute.extras.getCharSequence(Notification.EXTRA_BIG_TEXT).toString())
+            assertEquals("시작까지 1분 · 본관 301", minute.extras.getCharSequence(Notification.EXTRA_TEXT).toString())
+            assertEquals("시작까지 1분 · 본관 301", minute.extras.getCharSequence(Notification.EXTRA_BIG_TEXT).toString())
             assertEquals(startsAt.toInstant().toEpochMilli(), minute.`when`)
             assertTrue(minute.extras.getBoolean(Notification.EXTRA_SHOW_CHRONOMETER))
             assertNull(minute.shortCriticalText)
 
             val inClass = awaitText(manager, "수업 중", timeoutMillis = 70_000)
-            assertEquals("수업 중 · 덕성관 402", inClass.extras.getCharSequence(Notification.EXTRA_TEXT).toString())
+            assertEquals("수업 중 · 본관 301", inClass.extras.getCharSequence(Notification.EXTRA_TEXT).toString())
             assertFalse(inClass.extras.getBoolean(Notification.EXTRA_SHOW_CHRONOMETER))
         } finally {
             app.liveSurfaceController.cancel()

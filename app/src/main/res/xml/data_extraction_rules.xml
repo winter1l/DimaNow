@@ -1,19 +1,20 @@
-<?xml version="1.0" encoding="utf-8"?><!--
-   Sample data extraction rules file; uncomment and customize as necessary.
-   See https://developer.android.com/about/versions/12/backup-restore#xml-changes
-   for details.
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  D-099: Android backup and device-to-device transfer carry only the timetable database and app settings, so a
+  new phone keeps the timetable. LMS credentials (noBackupFilesDir), the LMS cache database, WebView cookies,
+  downloaded caches and dormitory photos are never included: with <include> rules, everything else is excluded.
 -->
 <data-extraction-rules>
     <cloud-backup>
-        <!-- TODO: Use <include> and <exclude> to control what is backed up.
-        <include .../>
-        <exclude .../>
-        -->
+        <include domain="database" path="dima-now.db" />
+        <include domain="database" path="dima-now.db-wal" />
+        <include domain="database" path="dima-now.db-shm" />
+        <include domain="file" path="datastore/dima_now_settings.preferences_pb" />
     </cloud-backup>
-    <!--
     <device-transfer>
-        <include .../>
-        <exclude .../>
+        <include domain="database" path="dima-now.db" />
+        <include domain="database" path="dima-now.db-wal" />
+        <include domain="database" path="dima-now.db-shm" />
+        <include domain="file" path="datastore/dima_now_settings.preferences_pb" />
     </device-transfer>
-    -->
 </data-extraction-rules>

@@ -148,11 +148,27 @@ internal fun OnboardingScreen(
                     when (draft.stage) {
                         OnboardingStage.WELCOME -> {
                             StepHeading("학교생활을 한눈에", "수업, 셔틀, 오늘 식단을 확인해요.")
+                            // D-099: 첫 화면에서 비공식 앱임과 데이터 처리 원칙을 알린다
+                            Text(
+                                com.example.dimanow.ui.UNOFFICIAL_NOTICE + " 시간표와 위치는 이 기기에만 저장돼요.",
+                                style = MaterialTheme.typography.bodyMedium,
+                                modifier = Modifier.testTag("onboarding_unofficial_notice"),
+                            )
+                            Text(
+                                com.example.dimanow.ui.DATA_ACCURACY_NOTICE,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                            val context = androidx.compose.ui.platform.LocalContext.current
+                            androidx.compose.material3.TextButton(
+                                onClick = { com.example.dimanow.ui.openUrl(context, com.example.dimanow.ui.AppLinks.PRIVACY_POLICY) },
+                                modifier = Modifier.testTag("onboarding_privacy_policy"),
+                            ) { Text("개인정보 처리방침 보기") }
                         }
                         OnboardingStage.HOME_BASE -> {
                             StepHeading("주로 어느 방향으로 돌아가나요?", "수업이 끝난 뒤 안내할 셔틀 방향이에요.")
                             Column(Modifier.selectableGroup(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            listOf(HomeBase.YEIN to "엔터관 방향", HomeBase.ONE_ROOM to "원룸촌 방향").forEach { (homeBase, label) ->
+                            listOf(HomeBase.YEIN to "엔터관 방향", HomeBase.ONE_ROOM to "원룸촌 방향", HomeBase.COMMUTE to "통학 (귀가 셔틀 안내 없음)").forEach { (homeBase, label) ->
                                 Surface(
                                     shape = DimaShapes.Tile,
                                     color = if (draft.homeBase == homeBase) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerLow,

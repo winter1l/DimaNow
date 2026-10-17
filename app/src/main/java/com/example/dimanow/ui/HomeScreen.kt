@@ -252,6 +252,9 @@ internal fun DashboardScreen(
                         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             Text(
                                 text = when {
+                                    // D-099: 학기가 끝났으면 새 학기 설정을 먼저 안내한다
+                                    com.example.dimanow.calendar.AcademicTerms.hasEnded(schedule.termEnd, now.toLocalDate()) ->
+                                        "학기가 끝났어요. 시간표에서 새 학기를 설정해 주세요"
                                     schedule.courses.isEmpty() -> "시간표에 수업을 추가해 주세요"
                                     guidancePaused -> "오늘은 휴강이에요"
                                     schedule.coursesOn(now.toLocalDate()).isEmpty() -> "오늘은 수업이 없어요"
@@ -296,6 +299,7 @@ internal fun DashboardScreen(
             ) {
                 HomeCardHeader(icon = Icons.Default.DirectionsBus, title = "셔틀 ($originName 출발)")
 
+                val shuttleSuspension = remember(now.toLocalDate()) { guidanceEngine.campusShuttleSuspensionOn(now.toLocalDate()) }
                 val todayZoneDepartures = shuttleDepartures.filter { it.serviceDay == now.dayOfWeek && it.originZone == zone }
                 val destinations = todayZoneDepartures.mapNotNull { it.destinationZone }.distinct().sortedBy { it.ordinal }
 
@@ -311,8 +315,31 @@ internal fun DashboardScreen(
                             EmptyState(homeShuttleUnavailableMessage(shuttle), contained = false)
                         }
                     }
+                    // D-099: 공휴일·운행 중지일에는 평일 시간표 대신 미운행을 알린다
+                    shuttleSuspension != null -> {
+                        Text(
+                            "오늘은 셔틀이 운행하지 않아요 · $shuttleSuspension",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.testTag("dashboard_shuttle_suspended"),
+                        )
+                    }
                     zone == CampusZoneId.OUTSIDE -> {
-                        Text("캠퍼스 외부 — 교내 진입 시 자동 안내", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        // D-099: 위치 권한이 없어서 '캠퍼스 밖'으로 보이는 경우를 구분해 알려 준다
+                        val context = androidx.compose.ui.platform.LocalContext.current
+                        val locationGranted = remember(now) {
+                            androidx.core.content.ContextCompat.checkSelfPermission(context, android.Manifest.permission.ACCESS_FINE_LOCATION) ==
+                                android.content.pm.PackageManager.PERMISSION_GRANTED ||
+                                androidx.core.content.ContextCompat.checkSelfPermission(context, android.Manifest.permission.ACCESS_COARSE_LOCATION) ==
+                                android.content.pm.PackageManager.PERMISSION_GRANTED
+                        }
+                        Text(
+                            if (locationGranted) "캠퍼스 외부 — 교내 진입 시 자동 안내"
+                            else "위치 권한을 허용하면 지금 있는 곳의 셔틀을 보여 줘요 · 설정 → 자동 안내 설정",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.testTag(if (locationGranted) "dashboard_outside" else "dashboard_location_needed"),
+                        )
                     }
                     destinations.isNotEmpty() -> {
                         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -537,7 +564,7 @@ internal fun DashboardScreen(
                                 contained = false,
                                 modifier = Modifier.testTag("dashboard_notices_error"),
                             )
-                            notices.lastSuccess == null -> LoadingLine("공지를 확인하고 있어요")
+                            notices.lastSuccess == null -> LoadingLine("인터넷에 연결되면 공지를 받아요")
                             else -> EmptyState("등록된 공지가 없어요", contained = false)
                         }
                     } else {
@@ -588,7 +615,7 @@ internal fun DashboardScreen(
             ) {
                 Icon(Icons.Default.Language, contentDescription = null, modifier = Modifier.size(ButtonDefaults.IconSize))
                 Spacer(Modifier.width(ButtonDefaults.IconSpacing))
-                Text("DIMA Portal")
+                Text("DIMA 포털")
             }
         }
     }

@@ -133,7 +133,7 @@ fun GuidanceSetup(
         AlertDialog(
             onDismissRequest = { backgroundExplanation = false },
             title = { Text("앱을 닫아도 위치 확인") },
-            text = { Text("이동에 맞춰 셔틀 안내를 바꾸려면 위치 권한이 필요해요. 다음 화면에서 권한 → 위치 → '$optionLabel'을 선택해 주세요. 나중에 설정해도 앱을 사용할 수 있어요.") },
+            text = { Text("앱이 닫혀 있을 때도 예인관·본관·원룸촌·4402 정류장에 들어섰는지 확인해 셔틀 안내를 바꾸려면 위치 권한이 필요해요. 위치는 이 기기 안에서만 쓰고 저장하거나 보내지 않아요. 다음 화면에서 권한 → 위치 → '$optionLabel'을 선택해 주세요. 나중에 설정해도 앱을 사용할 수 있어요.") },
             confirmButton = { TextButton(onClick = { backgroundExplanation = false; openSettings(appDetails()) }) { Text("설정") } },
             dismissButton = { TextButton(onClick = { backgroundExplanation = false }) { Text("나중에") } },
         )
@@ -149,7 +149,7 @@ internal fun GuidanceSetupContent(
     Column(modifier, verticalArrangement = Arrangement.spacedBy(8.dp)) {
         SetupRow("알림 받기", "수업 시작과 셔틀 출발을 알려줘요.", state.notifications, GuidanceSetupAction.NOTIFICATIONS, onAction)
         SetupRow(
-            "현재 위치 사용", "가까운 정류장의 셔틀을 안내해요.", state.preciseLocation,
+            "현재 위치 사용", "가까운 정류장의 셔틀을 안내해요. 위치는 이 기기 안에서만 쓰고 어디에도 보내지 않아요.", state.preciseLocation,
             GuidanceSetupAction.LOCATION, onAction,
             status = if (!state.preciseLocation && state.approximateLocation) "대략적 위치 허용됨 · 정확한 위치가 필요해요" else null,
         )

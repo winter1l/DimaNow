@@ -26,6 +26,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import com.example.dimanow.domain.CampusZoneId
+import com.example.dimanow.domain.DisplayVocabulary
 import com.example.dimanow.domain.Course
 import com.example.dimanow.domain.GuidancePause
 import java.time.DayOfWeek
@@ -130,6 +131,8 @@ fun CourseEditorDialog(initial: Course?, onDismiss: () -> Unit, onSave: (Course)
     var room by remember(initial) { mutableStateOf(initial?.room.orEmpty()) }
     var professor by remember(initial) { mutableStateOf(initial?.professor.orEmpty()) }
     var day by remember(initial) { mutableStateOf(initial?.weekday ?: DayOfWeek.MONDAY) }
+    // D-099: 수업 건물에 따라 셔틀 안내 방향이 달라진다 (본관 / 엔터관)
+    var zone by remember(initial) { mutableStateOf(initial?.zone?.takeIf { it == CampusZoneId.YEIN } ?: CampusZoneId.MAIN) }
     var start by remember(initial) { mutableStateOf(initial?.start ?: LocalTime.of(10, 0)) }
     var end by remember(initial) { mutableStateOf(initial?.end ?: LocalTime.of(11, 0)) }
     var showStartPicker by remember { mutableStateOf(false) }
@@ -144,6 +147,18 @@ fun CourseEditorDialog(initial: Course?, onDismiss: () -> Unit, onSave: (Course)
                 OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("수업명") })
                 OutlinedTextField(value = room, onValueChange = { room = it }, label = { Text("강의실") })
                 OutlinedTextField(value = professor, onValueChange = { professor = it }, label = { Text("담당 교수") })
+
+                Text("수업 건물", style = MaterialTheme.typography.labelMedium)
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    listOf(CampusZoneId.MAIN, CampusZoneId.YEIN).forEach { option ->
+                        FilterChip(
+                            selected = zone == option,
+                            onClick = { zone = option },
+                            label = { Text(DisplayVocabulary.originName(option)) },
+                            modifier = Modifier.testTag("course_zone_${option.name}"),
+                        )
+                    }
+                }
 
                 Text("요일 선택", style = MaterialTheme.typography.labelMedium)
                 Row(
@@ -181,7 +196,8 @@ fun CourseEditorDialog(initial: Course?, onDismiss: () -> Unit, onSave: (Course)
                     onSave(
                         Course(
                             weekday = day, start = start, end = end,
-                            name = name, room = room, professor = professor, zone = CampusZoneId.MAIN, id = initial?.id ?: 0,
+                            name = name.trim(), room = room.trim(), professor = professor.trim(), zone = zone, id = initial?.id ?: 0,
+                            isOnline = initial?.isOnline ?: false,
                         ),
                     )
                 },

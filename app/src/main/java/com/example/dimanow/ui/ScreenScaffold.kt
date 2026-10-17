@@ -37,6 +37,8 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.customActions
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.style.TextOverflow
@@ -250,7 +252,12 @@ private fun PullToRefresh(
     PullToRefreshBox(
         isRefreshing = refreshing,
         onRefresh = onRefresh,
-        modifier = modifier,
+        // D-099: 당기기 동작을 쓰기 어려운 화면 낭독기 사용자를 위해 같은 새로고침을 접근성 동작으로도 제공한다
+        modifier = modifier.semantics {
+            customActions = listOf(
+                androidx.compose.ui.semantics.CustomAccessibilityAction("새로고침") { onRefresh(); true },
+            )
+        },
     ) {
         content()
     }

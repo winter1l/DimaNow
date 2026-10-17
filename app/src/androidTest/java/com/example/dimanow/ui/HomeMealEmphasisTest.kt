@@ -13,7 +13,7 @@ import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.performScrollToNode
 import androidx.test.platform.app.InstrumentationRegistry
 import com.example.dimanow.domain.CampusZoneId
-import com.example.dimanow.domain.DefaultSchedule
+import com.example.dimanow.domain.SampleSchedule
 import com.example.dimanow.meal.DormitoryMealData
 import com.example.dimanow.meal.DormitoryMealDay
 import com.example.dimanow.meal.DormitoryMealSection
@@ -41,7 +41,7 @@ class HomeMealEmphasisTest {
         composeRule.setContent {
             DIMANowTheme(darkTheme = dark.value) {
                 DashboardScreen(
-                    schedule = DefaultSchedule.create(), zone = CampusZoneId.YEIN,
+                    schedule = SampleSchedule.create(), zone = CampusZoneId.YEIN,
                     shuttle = ShuttleData(emptyList(), null, null, null, "https://example.invalid", null),
                     meal = MealData(emptyList(), null, null, null, "https://example.invalid", null, null),
                     dormitoryMeal = dormitory, now = now.value,

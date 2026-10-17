@@ -1,13 +1,8 @@
-<?xml version="1.0" encoding="utf-8"?><!--
-   Sample backup rules file; uncomment and customize as necessary.
-   See https://developer.android.com/guide/topics/data/autobackup
-   for details.
-   Note: This file is ignored for devices older than API 31
-   See https://developer.android.com/about/versions/12/backup-restore
--->
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Pre-API 31 form of data_extraction_rules.xml (minSdk is 31, kept for completeness). -->
 <full-backup-content>
-    <!--
-   <include domain="sharedpref" path="."/>
-   <exclude domain="sharedpref" path="device.xml"/>
--->
+    <include domain="database" path="dima-now.db" />
+    <include domain="database" path="dima-now.db-wal" />
+    <include domain="database" path="dima-now.db-shm" />
+    <include domain="file" path="datastore/dima_now_settings.preferences_pb" />
 </full-backup-content>

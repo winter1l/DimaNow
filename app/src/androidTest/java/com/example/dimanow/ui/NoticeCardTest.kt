@@ -12,7 +12,7 @@ import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.unit.dp
 import com.example.dimanow.domain.CampusNotice
 import com.example.dimanow.domain.CampusZoneId
-import com.example.dimanow.domain.DefaultSchedule
+import com.example.dimanow.domain.SampleSchedule
 import com.example.dimanow.meal.MealData
 import com.example.dimanow.notice.NoticeData
 import com.example.dimanow.shuttle.ShuttleData
@@ -43,7 +43,7 @@ class NoticeCardTest {
         )
         composeRule.setContent {
             DashboardScreen(
-                schedule = DefaultSchedule.create(),
+                schedule = SampleSchedule.create(),
                 zone = CampusZoneId.OUTSIDE,
                 shuttle = ShuttleData(emptyList(), null, null, null, "https://www.dima.ac.kr/?p=97", null),
                 meal = MealData(emptyList(), null, null, null, "https://www.dima.ac.kr/?p=1", null, null),
@@ -75,7 +75,7 @@ class NoticeCardTest {
         homeList.performScrollToNode(hasText("2026-2학기 국가장학금 2차 신청 안내"))
         // The notice card is composed here, so a missing fourth row means it was left out.
         composeRule.onNodeWithText("네 번째 공지는 카드에 나오지 않습니다").assertDoesNotExist()
-        homeList.performScrollToNode(hasText("DIMA Portal"))
+        homeList.performScrollToNode(hasText("DIMA 포털"))
         // D-094(9): the LMS shortcut only duplicated the Courses tab and is gone; the signed-out
         // course card is a compact prompt whose whole row opens Courses ("수업 보기").
         homeList.performScrollToNode(hasTestTag("dashboard_learning_prompt"))
@@ -88,7 +88,7 @@ class NoticeCardTest {
     fun emptyNoticeCacheShowsAQuietPlaceholderInsteadOfAnError() {
         composeRule.setContent {
             DashboardScreen(
-                schedule = DefaultSchedule.create(),
+                schedule = SampleSchedule.create(),
                 zone = CampusZoneId.OUTSIDE,
                 shuttle = ShuttleData(emptyList(), null, null, null, "https://www.dima.ac.kr/?p=97", null),
                 meal = MealData(emptyList(), null, null, null, "https://www.dima.ac.kr/?p=1", null, null),
@@ -96,8 +96,8 @@ class NoticeCardTest {
             )
         }
 
-        composeRule.onNodeWithTag("home_list").performScrollToNode(hasText("공지를 확인하고 있어요"))
+        composeRule.onNodeWithTag("home_list").performScrollToNode(hasText("인터넷에 연결되면 공지를 받아요"))
         composeRule.onNodeWithText("학교 공지").assertExists()
-        composeRule.onNodeWithText("공지를 확인하고 있어요").assertExists()
+        composeRule.onNodeWithText("인터넷에 연결되면 공지를 받아요").assertExists()
     }
 }

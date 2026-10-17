@@ -41,6 +41,7 @@ import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.DateRangePicker
@@ -171,6 +172,42 @@ internal fun TimetableScreen(
                         onConfigure = { showPauseChoice = true },
                         onClear = { scope.launch { repository.clearGuidancePause() } },
                     )
+                }
+            }
+        }
+        // D-099: 학기가 끝났거나 아직 수업이 없으면 다음 할 일을 바로 안내한다
+        val termEnded = com.example.dimanow.calendar.AcademicTerms.hasEnded(schedule.termEnd, today)
+        if (termEnded || schedule.courses.isEmpty()) item(key = "term_guide") {
+            val suggestion = remember(today) { com.example.dimanow.calendar.AcademicTerms.suggest(today) }
+            ElevatedCard(
+                modifier = Modifier.fillMaxWidth().testTag(if (termEnded) "term_ended_card" else "timetable_empty_card"),
+                shape = DimaShapes.Card,
+                colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer),
+            ) {
+                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    if (termEnded) {
+                        Text("학기가 끝났어요", style = MaterialTheme.typography.titleMedium)
+                        Text(
+                            "새 학기 기간을 정하고 수업을 다시 등록해 주세요. 추천 기간은 " +
+                                "${koreanDateLabel(suggestion.start, today)} ~ ${koreanDateLabel(suggestion.end, today)}" +
+                                (if (suggestion.published) "이에요." else "이에요 (학교 일정 발표 전 예상)."),
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            FilledTonalButton(
+                                onClick = { scope.launch { repository.setTerm(suggestion.start, suggestion.end) } },
+                                modifier = Modifier.testTag("apply_suggested_term"),
+                            ) { Text("추천 기간으로 바꾸기") }
+                            TextButton(onClick = { showTermEditor = true }) { Text("직접 고르기") }
+                        }
+                    } else {
+                        Text("수업을 등록해 주세요", style = MaterialTheme.typography.titleMedium)
+                        Text(
+                            "아래 '수업 추가'로 과목을 넣으면 수업 전 알림과 셔틀 안내가 시작돼요. " +
+                                "다른 기기에서 저장한 시간표 파일은 설정 → 데이터 관리에서 불러올 수 있어요.",
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                    }
                 }
             }
         }

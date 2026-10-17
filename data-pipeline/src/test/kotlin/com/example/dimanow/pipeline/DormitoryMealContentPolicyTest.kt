@@ -99,7 +99,7 @@ class DormitoryMealContentPolicyTest {
             """{"month":${date.monthValue},"day":${date.dayOfMonth},"sections":[{"name":"조식","menuLines":["$line"]}]}"""
         } + "]}"
         assertThrows(DormitoryMealContentException::class.java) {
-            GeminiDormitoryMealPayloadBuilder().build(response, LocalDate.of(2026, 8, 27), "https://example.invalid/x.jpg")
+            GeminiDormitoryMealPayloadBuilder().build(response, LocalDate.of(2026, 8, 27), "r2://dima-now-dorm-photos/submissions/x.jpg")
         }
     }
 

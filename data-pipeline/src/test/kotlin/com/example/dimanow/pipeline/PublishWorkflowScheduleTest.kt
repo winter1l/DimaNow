@@ -31,28 +31,33 @@ class PublishWorkflowScheduleTest {
     }
 
     @Test
-    fun `dormitory backlog is swept oldest first with a per-run cap and without checking out the submission branch`() {
+    fun `dormitory backlog comes from private R2 oldest first with a per-run cap`() {
         val workflow = Files.readString(projectRoot().resolve(".github/workflows/publish-data.yml")).replace("\r\n", "\n")
 
         assertTrue(workflow.contains("if [[ \"\$EVENT_NAME\" == \"schedule\" ]]; then dorm=true; fi"))
-        assertTrue(workflow.contains("options: [all, shuttle, meal, notice, dorm, release, dorm-revoke, deploy-only]"))
-        assertTrue(workflow.contains("[[ \"\$path\" =~ ^dorm-submissions/[A-Za-z0-9_-]{1,64}\\.(jpg|jpeg|png|webp)\$ ]] || continue"))
-        assertTrue(workflow.contains("[[ \"\$mode\" == 100644 && \"\$type\" == blob ]] || continue"))
-        assertTrue(workflow.contains("head -n 10 \"\$candidates\" > \"\$index\""))
-        assertFalse(workflow.contains("path: submission"))
-        assertFalse(workflow.contains("diff-tree --no-commit-id"))
+        assertTrue(workflow.contains("/v1/internal/dormitory-photos"))
+        assertTrue(workflow.contains("[[ \"\$id\" =~ ^[A-Za-z0-9_-]{1,64}\$ && \"\$extension\" =~ ^(jpg|png|webp)\$ ]] || continue"))
+        assertTrue(workflow.contains("sort -n -k1,1 | head -n 10 > \"\$index\""))
+        assertFalse(workflow.contains("dorm-submissions:"))
+        assertFalse(workflow.contains("branches: [main, dorm-submissions]"))
+        // The photo read token reaches only the fetch step, which runs no build or pipeline code.
+        val steps = workflow.split("\n      - ")
+        val withPhotoToken = steps.filter { it.contains("secrets.DORM_PHOTO_READ_TOKEN") }
+        assertEquals(1, withPhotoToken.size)
+        assertFalse(withPhotoToken.single().contains("gradlew"))
     }
 
     @Test
-    fun `the upload Worker dispatch selects only the dormitory sweep and never reads its payload`() {
+    fun `the upload Worker wakes the workflow only through fixed workflow_dispatch choices`() {
         val workflow = Files.readString(projectRoot().resolve(".github/workflows/publish-data.yml")).replace("\r\n", "\n")
 
-        assertTrue(workflow.contains("types: [student-meal-publication-watch, dorm-submission, dorm-report-wrong-menu, dorm-report-not-dormitory, dorm-report-offensive, dorm-report-other]"))
-        assertTrue(workflow.contains("DISPATCH_TYPE: \${{ github.event.action }}"))
-        assertTrue(workflow.contains("              dorm-submission) value=dorm ;;\n"))
-        assertTrue(workflow.contains("              student-meal-publication-watch) value=meal ;;\n"))
+        assertFalse(workflow.contains("repository_dispatch"))
+        assertTrue(workflow.contains("options: [all, shuttle, meal, notice, dorm, release, dorm-revoke, deploy-only, meal-watch, report-wrong-menu, report-not-dormitory, report-offensive, report-other]"))
+        assertTrue(workflow.contains("              meal-watch) value=meal; collect=true ;;\n"))
+        assertTrue(workflow.contains("              report-wrong-menu|report-not-dormitory|report-offensive|report-other) value=dorm-report ;;\n"))
         assertTrue(workflow.contains("case \"\$value\" in dorm|all) dorm=true ;; esac"))
-        assertFalse(workflow.contains("event.client_payload"))
+        assertFalse(workflow.contains("client_payload"))
+        assertFalse(workflow.contains("github.event.action"))
     }
 
     @Test

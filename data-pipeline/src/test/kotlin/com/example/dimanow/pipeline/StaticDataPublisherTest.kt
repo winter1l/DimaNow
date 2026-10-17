@@ -310,5 +310,5 @@ class StaticDataPublisherTest {
     }
 
     private fun dormitorySourceUrl(submissionId: String): String =
-        "https://raw.githubusercontent.com/winter1l/DimaNow/${"0".repeat(40)}/dorm-submissions/$submissionId.jpg"
+        "r2://dima-now-dorm-photos/submissions/$submissionId.jpg"
 }

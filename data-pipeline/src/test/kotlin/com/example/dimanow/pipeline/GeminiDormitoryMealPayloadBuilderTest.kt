@@ -26,7 +26,7 @@ class GeminiDormitoryMealPayloadBuilderTest {
         val payload = GeminiDormitoryMealPayloadBuilder().build(
             responseJson = response,
             referenceDate = LocalDate.of(2026, 8, 27),
-            sourceImageUrl = "https://raw.githubusercontent.com/winter1l/DimaNow/dorm-submissions/dorm-submissions/example.jpg",
+            sourceImageUrl = "r2://dima-now-dorm-photos/submissions/example.jpg",
         )
 
         assertEquals("2026-08-24", payload.weekStart)
@@ -60,6 +60,6 @@ class GeminiDormitoryMealPayloadBuilderTest {
     } + "]}"
 
     private companion object {
-        const val SOURCE = "https://raw.githubusercontent.com/winter1l/DimaNow/dorm-submissions/dorm-submissions/example.jpg"
+        const val SOURCE = "r2://dima-now-dorm-photos/submissions/example.jpg"
     }
 }

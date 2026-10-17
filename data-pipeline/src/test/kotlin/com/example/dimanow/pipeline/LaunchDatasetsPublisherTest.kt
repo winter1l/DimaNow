@@ -62,6 +62,15 @@ class LaunchDatasetsPublisherTest {
     }
 
     @Test
+    fun `an old com-example v1 release is never offered as the public download`() {
+        val site = Files.createTempDirectory("release-old")
+        StaticDataPublisher(site).publishAppRelease(release.replace("v2.0", "v1.6"), 1, now)
+
+        val descriptor = manifest(site).datasets.getValue("app_release")
+        assertEquals("WAITING", descriptor.state)
+    }
+
+    @Test
     fun `a release from another repository or without a digest is refused`() {
         val site = Files.createTempDirectory("release-invalid")
         assertThrows(IllegalArgumentException::class.java) {

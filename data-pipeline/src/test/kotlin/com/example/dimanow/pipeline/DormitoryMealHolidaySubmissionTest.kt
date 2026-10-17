@@ -83,7 +83,7 @@ class DormitoryMealHolidaySubmissionTest {
                 publisher,
                 GeminiDormitoryMealClient("test", "http://127.0.0.1:${server.address.port}"),
                 Clock.fixed(NOW, ZoneId.of("Asia/Seoul")),
-            ).process(image, "image/jpeg", "https://raw.githubusercontent.com/winter1l/DimaNow/${"0".repeat(40)}/dorm-submissions/holiday-test.jpg", "holiday-test")
+            ).process(image, "image/jpeg", "r2://dima-now-dorm-photos/submissions/holiday-test.jpg", "holiday-test")
             assertEquals(2, calls)
             check(result, publisher, output)
         } finally {

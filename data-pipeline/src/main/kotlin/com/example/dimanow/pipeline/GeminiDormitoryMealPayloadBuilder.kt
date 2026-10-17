@@ -29,7 +29,8 @@ class GeminiDormitoryMealPayloadBuilder {
     private val json = Json { ignoreUnknownKeys = true }
 
     fun build(responseJson: String, referenceDate: LocalDate, sourceImageUrl: String): DormitoryMealPayload {
-        require(sourceImageUrl.startsWith("https://")) { "기숙사 식단 이미지 주소가 HTTPS가 아닙니다." }
+        // D-100: the source is the private R2 reference of the submitted photo, never a public link.
+        require(sourceImageUrl.startsWith("r2://")) { "기숙사 식단 이미지 참조가 올바르지 않습니다." }
         val root = json.parseToJsonElement(responseJson) as JsonObject
         val days = (root.getValue("days") as JsonArray).map { element ->
             val day = element as JsonObject

@@ -9,12 +9,11 @@ import java.time.Instant
 import java.time.ZoneId
 
 /**
- * One image on the `dorm-submissions` branch, identified by the latest commit that touched it.
- * [commitSha] makes the published source URL immutable; [committedAt] orders the backlog oldest first.
+ * One photo in the private R2 bucket (D-100), downloaded by the workflow to [path] under the run's submission root.
+ * [uploadedAt] orders the backlog oldest first and decides the target week.
  */
-data class PendingDormitorySubmission(val commitSha: String, val committedAt: Instant, val path: String) {
+data class PendingDormitorySubmission(val uploadedAt: Instant, val path: String) {
     init {
-        require(commitSha.matches(COMMIT_SHA_PATTERN)) { "잘못된 제출 커밋입니다." }
         require(path.matches(SUBMISSION_PATH_PATTERN)) { "잘못된 제출 경로입니다." }
     }
 
@@ -26,24 +25,24 @@ data class PendingDormitorySubmission(val commitSha: String, val committedAt: In
         else -> "image/jpeg"
     }
 
+    /** Non-public reference to the stored photo; the owner resolves it privately when checking a report. */
     val sourceImageUrl: String
-        get() = "https://raw.githubusercontent.com/${StaticDataPublisher.DORMITORY_REPOSITORY}/$commitSha/$path"
+        get() = "${StaticDataPublisher.DORMITORY_SOURCE_URL}/${path.substringAfterLast('/')}"
 
     companion object {
-        private val COMMIT_SHA_PATTERN = Regex("[0-9a-f]{40}")
         private val SUBMISSION_PATH_PATTERN = Regex("dorm-submissions/[A-Za-z0-9_-]{1,64}\\.(?:jpg|jpeg|png|webp)")
         private val EPOCH_SECONDS_PATTERN = Regex("[0-9]{1,12}")
 
         /**
-         * Parses the workflow's `<commit-sha> <commit-epoch-seconds> <path>` lines. Lines that do not match the exact
-         * shape are skipped and reported, so one malformed entry cannot stop the rest of the backlog.
+         * Parses the workflow's `<upload-epoch-seconds> <path>` lines. Lines that do not match the exact shape are
+         * skipped and reported, so one malformed entry cannot stop the rest of the backlog.
          */
         fun parseIndex(text: String, onInvalid: (String) -> Unit = {}): List<PendingDormitorySubmission> =
             text.lineSequence().map(String::trim).filter(String::isNotEmpty).mapNotNull { line ->
                 val parts = line.split(' ')
                 runCatching {
-                    require(parts.size == 3 && parts[1].matches(EPOCH_SECONDS_PATTERN))
-                    PendingDormitorySubmission(parts[0], Instant.ofEpochSecond(parts[1].toLong()), parts[2])
+                    require(parts.size == 2 && parts[0].matches(EPOCH_SECONDS_PATTERN))
+                    PendingDormitorySubmission(Instant.ofEpochSecond(parts[0].toLong()), parts[1])
                 }.getOrElse {
                     onInvalid(line)
                     null
@@ -110,9 +109,9 @@ class DormitoryMealSubmissionProcessor(
     }
 
     /**
-     * Processes the `dorm-submissions` backlog: every listed image without a published status, oldest first, at most
+     * Processes the pending R2 backlog: every listed image without a published status, oldest first, at most
      * [limit] per run. A run cancelled while pending (shared concurrency group) therefore loses nothing; the next run
-     * picks the image up. An image committed for an earlier target week is rejected without a Gemini call. One failing
+     * picks the image up. An image uploaded for an earlier target week is rejected without a Gemini call. One failing
      * image records ERROR and does not stop the others.
      */
     fun processPending(
@@ -124,12 +123,12 @@ class DormitoryMealSubmissionProcessor(
         val root = submissionRoot.toAbsolutePath().normalize()
         val currentWeek = dormitoryMealTargetWeekStart(clock.instant().atZone(clock.zone).toLocalDate())
         return submissions
-            .sortedWith(compareBy({ it.committedAt }, { it.commitSha }, { it.path }))
+            .sortedWith(compareBy({ it.uploadedAt }, { it.path }))
             .distinctBy { it.submissionId }
             .filterNot { publisher.hasDormitorySubmissionStatus(it.submissionId) }
             .take(limit)
             .map { submission ->
-                val submittedWeek = dormitoryMealTargetWeekStart(submission.committedAt.atZone(clock.zone).toLocalDate())
+                val submittedWeek = dormitoryMealTargetWeekStart(submission.uploadedAt.atZone(clock.zone).toLocalDate())
                 if (submittedWeek != currentWeek) {
                     return@map publishStatus(submission.submissionId, "REJECTED", STALE_SUBMISSION_REASON)
                 }

@@ -1,14 +1,8 @@
 name: 캠퍼스 데이터 게시
 
 on:
-  repository_dispatch:
-    # dorm-submission: sent by the upload Worker after it writes a photo to dorm-submissions. Only the event type
-    # selects the dormitory sweep; client_payload is never read, and the schedule remains the fallback.
-    # dorm-report-*: an anonymous report of the published dormitory week; the reason is the event type itself, so
-    # no client_payload is read here either.
-    types: [student-meal-publication-watch, dorm-submission, dorm-report-wrong-menu, dorm-report-not-dormitory, dorm-report-offensive, dorm-report-other]
   push:
-    branches: [main, dorm-submissions]
+    branches: [main]
     paths:
       - data-source/shuttle.csv
       - data-source/calendar.json
@@ -17,7 +11,6 @@ on:
       - tools/render_privacy_page.py
       - data-pipeline/**
       - sync-contract/**
-      - dorm-submissions/**
       - .github/workflows/publish-data.yml
   schedule:
     # UTC: Monday 09:07-13:37 KST every 30m; then every 2h until the week is published.
@@ -26,6 +19,8 @@ on:
     - cron: "7 5-23/2 * * 1"
     - cron: "7 1-23/2 * * 0,2-6"
     - cron: "43 0 * * *"
+  # D-100: the upload Worker wakes this workflow with workflow_dispatch and a fixed choice (dorm, meal-watch,
+  # report-*), so its GitHub App needs only Actions write. Only the chosen option is read, never a client value.
   workflow_dispatch:
     inputs:
       dataset:
@@ -33,7 +28,7 @@ on:
         required: true
         default: all
         type: choice
-        options: [all, shuttle, meal, notice, dorm, release, dorm-revoke, deploy-only]
+        options: [all, shuttle, meal, notice, dorm, release, dorm-revoke, deploy-only, meal-watch, report-wrong-menu, report-not-dormitory, report-offensive, report-other]
 
 permissions:
   contents: write
@@ -84,22 +79,15 @@ jobs:
           REQUESTED: ${{ inputs.dataset }}
           SCHEDULE_EXPRESSION: ${{ github.event.schedule }}
           EVENT_NAME: ${{ github.event_name }}
-          REF_NAME: ${{ github.ref_name }}
-          DISPATCH_TYPE: ${{ github.event.action }}
         run: |
-          if [[ "$EVENT_NAME" == "push" && "$REF_NAME" == "dorm-submissions" ]]; then value=dorm
-          elif [[ "$EVENT_NAME" == "push" ]]; then value=shuttle
-          elif [[ "$EVENT_NAME" == "repository_dispatch" ]]; then
-            case "$DISPATCH_TYPE" in
-              dorm-submission) value=dorm ;;
-              student-meal-publication-watch) value=meal ;;
-              dorm-report-wrong-menu|dorm-report-not-dormitory|dorm-report-offensive|dorm-report-other) value=dorm-report ;;
-              *) echo "지원하지 않는 repository_dispatch 유형입니다." >&2; exit 1 ;;
-            esac
+          collect=false
+          if [[ "$EVENT_NAME" == "push" ]]; then value=shuttle
           elif [[ "$EVENT_NAME" == "workflow_dispatch" ]]; then
             case "$REQUESTED" in
               all|shuttle|meal|notice|dorm|release|dorm-revoke|deploy-only) value="$REQUESTED" ;;
-              *) echo "지원하지 않는 수동 게시 대상입니다." >&2; exit 1 ;;
+              meal-watch) value=meal; collect=true ;;
+              report-wrong-menu|report-not-dormitory|report-offensive|report-other) value=dorm-report ;;
+              *) echo "지원하지 않는 게시 대상입니다." >&2; exit 1 ;;
             esac
           elif [[ "$SCHEDULE_EXPRESSION" == "43 0 * * *" ]]; then value=notice
           else value=meal
@@ -115,8 +103,10 @@ jobs:
           case "$value" in release|all|notice) release=true ;; esac
           echo "release=$release" >> "$GITHUB_OUTPUT"
           if [[ "$EVENT_NAME" == "schedule" ]]; then dorm=true; fi
+          if [[ "$EVENT_NAME" == "schedule" ]]; then collect=true; fi
           echo "value=$value" >> "$GITHUB_OUTPUT"
           echo "dorm=$dorm" >> "$GITHUB_OUTPUT"
+          echo "collect=$collect" >> "$GITHUB_OUTPUT"
       - name: 셔틀 게시
         if: steps.target.outputs.value == 'shuttle' || steps.target.outputs.value == 'all'
         working-directory: source
@@ -145,46 +135,44 @@ jobs:
         working-directory: source
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-          EVENT_NAME: ${{ github.event_name }}
+          COLLECT: ${{ steps.target.outputs.collect }}
         run: |
           command=publish-meal
-          if [[ "$EVENT_NAME" == "schedule" || "$EVENT_NAME" == "repository_dispatch" ]]; then command=collect-meal; fi
+          # Scheduled runs and the Worker's meal watch only collect while the current week is still missing.
+          if [[ "$COLLECT" == "true" ]]; then command=collect-meal; fi
           bash ./gradlew :data-pipeline:run --args="$command ignored $GITHUB_WORKSPACE/site"
       - name: 기숙사 대기 제출 목록
         id: dorm_pending
         if: steps.target.outputs.dorm == 'true'
         shell: bash
+        # D-100: photos are private in Cloudflare R2. This step alone holds the read token, runs no build or pipeline
+        # code, and downloads at most 10 photos without a published status, oldest first.
+        env:
+          PHOTO_ENDPOINT: ${{ secrets.DORM_PHOTO_ENDPOINT }}
+          PHOTO_TOKEN: ${{ secrets.DORM_PHOTO_READ_TOKEN }}
         run: |
           set -euo pipefail
-          # Every image on dorm-submissions without a published status, oldest commit first, at most 10 per run.
-          # Images are read as regular-file blobs from Git objects; the branch is never checked out, so its files,
-          # symlinks and older workflow code are neither executed nor followed.
-          ref=refs/remotes/origin/dorm-submissions
           root="$RUNNER_TEMP/dorm-pending"
           index="$RUNNER_TEMP/dorm-pending.txt"
-          candidates="$RUNNER_TEMP/dorm-candidates.txt"
           mkdir -p "$root/dorm-submissions"
           : > "$index"
-          : > "$candidates"
-          if ! git -C source fetch --no-tags origin "+refs/heads/dorm-submissions:$ref"; then
-            echo "dorm-submissions 브랜치가 없어 기숙사 제출 처리를 건너뜁니다."
+          if [[ -z "$PHOTO_ENDPOINT" || -z "$PHOTO_TOKEN" ]]; then
+            echo "사진 저장소 설정이 없어 기숙사 제출 처리를 건너뜁니다."
             echo "count=0" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          while IFS=$'\t' read -r meta path; do
-            read -r mode type _ <<< "$meta"
-            [[ "$mode" == 100644 && "$type" == blob ]] || continue
-            [[ "$path" =~ ^dorm-submissions/[A-Za-z0-9_-]{1,64}\.(jpg|jpeg|png|webp)$ ]] || continue
-            file="${path#dorm-submissions/}"
-            [[ -e "site/data/v1/dorm-submissions/${file%.*}.json" ]] && continue
-            commit="$(git -C source log -1 --format='%H %ct' "$ref" -- "$path")"
-            [[ "$commit" =~ ^[0-9a-f]{40}\ [0-9]{1,12}$ ]] || continue
-            echo "$commit $path" >> "$candidates"
-          done < <(git -C source ls-tree -r --full-tree "$ref" -- dorm-submissions/)
-          sort -k2,2n -k1,1 -k3,3 -o "$candidates" "$candidates"
-          head -n 10 "$candidates" > "$index"
-          while read -r _ _ path; do
-            git -C source cat-file blob "$ref:$path" > "$root/$path"
+          echo "::add-mask::$PHOTO_TOKEN"
+          list="$RUNNER_TEMP/dorm-photos.json"
+          curl -fsS --max-time 30 -H "Authorization: Bearer $PHOTO_TOKEN" "$PHOTO_ENDPOINT/v1/internal/dormitory-photos" -o "$list"
+          jq -r '.photos[] | "\(.uploadedAt) \(.id) \(.extension)"' "$list" | while read -r uploaded id extension; do
+            [[ "$id" =~ ^[A-Za-z0-9_-]{1,64}$ && "$extension" =~ ^(jpg|png|webp)$ ]] || continue
+            [[ -e "site/data/v1/dorm-submissions/$id.json" ]] && continue
+            epoch="$(date -u -d "$uploaded" +%s)"
+            echo "$epoch dorm-submissions/$id.$extension"
+          done | sort -n -k1,1 | head -n 10 > "$index"
+          while read -r _ path; do
+            curl -fsS --max-time 60 -H "Authorization: Bearer $PHOTO_TOKEN" \
+              "$PHOTO_ENDPOINT/v1/internal/dormitory-photos/${path#dorm-submissions/}" -o "$root/$path"
           done < "$index"
           count="$(wc -l < "$index" | tr -d ' ')"
           echo "기숙사 대기 제출 ${count}건"
@@ -201,7 +189,7 @@ jobs:
         run: bash ./gradlew :data-pipeline:run --args="publish-notice ignored $GITHUB_WORKSPACE/site"
       - name: 기숙사 식단 내리기
         # Owner-only manual action after reviewing a report: the current dormitory week stops being published and
-        # apps drop it, so a new photo can be uploaded. The photo itself stays in dorm-submissions history.
+        # apps drop it, so a new photo can be uploaded. The private photo is deleted by the 30-day retention.
         if: steps.target.outputs.value == 'dorm-revoke'
         working-directory: source
         run: bash ./gradlew :data-pipeline:run --args="revoke-dorm-meal ignored $GITHUB_WORKSPACE/site"
@@ -238,9 +226,9 @@ jobs:
           fi
           rm -f site/.git
       - uses: actions/configure-pages@983d7736d9b0ae728b81ab479565c72886d7745b
-        if: steps.generated.outputs.changed == 'true' || github.event_name == 'workflow_dispatch'
+        if: steps.generated.outputs.changed == 'true' || inputs.dataset == 'deploy-only' || inputs.dataset == 'all'
       - name: Pages 아티팩트 생성
-        if: steps.generated.outputs.changed == 'true' || github.event_name == 'workflow_dispatch'
+        if: steps.generated.outputs.changed == 'true' || inputs.dataset == 'deploy-only' || inputs.dataset == 'all'
         shell: bash
         run: |
           tar \
@@ -251,7 +239,7 @@ jobs:
             --exclude=.github \
             .
       - name: Pages 아티팩트 업로드
-        if: steps.generated.outputs.changed == 'true' || github.event_name == 'workflow_dispatch'
+        if: steps.generated.outputs.changed == 'true' || inputs.dataset == 'deploy-only' || inputs.dataset == 'all'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: github-pages
@@ -259,7 +247,7 @@ jobs:
           retention-days: 1
           if-no-files-found: error
       - name: Pages 배포
-        if: steps.generated.outputs.changed == 'true' || github.event_name == 'workflow_dispatch'
+        if: steps.generated.outputs.changed == 'true' || inputs.dataset == 'deploy-only' || inputs.dataset == 'all'
         id: deployment
         uses: actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e
       - name: 신고와 게시 상태 알림
@@ -270,7 +258,7 @@ jobs:
         env:
           ISSUE_TOKEN: ${{ github.token }}
           JOB_STATUS: ${{ job.status }}
-          DISPATCH_TYPE: ${{ github.event.action }}
+          REQUESTED: ${{ inputs.dataset }}
           TARGET: ${{ steps.target.outputs.value }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
@@ -279,10 +267,10 @@ jobs:
           repo="$GITHUB_REPOSITORY"
           manifest="site/data/v1/manifest.json"
           if [[ "$TARGET" == "dorm-report" ]]; then
-            case "$DISPATCH_TYPE" in
-              dorm-report-wrong-menu) label="메뉴가 사진이나 실제와 달라요" ;;
-              dorm-report-not-dormitory) label="기숙사 식단이 아니에요" ;;
-              dorm-report-offensive) label="부적절한 내용이 있어요" ;;
+            case "$REQUESTED" in
+              report-wrong-menu) label="메뉴가 사진이나 실제와 달라요" ;;
+              report-not-dormitory) label="기숙사 식단이 아니에요" ;;
+              report-offensive) label="부적절한 내용이 있어요" ;;
               *) label="기타" ;;
             esac
             week="$(jq -r '.datasets.dorm_meal.publishedAt // "알 수 없음"' "$manifest" 2>/dev/null || echo "알 수 없음")"
@@ -295,6 +283,7 @@ jobs:
                 echo "익명 신고: $label"
                 echo "신고된 식단의 게시 시각: $week"
                 echo
+                echo "원본 사진은 비공개 R2에 30일 동안만 있어요(관리자만 확인)."
                 echo "확인 후 내려야 하면 Actions의 '캠퍼스 데이터 게시'를 dorm-revoke로 실행해 주세요."
               } > "$RUNNER_TEMP/report.md"
               gh issue create --repo "$repo" --title "$title" --body-file "$RUNNER_TEMP/report.md"

@@ -164,7 +164,7 @@ class DormitoryMealSubmissionProcessorTest {
         FakeGemini(ocrResponse = week(8, 24)).use { gemini ->
             for (url in listOf(
                 "https://raw.githubusercontent.com/winter1l/DimaNow/example.jpg",
-                "https://example.invalid/winter1l/DimaNow/${"0".repeat(40)}/dorm-submissions/bad-source.jpg",
+                "r2://other-bucket/submissions/bad-source.jpg",
                 sourceUrl("other-submission"),
             )) {
                 assertThrows(IllegalArgumentException::class.java) {
@@ -233,20 +233,6 @@ class DormitoryMealSubmissionProcessorTest {
     }
 
     @Test
-    fun `레거시 6인자 publish-dorm-meal 명령 계약을 유지한다`() {
-        val output = Files.createTempDirectory("dima-dorm-cli-legacy")
-        val published = FakeGemini(ocrResponse = week(8, 24)).use { process(output, it, THURSDAY, "legacy") }
-
-        // The legacy workflow on the dorm-submissions branch still calls this exact shape with main's pipeline code.
-        main(arrayOf("publish-dorm-meal", image().toString(), output.toString(), "legacy", sourceUrl("legacy"), "image/jpeg"))
-
-        assertEquals(published, readStatus(output, "legacy"))
-        assertThrows(IllegalArgumentException::class.java) {
-            main(arrayOf("publish-dorm-meal", image().toString(), output.toString(), "legacy", sourceUrl("legacy")))
-        }
-    }
-
-    @Test
     fun `대기 중인 두 제출을 오래된 순서로 모두 처리한다`() {
         val output = Files.createTempDirectory("dima-dorm-batch-two")
         val root = submissionRoot("older", "newer")
@@ -265,7 +251,7 @@ class DormitoryMealSubmissionProcessorTest {
             val descriptor = readManifest(output).datasets.getValue("dorm_meal")
             val payload = Json.decodeFromString<DormitoryMealPayload>(Files.readString(output.resolve("data/v1").resolve(descriptor.url)))
             assertEquals(
-                "https://raw.githubusercontent.com/winter1l/DimaNow/${"a".repeat(40)}/dorm-submissions/older.jpg",
+                "r2://dima-now-dorm-photos/submissions/older.jpg",
                 payload.sourceImageUrl,
             )
         }
@@ -328,24 +314,23 @@ class DormitoryMealSubmissionProcessorTest {
     }
 
     @Test
-    fun `대기 목록은 정확한 커밋과 경로 형식만 받는다`() {
-        val sha = "0123456789abcdef0123456789abcdef01234567"
+    fun `대기 목록은 정확한 업로드 시각과 경로 형식만 받는다`() {
         val invalid = mutableListOf<String>()
         val parsed = PendingDormitorySubmission.parseIndex(
             listOf(
-                "$sha 1788134625 dorm-submissions/ok-1.jpg",
-                "$sha 1788134625 dorm-submissions/../secret.jpg",
-                "$sha 1788134625 dorm-submissions/x.gif",
-                "${sha.uppercase()} 1788134625 dorm-submissions/upper.jpg",
-                "$sha -1 dorm-submissions/negative.jpg",
-                "$sha 1788134625 dorm-submissions/a.png extra",
-                "$sha 1788134625 dorm-submissions/ok-2.webp",
+                "1788134625 dorm-submissions/ok-1.jpg",
+                "1788134625 dorm-submissions/../secret.jpg",
+                "1788134625 dorm-submissions/x.gif",
+                "-1 dorm-submissions/negative.jpg",
+                "1788134625 dorm-submissions/a.png extra",
+                "abc 1788134625 dorm-submissions/legacy.jpg",
+                "1788134625 dorm-submissions/ok-2.webp",
             ).joinToString("\n"),
         ) { invalid += it }
 
         assertEquals(listOf("ok-1", "ok-2"), parsed.map { it.submissionId })
         assertEquals(listOf("image/jpeg", "image/webp"), parsed.map { it.mimeType })
-        assertEquals("https://raw.githubusercontent.com/winter1l/DimaNow/$sha/dorm-submissions/ok-1.jpg", parsed.first().sourceImageUrl)
+        assertEquals("r2://dima-now-dorm-photos/submissions/ok-1.jpg", parsed.first().sourceImageUrl)
         assertEquals(5, invalid.size)
     }
 
@@ -354,8 +339,9 @@ class DormitoryMealSubmissionProcessorTest {
         ids.forEach { Files.write(root.resolve("dorm-submissions/$it.jpg"), byteArrayOf(7, 8, 9)) }
     }
 
-    private fun pending(id: String, committedAt: Instant, shaChar: Char) =
-        PendingDormitorySubmission(shaChar.toString().repeat(40), committedAt, "dorm-submissions/$id.jpg")
+    @Suppress("UNUSED_PARAMETER")
+    private fun pending(id: String, uploadedAt: Instant, shaChar: Char) =
+        PendingDormitorySubmission(uploadedAt, "dorm-submissions/$id.jpg")
 
     private fun process(output: Path, gemini: FakeGemini, now: Instant, submissionId: String): DormitoryMealSubmissionStatus =
         processor(output, gemini, now).process(image(), "image/jpeg", sourceUrl(submissionId), submissionId)
@@ -408,6 +394,6 @@ class DormitoryMealSubmissionProcessorTest {
         val THURSDAY: Instant = Instant.parse("2026-08-27T03:00:00Z")
 
         fun sourceUrl(submissionId: String): String =
-            "https://raw.githubusercontent.com/winter1l/DimaNow/${"0".repeat(40)}/dorm-submissions/$submissionId.jpg"
+            "r2://dima-now-dorm-photos/submissions/$submissionId.jpg"
     }
 }

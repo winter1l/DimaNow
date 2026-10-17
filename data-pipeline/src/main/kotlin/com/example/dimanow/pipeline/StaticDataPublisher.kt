@@ -59,6 +59,11 @@ class StaticDataPublisher(private val outputRoot: Path) {
         fun text(obj: JsonObject, key: String) = obj[key]?.jsonPrimitive?.contentOrNull ?: error("릴리스 응답에 $key 값이 없습니다.")
         val tag = text(root, "tag_name")
         require(tag.matches(Regex("""v[0-9]+\.[0-9]+(?:\.[0-9]+)?"""))) { "지원하지 않는 릴리스 태그입니다: $tag" }
+        // v1.x releases are the old com.example.dimanow package; never offer them as the public download (D-099).
+        if (tag.removePrefix("v").substringBefore('.').toInt() < FIRST_PUBLIC_MAJOR) {
+            recordFailure("app_release", "WAITING", "공개 버전을 준비하고 있어요", publishedAt)
+            return
+        }
         require(root["draft"]?.jsonPrimitive?.booleanOrNull == false && root["prerelease"]?.jsonPrimitive?.booleanOrNull == false) {
             "안정 릴리스가 아닙니다."
         }
@@ -152,7 +157,7 @@ class StaticDataPublisher(private val outputRoot: Path) {
         ).also(::writeDormitorySubmissionStatus)
     }
 
-    /** Rejects a submission ID or source image URL that is not the exact immutable `dorm-submissions` commit path. */
+    /** Rejects a submission ID or a source reference other than this submission's private R2 object (D-100). */
     fun requireValidDormitorySubmission(submissionId: String, sourceImageUrl: String) {
         requireValidSubmissionId(submissionId)
         requireValidDormitorySourceImageUrl(sourceImageUrl, submissionId)
@@ -287,25 +292,18 @@ class StaticDataPublisher(private val outputRoot: Path) {
     }
 
     private fun requireValidDormitorySourceImageUrl(value: String, submissionId: String) {
-        val valid = runCatching {
-            val uri = URI.create(value)
-            uri.scheme.equals("https", ignoreCase = true) &&
-                uri.host.equals("raw.githubusercontent.com", ignoreCase = true) &&
-                uri.userInfo == null && uri.port == -1 && uri.rawQuery == null && uri.rawFragment == null &&
-                uri.rawPath.matches(
-                    Regex("^/winter1l/DimaNow/[0-9a-f]{40}/dorm-submissions/${Regex.escape(submissionId)}\\.(?:jpg|jpeg|png|webp)$"),
-                )
-        }.getOrDefault(false)
-        require(valid) { "제출 이미지의 불변 GitHub 원본 주소가 올바르지 않습니다." }
+        val expected = Regex("^${Regex.escape(DORMITORY_SOURCE_URL)}/${Regex.escape(submissionId)}\\.(?:jpg|jpeg|png|webp)$")
+        require(value.matches(expected)) { "제출 사진의 비공개 저장소 참조가 올바르지 않습니다." }
     }
 
     internal companion object {
-        /** The only repository whose immutable `dorm-submissions` commits may be cited as a dormitory source image. */
+        /** The repository whose releases and Pages this pipeline publishes. */
         const val DORMITORY_REPOSITORY = "winter1l/DimaNow"
         const val REVOKED_MESSAGE = "신고를 확인해 이번 주 식단을 내렸어요. 새 사진을 올려 주세요"
+        const val FIRST_PUBLIC_MAJOR = 2
         const val RELEASES_SOURCE_URL = "https://github.com/winter1l/DimaNow/releases"
         const val CALENDAR_SOURCE_URL = "https://www.dima.ac.kr/?p=78"
-        const val DORMITORY_SOURCE_URL = "https://github.com/winter1l/DimaNow/tree/dorm-submissions/dorm-submissions"
+        const val DORMITORY_SOURCE_URL = "r2://dima-now-dorm-photos/submissions"
         val SUBMISSION_ID_PATTERN = Regex("[A-Za-z0-9_-]{1,64}")
         val KST: ZoneId = ZoneId.of("Asia/Seoul")
     }

@@ -54,10 +54,14 @@ class StaticShuttleSource(
     private val transport: StaticDataTransport,
     private val clock: Clock = Clock.systemUTC(),
     private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
+    /** Validates and installs a downloaded `calendar` payload (D-099); throws when it is invalid. */
+    private val calendarImporter: ((ByteArray) -> Unit)? = null,
 ) : ShuttleSource {
     private val dao = database.scheduleDao()
     private val refreshMutex = Mutex()
-    private val json = Json { ignoreUnknownKeys = false }
+    // Unknown fields are ignored so a later publisher can add fields without breaking shipped apps (D-099);
+    // schemaVersion still rejects incompatible payloads.
+    private val json = Json { ignoreUnknownKeys = true }
 
     override val data: Flow<ShuttleData> = combine(
         dao.observeShuttleDepartures()
@@ -84,6 +88,7 @@ class StaticShuttleSource(
         try {
             val manifest = json.decodeFromString<CampusDataManifest>(transport.get(MANIFEST_URL).decodeToString())
             require(manifest.schemaVersion == 1) { "지원하지 않는 동기화 스키마예요." }
+            syncCalendar(manifest, attempt)
             val descriptor = manifest.datasets.getValue(SOURCE_KEY)
             require(descriptor.state == "READY") { descriptor.message ?: "셔틀 데이터가 준비되지 않았어요." }
             require(descriptor.sourceUrl == OFFICIAL_SHUTTLE_SOURCE_URL) { "허용되지 않은 셔틀 원문 주소예요." }
@@ -183,6 +188,32 @@ class StaticShuttleSource(
         }
     } }
 
+    /** Best effort: a calendar problem never fails the shuttle refresh; the previous calendar stays in use. */
+    private suspend fun syncCalendar(manifest: CampusDataManifest, attempt: Instant) {
+        val importer = calendarImporter ?: return
+        runCatching {
+            val descriptor = manifest.datasets[CALENDAR_KEY]?.takeIf { it.state == "READY" } ?: return
+            require(descriptor.sourceUrl == CALENDAR_SOURCE_URL) { "허용되지 않은 달력 원문 주소예요." }
+            if (dao.syncState(CALENDAR_KEY)?.sha256 == descriptor.sha256) return
+            val bytes = transport.get("$DATA_ROOT/${requirePayloadUrl(descriptor.url, "calendar")}")
+            require(bytes.size <= 512 * 1024 && bytes.sha256() == descriptor.sha256) { "달력 데이터 무결성 검사에 실패했어요." }
+            importer(bytes)
+            dao.putSyncState(
+                SyncStateEntity(
+                    dataset = CALENDAR_KEY,
+                    revision = descriptor.revision,
+                    etag = null,
+                    sha256 = descriptor.sha256,
+                    serverPublishedEpochMillis = Instant.parse(descriptor.publishedAt).toEpochMilli(),
+                    lastCheckedEpochMillis = attempt.toEpochMilli(),
+                    lastImportedEpochMillis = attempt.toEpochMilli(),
+                    serverState = descriptor.state,
+                    error = null,
+                ),
+            )
+        }
+    }
+
     private fun requirePayloadUrl(value: String, directory: String): String {
         require(value.matches(Regex("$directory/[0-9a-f]{64}\\.json"))) { "잘못된 데이터 경로예요." }
         return value
@@ -196,5 +227,7 @@ class StaticShuttleSource(
         const val DATA_ROOT = "https://winter1l.github.io/DimaNow/data/v1"
         const val MANIFEST_URL = "$DATA_ROOT/manifest.json"
         const val SOURCE_KEY = "shuttle"
+        const val CALENDAR_KEY = "calendar"
+        const val CALENDAR_SOURCE_URL = "https://www.dima.ac.kr/?p=78"
     }
 }

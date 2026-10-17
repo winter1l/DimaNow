@@ -95,31 +95,9 @@ data class Bus4402Departure(
 )
 
 object Bus4402ServiceCalendar {
-    private val publicHolidays2026 = setOf(
-        LocalDate.of(2026, 1, 1),
-        LocalDate.of(2026, 2, 16),
-        LocalDate.of(2026, 2, 17),
-        LocalDate.of(2026, 2, 18),
-        LocalDate.of(2026, 3, 1),
-        LocalDate.of(2026, 3, 2),
-        LocalDate.of(2026, 5, 5),
-        LocalDate.of(2026, 5, 24),
-        LocalDate.of(2026, 5, 25),
-        LocalDate.of(2026, 6, 3),
-        LocalDate.of(2026, 6, 6),
-        LocalDate.of(2026, 8, 15),
-        LocalDate.of(2026, 8, 17),
-        LocalDate.of(2026, 9, 24),
-        LocalDate.of(2026, 9, 25),
-        LocalDate.of(2026, 9, 26),
-        LocalDate.of(2026, 10, 3),
-        LocalDate.of(2026, 10, 5),
-        LocalDate.of(2026, 10, 9),
-        LocalDate.of(2026, 12, 25),
-    )
-
+    /** Public and substitute holidays come from the shared service calendar (D-099), not a per-year list. */
     fun serviceType(date: LocalDate): Bus4402ServiceType = when {
-        date in publicHolidays2026 -> Bus4402ServiceType.SUNDAY_HOLIDAY
+        com.example.dimanow.calendar.ServiceCalendarStore.current.isPublicHoliday(date) -> Bus4402ServiceType.SUNDAY_HOLIDAY
         date.dayOfWeek == DayOfWeek.SATURDAY -> Bus4402ServiceType.SATURDAY
         date.dayOfWeek == DayOfWeek.SUNDAY -> Bus4402ServiceType.SUNDAY_HOLIDAY
         else -> Bus4402ServiceType.WEEKDAY

@@ -102,6 +102,12 @@ fun ShuttleScreen(
     // 요일별 출발지 묶음은 컴포저블 범위에서 한 번만 계산하고, 목록은 카드마다 키가 있는 지연 항목으로 낸다 (D-094)
     val activeDay = selectedDay
     val isToday = activeDay == now.dayOfWeek
+    // D-099: 공휴일·운행 중지일에는 오늘 시간표 대신 미운행을, 학기 밖(방학)에는 시간 변동 가능성을 알린다
+    val todaySuspension = remember(now.toLocalDate()) { guidanceEngine.campusShuttleSuspensionOn(now.toLocalDate()) }
+    val outsideTerm = remember(now.toLocalDate()) {
+        val calendar = com.example.dimanow.calendar.ServiceCalendarStore.current
+        calendar.terms.isNotEmpty() && calendar.termContaining(now.toLocalDate()) == null
+    }
     val dayDepartures = remember(shuttleDepartures, activeDay) {
         shuttleDepartures.filter { it.serviceDay == activeDay }
     }
@@ -188,6 +194,13 @@ fun ShuttleScreen(
                         modifier = Modifier.testTag("shuttle_no_data"),
                     )
                 }
+                isToday && todaySuspension != null -> item(key = "shuttle_suspended") {
+                    EmptyState(
+                        message = "오늘은 셔틀이 운행하지 않아요 · $todaySuspension",
+                        supporting = "다른 요일을 고르면 평소 시간표를 볼 수 있어요",
+                        modifier = Modifier.testTag("shuttle_suspended"),
+                    )
+                }
                 dayDepartures.isEmpty() -> item(key = "shuttle_empty_${activeDay.name}") {
                     EmptyState(
                         message = "${koreanWeekdayLabel(activeDay)}은 운행하지 않아요",
@@ -195,29 +208,39 @@ fun ShuttleScreen(
                     )
                 }
                 // 선택된 요일의 노선별 셔틀 목록 (현재 위치 출발 우선 정렬)
-                else -> originGroups.forEach { (originZone, routes) ->
-                    val isCurrentLocation = originZone == currentZone && currentZone != CampusZoneId.OUTSIDE
-                    item(key = "origin_${activeDay.name}_${originZone.name}") {
-                        ShuttleOriginHeader(
-                            origin = DisplayVocabulary.originName(originZone),
-                            isCurrentLocation = isCurrentLocation,
-                            modifier = Modifier.animateItem(fadeInSpec = dayFadeIn, placementSpec = null, fadeOutSpec = null),
+                else -> {
+                    if (outsideTerm) item(key = "shuttle_vacation_note") {
+                        Text(
+                            "지금은 학기 중이 아니라 운행 시간이 다를 수 있어요. 학교 공지를 함께 확인해 주세요.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.testTag("shuttle_vacation_note"),
                         )
                     }
-                    routes.forEach { (destinationZone, routeDepartures) ->
-                        item(key = "route_${activeDay.name}_${originZone.name}_${destinationZone?.name}") {
-                            Box(Modifier.animateItem(fadeInSpec = dayFadeIn, placementSpec = null, fadeOutSpec = null)) {
-                                ShuttleRouteCard(
-                                    originZone = originZone,
-                                    destinationZone = destinationZone,
-                                    routeDepartures = routeDepartures,
-                                    shuttleDepartures = shuttleDepartures,
-                                    activeDay = activeDay,
-                                    isToday = isToday,
-                                    isCurrentLocation = isCurrentLocation,
-                                    now = now,
-                                    guidanceEngine = guidanceEngine,
-                                )
+                    originGroups.forEach { (originZone, routes) ->
+                        val isCurrentLocation = originZone == currentZone && currentZone != CampusZoneId.OUTSIDE
+                        item(key = "origin_${activeDay.name}_${originZone.name}") {
+                            ShuttleOriginHeader(
+                                origin = DisplayVocabulary.originName(originZone),
+                                isCurrentLocation = isCurrentLocation,
+                                modifier = Modifier.animateItem(fadeInSpec = dayFadeIn, placementSpec = null, fadeOutSpec = null),
+                            )
+                        }
+                        routes.forEach { (destinationZone, routeDepartures) ->
+                            item(key = "route_${activeDay.name}_${originZone.name}_${destinationZone?.name}") {
+                                Box(Modifier.animateItem(fadeInSpec = dayFadeIn, placementSpec = null, fadeOutSpec = null)) {
+                                    ShuttleRouteCard(
+                                        originZone = originZone,
+                                        destinationZone = destinationZone,
+                                        routeDepartures = routeDepartures,
+                                        shuttleDepartures = shuttleDepartures,
+                                        activeDay = activeDay,
+                                        isToday = isToday,
+                                        isCurrentLocation = isCurrentLocation,
+                                        now = now,
+                                        guidanceEngine = guidanceEngine,
+                                    )
+                                }
                             }
                         }
                     }

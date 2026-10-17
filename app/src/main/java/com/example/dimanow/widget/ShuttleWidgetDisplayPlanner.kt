@@ -68,6 +68,14 @@ class ShuttleWidgetDisplayPlanner {
             )
         }
         val engine = GuidanceEngine()
+        // D-099: no cached timetable yet is not "no service"; a public holiday or suspension is named.
+        if (allDepartures.isEmpty()) {
+            return ShuttleWidgetDisplayPlan("DIMA 셔틀", emptyList(), NO_DATA_TEXT, "DIMA 셔틀. $NO_DATA_TEXT")
+        }
+        engine.campusShuttleSuspensionOn(now.toLocalDate())?.let { reason ->
+            val text = "$NO_SERVICE_TEXT · $reason"
+            return ShuttleWidgetDisplayPlan("DIMA 셔틀", emptyList(), text, "DIMA 셔틀. $text")
+        }
         val upcomingDepartures = board.rows.flatMap { row -> row.departures.map { it.departure } }
         val origin = engine.boardingOriginName(originZone, upcomingDepartures)
         val header = "DIMA 셔틀 · $origin"
@@ -194,6 +202,7 @@ class ShuttleWidgetDisplayPlanner {
         // Same wording as the Home shuttle card
         private const val OUTSIDE_TEXT = "교내 진입 시 자동 안내"
         private const val NO_SERVICE_TEXT = "오늘은 운행하지 않아요"
+        private const val NO_DATA_TEXT = "앱을 열어 시간표를 받아 주세요"
         private val TIME: DateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm")
     }
 }

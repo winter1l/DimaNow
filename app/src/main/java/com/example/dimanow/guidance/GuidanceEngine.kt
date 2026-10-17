@@ -23,6 +23,8 @@ import com.example.dimanow.transit.Bus4402ServiceCalendar
 enum class HomeBase(val zone: CampusZoneId) {
     YEIN(CampusZoneId.YEIN),
     ONE_ROOM(CampusZoneId.ONE_ROOM),
+    /** Commuters (D-099): no campus return-shuttle guidance after the last class. */
+    COMMUTE(CampusZoneId.OUTSIDE),
 }
 
 enum class ShuttleBoardPurpose {
@@ -103,7 +105,17 @@ data class AnnotatedServiceDeparture(
         }
 }
 
-class GuidanceEngine {
+class GuidanceEngine(
+    /** Why the campus shuttle does not run on a date (public holiday, suspension), or null when it runs (D-099). */
+    private val campusShuttleSuspension: (LocalDate) -> String? = {
+        com.example.dimanow.calendar.ServiceCalendarStore.current.campusShuttleSuspension(it)
+    },
+) {
+    /** The reason today's campus shuttle timetable does not apply on [date], or null when it runs normally. */
+    fun campusShuttleSuspensionOn(date: LocalDate): String? = campusShuttleSuspension(date)
+
+    private fun campusShuttleRuns(now: ZonedDateTime): Boolean = campusShuttleSuspension(now.toLocalDate()) == null
+
     /**
      * Builds the physical-run projection of the schedule. Raw official rows remain intact.
      * Daytime A/B rows are separate services; the A/B evening rows are one three-stop loop.
@@ -262,6 +274,7 @@ class GuidanceEngine {
         homeBase: HomeBase = HomeBase.YEIN,
         limitPerDestination: Int = 2,
     ): ShuttleBoard {
+        if (!campusShuttleRuns(now)) return ShuttleBoard(emptyList())
         val destinations = when (purpose) {
             ShuttleBoardPurpose.GENERAL -> index.destinations[now.dayOfWeek to originZone].orEmpty()
             ShuttleBoardPurpose.RETURN -> listOf(homeBase.zone).filterNot { it == originZone }
@@ -331,6 +344,7 @@ class GuidanceEngine {
         limit: Int = 2,
     ): List<ShuttleDeparture> = departures
         .asSequence()
+        .filter { campusShuttleRuns(now) }
         .filter {
             it.serviceDay == now.dayOfWeek &&
                 it.originZone == originZone &&
@@ -361,6 +375,8 @@ class GuidanceEngine {
             return bus4402Snapshot(now, stop, bus4402Schedule)
                 ?: GuidanceSnapshot(null, emptyList(), GuidancePhase.NONE)
         }
+        // On public holidays and suspension dates no campus departure is offered (shuttleBoard checks it too).
+        val shuttleDepartures = if (campusShuttleRuns(now)) shuttleDepartures else emptyList()
         if (
             !automaticClassGuidance ||
             now.toLocalDate() !in termStart..termEnd ||

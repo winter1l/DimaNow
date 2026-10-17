@@ -71,11 +71,32 @@ class ShuttleWidgetDisplayPlannerTest {
     fun `no service today says so in a plain sentence`() {
         val now = ZonedDateTime.of(2026, 8, 24, 22, 0, 0, 0, zoneId)
 
-        val plan = ShuttleWidgetDisplayPlanner().plan(now, CampusZoneId.MAIN, ShuttleBoard(emptyList()), emptyList())
+        // A cached timetable whose only departures run on Sunday: Monday has no service at all.
+        val sundayOnly = ShuttleDeparture("C", "one-room", "TO_MAIN", DayOfWeek.SUNDAY, LocalTime.of(17, 0), CampusZoneId.ONE_ROOM, CampusZoneId.MAIN)
+        val plan = ShuttleWidgetDisplayPlanner().plan(now, CampusZoneId.MAIN, ShuttleBoard(emptyList()), listOf(sundayOnly))
 
         assertTrue(plan.rows.isEmpty())
         assertEquals("오늘은 운행하지 않아요", plan.emptyText)
         assertEquals("DIMA 셔틀, 본관 출발. 오늘은 운행하지 않아요", plan.spokenSummary)
+    }
+
+    @Test
+    fun `an empty cache asks the user to open the app instead of claiming no service`() {
+        val now = ZonedDateTime.of(2026, 8, 24, 9, 0, 0, 0, zoneId)
+
+        val plan = ShuttleWidgetDisplayPlanner().plan(now, CampusZoneId.MAIN, ShuttleBoard(emptyList()), emptyList())
+
+        assertEquals("앱을 열어 시간표를 받아 주세요", plan.emptyText)
+    }
+
+    @Test
+    fun `a public holiday names the holiday instead of the weekday timetable`() {
+        val now = ZonedDateTime.of(2026, 10, 9, 9, 0, 0, 0, zoneId)
+        val weekday = ShuttleDeparture("A", "one-room", "TO_MAIN", DayOfWeek.FRIDAY, LocalTime.of(9, 30), CampusZoneId.MAIN, CampusZoneId.ONE_ROOM)
+
+        val plan = ShuttleWidgetDisplayPlanner().plan(now, CampusZoneId.MAIN, ShuttleBoard(emptyList()), listOf(weekday))
+
+        assertEquals("오늘은 운행하지 않아요 · 한글날", plan.emptyText)
     }
 
     @Test

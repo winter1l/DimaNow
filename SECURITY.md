@@ -2,7 +2,7 @@
 
 ## 지원 범위
 
-현재 최신 GitHub Release와 `main` 브랜치를 대상으로 보안 문제를 확인합니다. 개인 설치용 프로젝트이므로 장기 지원 버전은 별도로 운영하지 않습니다.
+현재 최신 GitHub Release와 `main` 브랜치를 대상으로 보안 문제를 확인합니다. 학생 개인이 운영하는 비공식 앱이므로 장기 지원 버전은 별도로 운영하지 않습니다.
 
 ## 취약점 제보
 
@@ -18,11 +18,15 @@
 - GitHub Actions workflow는 고정 commit SHA의 Actions를 사용하며 최소 권한을 선언합니다.
 - 식단 OCR용 `GEMINI_API_KEY`는 GitHub Actions Secret으로만 주입하고 요청 본문·로그·아티팩트에 기록하지 않습니다.
 - 기숙사 사진은 인증 없는 Cloudflare Worker endpoint로 제출합니다. Worker는 먼저 경로·형식·선언 크기를 확인하고, 짧은 IP 해시(IPv4는 전체 주소, IPv6는 /64 대역) 기반 10분 중복 제한을 적용한 뒤 이미지 서명, 20 KB 이상 크기와 헤더의 가로·세로(320–12000 px)를 검사합니다. 일간·주간 전체 처리 예산은 이 검사를 통과한 요청에만 소비하고 GitHub 쓰기가 실패하면 원자적으로 되돌립니다. 만료된 IP 해시는 업로드 요청과 최대 2시간 간격의 정기 작업에서 삭제합니다. Workers에서는 재인코딩을 하지 않으므로 헤더 이후 이미지 데이터의 정상성은 보장하지 않습니다. GitHub 쓰기는 이 저장소에만 설치된 최소 권한 GitHub App의 단기 설치 토큰을 요청 시 `DimaNow` 저장소와 `contents: write` 권한으로 다시 좁혀 발급받아 `dorm-submissions` 브랜치의 신규 이미지 경로만 씁니다. GitHub App 개인 키와 rate-limit salt는 Wrangler Secret으로만 보관하며 APK·Git·로그에 포함하지 않습니다.
+- 기숙사 식단 신고(`/v1/dormitory-meal-reports`)는 주차·사유 코드만 받고, 같은 IP 해시는 그 주에 한 번만, 전체는 하루·주 한도 안에서만 받습니다. 사유는 `dorm-report-*` repository_dispatch 이벤트 종류로만 전달되며 workflow는 client_payload를 읽지 않습니다.
+- 기숙사 업로드는 앱에서 모든 형식을 다시 인코딩해 EXIF/XMP 등 사진 정보를 지운 뒤 보냅니다.
 - 제출 처리는 `main` 브랜치의 `publish-data.yml`만 실행합니다. Worker는 사진 쓰기에 성공한 뒤 같은 설치 토큰으로 고정 대상 `winter1l/DimaNow`에 `repository_dispatch`(`dorm-submission`, `client_payload` 없음)를 보내고, workflow는 이벤트 유형만으로 기숙사 대기 제출 sweep을 선택하며 payload를 읽지 않습니다. dispatch 실패는 업로드 결과를 바꾸지 않고, 정기 실행의 sweep이 미처리 제출을 다시 처리합니다. `dorm-submissions` 브랜치의 파일은 checkout·실행하지 않고 이미지 blob만 읽습니다.
 - 제출 workflow는 직렬 실행하고, OCR 전에 현재 주 기숙사 식단 존재 여부를 다시 확인합니다. 검증 실패 사진은 정상 식단 캐시를 덮어쓰지 않습니다.
 - 앱 업데이트는 공개 GitHub latest stable release의 이름 규칙과 asset SHA-256을 확인합니다.
 - 업데이트 다운로드는 허용된 GitHub HTTPS 호스트와 128 MiB 상한으로 제한하고, 완료 전 `.part` 파일은 설치 대상으로 사용하지 않습니다.
-- 설치 전 APK의 패키지명, versionName, 더 높은 versionCode와 현재 설치본과 동일한 서명 인증서를 확인합니다. Android의 앱별 설치 출처 권한과 시스템 설치 확인 화면을 우회하지 않습니다.
+- 업데이트 정보는 GitHub Pages의 `app_release` 데이터셋(manifest SHA-256 확인)을 먼저 읽고, 없으면 GitHub Releases API를 씁니다. 어느 쪽이든 내려받은 APK의 SHA-256을 확인합니다.
+- 설치 전 APK의 패키지명, versionName, 더 높은 versionCode와 서명을 확인합니다. 후보의 서명 또는 서명 교체 이력(APK Signature Scheme v3 lineage)에 현재 설치본의 서명이 있어야 합니다. 릴리스는 Git에 없는 전용 릴리스 키로만 서명합니다. Android의 앱별 설치 출처 권한과 시스템 설치 확인 화면을 우회하지 않습니다.
+- LMS 다른 기기 로그인(3045)은 사용자가 그 자리에서 승인한 다음 로그인에서만 한 번 넘겨받습니다. 승인 없이 다른 기기의 로그인을 끊지 않습니다.
 - LMS 자동 로그인 계정은 `dima_now_lms_credentials_v1` Android Keystore AES-256-GCM 키로 암호화하고 백업 제외 파일에만 저장합니다. 키 손상·무효화·암호문 변조 시 파일을 폐기하고 재입력을 요구합니다.
 - LMS WebView의 메인 탐색과 WebView가 직접 전달하는 HTTP(S) 요청은 정확한 `lms.dima.ac.kr`·`portal.dima.ac.kr` HTTPS 호스트만 허용합니다. 단 하나의 예외로, 사용자 승인(D-073)에 따라 로그인 탐색에 한해 HTTP `sso.dima.ac.kr:8080`의 `/sso/pmi-sso.jsp`·`/sso/pmi-sso2.jsp` 학교 SSO 중계 경로를 허용합니다. 이 구간의 로그인 티켓은 전송 중 암호화되지 않습니다. Android 네트워크 보안 설정은 경로 단위 허용을 지원하지 않으므로 `sso.dima.ac.kr` 도메인(하위 도메인 제외)만 평문을 허용하고, 포트와 경로는 앱의 URL 검사로 제한합니다. LMS 정보와 첨부파일 요청은 HTTPS만 사용합니다. WebView는 파일/콘텐츠 접근과 mixed content를 차단하며 `addJavascriptInterface`를 사용하지 않습니다. Android WebView는 하위 리소스의 30x 후속 URL을 다시 전달하지 않을 수 있으므로 이 경계를 모든 리다이렉트 홉의 완전한 네트워크 allowlist로 과장하지 않습니다. 계정 주입은 공식 포털의 `#txtID`·`#txtPwd`와 `Login('N')`, 또는 공식 LMS 로그인 화면의 `#id`·`#pass`와 `login_proc()` 조합에만 한정하고, 같은 form에 추가 인증 입력이 있으면 값을 쓰기 전에 중단합니다. 공지·자료·과제 본문은 WebView가 아닌 sanitizer를 거친 네이티브 UI로 표시합니다. 영상은 목록과 서버 제공 완료 상태 표시가 우선이며, 사용자가 선택한 CONTENT와 미지원 항목의 공식 화면만 같은 제한 세션 안에서 후순위로 엽니다.
 - 자동 로그인은 직렬화된 1회 시도만 수행하고 실패 자격 증명을 반복하지 않습니다. 중복 세션은 정확한 HTTPS `portal.dima.ac.kr/sso/error.aspx?errorCode=3045`에서 공식 페이지의 검증된 전환 동작만 한 번 제출합니다. 반복 3045·다른 호스트·동작 불일치·CAPTCHA·OTP·추가 인증·계정 잠금은 우회하지 않으며 네트워크 실패 자동 재시도는 15분 억제합니다.

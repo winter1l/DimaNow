@@ -93,6 +93,8 @@ class AndroidLmsCredentialStore(context: Context) : LmsCredentialStore {
 
     override suspend fun delete() = withContext(Dispatchers.IO) {
         atomicFile.delete()
+        // The key is useless without the ciphertext; removing it leaves nothing behind (D-099).
+        runCatching { KeyStore.getInstance(ANDROID_KEY_STORE).apply { load(null) }.deleteEntry(KEY_ALIAS) }
         mutableState.value = CredentialState.EMPTY
     }
 

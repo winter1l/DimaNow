@@ -34,10 +34,12 @@ class LmsTabTest {
 
         // The login form is a LazyColumn; scroll so a short screen still composes each row.
         val loginList = composeRule.onNodeWithTag("lms_login_list")
-        listOf("학번", "비밀번호", "계정을 이 기기에 암호화해 저장해요").forEach {
+        listOf("학번", "비밀번호").forEach {
             loginList.performScrollToNode(hasText(it))
             composeRule.onNodeWithText(it).assertExists()
         }
+        loginList.performScrollToNode(hasText("이 기기에만 암호화해 저장", substring = true))
+        composeRule.onNodeWithText("이 기기에만 암호화해 저장", substring = true).assertExists()
         composeRule.onNodeWithTag("nav_SETTINGS").assertDoesNotExist()
     }
 }

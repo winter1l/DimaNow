@@ -40,7 +40,7 @@ sealed interface LmsLoginResult {
 internal fun LmsLoginResult.failureMessage(): String? = when (this) {
     LmsLoginResult.Success -> null
     LmsLoginResult.CredentialsRejected -> "계정 정보를 다시 확인해 주세요"
-    LmsLoginResult.SessionConflict -> "다른 기기의 로그인 세션을 확인해 주세요"
+    LmsLoginResult.SessionConflict -> "다른 곳에서 LMS에 로그인되어 있어요"
     is LmsLoginResult.SessionTakeoverFailed -> message
     LmsLoginResult.InteractiveAuthenticationRequired -> "공식 LMS에서 추가 인증이 필요해요"
     is LmsLoginResult.NetworkError -> LmsUserMessages.NETWORK
@@ -54,14 +54,26 @@ interface LmsLoginDriver {
 class LmsLoginRequest internal constructor(
     val credentials: SavedLmsCredentials,
     internal val result: CompletableDeferred<LmsLoginResult>,
+    /** True only when the user just approved moving an LMS login held elsewhere to this device (D-099). */
+    val allowSessionTakeover: Boolean = false,
 )
 
 class LmsLoginBridge : LmsLoginDriver {
     private val mutableRequest = MutableStateFlow<LmsLoginRequest?>(null)
     val request: StateFlow<LmsLoginRequest?> = mutableRequest.asStateFlow()
 
+    private val takeoverApproval = java.util.concurrent.atomic.AtomicBoolean(false)
+
+    /**
+     * The next login may take over a session held on another device or browser (the official 3045 action).
+     * Without this, a conflict ends the attempt with [LmsLoginResult.SessionConflict] so the user can decide.
+     */
+    fun approveSessionTakeoverOnce() {
+        takeoverApproval.set(true)
+    }
+
     override suspend fun authenticate(credentials: SavedLmsCredentials): LmsLoginResult {
-        val pending = LmsLoginRequest(credentials, CompletableDeferred())
+        val pending = LmsLoginRequest(credentials, CompletableDeferred(), allowSessionTakeover = takeoverApproval.getAndSet(false))
         check(mutableRequest.compareAndSet(null, pending)) { "LMS login is already in progress" }
         return try {
             pending.result.await()
@@ -101,9 +113,11 @@ internal data class LmsLoginFlowState(
     val stage: LmsLoginFlowStage,
     val sessionTakeoverSubmissions: Int = 0,
     val result: LmsLoginResult? = null,
+    val allowSessionTakeover: Boolean = false,
 ) {
     companion object {
-        fun initial(): LmsLoginFlowState = LmsLoginFlowState(LmsLoginFlowStage.CREDENTIALS_PENDING)
+        fun initial(allowSessionTakeover: Boolean = false): LmsLoginFlowState =
+            LmsLoginFlowState(LmsLoginFlowStage.CREDENTIALS_PENDING, allowSessionTakeover = allowSessionTakeover)
     }
 }
 
@@ -167,7 +181,13 @@ internal fun reduceLmsLoginFlow(
         LmsLoginFlowCommand.SubmitCredentials,
     )
     is LmsLoginFlowEvent.MainFrameFinished -> if (isExactOfficialLmsSessionConflictUrl(event.url)) {
-        if (state.sessionTakeoverSubmissions == 0) {
+        if (!state.allowSessionTakeover) {
+            // D-099: never log out another device on our own; the user is asked first.
+            LmsLoginFlowTransition(
+                state.copy(stage = LmsLoginFlowStage.TERMINAL_ERROR, result = LmsLoginResult.SessionConflict),
+                LmsLoginFlowCommand.Complete(LmsLoginResult.SessionConflict),
+            )
+        } else if (state.sessionTakeoverSubmissions == 0) {
             LmsLoginFlowTransition(
                 state.copy(stage = LmsLoginFlowStage.SESSION_CONFLICT, result = LmsLoginResult.SessionConflict),
                 LmsLoginFlowCommand.InspectSessionTakeoverAction,
@@ -321,6 +341,13 @@ class LmsAutoLoginCoordinator(
     private var retryAfter: Instant? = null
     private val mutableErrorMessage = MutableStateFlow<String?>(null)
     val errorMessage: StateFlow<String?> = mutableErrorMessage.asStateFlow()
+    private val mutableSessionConflict = MutableStateFlow(false)
+    /** True after an automatic login found the LMS session held elsewhere; the screen asks before taking it over. */
+    val sessionConflict: StateFlow<Boolean> = mutableSessionConflict.asStateFlow()
+
+    fun dismissSessionConflict() {
+        mutableSessionConflict.value = false
+    }
 
     suspend fun ensureActive(force: Boolean, credentialsChanged: Boolean = false): LmsSessionState = mutex.withLock {
         val current = sessionController.state.value
@@ -343,6 +370,7 @@ class LmsAutoLoginCoordinator(
             throw cancelled
         }
         mutableErrorMessage.value = result.failureMessage()
+        mutableSessionConflict.value = result == LmsLoginResult.SessionConflict
         when (result) {
             LmsLoginResult.Success -> {
                 retryAfter = null

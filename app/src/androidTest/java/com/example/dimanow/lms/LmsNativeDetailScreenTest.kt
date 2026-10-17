@@ -3,6 +3,8 @@ package com.example.dimanow.lms
 import android.os.ParcelFileDescriptor
 import android.text.InputType
 import android.webkit.WebView
+import androidx.compose.ui.test.hasTestTag
+import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
@@ -147,6 +149,8 @@ class LmsNativeDetailScreenTest {
             }
         }
 
+        // The consent text (D-099) can push the field below a short window; bring it into view first.
+        composeRule.onNodeWithTag("lms_login_list").performScrollToNode(hasTestTag("lms_password"))
         composeRule.onNodeWithTag("lms_password").performClick().performTextInput("dummy-secret")
         composeRule.waitUntil(5_000) {
             val inputType = currentEditorInputType() ?: return@waitUntil false
@@ -334,8 +338,9 @@ private fun currentEditorInputType(): Int? {
     val descriptor = InstrumentationRegistry.getInstrumentation().uiAutomation
         .executeShellCommand("dumpsys input_method")
     val dump = ParcelFileDescriptor.AutoCloseInputStream(descriptor).bufferedReader().use { it.readText() }
+    val packageName = Regex.escape(InstrumentationRegistry.getInstrumentation().targetContext.packageName)
     return Regex(
-        """curEditorInfo:\s+inputType=0x([0-9a-fA-F]+)[\s\S]*?packageName=com\.example\.dimanow""",
+        """curEditorInfo:\s+inputType=0x([0-9a-fA-F]+)[\s\S]*?packageName=$packageName""",
     ).find(dump)?.groupValues?.get(1)?.toInt(16)
 }
 

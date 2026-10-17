@@ -63,6 +63,9 @@ fun LmsRoute(
     val sessionState by sessionController.state.collectAsStateWithLifecycle()
     val credentialState by credentialStore.state.collectAsStateWithLifecycle()
     val loginError by autoLoginCoordinator.errorMessage.collectAsStateWithLifecycle()
+    val savedLoginConflict by autoLoginCoordinator.sessionConflict.collectAsStateWithLifecycle()
+    // Credentials of a not-saved manual login that hit a session held elsewhere; kept only until the user decides.
+    var manualConflictCredentials by remember { mutableStateOf<SavedLmsCredentials?>(null) }
     val snapshot by source.snapshot.collectAsStateWithLifecycle(initialValue = LmsSnapshot())
     val loginRequest by loginBridge.request.collectAsStateWithLifecycle()
     val renderedPageRequest by (
@@ -85,6 +88,23 @@ fun LmsRoute(
     LaunchedEffect(fullScreen) { onFullScreenChange(fullScreen) }
     DisposableEffect(Unit) {
         onDispose { onFullScreenChange(false) }
+    }
+
+    suspend fun manualLogin(credentials: SavedLmsCredentials) {
+        sessionController.transition(LmsSessionState.AUTHENTICATING)
+        val result = loginBridge.authenticate(credentials)
+        val next = when (result) {
+            LmsLoginResult.Success -> LmsSessionState.ACTIVE
+            LmsLoginResult.CredentialsRejected -> LmsSessionState.CREDENTIALS_NEED_REVIEW
+            LmsLoginResult.InteractiveAuthenticationRequired -> LmsSessionState.INTERACTIVE_AUTH_REQUIRED
+            else -> LmsSessionState.ERROR
+        }
+        sessionController.transition(next)
+        when {
+            next == LmsSessionState.ACTIVE -> source.refresh(force = true)
+            result == LmsLoginResult.SessionConflict -> manualConflictCredentials = credentials
+            else -> result.failureMessage()?.let { snackbar.showSnackbar(it) }
+        }
     }
 
     suspend fun loginAndRefresh(force: Boolean, credentialsChanged: Boolean = false) {
@@ -123,6 +143,32 @@ fun LmsRoute(
                 else -> sessionController.transition(LmsSessionState.ACTIVE)
             }
         }
+    }
+
+    if (savedLoginConflict || manualConflictCredentials != null) {
+        // D-099: moving the single LMS session here logs the other device out, so the user decides.
+        AlertDialog(
+            onDismissRequest = { autoLoginCoordinator.dismissSessionConflict(); manualConflictCredentials = null },
+            title = { Text("다른 곳에서 로그인 중이에요") },
+            text = {
+                Text(
+                    "학교 LMS는 한 곳에서만 로그인돼요. 이 기기로 옮기면 PC나 다른 기기의 로그인이 끊기고, " +
+                        "시험·과제를 하는 중이면 저장되지 않을 수 있어요.",
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    val manual = manualConflictCredentials
+                    autoLoginCoordinator.dismissSessionConflict()
+                    manualConflictCredentials = null
+                    loginBridge.approveSessionTakeoverOnce()
+                    scope.launch { if (manual != null) manualLogin(manual) else loginAndRefresh(force = true) }
+                }) { Text("이 기기로 로그인") }
+            },
+            dismissButton = {
+                TextButton(onClick = { autoLoginCoordinator.dismissSessionConflict(); manualConflictCredentials = null }) { Text("나중에") }
+            },
+        )
     }
 
     Box(modifier = modifier.fillMaxSize()) {
@@ -174,17 +220,7 @@ fun LmsRoute(
                                 loginAndRefresh(force = true, credentialsChanged = true)
                             } else {
                                 credentialStore.delete()
-                                sessionController.transition(LmsSessionState.AUTHENTICATING)
-                                val result = loginBridge.authenticate(credentials)
-                                val next = when (result) {
-                                    LmsLoginResult.Success -> LmsSessionState.ACTIVE
-                                    LmsLoginResult.CredentialsRejected -> LmsSessionState.CREDENTIALS_NEED_REVIEW
-                                    LmsLoginResult.InteractiveAuthenticationRequired -> LmsSessionState.INTERACTIVE_AUTH_REQUIRED
-                                    else -> LmsSessionState.ERROR
-                                }
-                                sessionController.transition(next)
-                                if (next == LmsSessionState.ACTIVE) source.refresh(force = true)
-                                else result.failureMessage()?.let { snackbar.showSnackbar(it) }
+                                manualLogin(credentials)
                             }
                         }
                     },

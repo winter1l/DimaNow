@@ -42,7 +42,7 @@ class LmsLoginFlowReducerTest {
     @Test
     fun missingVerifiedOfficialTakeoverActionFailsWithoutSubmittingAnything() {
         var transition = reduceLmsLoginFlow(
-            LmsLoginFlowState.initial(),
+            LmsLoginFlowState.initial(allowSessionTakeover = true),
             LmsLoginFlowEvent.CredentialsAvailable,
         )
         transition = reduceLmsLoginFlow(
@@ -66,7 +66,7 @@ class LmsLoginFlowReducerTest {
     @Test
     fun wrongHostTerminatesTheLoginFlowAsUnsafe() {
         val submitting = reduceLmsLoginFlow(
-            LmsLoginFlowState.initial(),
+            LmsLoginFlowState.initial(allowSessionTakeover = true),
             LmsLoginFlowEvent.CredentialsAvailable,
         ).state
 
@@ -86,7 +86,7 @@ class LmsLoginFlowReducerTest {
     @Test
     fun captchaOrOtpChallengeTerminatesWithoutAttemptingABypass() {
         val submitting = reduceLmsLoginFlow(
-            LmsLoginFlowState.initial(),
+            LmsLoginFlowState.initial(allowSessionTakeover = true),
             LmsLoginFlowEvent.CredentialsAvailable,
         ).state
 
@@ -106,7 +106,7 @@ class LmsLoginFlowReducerTest {
     @Test
     fun sessionConflictIsNeverReclassifiedAsRejectedCredentials() {
         val submitting = reduceLmsLoginFlow(
-            LmsLoginFlowState.initial(),
+            LmsLoginFlowState.initial(allowSessionTakeover = true),
             LmsLoginFlowEvent.CredentialsAvailable,
         ).state
         val rejected = reduceLmsLoginFlow(
@@ -134,7 +134,7 @@ class LmsLoginFlowReducerTest {
     @Test
     fun terminalFailureCannotRestartOrSubmitAConflictTakeover() {
         val submitting = reduceLmsLoginFlow(
-            LmsLoginFlowState.initial(),
+            LmsLoginFlowState.initial(allowSessionTakeover = true),
             LmsLoginFlowEvent.CredentialsAvailable,
         ).state
         val terminal = reduceLmsLoginFlow(
@@ -156,7 +156,7 @@ class LmsLoginFlowReducerTest {
     @Test
     fun oneOfficial3045ConflictIsTakenOverThenLoginSucceeds() {
         var transition = reduceLmsLoginFlow(
-            LmsLoginFlowState.initial(),
+            LmsLoginFlowState.initial(allowSessionTakeover = true),
             LmsLoginFlowEvent.CredentialsAvailable,
         )
 
@@ -204,7 +204,7 @@ class LmsLoginFlowReducerTest {
     @Test
     fun normalLoginConfirmsTheLmsMainThenExtractsCourses() {
         var transition = reduceLmsLoginFlow(
-            LmsLoginFlowState.initial(),
+            LmsLoginFlowState.initial(allowSessionTakeover = true),
             LmsLoginFlowEvent.CredentialsAvailable,
         )
         assertEquals(LmsLoginFlowStage.LOGIN_SUBMISSION, transition.state.stage)
@@ -263,7 +263,7 @@ class LmsLoginFlowReducerTest {
 
     private fun takeoverSubmissionState(): LmsLoginFlowState {
         var transition = reduceLmsLoginFlow(
-            LmsLoginFlowState.initial(),
+            LmsLoginFlowState.initial(allowSessionTakeover = true),
             LmsLoginFlowEvent.CredentialsAvailable,
         )
         transition = reduceLmsLoginFlow(
@@ -276,5 +276,17 @@ class LmsLoginFlowReducerTest {
             transition.state,
             LmsLoginFlowEvent.SessionTakeoverActionVerified,
         ).state
+    }
+
+    @Test
+    fun sessionConflictWithoutUserApprovalEndsWithoutTakingOverTheOtherLogin() {
+        val conflict = reduceLmsLoginFlow(
+            reduceLmsLoginFlow(LmsLoginFlowState.initial(), LmsLoginFlowEvent.CredentialsAvailable).state,
+            LmsLoginFlowEvent.MainFrameFinished("https://portal.dima.ac.kr/sso/error.aspx?errorCode=3045"),
+        )
+
+        assertEquals(LmsLoginFlowStage.TERMINAL_ERROR, conflict.state.stage)
+        assertEquals(0, conflict.state.sessionTakeoverSubmissions)
+        assertEquals(LmsLoginFlowCommand.Complete(LmsLoginResult.SessionConflict), conflict.command)
     }
 }

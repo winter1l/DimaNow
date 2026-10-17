@@ -66,7 +66,8 @@ internal fun LmsLoginScreen(
     }
     var username by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
-    var automatic by remember { mutableStateOf(true) }
+    // D-099: 계정 저장은 사용자가 직접 켜야 한다
+    var automatic by remember { mutableStateOf(false) }
     ScreenScaffold(
         title = "수업",
         modifier = modifier.imePadding(),
@@ -77,6 +78,20 @@ internal fun LmsLoginScreen(
             Column(modifier = Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(vertical = 16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
                     Text("학교 계정으로 로그인", style = MaterialTheme.typography.titleMedium)
+                    // D-099: 비공식 앱, 전송 경로, 저장 방식과 중복 로그인을 로그인 전에 알린다
+                    Text(
+                        "DIMA Now는 학교가 만든 앱이 아니에요. 학번과 비밀번호는 학교 공식 로그인 화면(portal·lms.dima.ac.kr)에만 " +
+                            "입력되고 개발자나 다른 서버로 보내지 않아요. 다만 학교 통합 로그인 중 한 구간(sso.dima.ac.kr:8080)은 " +
+                            "학교가 암호화하지 않은 연결을 써서, 공용 Wi-Fi에서는 로그인 정보가 노출될 수 있어요.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.testTag("lms_consent"),
+                    )
+                    Text(
+                        "학교 LMS는 한 곳에서만 로그인돼요. 다른 기기에서 로그인 중이면 이 앱이 그 로그인을 끊기 전에 먼저 물어봐요.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
                     if (needsReview) {
                         Surface(
                             modifier = Modifier.fillMaxWidth(),
@@ -113,8 +128,13 @@ internal fun LmsLoginScreen(
                         horizontalArrangement = Arrangement.spacedBy(16.dp),
                     ) {
                         Column(Modifier.weight(1f)) {
-                            Text("자동 로그인")
-                            Text("계정을 이 기기에 암호화해 저장해요", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text("자동 로그인 (선택)")
+                            Text(
+                                "켜면 학번과 비밀번호를 이 기기에만 암호화해 저장하고, 수업 탭을 열 때 자동으로 로그인해요. " +
+                                    "설정의 수업 계정에서 언제든 지울 수 있어요.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
                         }
                         Switch(checked = automatic, onCheckedChange = null)
                     }
@@ -201,7 +221,7 @@ internal fun LmsAuthenticationWebView(
                         if (Build.VERSION.SDK_INT >= 26) WebView.startSafeBrowsing(context, null)
                         var injected = false
                         var catalogRequested = false
-                        var flowState = LmsLoginFlowState.initial()
+                        var flowState = LmsLoginFlowState.initial(request.allowSessionTakeover)
                         var finished = false
 
                         fun finish(result: LmsLoginResult) {

@@ -12,8 +12,8 @@ android {
         applicationId = "io.github.winter1l.dimanow"
         minSdk = 31
         targetSdk = 36
-        versionCode = 8
-        versionName = "2.0"
+        versionCode = 9
+        versionName = "2.1"
     }
 
     buildTypes {

@@ -149,7 +149,7 @@ class StaticMealSourceTest {
     fun validDormitoryPayloadKeepsEveryMealSectionForTheWeek() = runTest {
         val payload = """{"schemaVersion":1,"weekStart":"2026-08-24","weekEnd":"2026-08-30","sourceImageUrl":"https://raw.githubusercontent.com/winter1l/DimaNow/example.jpg","days":[{"date":"2026-08-24","sections":[{"name":"조식","hours":"08:00~09:30","menuLines":["떡국","완자전&소스"]},{"name":"중식","hours":"12:00~14:00","menuLines":["유채된장국","계란마파두부"]}]}]}"""
         val hash = MessageDigest.getInstance("SHA-256").digest(payload.toByteArray()).joinToString("") { "%02x".format(it) }
-        val manifest = """{"schemaVersion":1,"generatedAt":"2026-08-27T03:00:00Z","datasets":{"dorm_meal":{"revision":1,"state":"READY","publishedAt":"2026-08-27T03:00:00Z","lastAttemptAt":"2026-08-27T03:00:00Z","url":"dorm-meal/$hash.json","sha256":"$hash","sourceUrl":"https://github.com/winter1l/DimaNow/tree/dorm-submissions/dorm-submissions"}}}"""
+        val manifest = """{"schemaVersion":1,"generatedAt":"2026-08-27T03:00:00Z","datasets":{"dorm_meal":{"revision":1,"state":"READY","publishedAt":"2026-08-27T03:00:00Z","lastAttemptAt":"2026-08-27T03:00:00Z","url":"dorm-meal/$hash.json","sha256":"$hash","sourceUrl":"r2://dima-now-dorm-photos/submissions"}}}"""
         val source: MealSource = StaticMealSource(
             database = database,
             transport = StaticDataTransport { url -> if (url.contains("manifest.json")) manifest.toByteArray() else payload.toByteArray() },
@@ -167,7 +167,7 @@ class StaticMealSourceTest {
     fun sameDormitoryRevisionAfterItsWeekExpiresReportsNotPublishedAndKeepsTheLastGoodWeek() = runTest {
         val payload = """{"schemaVersion":1,"weekStart":"2026-08-24","weekEnd":"2026-08-30","sourceImageUrl":"https://raw.githubusercontent.com/winter1l/DimaNow/example.jpg","days":[{"date":"2026-08-24","sections":[{"name":"중식","hours":"12:00~14:00","menuLines":["유채된장국"]}]}]}"""
         val hash = MessageDigest.getInstance("SHA-256").digest(payload.toByteArray()).joinToString("") { "%02x".format(it) }
-        val manifest = """{"schemaVersion":1,"generatedAt":"2026-08-27T03:00:00Z","datasets":{"dorm_meal":{"revision":1,"state":"READY","publishedAt":"2026-08-27T03:00:00Z","lastAttemptAt":"2026-08-27T03:00:00Z","url":"dorm-meal/$hash.json","sha256":"$hash","sourceUrl":"https://github.com/winter1l/DimaNow/tree/dorm-submissions/dorm-submissions"}}}"""
+        val manifest = """{"schemaVersion":1,"generatedAt":"2026-08-27T03:00:00Z","datasets":{"dorm_meal":{"revision":1,"state":"READY","publishedAt":"2026-08-27T03:00:00Z","lastAttemptAt":"2026-08-27T03:00:00Z","url":"dorm-meal/$hash.json","sha256":"$hash","sourceUrl":"r2://dima-now-dorm-photos/submissions"}}}"""
         val firstSuccess = Instant.parse("2026-08-27T04:00:00Z")
         StaticMealSource(
             database,

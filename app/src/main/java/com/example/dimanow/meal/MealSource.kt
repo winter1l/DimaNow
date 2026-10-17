@@ -214,7 +214,8 @@ interface MealSource {
 }
 
 const val OFFICIAL_MEAL_SOURCE_URL = "https://www.dima.ac.kr/?p=1"
-const val DORMITORY_MEAL_SOURCE_URL = "https://github.com/winter1l/DimaNow/tree/dorm-submissions/dorm-submissions"
+// D-100: photos are private in R2; this is an identifier, not a link.
+const val DORMITORY_MEAL_SOURCE_URL = "r2://dima-now-dorm-photos/submissions"
 
 class StaticMealSource(
     private val database: DimaDatabase,

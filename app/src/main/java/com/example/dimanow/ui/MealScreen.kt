@@ -395,11 +395,12 @@ fun MealScreen(
         AlertDialog(
             onDismissRequest = { pendingImage = null },
             title = { Text("기숙사 식단 올리기") },
-            // D-099: 즉시·영구 공개, AI 처리, 촬영 정보 제거를 올리기 전에 분명히 알린다
+            // D-100: 비공개 보관·30일 삭제, AI 처리와 학습 활용 가능성, 촬영 정보 제거를 올리기 전에 알린다
             text = {
                 Text(
-                    "사진은 올리는 즉시 공개 GitHub 저장소에 저장되고 지울 수 없어요. " +
-                        "Google Gemini가 사진을 읽어 메뉴를 만들고, 통과하면 모든 사용자에게 게시돼요. " +
+                    "사진은 공개되지 않는 저장소에 30일 동안만 보관한 뒤 지워요. " +
+                        "Google Gemini(무료 등급)가 사진을 읽어 메뉴를 만들고, 통과한 메뉴 글자만 모든 사용자에게 게시돼요. " +
+                        "Google은 무료 등급으로 받은 사진을 서비스 개선과 AI 학습에 쓸 수 있고 검토자가 볼 수도 있어요. " +
                         "위치·촬영 시각 같은 사진 정보는 지운 뒤 올려요. 사람이나 개인정보가 찍히지 않았는지 확인해 주세요.",
                     modifier = Modifier.testTag("dorm_upload_consent"),
                 )

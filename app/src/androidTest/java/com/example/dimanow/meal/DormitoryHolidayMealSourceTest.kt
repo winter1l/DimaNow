@@ -53,7 +53,7 @@ class DormitoryHolidayMealSourceTest {
 
     private fun source(payload: String, revision: Int = 1): MealSource {
         val hash = MessageDigest.getInstance("SHA-256").digest(payload.toByteArray()).joinToString("") { "%02x".format(it) }
-        val manifest = """{"schemaVersion":1,"generatedAt":"$NOW","datasets":{"dorm_meal":{"revision":$revision,"state":"READY","publishedAt":"$NOW","lastAttemptAt":"$NOW","url":"dorm-meal/$hash.json","sha256":"$hash","sourceUrl":"https://github.com/winter1l/DimaNow/tree/dorm-submissions/dorm-submissions"}}}"""
+        val manifest = """{"schemaVersion":1,"generatedAt":"$NOW","datasets":{"dorm_meal":{"revision":$revision,"state":"READY","publishedAt":"$NOW","lastAttemptAt":"$NOW","url":"dorm-meal/$hash.json","sha256":"$hash","sourceUrl":"r2://dima-now-dorm-photos/submissions"}}}"""
         return StaticMealSource(database, StaticDataTransport { url ->
             if (url.endsWith("manifest.json")) manifest.toByteArray() else payload.toByteArray()
         }, Clock.fixed(NOW, ZoneOffset.UTC))

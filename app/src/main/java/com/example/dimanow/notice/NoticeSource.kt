@@ -52,7 +52,8 @@ class StaticNoticeSource(
 ) : NoticeSource {
     private val dao = database.scheduleDao()
     private val refreshMutex = Mutex()
-    private val json = Json { ignoreUnknownKeys = false }
+    // Tolerates fields added by a later publisher (D-099); schemaVersion still gates incompatible payloads.
+    private val json = Json { ignoreUnknownKeys = true }
 
     override val data: Flow<NoticeData> = combine(
         dao.observeNotices(),

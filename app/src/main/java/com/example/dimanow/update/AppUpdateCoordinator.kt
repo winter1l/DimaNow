@@ -84,7 +84,8 @@ class AppUpdateCoordinator(
         val saved = preferences.appUpdatePreferences.first()
         val now = clock.instant()
         val lastChecked = saved.lastCheckedEpochMillis?.let(Instant::ofEpochMilli)
-        if (!policy.shouldCheck(lastChecked, now, manual)) return@withLock
+        val lastFailed = saved.lastFailedEpochMillis?.let(Instant::ofEpochMilli)
+        if (!policy.shouldCheck(lastChecked, now, manual, lastFailed)) return@withLock
         mutableState.value = mutableState.value.copy(phase = AppUpdatePhase.CHECKING, message = null)
         runCatching { source.latestStableRelease() }
             .onSuccess { release ->
@@ -112,6 +113,7 @@ class AppUpdateCoordinator(
                 }
             }
             .onFailure { _ ->
+                preferences.recordAppUpdateFailure(now.toEpochMilli())
                 mutableState.value = mutableState.value.copy(phase = AppUpdatePhase.ERROR, message = "업데이트를 확인하지 못했어요. 인터넷 연결을 확인하고 다시 시도해 주세요")
             }
     }

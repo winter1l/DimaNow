@@ -52,8 +52,19 @@ class AppVersion(value: String) : Comparable<AppVersion> {
 }
 
 class AppUpdatePolicy {
-    fun shouldCheck(lastCheckedAt: Instant?, now: Instant, manual: Boolean): Boolean = manual || lastCheckedAt == null ||
-        !now.isBefore(lastCheckedAt.plus(Duration.ofHours(24)))
+    /**
+     * Automatic checks run at most daily after a success and at most every [FAILURE_BACKOFF] after a failure, so a
+     * shared campus address or an outage does not turn every cold start (widgets, alarms) into a request.
+     */
+    fun shouldCheck(lastCheckedAt: Instant?, now: Instant, manual: Boolean, lastFailedAt: Instant? = null): Boolean {
+        if (manual) return true
+        if (lastFailedAt != null && now.isBefore(lastFailedAt.plus(FAILURE_BACKOFF)) && !now.isBefore(lastFailedAt)) return false
+        return lastCheckedAt == null || !now.isBefore(lastCheckedAt.plus(Duration.ofHours(24)))
+    }
+
+    companion object {
+        val FAILURE_BACKOFF: Duration = Duration.ofHours(6)
+    }
 
     fun shouldPrompt(latestVersion: String, dismissedVersion: String?): Boolean = latestVersion != dismissedVersion
 

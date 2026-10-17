@@ -59,7 +59,6 @@ import kotlinx.coroutines.withTimeoutOrNull
 import java.time.Instant
 import com.example.dimanow.update.AndroidAppUpdateInstaller
 import com.example.dimanow.update.AppUpdateCoordinator
-import com.example.dimanow.update.GitHubAppUpdateSource
 import com.example.dimanow.lms.AndroidLmsCredentialStore
 import com.example.dimanow.lms.LmsAutoLoginCoordinator
 import com.example.dimanow.lms.LmsCacheDatabase
@@ -88,7 +87,11 @@ class DimaNowApplication : Application() {
     val repository: RoomCampusDataRepository by lazy { RoomCampusDataRepository(database) }
     val preferences: AppPreferences by lazy { AppPreferences(this) }
     private val staticDataTransport by lazy { CachingStaticDataTransport(UrlConnectionStaticDataTransport()) }
-    val shuttleSource: ShuttleSource by lazy { StaticShuttleSource(database, staticDataTransport) }
+    val shuttleSource: ShuttleSource by lazy {
+        StaticShuttleSource(database, staticDataTransport, calendarImporter = { bytes ->
+            com.example.dimanow.calendar.ServiceCalendarStore.importSynchronized(this, bytes)
+        })
+    }
     private val dormitoryMealSubmissionService by lazy {
         DormitoryMealSubmissionService(
             gateway = AnonymousDormitoryMealApi(
@@ -147,7 +150,7 @@ class DimaNowApplication : Application() {
         AppUpdateCoordinator(
             scope = applicationScope,
             preferences = preferences,
-            source = GitHubAppUpdateSource(),
+            source = com.example.dimanow.update.PagesAppUpdateSource(staticDataTransport),
             installer = AndroidAppUpdateInstaller(this),
             currentVersion = packageInfo.versionName.orEmpty(),
         )
@@ -157,6 +160,7 @@ class DimaNowApplication : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        com.example.dimanow.calendar.ServiceCalendarStore.loadCached(this)
         appUpdateCoordinator.initialize()
         val lockStateFilter = IntentFilter().apply {
             addAction(Intent.ACTION_SCREEN_ON)

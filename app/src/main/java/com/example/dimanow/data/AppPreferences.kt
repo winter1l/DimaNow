@@ -26,6 +26,8 @@ import java.time.Instant
 
 data class AppUpdatePreferences(
     val lastCheckedEpochMillis: Long? = null,
+    /** Last failed automatic check; automatic checks back off from it (D-099 clause 8). */
+    val lastFailedEpochMillis: Long? = null,
     val cachedRelease: AppUpdateRelease? = null,
     val dismissedVersion: String? = null,
     val preparedPath: String? = null,
@@ -162,6 +164,7 @@ class AppPreferences(private val context: Context) {
         } else null
         AppUpdatePreferences(
             lastCheckedEpochMillis = preferences[UPDATE_LAST_CHECKED],
+            lastFailedEpochMillis = preferences[UPDATE_LAST_FAILED],
             cachedRelease = release,
             dismissedVersion = preferences[UPDATE_DISMISSED_VERSION],
             preparedPath = preferences[UPDATE_PREPARED_PATH],
@@ -275,12 +278,17 @@ class AppPreferences(private val context: Context) {
     suspend fun recordAppUpdateCheck(atEpochMillis: Long, release: AppUpdateRelease) {
         context.settingsDataStore.edit {
             it[UPDATE_LAST_CHECKED] = atEpochMillis
+            it.remove(UPDATE_LAST_FAILED)
             it[UPDATE_LATEST_VERSION] = release.versionName
             it[UPDATE_RELEASE_PAGE] = release.releasePageUrl
             it[UPDATE_DOWNLOAD_URL] = release.downloadUrl
             it[UPDATE_SIZE] = release.sizeBytes
             it[UPDATE_SHA256] = release.sha256
         }
+    }
+
+    suspend fun recordAppUpdateFailure(atEpochMillis: Long) {
+        context.settingsDataStore.edit { it[UPDATE_LAST_FAILED] = atEpochMillis }
     }
 
     suspend fun dismissAppUpdateVersion(version: String) {
@@ -326,6 +334,7 @@ class AppPreferences(private val context: Context) {
         val ONBOARDING_DRAFT_HOME_BASE = stringPreferencesKey("onboarding_draft_home_base")
         val BACKGROUND_WORK_POLICY_VERSION = intPreferencesKey("background_work_policy_version")
         val UPDATE_LAST_CHECKED = longPreferencesKey("update_last_checked")
+        val UPDATE_LAST_FAILED = longPreferencesKey("update_last_failed")
         val UPDATE_LATEST_VERSION = stringPreferencesKey("update_latest_version")
         val UPDATE_RELEASE_PAGE = stringPreferencesKey("update_release_page")
         val UPDATE_DOWNLOAD_URL = stringPreferencesKey("update_download_url")

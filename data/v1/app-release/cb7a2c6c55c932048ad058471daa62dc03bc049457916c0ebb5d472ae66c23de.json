@@ -1,0 +1,15 @@
+{
+    "tag_name": "v1.6",
+    "draft": false,
+    "prerelease": false,
+    "html_url": "https://github.com/winter1l/DimaNow/releases/tag/v1.6",
+    "published_at": "2026-10-11T15:43:05Z",
+    "assets": [
+        {
+            "name": "DIMA-Now-v1.6-optimized.apk",
+            "size": 5854213,
+            "browser_download_url": "https://github.com/winter1l/DimaNow/releases/download/v1.6/DIMA-Now-v1.6-optimized.apk",
+            "digest": "sha256:b310a95e7e523ff86f65bddda5ea1ece1eccb4e014138f15617626079a565831"
+        }
+    ]
+}

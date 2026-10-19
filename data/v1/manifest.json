@@ -1,5 +1,5 @@
 {
-    "generatedAt": "2026-10-19T02:07:46.192607597Z",
+    "generatedAt": "2026-10-19T05:16:02.046412020Z",
     "datasets": {
         "shuttle": {
             "revision": 2,
@@ -23,7 +23,7 @@
             "revision": 34,
             "state": "READY",
             "publishedAt": "2026-10-17T04:57:14.954519418Z",
-            "lastAttemptAt": "2026-10-18T05:05:36.002313284Z",
+            "lastAttemptAt": "2026-10-19T05:16:02.046412020Z",
             "url": "notices/4030260fedfb7174bf6d8661b1e61d8919df04e9050451ded738b60f11a66a61.json",
             "sha256": "4030260fedfb7174bf6d8661b1e61d8919df04e9050451ded738b60f11a66a61",
             "sourceUrl": "https://www.dima.ac.kr/?p=111"
@@ -50,7 +50,7 @@
             "revision": 2,
             "state": "READY",
             "publishedAt": "2026-10-18T05:05:33.018929624Z",
-            "lastAttemptAt": "2026-10-18T05:05:33.018929624Z",
+            "lastAttemptAt": "2026-10-19T05:15:59.219743820Z",
             "url": "app-release/cb7a2c6c55c932048ad058471daa62dc03bc049457916c0ebb5d472ae66c23de.json",
             "sha256": "cb7a2c6c55c932048ad058471daa62dc03bc049457916c0ebb5d472ae66c23de",
             "sourceUrl": "https://github.com/winter1l/DimaNow/releases"

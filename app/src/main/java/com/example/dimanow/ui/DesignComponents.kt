@@ -29,6 +29,19 @@ internal object DimaLayout {
     val sectionGap = 16.dp
 }
 
+/** The filled `오늘` pill shared by the meal day heading and the timetable weekday heading (D-102). */
+@Composable
+internal fun TodayBadge(modifier: Modifier = Modifier) {
+    Surface(modifier = modifier, shape = DimaShapes.Badge, color = MaterialTheme.colorScheme.primary) {
+        Text(
+            text = "오늘",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onPrimary,
+            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+        )
+    }
+}
+
 /** Stable Material 1.4 selection control; never imitates unavailable connected-toggle APIs. */
 @Composable
 internal fun DimaDaySelector(

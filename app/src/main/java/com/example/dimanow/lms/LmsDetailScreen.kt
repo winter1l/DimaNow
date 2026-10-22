@@ -121,7 +121,7 @@ internal fun LmsDetailScreen(
                 contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
                 modifier = Modifier.fillMaxWidth(),
             ) {
-                Text("첨부파일이 변경됐어요", style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(12.dp))
+                Text("첨부파일이 바뀌었어요", style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(12.dp))
             }
         } else if (presented.cached) {
             Surface(

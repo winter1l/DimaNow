@@ -1,6 +1,5 @@
 package com.example.dimanow.ui
 
-import androidx.compose.ui.test.assertContentDescriptionEquals
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
@@ -54,8 +53,8 @@ class AppBackNavigationTest {
         prepareCompletedOnboarding()
 
         composeRule.onNodeWithTag("nav_TIMETABLE").performClick()
-        // D-094: 수업 추가 is the Timetable FAB; it is named by its content description in every state.
-        composeRule.onNodeWithTag("add_course").assertContentDescriptionEquals("수업 추가").performClick()
+        // D-102: a fresh timetable offers 수업 추가 in its empty state; with courses it is the FAB.
+        composeRule.onNodeWithTag("add_course").performClick()
         composeRule.onNodeWithText("수업명").assertExists()
 
         systemBack()

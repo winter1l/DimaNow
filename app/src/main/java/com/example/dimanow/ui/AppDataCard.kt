@@ -17,10 +17,12 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -36,6 +38,69 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
+/**
+ * Opening a timetable file, shared by 데이터 관리 and the empty timetable (D-102): [open] shows the file
+ * picker, a readable file waits in [pending] until [TimetableImportConfirmation] confirms the replacement,
+ * and every outcome is reported through the message callback given to [rememberTimetableImport].
+ */
+@Stable
+internal class TimetableImport internal constructor() {
+    internal var pending by mutableStateOf<TimetableBackup?>(null)
+    internal var launch: () -> Unit = {}
+    internal var restore: (TimetableBackup) -> Unit = {}
+
+    fun open() = launch()
+}
+
+@Composable
+internal fun rememberTimetableImport(onMessage: (String) -> Unit): TimetableImport {
+    val context = LocalContext.current
+    val app = context.applicationContext as? com.example.dimanow.DimaNowApplication
+    val scope = rememberCoroutineScope()
+    val report by rememberUpdatedState(onMessage)
+    val import = remember { TimetableImport() }
+    val launcher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        scope.launch {
+            runCatching {
+                val bytes = withContext(Dispatchers.IO) {
+                    context.contentResolver.openInputStream(uri)?.use { it.readBytes() } ?: error("파일을 열지 못했어요.")
+                }
+                TimetableBackupCodec.decode(bytes)
+            }.onSuccess { import.pending = it }
+                .onFailure { report((it as? IllegalArgumentException)?.message ?: "시간표 파일을 읽지 못했어요.") }
+        }
+    }
+    import.launch = { launcher.launch(arrayOf("application/json", "application/octet-stream", "text/plain")) }
+    import.restore = { backup ->
+        if (app != null) scope.launch {
+            report(
+                runCatching { TimetableBackupCodec.restore(app.repository, backup); "시간표를 불러왔어요." }
+                    .getOrElse { "시간표를 불러오지 못했어요." },
+            )
+        }
+    }
+    return import
+}
+
+/** Asks before a picked timetable file replaces the current timetable. */
+@Composable
+internal fun TimetableImportConfirmation(import: TimetableImport) {
+    val backup = import.pending ?: return
+    AlertDialog(
+        onDismissRequest = { import.pending = null },
+        title = { Text("시간표를 바꿀까요?") },
+        text = { Text("지금 시간표를 지우고 파일의 과목 ${backup.courses.size}개와 학기 ${backup.termStart} ~ ${backup.termEnd}로 바꿔요.") },
+        confirmButton = {
+            Button(
+                onClick = { import.pending = null; import.restore(backup) },
+                modifier = Modifier.testTag("confirm_import_timetable"),
+            ) { Text("바꾸기") }
+        },
+        dismissButton = { TextButton(onClick = { import.pending = null }) { Text("취소") } },
+    )
+}
+
 /** 데이터 관리 (D-099 clause 9): timetable export/import and deleting everything the app stored. */
 @Composable
 internal fun AppDataCard(modifier: Modifier = Modifier) {
@@ -43,8 +108,8 @@ internal fun AppDataCard(modifier: Modifier = Modifier) {
     val app = context.applicationContext as? com.example.dimanow.DimaNowApplication
     val scope = rememberCoroutineScope()
     var message by remember { mutableStateOf<String?>(null) }
-    var pendingImport by remember { mutableStateOf<TimetableBackup?>(null) }
     var confirmDeleteAll by remember { mutableStateOf(false) }
+    val timetableImport = rememberTimetableImport { message = it }
 
     val exportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
         if (uri == null || app == null) return@rememberLauncherForActivityResult
@@ -56,18 +121,6 @@ internal fun AppDataCard(modifier: Modifier = Modifier) {
                 }
                 "시간표를 저장했어요."
             }.getOrElse { "시간표를 저장하지 못했어요." }
-        }
-    }
-    val importLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        if (uri == null) return@rememberLauncherForActivityResult
-        scope.launch {
-            runCatching {
-                val bytes = withContext(Dispatchers.IO) {
-                    context.contentResolver.openInputStream(uri)?.use { it.readBytes() } ?: error("파일을 열지 못했어요.")
-                }
-                TimetableBackupCodec.decode(bytes)
-            }.onSuccess { pendingImport = it }
-                .onFailure { message = (it as? IllegalArgumentException)?.message ?: "시간표 파일을 읽지 못했어요." }
         }
     }
 
@@ -88,7 +141,7 @@ internal fun AppDataCard(modifier: Modifier = Modifier) {
                 modifier = Modifier.fillMaxWidth().testTag("export_timetable"),
             ) { Text("시간표 파일로 저장") }
             OutlinedButton(
-                onClick = { importLauncher.launch(arrayOf("application/json", "application/octet-stream", "text/plain")) },
+                onClick = timetableImport::open,
                 modifier = Modifier.fillMaxWidth().testTag("import_timetable"),
             ) { Text("시간표 파일 불러오기") }
             TextButton(
@@ -100,23 +153,7 @@ internal fun AppDataCard(modifier: Modifier = Modifier) {
         }
     }
 
-    pendingImport?.let { backup ->
-        AlertDialog(
-            onDismissRequest = { pendingImport = null },
-            title = { Text("시간표를 바꿀까요?") },
-            text = { Text("지금 시간표를 지우고 파일의 과목 ${backup.courses.size}개와 학기 ${backup.termStart} ~ ${backup.termEnd}로 바꿔요.") },
-            confirmButton = {
-                Button(onClick = {
-                    pendingImport = null
-                    if (app != null) scope.launch {
-                        message = runCatching { TimetableBackupCodec.restore(app.repository, backup); "시간표를 불러왔어요." }
-                            .getOrElse { "시간표를 불러오지 못했어요." }
-                    }
-                }, modifier = Modifier.testTag("confirm_import_timetable")) { Text("바꾸기") }
-            },
-            dismissButton = { TextButton(onClick = { pendingImport = null }) { Text("취소") } },
-        )
-    }
+    TimetableImportConfirmation(timetableImport)
     if (confirmDeleteAll) {
         AlertDialog(
             onDismissRequest = { confirmDeleteAll = false },

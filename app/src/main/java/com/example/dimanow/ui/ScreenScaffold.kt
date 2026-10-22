@@ -35,6 +35,9 @@ import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.customActions
@@ -140,6 +143,16 @@ internal fun ScreenScaffold(
             } else {
                 0f
             }
+        }
+    }
+    // D-102: selecting the visible tab again scrolls its list to the top. The last handled signal is saved
+    // with the tab, so returning to a tab keeps its scroll position (D-094(12)) instead of replaying it.
+    val scrollToTopSignal = LocalScrollToTopSignal.current
+    var handledScrollToTop by rememberSaveable { mutableIntStateOf(scrollToTopSignal) }
+    LaunchedEffect(scrollToTopSignal) {
+        if (scrollToTopSignal != handledScrollToTop) {
+            handledScrollToTop = scrollToTopSignal
+            listState.animateScrollToItem(0)
         }
     }
     val titleSlot: @Composable () -> Unit = titleContent ?: { title?.let { DimaTopAppBarTitle(it) } }

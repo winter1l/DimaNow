@@ -27,6 +27,17 @@ internal fun openDeveloperOptions(context: Context) {
     )
 }
 
+/** This app's page in the system settings, where refused permissions can be turned back on. */
+internal fun openAppDetailsSettings(context: Context) {
+    openFirstAvailableSettings(
+        context,
+        listOf(
+            Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:${context.packageName}")),
+            Intent(Settings.ACTION_SETTINGS),
+        ),
+    )
+}
+
 private fun openFirstAvailableSettings(context: Context, intents: List<Intent>) {
     intents.firstOrNull { it.resolveActivity(context.packageManager) != null }?.let { intent ->
         val launchIntent = Intent(intent).apply {

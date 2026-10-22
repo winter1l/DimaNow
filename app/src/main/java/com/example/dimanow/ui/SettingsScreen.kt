@@ -85,8 +85,10 @@ internal fun SettingsScreen(
 ) {
     var confirmDeleteLmsAccount by remember { mutableStateOf(false) }
     var diagnosticsExpanded by rememberSaveable { mutableStateOf(false) }
-    var setupExpanded by rememberSaveable { mutableStateOf(false) }
     val app = LocalContext.current.applicationContext as? com.example.dimanow.DimaNowApplication
+    val guidanceSetup = rememberGuidanceSetupController(liveSurfaceController) { app?.refreshGuidancePermissions() }
+    // D-102: 꺼진 권한이 있으면 펼친 채로 열어, 안내가 왜 안 오는지 바로 보이게 한다
+    var setupExpanded by rememberSaveable { mutableStateOf(guidanceSetup.state.missingCount > 0) }
 
     ScreenScaffold(
         title = "설정",
@@ -122,13 +124,21 @@ internal fun SettingsScreen(
             }
         }
 
-        item(key = "alerts_header") { Text("알림과 위치", style = MaterialTheme.typography.titleMedium) }
-        item(key = "live_display") {
-            LiveDisplaySettings(
-                options = displayOptions,
-                onChipContentChange = onChipContentChange,
-                onClassOrderChange = onClassOrderChange,
+        // D-102: 알림 묶음은 '안내가 오는가(권한) → 무엇을 받는가(종류) → 어떻게 보이는가(표시)' 순서다
+        item(key = "alerts_header") { SettingsSectionHeader("알림과 위치") }
+        item(key = "guidance_setup_toggle") {
+            val missing = guidanceSetup.state.missingCount
+            SettingsExpander(
+                title = "자동 안내 권한",
+                supporting = if (missing == 0) "모두 켜져 있어요" else "${missing}개가 꺼져 있어요 · 켜면 안내가 더 정확해져요",
+                supportingColor = if (missing == 0) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.primary,
+                expanded = setupExpanded,
+                onToggle = { setupExpanded = !setupExpanded },
+                modifier = Modifier.testTag("open_guidance_setup"),
             )
+        }
+        if (setupExpanded) item(key = "guidance_setup") {
+            GuidanceSetupChecklist(guidanceSetup, modifier = Modifier.padding(horizontal = 8.dp))
         }
         item(key = "notification_guidance") {
             NotificationGuidanceSettings(
@@ -136,19 +146,15 @@ internal fun SettingsScreen(
                 onModeChange = onNotificationModeChange,
             )
         }
-        item(key = "guidance_setup_toggle") {
-            SettingsExpander(
-                title = "자동 안내 설정",
-                supporting = "위치·알림 권한과 기기 설정",
-                expanded = setupExpanded,
-                onToggle = { setupExpanded = !setupExpanded },
-                modifier = Modifier.testTag("open_guidance_setup"),
+        item(key = "live_display") {
+            LiveDisplaySettings(
+                options = displayOptions,
+                onChipContentChange = onChipContentChange,
+                onClassOrderChange = onClassOrderChange,
             )
         }
-        if (setupExpanded) item(key = "guidance_setup") {
-            GuidanceSetup(liveSurfaceController = liveSurfaceController, onPermissionsChanged = { app?.refreshGuidancePermissions() })
-        }
 
+        item(key = "account_header") { SettingsSectionHeader("계정과 데이터") }
         item(key = "lms_account") {
             ElevatedCard(
                 modifier = Modifier.fillMaxWidth(),
@@ -172,7 +178,8 @@ internal fun SettingsScreen(
                 }
             }
         }
-        item(key = "app_info_header") { Text("앱 정보", style = MaterialTheme.typography.titleMedium) }
+        item(key = "app_data") { AppDataCard() }
+        item(key = "app_info_header") { SettingsSectionHeader("앱 정보") }
         item(key = "app_update") {
             AppUpdateCard(
                 state = updateState,
@@ -183,7 +190,6 @@ internal fun SettingsScreen(
             )
         }
         item(key = "about") { AboutCard() }
-        item(key = "app_data") { AppDataCard() }
         item(key = "diagnostics_toggle") {
             SettingsExpander(
                 title = "고급 및 진단",

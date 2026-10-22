@@ -21,7 +21,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Campaign
 import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.DirectionsBus
-import androidx.compose.material.icons.filled.LocationOn
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Restaurant
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -83,6 +83,8 @@ internal fun DashboardScreen(
     now: ZonedDateTime = ZonedDateTime.now(),
     lmsSnapshot: com.example.dimanow.lms.LmsSnapshot = com.example.dimanow.lms.LmsSnapshot(),
     lmsSessionState: LmsSessionState = LmsSessionState.SIGNED_OUT,
+    onAddCourse: () -> Unit = { onNavigateToPage(AppPage.TIMETABLE) },
+    updateNotice: (@Composable () -> Unit)? = null,
 ) {
     val context = LocalContext.current
     val nowTime = now.toLocalTime()
@@ -94,6 +96,7 @@ internal fun DashboardScreen(
 
     // 엔진과 무거운 계산은 입력이 바뀔 때만 다시 수행한다 (#20)
     val guidanceEngine = remember { GuidanceEngine() }
+    val locationAccess = rememberLocationAccess()
     val shuttleDepartures = shuttle?.departures.orEmpty()
     val shuttleBoard = remember(now, zone, shuttleDepartures) {
         guidanceEngine.shuttleBoard(
@@ -117,42 +120,18 @@ internal fun DashboardScreen(
     } else mealStatusNow?.state == MealServiceState.OPEN
     val originName = DisplayVocabulary.originName(zone)
 
-    // D-029: 홈의 상단 바 제목 자리는 현재 위치 배지이고, 설정 톱니는 오른쪽 끝에 둔다 (D-094)
+    // D-102: 홈의 제목은 오늘 날짜다. 현재 위치는 그 위치가 바꾸는 셔틀 카드 머리에서 '○○ 출발'로 보여 준다
+    // (D-029의 위치 배지를 대체). 설정 톱니는 오른쪽 끝에 둔다 (D-094)
     ScreenScaffold(
+        // 다른 탭 제목과 같은 크기의 제목 자리에 날짜를 둔다
+        title = "${now.monthValue}월 ${now.dayOfMonth}일 ${koreanWeekdayLabel(now.dayOfWeek)}",
         modifier = modifier,
         itemSpacing = DimaLayout.sectionGap,
         listTag = "home_list",
-        titleContent = {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.Start,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Surface(
-                    shape = DimaShapes.Badge,
-                    color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(4.dp),
-                    ) {
-                        Icon(
-                            Icons.Default.LocationOn,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(16.dp),
-                        )
-                        Text(
-                            text = "위치: $originName",
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.primary,
-                        )
-                    }
-                }
-            }
-        },
     ) {
+        // 새 버전 안내는 앱을 열자마자 막는 대화상자 대신 홈 맨 위의 카드로 알린다 (D-102)
+        updateNotice?.let { notice -> item(key = "update_notice") { notice() } }
+
         // 카드마다 키가 있는 지연 항목이라, 분 틱은 바뀐 값을 읽는 카드만 다시 그린다 (D-094)
         if (testMode) item(key = "test_mode") {
             Surface(
@@ -200,7 +179,7 @@ internal fun DashboardScreen(
                                 ) {
                                     AnimatedCountText(
                                         text = if (isOngoing) "수업 중" else startLabel,
-                                        style = MaterialTheme.typography.labelMedium.emphasized(),
+                                        style = MaterialTheme.typography.labelMedium.emphasized().copy(fontFeatureSettings = TABULAR_FIGURES),
                                         color = if (isOngoing) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSecondary,
                                         modifier = Modifier
                                             .padding(horizontal = 8.dp, vertical = 4.dp)
@@ -217,11 +196,15 @@ internal fun DashboardScreen(
                                 text = nextCourse.name,
                                 style = MaterialTheme.typography.headlineSmall.emphasized(),
                             )
-                            Text(
-                                text = if (nextCourse.professor.isNotBlank()) "${nextCourse.room} · ${nextCourse.professor}" else nextCourse.room,
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onPrimaryContainer,
-                            )
+                            // 비워 둔 강의실·교수는 빈 구분자 없이 건너뛴다
+                            listOf(nextCourse.room, nextCourse.professor).filter(String::isNotBlank).joinToString(" · ")
+                                .takeIf(String::isNotEmpty)?.let { place ->
+                                    Text(
+                                        text = place,
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                    )
+                                }
                             // 셔틀 출발 정보는 바로 아래 셔틀 카드가 캡슐로 보여주므로
                             // 히어로 카드에서 같은 내용을 문장으로 반복하지 않는다 (D-056)
                         }
@@ -230,7 +213,7 @@ internal fun DashboardScreen(
                         if (upcomingAfterCourse != null) {
                             HeroClassPreviewRow(
                                 label = "다음 수업 · ${upcomingAfterCourse.start.format(TIME)}",
-                                detail = "${upcomingAfterCourse.name} (${upcomingAfterCourse.room})",
+                                detail = courseWithRoom(upcomingAfterCourse.name, upcomingAfterCourse.room),
                             )
                         }
                     } else {
@@ -249,19 +232,42 @@ internal fun DashboardScreen(
                                 }
                                 .firstOrNull()
                         }
+                        val termEnded = com.example.dimanow.calendar.AcademicTerms.hasEnded(schedule.termEnd, now.toLocalDate())
                         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             Text(
                                 text = when {
                                     // D-099: 학기가 끝났으면 새 학기 설정을 먼저 안내한다
-                                    com.example.dimanow.calendar.AcademicTerms.hasEnded(schedule.termEnd, now.toLocalDate()) ->
-                                        "학기가 끝났어요. 시간표에서 새 학기를 설정해 주세요"
-                                    schedule.courses.isEmpty() -> "시간표에 수업을 추가해 주세요"
+                                    termEnded -> "학기가 끝났어요"
+                                    schedule.courses.isEmpty() -> "수업을 추가해 주세요"
                                     guidancePaused -> "오늘은 휴강이에요"
                                     schedule.coursesOn(now.toLocalDate()).isEmpty() -> "오늘은 수업이 없어요"
                                     else -> "오늘 수업이 모두 끝났어요"
                                 },
                                 style = MaterialTheme.typography.titleLarge.emphasized(),
                             )
+                            // 무엇을 하면 무엇을 얻는지 한 줄로 알려 준다 (토스 UX 라이팅: 가능하게 하는 조건을 말한다)
+                            when {
+                                termEnded -> "새 학기 기간을 정하면 수업 안내를 다시 받을 수 있어요."
+                                schedule.courses.isEmpty() -> "추가한 수업에 맞춰 수업 전 알림과 셔틀 안내를 보내 드려요."
+                                else -> null
+                            }?.let {
+                                Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onPrimaryContainer)
+                            }
+                            // D-102: 빈 브리핑은 다음 행동을 버튼으로 바로 건넨다
+                            when {
+                                termEnded -> Button(
+                                    onClick = { onNavigateToPage(AppPage.TIMETABLE) },
+                                    modifier = Modifier.testTag("home_set_term"),
+                                ) { Text("새 학기 설정하기") }
+                                schedule.courses.isEmpty() -> Button(
+                                    onClick = onAddCourse,
+                                    modifier = Modifier.testTag("home_add_course"),
+                                ) {
+                                    Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(ButtonDefaults.IconSize))
+                                    Spacer(Modifier.width(ButtonDefaults.IconSpacing))
+                                    Text("수업 추가하기")
+                                }
+                            }
                             if (nextClassPreview != null) {
                                 val (date, course) = nextClassPreview
                                 val dayLabel = if (date == now.toLocalDate().plusDays(1)) {
@@ -271,7 +277,7 @@ internal fun DashboardScreen(
                                 }
                                 HeroClassPreviewRow(
                                     label = "$dayLabel · ${course.start.format(TIME)}",
-                                    detail = "${course.name} (${course.room})",
+                                    detail = courseWithRoom(course.name, course.room),
                                 )
                             }
                         }
@@ -292,14 +298,48 @@ internal fun DashboardScreen(
 
         // 2. 실시간 셔틀 카드 — 카드 전체가 셔틀 탭을 연다 (D-094(9))
         item(key = "shuttle") {
-            HomeSummaryCard(
+            val shuttleSuspension = remember(now.toLocalDate()) { guidanceEngine.campusShuttleSuspensionOn(now.toLocalDate()) }
+            val shuttleHeader: @Composable (Boolean) -> Unit = { openable ->
+                // D-102: 지금 위치는 그 위치가 바꾸는 이 카드에서 '○○ 출발'로 알린다
+                HomeCardHeader(icon = Icons.Default.DirectionsBus, title = "셔틀", showChevron = openable) {
+                    if (zone != CampusZoneId.OUTSIDE) {
+                        Surface(shape = DimaShapes.Badge, color = MaterialTheme.colorScheme.secondaryContainer) {
+                            Text(
+                                text = "$originName 출발",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.onSecondaryContainer,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp).testTag("dashboard_shuttle_origin"),
+                            )
+                        }
+                    }
+                }
+            }
+            // D-102: 위치 권한이 없어 '캠퍼스 밖'으로 보일 때는 설정으로 보내지 않고 여기서 바로 묻는다.
+            // M3 카드는 전체가 한 번 누르는 대상이거나 자기 버튼을 가진 그릇 중 하나이므로, 이때 카드는 누를 수 없다.
+            if (zone == CampusZoneId.OUTSIDE && !locationAccess.granted && !shuttleDepartures.isEmpty() && shuttleSuspension == null) {
+                HomeContainerCard(modifier = Modifier.testTag("dashboard_shuttle_card")) {
+                    shuttleHeader(false)
+                    Text(
+                        "위치를 허용하면 지금 있는 곳에서 출발하는 셔틀을 바로 보여 줘요. 위치는 이 기기 안에서만 써요.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.testTag("dashboard_location_needed"),
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        FilledTonalButton(
+                            onClick = locationAccess.request,
+                            modifier = Modifier.testTag("dashboard_allow_location"),
+                        ) { Text("위치 허용하기") }
+                        TextButton(onClick = { onNavigateToPage(AppPage.SHUTTLE) }) { Text("전체 시간표") }
+                    }
+                }
+            } else HomeSummaryCard(
                 onClick = { onNavigateToPage(AppPage.SHUTTLE) },
                 onClickLabel = "셔틀 전체 시간표 보기",
                 modifier = Modifier.testTag("dashboard_shuttle_card"),
             ) {
-                HomeCardHeader(icon = Icons.Default.DirectionsBus, title = "셔틀 ($originName 출발)")
+                shuttleHeader(true)
 
-                val shuttleSuspension = remember(now.toLocalDate()) { guidanceEngine.campusShuttleSuspensionOn(now.toLocalDate()) }
                 val todayZoneDepartures = shuttleDepartures.filter { it.serviceDay == now.dayOfWeek && it.originZone == zone }
                 val destinations = todayZoneDepartures.mapNotNull { it.destinationZone }.distinct().sortedBy { it.ordinal }
 
@@ -325,20 +365,12 @@ internal fun DashboardScreen(
                         )
                     }
                     zone == CampusZoneId.OUTSIDE -> {
-                        // D-099: 위치 권한이 없어서 '캠퍼스 밖'으로 보이는 경우를 구분해 알려 준다
-                        val context = androidx.compose.ui.platform.LocalContext.current
-                        val locationGranted = remember(now) {
-                            androidx.core.content.ContextCompat.checkSelfPermission(context, android.Manifest.permission.ACCESS_FINE_LOCATION) ==
-                                android.content.pm.PackageManager.PERMISSION_GRANTED ||
-                                androidx.core.content.ContextCompat.checkSelfPermission(context, android.Manifest.permission.ACCESS_COARSE_LOCATION) ==
-                                android.content.pm.PackageManager.PERMISSION_GRANTED
-                        }
+                        // 위치를 쓸 수 있는데 캠퍼스 밖이면, 무엇이 언제 나타나는지만 알려 준다 (D-102)
                         Text(
-                            if (locationGranted) "캠퍼스 외부 — 교내 진입 시 자동 안내"
-                            else "위치 권한을 허용하면 지금 있는 곳의 셔틀을 보여 줘요 · 설정 → 자동 안내 설정",
+                            "캠퍼스에 들어오면 그곳에서 출발하는 셔틀을 바로 보여 줘요",
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.testTag(if (locationGranted) "dashboard_outside" else "dashboard_location_needed"),
+                            modifier = Modifier.testTag("dashboard_outside"),
                         )
                     }
                     destinations.isNotEmpty() -> {
@@ -436,7 +468,7 @@ internal fun DashboardScreen(
                                                 itemVerticalAlignment = Alignment.CenterVertically,
                                             ) {
                                                 Text(
-                                                    text = "운행 종료",
+                                                    text = "오늘 운행이 끝났어요",
                                                     style = MaterialTheme.typography.titleSmall,
                                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                                 )
@@ -658,5 +690,8 @@ private fun HeroClassPreviewRow(label: String, detail: String) {
         }
     }
 }
+
+/** `수업명 (강의실)`, without empty brackets when the room was left blank. */
+internal fun courseWithRoom(name: String, room: String): String = if (room.isBlank()) name else "$name ($room)"
 
 private val TIME = DateTimeFormatter.ofPattern("HH:mm")

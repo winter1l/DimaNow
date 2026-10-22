@@ -150,6 +150,24 @@ internal fun HomeSummaryCard(
     }
 }
 
+/**
+ * The same Home card surface when the card holds its own buttons (D-102): M3 cards are either one tap target
+ * or a container of controls, never both, so this card itself does not respond to taps.
+ */
+@Composable
+internal fun HomeContainerCard(
+    modifier: Modifier = Modifier,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    ElevatedCard(
+        modifier = modifier.fillMaxWidth(),
+        shape = DimaShapes.Card,
+        colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+    ) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp), content = content)
+    }
+}
+
 /** Names the click action for screen readers ("double-tap to <label>") without adding a second action. */
 private fun SemanticsPropertyReceiver.labelClickAction(label: String, action: () -> Unit) {
     onClick(label = label) { action(); true }

@@ -1,10 +1,23 @@
 package com.example.dimanow.ui
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.automirrored.filled.OpenInNew
+import androidx.compose.material.icons.filled.BugReport
+import androidx.compose.material.icons.filled.Code
+import androidx.compose.material.icons.filled.Description
+import androidx.compose.material.icons.filled.PrivacyTip
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.semantics.Role
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.selection.SelectionContainer
@@ -51,7 +64,11 @@ internal const val DATA_ACCURACY_NOTICE =
     "셔틀·식단·공지는 학교 공개 자료를 옮긴 것이고, 식단은 AI가 사진을 읽거나 학생이 올린 사진으로 만들어져 틀릴 수 있어요. " +
         "중요한 일정은 학교 공지와 공식 시간표로 꼭 확인해 주세요."
 
-/** 앱 정보 card: unofficial notice, accuracy note, privacy policy, licences, problem report and source code. */
+/**
+ * 앱 정보 card: unofficial notice, accuracy note, then the links as list rows (D-102): one row per
+ * destination with a leading icon, a supporting line where it helps, and a trailing mark that says whether
+ * it opens the browser or a page inside the app (M3 lists, Toss ListRow).
+ */
 @Composable
 internal fun AboutCard(modifier: Modifier = Modifier) {
     val context = LocalContext.current
@@ -61,28 +78,70 @@ internal fun AboutCard(modifier: Modifier = Modifier) {
         shape = DimaShapes.Card,
         colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
     ) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text("이 앱에 대해", style = MaterialTheme.typography.titleMedium)
-            Text(UNOFFICIAL_NOTICE, style = MaterialTheme.typography.bodySmall)
-            Text(DATA_ACCURACY_NOTICE, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            OutlinedButton(
-                onClick = { openUrl(context, AppLinks.PRIVACY_POLICY) },
-                modifier = Modifier.fillMaxWidth().testTag("open_privacy_policy"),
-            ) { Text("개인정보 처리방침") }
-            OutlinedButton(
-                onClick = { openUrl(context, AppLinks.REPORT_PROBLEM) },
-                modifier = Modifier.fillMaxWidth().testTag("open_report_problem"),
-            ) { Text("문의·오류 제보") }
-            Text(
-                "제보는 공개 GitHub 이슈로 남아요. 시간표·위치·학번 같은 개인정보는 적지 말아 주세요.",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            TextButton(onClick = { showLicenses = true }, modifier = Modifier.testTag("open_licenses")) { Text("오픈소스 라이선스") }
-            TextButton(onClick = { openUrl(context, AppLinks.SOURCE_CODE) }) { Text("소스 코드 (Apache License 2.0)") }
+        Column(Modifier.padding(vertical = 16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Column(Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("이 앱에 대해", style = MaterialTheme.typography.titleMedium)
+                Text(UNOFFICIAL_NOTICE, style = MaterialTheme.typography.bodySmall)
+                Text(DATA_ACCURACY_NOTICE, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            Column {
+                AboutLinkRow(
+                    icon = Icons.Default.PrivacyTip, title = "개인정보 처리방침",
+                    onClick = { openUrl(context, AppLinks.PRIVACY_POLICY) }, tag = "open_privacy_policy",
+                )
+                AboutLinkRow(
+                    icon = Icons.Default.BugReport, title = "문의·오류 제보",
+                    supporting = "공개 GitHub 이슈로 남아요. 시간표·위치·학번 같은 개인정보는 적지 말아 주세요.",
+                    onClick = { openUrl(context, AppLinks.REPORT_PROBLEM) }, tag = "open_report_problem",
+                )
+                AboutLinkRow(
+                    icon = Icons.Default.Description, title = "오픈소스 라이선스",
+                    onClick = { showLicenses = true }, tag = "open_licenses", external = false,
+                )
+                AboutLinkRow(
+                    icon = Icons.Default.Code, title = "소스 코드",
+                    supporting = "Apache License 2.0",
+                    onClick = { openUrl(context, AppLinks.SOURCE_CODE) }, tag = "open_source_code",
+                )
+            }
         }
     }
     if (showLicenses) OpenSourceLicensesDialog(onDismiss = { showLicenses = false })
+}
+
+@Composable
+private fun AboutLinkRow(
+    icon: ImageVector,
+    title: String,
+    onClick: () -> Unit,
+    tag: String,
+    supporting: String? = null,
+    external: Boolean = true,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(min = 56.dp)
+            .clickable(onClickLabel = if (external) "브라우저에서 열기" else "열기", role = Role.Button, onClick = onClick)
+            .padding(horizontal = 16.dp, vertical = 10.dp)
+            .testTag(tag),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(16.dp),
+    ) {
+        Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(24.dp))
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(title, style = MaterialTheme.typography.bodyLarge)
+            supporting?.let {
+                Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+        Icon(
+            if (external) Icons.AutoMirrored.Filled.OpenInNew else Icons.AutoMirrored.Filled.KeyboardArrowRight,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.size(20.dp),
+        )
+    }
 }
 
 private data class LicensedComponent(val name: String, val owner: String, val license: String)

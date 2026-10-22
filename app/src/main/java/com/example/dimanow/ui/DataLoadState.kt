@@ -149,6 +149,9 @@ internal fun mealRefreshMessage(result: MealRefreshResult?, venue: MealVenue, to
     is MealRefreshResult.Failure -> "식단을 받지 못했어요. 잠시 후 다시 당겨 주세요"
 }
 
+/** OpenType tabular figures: every digit takes the same width, so a ticking countdown keeps its size. */
+internal const val TABULAR_FIGURES = "tnum"
+
 /**
  * Next-departure capsule shared by Home, the campus shuttle and 4402 (D-094(1), (5)): the
  * countdown/service label on one line and the clock on its own line beneath.
@@ -171,14 +174,15 @@ internal fun DepartureCapsule(
             modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(2.dp),
         ) {
+            // D-102: 분마다 바뀌는 숫자는 고정폭 숫자(tnum)로 그려 글자 폭이 흔들리지 않게 한다 (M3 타이포그래피)
             AnimatedCountText(
                 text = label,
-                style = labelStyle,
+                style = labelStyle.copy(fontFeatureSettings = TABULAR_FIGURES),
                 color = contentColor,
             )
             Text(
                 text = clock,
-                style = MaterialTheme.typography.bodySmall,
+                style = MaterialTheme.typography.bodySmall.copy(fontFeatureSettings = TABULAR_FIGURES),
                 color = contentColor,
                 maxLines = 1,
                 softWrap = false,

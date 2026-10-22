@@ -36,7 +36,8 @@ import com.example.dimanow.theme.DimaShapes
  *
  * - With [icon] it is a centered illustration-style card (used when the whole view is empty).
  * - [contained] = false draws only the text and action, for use inside another card.
- * - [actionLabel] + [onAction] add one follow-up action.
+ * - [actionLabel] + [onAction] add one follow-up action; [secondaryActionLabel] + [onSecondaryAction]
+ *   add a quieter alternative under it (D-102: an empty view offers every way to fill it).
  */
 @Composable
 internal fun EmptyState(
@@ -50,6 +51,9 @@ internal fun EmptyState(
     actionEnabled: Boolean = true,
     actionTag: String? = null,
     contained: Boolean = true,
+    secondaryActionLabel: String? = null,
+    onSecondaryAction: (() -> Unit)? = null,
+    secondaryActionTag: String? = null,
 ) {
     val content: @Composable () -> Unit = {
         if (icon != null) {
@@ -77,6 +81,7 @@ internal fun EmptyState(
                     )
                 }
                 StateAction(actionLabel, onAction, actionIcon, actionEnabled, actionTag, tonal = true)
+                StateAction(secondaryActionLabel, onSecondaryAction, null, actionEnabled, secondaryActionTag, tonal = false)
             }
         } else {
             Column(
@@ -88,6 +93,7 @@ internal fun EmptyState(
                     Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 StateAction(actionLabel, onAction, actionIcon, actionEnabled, actionTag, tonal = false)
+                StateAction(secondaryActionLabel, onSecondaryAction, null, actionEnabled, secondaryActionTag, tonal = false)
             }
         }
     }

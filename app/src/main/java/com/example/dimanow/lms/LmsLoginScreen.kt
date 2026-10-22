@@ -25,11 +25,23 @@ import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.selection.toggleable
+import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import com.example.dimanow.theme.DimaShapes
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.ui.autofill.ContentType
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentType
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
@@ -66,8 +78,10 @@ internal fun LmsLoginScreen(
     }
     var username by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
+    var passwordVisible by remember { mutableStateOf(false) }
     // D-099: 계정 저장은 사용자가 직접 켜야 한다
     var automatic by remember { mutableStateOf(false) }
+    val canLogin = username.isNotBlank() && password.isNotEmpty()
     ScreenScaffold(
         title = "수업",
         modifier = modifier.imePadding(),
@@ -77,21 +91,29 @@ internal fun LmsLoginScreen(
         item(key = "lms_login_form") {
             Column(modifier = Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(vertical = 16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                    Text("학교 계정으로 로그인", style = MaterialTheme.typography.titleMedium)
-                    // D-099: 비공식 앱, 전송 경로, 저장 방식과 중복 로그인을 로그인 전에 알린다
-                    Text(
-                        "DIMA Now는 학교가 만든 앱이 아니에요. 학번과 비밀번호는 학교 공식 로그인 화면(portal·lms.dima.ac.kr)에만 " +
-                            "입력되고 개발자나 다른 서버로 보내지 않아요. 다만 학교 통합 로그인 중 한 구간(sso.dima.ac.kr:8080)은 " +
-                            "학교가 암호화하지 않은 연결을 써서, 공용 Wi-Fi에서는 로그인 정보가 노출될 수 있어요.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.testTag("lms_consent"),
-                    )
-                    Text(
-                        "학교 LMS는 한 곳에서만 로그인돼요. 다른 기기에서 로그인 중이면 이 앱이 그 로그인을 끊기 전에 먼저 물어봐요.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
+                    // D-102: 로그인을 묻기 전에 무엇을 얻는지 한 줄로 먼저 말한다 (HIG 계정, 토스 로그인 안내)
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text("학교 계정으로 로그인", style = MaterialTheme.typography.titleMedium)
+                        Text(
+                            "과제·강의 마감과 수업 공지를 이 탭에서 모아 볼 수 있어요.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    // D-099: 비공식 앱, 전송 경로, 저장 방식과 중복 로그인을 로그인 전에 알린다.
+                    // D-102: 같은 내용을 한 덩어리 문단 대신 항목별로 나눠 읽기 쉽게 한다
+                    Surface(shape = DimaShapes.Tile, color = MaterialTheme.colorScheme.surfaceContainerLow) {
+                        Column(
+                            Modifier.fillMaxWidth().padding(16.dp).testTag("lms_consent"),
+                            verticalArrangement = Arrangement.spacedBy(6.dp),
+                        ) {
+                            Text("로그인 전에 확인해 주세요", style = MaterialTheme.typography.labelLarge)
+                            LmsNoticeLine("DIMA Now는 학교가 만든 앱이 아니에요.")
+                            LmsNoticeLine("학번과 비밀번호는 학교 공식 로그인 화면(portal·lms.dima.ac.kr)에만 입력되고, 개발자나 다른 서버로 보내지 않아요.")
+                            LmsNoticeLine("학교 통합 로그인 중 한 구간(sso.dima.ac.kr:8080)은 학교가 암호화하지 않은 연결을 써서, 공용 Wi-Fi에서는 로그인 정보가 노출될 수 있어요.")
+                            LmsNoticeLine("학교 LMS는 한 곳에서만 로그인돼요. 다른 기기에서 로그인 중이면 그 로그인을 끊기 전에 먼저 물어봐요.")
+                        }
+                    }
                     if (needsReview) {
                         Surface(
                             modifier = Modifier.fillMaxWidth(),
@@ -106,21 +128,32 @@ internal fun LmsLoginScreen(
                             )
                         }
                     }
+                    // D-102: 키보드의 다음·완료로 이어서 입력하고, 비밀번호는 눌러서 확인할 수 있다 (M3 텍스트 필드)
                     OutlinedTextField(
                         value = username,
                         onValueChange = { username = it },
                         label = { Text("학번") },
                         singleLine = true,
-                        modifier = Modifier.fillMaxWidth().testTag("lms_username"),
+                        keyboardOptions = KeyboardOptions(autoCorrectEnabled = false, imeAction = ImeAction.Next),
+                        modifier = Modifier.fillMaxWidth().testTag("lms_username").semantics { contentType = ContentType.Username },
                     )
                     OutlinedTextField(
                         value = password,
                         onValueChange = { password = it },
                         label = { Text("비밀번호") },
-                        visualTransformation = PasswordVisualTransformation(),
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                        visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, imeAction = ImeAction.Done),
+                        keyboardActions = KeyboardActions(onDone = { if (canLogin) onLogin(username, password, automatic) }),
+                        trailingIcon = {
+                            IconButton(onClick = { passwordVisible = !passwordVisible }, modifier = Modifier.testTag("lms_password_visibility")) {
+                                Icon(
+                                    if (passwordVisible) Icons.Default.VisibilityOff else Icons.Default.Visibility,
+                                    contentDescription = if (passwordVisible) "비밀번호 숨기기" else "비밀번호 보기",
+                                )
+                            }
+                        },
                         singleLine = true,
-                        modifier = Modifier.fillMaxWidth().testTag("lms_password"),
+                        modifier = Modifier.fillMaxWidth().testTag("lms_password").semantics { contentType = ContentType.Password },
                     )
                     Row(
                         Modifier.fillMaxWidth().toggleable(value = automatic, role = Role.Switch, onValueChange = { automatic = it }).padding(vertical = 8.dp),
@@ -140,12 +173,27 @@ internal fun LmsLoginScreen(
                     }
                     Button(
                         onClick = { onLogin(username, password, automatic) },
-                        enabled = username.isNotBlank() && password.isNotEmpty(),
+                        enabled = canLogin,
                         modifier = Modifier.fillMaxWidth().testTag("lms_login"),
                     ) { Text("로그인") }
                 }
             }
         }
+    }
+}
+
+/** One bullet of the pre-login notice. */
+@Composable
+private fun LmsNoticeLine(text: String) {
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        // The bullet is decoration; screen readers read only the sentence.
+        Text(
+            "•",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.clearAndSetSemantics { },
+        )
+        Text(text, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 

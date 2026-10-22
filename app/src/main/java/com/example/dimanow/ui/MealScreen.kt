@@ -481,19 +481,7 @@ private fun MealDayHeading(date: LocalDate, today: LocalDate, trailing: String?)
                 text = "${date.monthValue}월 ${date.dayOfMonth}일 ${koreanWeekdayLabel(date.dayOfWeek)}",
                 style = MaterialTheme.typography.titleMedium,
             )
-            if (date == today) {
-                Surface(
-                    shape = DimaShapes.Badge,
-                    color = MaterialTheme.colorScheme.primary,
-                ) {
-                    Text(
-                        text = "오늘",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onPrimary,
-                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-                    )
-                }
-            }
+            if (date == today) TodayBadge()
         }
         trailing?.let {
             Text(

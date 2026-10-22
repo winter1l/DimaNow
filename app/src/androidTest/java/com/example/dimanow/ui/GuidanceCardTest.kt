@@ -128,7 +128,7 @@ class GuidanceCardTest {
             )
         }
 
-        composeRule.onNodeWithText("운행 종료").assertIsDisplayed()
+        composeRule.onNodeWithText("오늘 운행이 끝났어요").assertIsDisplayed()
     }
 
     @Test

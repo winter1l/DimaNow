@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
@@ -18,6 +19,15 @@ import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.DirectionsBus
+import androidx.compose.material.icons.filled.LocationOn
+import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.Restaurant
+import androidx.compose.material.icons.filled.Schedule
+import androidx.compose.material.icons.filled.School
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
@@ -50,7 +60,9 @@ import com.example.dimanow.data.OnboardingDraft
 import com.example.dimanow.data.OnboardingStage
 import com.example.dimanow.guidance.HomeBase
 import com.example.dimanow.live.LiveSurfaceController
-import com.example.dimanow.ui.GuidanceSetup
+import com.example.dimanow.ui.GuidanceSetupChecklist
+import com.example.dimanow.ui.GuidanceSetupState
+import com.example.dimanow.ui.rememberGuidanceSetupController
 import com.example.dimanow.ui.DimaLayout
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
@@ -92,6 +104,7 @@ fun OnboardingRoute(
             }
         }
     }
+    val setup = rememberGuidanceSetupController(liveSurfaceController, onPermissionsChanged)
     OnboardingScreen(
         draft = current,
         onDraftChange = { next -> save { preferences.saveOnboardingDraft(next) } },
@@ -99,10 +112,20 @@ fun OnboardingRoute(
         modifier = modifier,
         saving = saving,
         error = error,
-        setupContent = { GuidanceSetup(liveSurfaceController, onPermissionsChanged = onPermissionsChanged) },
+        setup = setup.state,
+        onRequestEssentials = setup::requestEssentials,
+        setupContent = { GuidanceSetupChecklist(setup, onlyIncomplete = true) },
     )
 }
 
+/**
+ * First run (D-075 order, D-102 content): what the app does, the home direction, then one permission step.
+ *
+ * The permission step follows Apple HIG and the Toss guide: it names the two permissions guidance needs with
+ * one sentence each, and its single `계속` button lets Android ask for both in turn. Refusing never blocks the
+ * app (D-056). Only after that does [setupContent] show the optional items that need a system settings page;
+ * `나중에 할게요` finishes without asking at all.
+ */
 @Composable
 internal fun OnboardingScreen(
     draft: OnboardingDraft,
@@ -111,8 +134,12 @@ internal fun OnboardingScreen(
     modifier: Modifier = Modifier,
     saving: Boolean = false,
     error: String? = null,
+    setup: GuidanceSetupState = GuidanceSetupState(),
+    onRequestEssentials: () -> Unit = {},
     setupContent: @Composable () -> Unit = {},
 ) {
+    var essentialsAsked by rememberSaveable { mutableStateOf(false) }
+    val essentialsHandled = essentialsAsked || setup.essentialsGranted
     fun back() {
         val previous = when (draft.stage) {
             OnboardingStage.SETUP -> OnboardingStage.HOME_BASE
@@ -147,28 +174,47 @@ internal fun OnboardingScreen(
                 ) {
                     when (draft.stage) {
                         OnboardingStage.WELCOME -> {
-                            StepHeading("학교생활을 한눈에", "수업, 셔틀, 오늘 식단을 확인해요.")
+                            StepHeading("학교생활을 한눈에", "수업, 셔틀, 식단을 한곳에서 확인해요.")
+                            // D-102: 무엇을 해 주는 앱인지 먼저 보여 준다 (가치 먼저, 설정은 나중에)
+                            Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                                OnboardingRow(Icons.Default.Schedule, "수업 안내", "수업 시작 전에 강의실과 시간을 알려 드려요.")
+                                OnboardingRow(Icons.Default.DirectionsBus, "셔틀 안내", "지금 있는 곳에서 곧 출발하는 셔틀을 보여 드려요.")
+                                OnboardingRow(Icons.Default.Restaurant, "오늘 식단", "학생식당과 기숙사 식단을 바로 확인해요.")
+                                OnboardingRow(Icons.Default.School, "과제 마감", "학교 계정을 연결하면 마감을 모아 보여 드려요.")
+                            }
                             // D-099: 첫 화면에서 비공식 앱임과 데이터 처리 원칙을 알린다
-                            Text(
-                                com.example.dimanow.ui.UNOFFICIAL_NOTICE + " 시간표와 위치는 이 기기에만 저장돼요.",
-                                style = MaterialTheme.typography.bodyMedium,
-                                modifier = Modifier.testTag("onboarding_unofficial_notice"),
-                            )
-                            Text(
-                                com.example.dimanow.ui.DATA_ACCURACY_NOTICE,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                            val context = androidx.compose.ui.platform.LocalContext.current
-                            androidx.compose.material3.TextButton(
-                                onClick = { com.example.dimanow.ui.openUrl(context, com.example.dimanow.ui.AppLinks.PRIVACY_POLICY) },
-                                modifier = Modifier.testTag("onboarding_privacy_policy"),
-                            ) { Text("개인정보 처리방침 보기") }
+                            Surface(
+                                shape = DimaShapes.Tile,
+                                color = MaterialTheme.colorScheme.surfaceContainerLow,
+                                modifier = Modifier.fillMaxWidth(),
+                            ) {
+                                Column(Modifier.padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 4.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    Text(
+                                        com.example.dimanow.ui.UNOFFICIAL_NOTICE + " 시간표와 위치는 이 기기에만 저장돼요.",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        modifier = Modifier.testTag("onboarding_unofficial_notice"),
+                                    )
+                                    Text(
+                                        com.example.dimanow.ui.DATA_ACCURACY_NOTICE,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                    val context = androidx.compose.ui.platform.LocalContext.current
+                                    androidx.compose.material3.TextButton(
+                                        onClick = { com.example.dimanow.ui.openUrl(context, com.example.dimanow.ui.AppLinks.PRIVACY_POLICY) },
+                                        modifier = Modifier.testTag("onboarding_privacy_policy"),
+                                    ) { Text("개인정보 처리방침 보기") }
+                                }
+                            }
                         }
                         OnboardingStage.HOME_BASE -> {
-                            StepHeading("주로 어느 방향으로 돌아가나요?", "수업이 끝난 뒤 안내할 셔틀 방향이에요.")
+                            StepHeading("주로 어느 방향으로 돌아가나요?", "수업이 끝난 뒤 안내할 셔틀 방향이에요. 설정에서 언제든 바꿀 수 있어요.")
                             Column(Modifier.selectableGroup(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            listOf(HomeBase.YEIN to "엔터관 방향", HomeBase.ONE_ROOM to "원룸촌 방향", HomeBase.COMMUTE to "통학 (귀가 셔틀 안내 없음)").forEach { (homeBase, label) ->
+                            listOf(
+                                Triple(HomeBase.YEIN, "엔터관 방향", null),
+                                Triple(HomeBase.ONE_ROOM, "원룸촌 방향", null),
+                                Triple(HomeBase.COMMUTE, "통학", "귀가 셔틀은 안내하지 않아요"),
+                            ).forEach { (homeBase, label, supporting) ->
                                 Surface(
                                     shape = DimaShapes.Tile,
                                     color = if (draft.homeBase == homeBase) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerLow,
@@ -184,7 +230,12 @@ internal fun OnboardingScreen(
                                         verticalAlignment = Alignment.CenterVertically,
                                         horizontalArrangement = Arrangement.spacedBy(16.dp),
                                     ) {
-                                        Text(label, modifier = Modifier.weight(1f), style = MaterialTheme.typography.titleMedium)
+                                        Column(Modifier.weight(1f)) {
+                                            Text(label, style = MaterialTheme.typography.titleMedium)
+                                            supporting?.let {
+                                                Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                            }
+                                        }
                                         RadioButton(selected = draft.homeBase == homeBase, onClick = null, enabled = !saving)
                                     }
                                 }
@@ -192,8 +243,31 @@ internal fun OnboardingScreen(
                             }
                         }
                         OnboardingStage.SETUP -> {
-                            StepHeading("자동 안내를 설정해요", "수업과 셔틀 안내에 필요한 설정을 확인해 주세요.")
-                            setupContent()
+                            StepHeading(
+                                "알림과 위치를 허용해 주세요",
+                                "수업과 셔틀을 제때 안내하려면 두 가지가 필요해요. 허용하지 않아도 앱은 그대로 쓸 수 있어요.",
+                            )
+                            Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                                OnboardingRow(
+                                    Icons.Default.Notifications, "알림", "수업 시작 전과 셔틀 출발 전에 알려 드려요.",
+                                    granted = setup.notifications,
+                                )
+                                OnboardingRow(
+                                    Icons.Default.LocationOn, "위치", "지금 있는 곳에서 출발하는 셔틀을 보여 드려요. 위치는 이 기기 안에서만 써요.",
+                                    granted = setup.preciseLocation || setup.approximateLocation,
+                                )
+                            }
+                            if (essentialsHandled) {
+                                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                    Text("더 정확한 안내 (선택)", style = MaterialTheme.typography.titleSmall)
+                                    Text(
+                                        "휴대폰 설정에서 켜는 항목이에요. 나중에 설정 → 자동 안내 권한에서도 켤 수 있어요.",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+                                setupContent()
+                            }
                         }
                     }
                 }
@@ -207,28 +281,64 @@ internal fun OnboardingScreen(
                         modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
                     )
                 }
-                if (draft.stage == OnboardingStage.SETUP) {
-                    Text("나중에 설정에서 변경할 수 있어요.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
+                // 권한 화면의 첫 버튼은 Android의 허용 창을 띄우는 '계속' 하나다 (HIG). 묻고 난 뒤에는 '완료'로 끝낸다.
+                val asksEssentials = draft.stage == OnboardingStage.SETUP && !essentialsHandled
                 Button(
                     onClick = {
                         when (draft.stage) {
                             OnboardingStage.WELCOME -> onDraftChange(draft.copy(stage = OnboardingStage.HOME_BASE))
                             OnboardingStage.HOME_BASE -> onDraftChange(draft.copy(stage = OnboardingStage.SETUP))
-                            OnboardingStage.SETUP -> draft.homeBase?.let(onComplete)
+                            OnboardingStage.SETUP -> if (asksEssentials) {
+                                essentialsAsked = true
+                                onRequestEssentials()
+                            } else {
+                                draft.homeBase?.let(onComplete)
+                            }
                         }
                     },
                     enabled = !saving && (draft.stage == OnboardingStage.WELCOME || draft.homeBase != null),
                     modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp).testTag("onboarding_primary"),
                 ) {
                     Text(if (saving) "저장 중" else when (draft.stage) {
-                        OnboardingStage.WELCOME -> "설정 시작"
+                        OnboardingStage.WELCOME -> "시작하기"
                         OnboardingStage.HOME_BASE -> "다음"
-                        OnboardingStage.SETUP -> "시작하기"
+                        OnboardingStage.SETUP -> if (asksEssentials) "계속" else "완료"
                     })
+                }
+                // 언제나 빠져나갈 길이 있다 (토스 UX 가이드): 묻지 않고 바로 시작할 수 있다
+                if (asksEssentials) {
+                    androidx.compose.material3.TextButton(
+                        onClick = { draft.homeBase?.let(onComplete) },
+                        enabled = !saving && draft.homeBase != null,
+                        modifier = Modifier.fillMaxWidth().testTag("onboarding_skip"),
+                    ) { Text("나중에 할게요") }
                 }
             }
         }
+        }
+    }
+}
+
+/** One feature or permission line: icon, name, one sentence, and a check mark once a permission is on. */
+@Composable
+private fun OnboardingRow(icon: ImageVector, title: String, description: String, granted: Boolean? = null) {
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+        Surface(shape = DimaShapes.Badge, color = MaterialTheme.colorScheme.secondaryContainer, modifier = Modifier.size(44.dp)) {
+            Box(contentAlignment = Alignment.Center) {
+                Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.onSecondaryContainer, modifier = Modifier.size(24.dp))
+            }
+        }
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(title, style = MaterialTheme.typography.titleMedium)
+            Text(description, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        if (granted == true) {
+            Icon(
+                Icons.Default.CheckCircle,
+                contentDescription = "허용됨",
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(24.dp),
+            )
         }
     }
 }

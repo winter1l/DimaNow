@@ -137,8 +137,8 @@ fun ShuttleScreen(
         onRefresh = ::refreshShuttle,
         refreshing = refreshing,
         listTag = "shuttle_list",
-    ) {
-        item(key = "shuttle_view") {
+        // D-102: 식단 화면처럼 노선 전환과 요일 선택을 머리에 고정해, 시간표를 내려 읽다가도 바로 바꿀 수 있다 (D-057)
+        subHeader = {
             SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
                 SegmentedButton(
                     selected = shuttleView == ShuttleView.CAMPUS,
@@ -151,14 +151,8 @@ fun ShuttleScreen(
                     shape = SegmentedButtonDefaults.itemShape(1, 2),
                 ) { Text("4402") }
             }
-        }
-        if (shuttleView == ShuttleView.BUS_4402) {
-            item(key = "bus_4402") {
-                Bus4402ScheduleContent(now = now, nearbyStopNumber = nearbyTransitStopNumber)
-            }
-        } else {
-            // M3 Expressive 요일 선택 (DimaDaySelector)
-            item(key = "shuttle_days") {
+            if (shuttleView == ShuttleView.CAMPUS) {
+                // M3 Expressive 요일 선택 (DimaDaySelector)
                 DimaDaySelector(
                     days = DayOfWeek.entries,
                     selected = selectedDay,
@@ -167,6 +161,13 @@ fun ShuttleScreen(
                     itemTag = { "shuttle_day_${it.name}" },
                 )
             }
+        },
+    ) {
+        if (shuttleView == ShuttleView.BUS_4402) {
+            item(key = "bus_4402") {
+                Bus4402ScheduleContent(now = now, nearbyStopNumber = nearbyTransitStopNumber)
+            }
+        } else {
             when {
                 shuttle == null -> item(key = "shuttle_loading") {
                     OutlinedCard(modifier = Modifier.fillMaxWidth(), shape = DimaShapes.Card) {

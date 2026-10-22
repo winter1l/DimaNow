@@ -47,6 +47,7 @@ import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.DateRangePicker
 import androidx.compose.material3.rememberDateRangePickerState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -82,11 +83,22 @@ internal fun TimetableScreen(
     schedule: TermSchedule,
     modifier: Modifier = Modifier,
     today: LocalDate = LocalDate.now(MinuteTicker.CAMPUS_ZONE),
+    addCourseRequest: Long = 0L,
+    onAddCourseRequestHandled: () -> Unit = {},
 ) {
     val scope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
     var editing by remember { mutableStateOf<Course?>(null) }
     var showEditor by remember { mutableStateOf(false) }
+    // D-102: 홈의 '수업 추가하기'는 탭을 옮긴 뒤 곧바로 추가 화면을 연다
+    LaunchedEffect(addCourseRequest) {
+        if (addCourseRequest != 0L) {
+            editing = null
+            showEditor = true
+            onAddCourseRequestHandled()
+        }
+    }
+    val timetableImport = rememberTimetableImport { message -> scope.launch { snackbarHostState.showSnackbar(message) } }
     var showTermEditor by remember { mutableStateOf(false) }
     var showPauseChoice by remember { mutableStateOf(false) }
     var pausePickerMode by remember { mutableStateOf<String?>(null) }
@@ -110,6 +122,20 @@ internal fun TimetableScreen(
     val listState = rememberLazyListState()
     // 목록 맨 위에서는 "수업 추가"를 글자와 함께 펼치고, 내려 읽는 동안에는 아이콘 버튼으로 접는다 (D-094)
     val addExpanded by remember { derivedStateOf { listState.firstVisibleItemIndex == 0 } }
+    val termEnded = com.example.dimanow.calendar.AcademicTerms.hasEnded(schedule.termEnd, today)
+    val noCourses = schedule.courses.isEmpty()
+    val addCourseFab: @Composable () -> Unit = {
+        ExtendedFloatingActionButton(
+            text = { Text("수업 추가") },
+            icon = { Icon(Icons.Default.Add, contentDescription = null) },
+            onClick = { editing = null; showEditor = true },
+            expanded = addExpanded,
+            // 접힌 상태에서도 같은 이름으로 읽히도록 버튼 자체에 설명을 둔다
+            modifier = Modifier
+                .testTag("add_course")
+                .semantics { contentDescription = "수업 추가" },
+        )
+    }
     ScreenScaffold(
         title = "시간표",
         modifier = modifier,
@@ -119,18 +145,8 @@ internal fun TimetableScreen(
         snackbarHost = {
             SnackbarHost(snackbarHostState, Modifier.semantics { liveRegion = LiveRegionMode.Polite })
         },
-        floatingActionButton = {
-            ExtendedFloatingActionButton(
-                text = { Text("수업 추가") },
-                icon = { Icon(Icons.Default.Add, contentDescription = null) },
-                onClick = { editing = null; showEditor = true },
-                expanded = addExpanded,
-                // 접힌 상태에서도 같은 이름으로 읽히도록 버튼 자체에 설명을 둔다
-                modifier = Modifier
-                    .testTag("add_course")
-                    .semantics { contentDescription = "수업 추가" },
-            )
-        },
+        // D-102: 수업이 없을 때는 빈 화면 안내가 추가·불러오기 버튼을 함께 보여 주므로 FAB를 겹쳐 두지 않는다
+        floatingActionButton = addCourseFab.takeUnless { noCourses },
     ) {
         item(key = "term") {
             ElevatedCard(
@@ -164,52 +180,61 @@ internal fun TimetableScreen(
                         }
                     }
 
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                    // 휴강 모드는 수업이 있어야 의미가 있으므로, 빈 시간표에서는 학기 기간만 보인다 (D-102)
+                    if (!noCourses) {
+                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
 
-                    GuidancePauseSetting(
-                        pause = schedule.guidancePause,
-                        today = today,
-                        onConfigure = { showPauseChoice = true },
-                        onClear = { scope.launch { repository.clearGuidancePause() } },
-                    )
-                }
-            }
-        }
-        // D-099: 학기가 끝났거나 아직 수업이 없으면 다음 할 일을 바로 안내한다
-        val termEnded = com.example.dimanow.calendar.AcademicTerms.hasEnded(schedule.termEnd, today)
-        if (termEnded || schedule.courses.isEmpty()) item(key = "term_guide") {
-            val suggestion = remember(today) { com.example.dimanow.calendar.AcademicTerms.suggest(today) }
-            ElevatedCard(
-                modifier = Modifier.fillMaxWidth().testTag(if (termEnded) "term_ended_card" else "timetable_empty_card"),
-                shape = DimaShapes.Card,
-                colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer),
-            ) {
-                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    if (termEnded) {
-                        Text("학기가 끝났어요", style = MaterialTheme.typography.titleMedium)
-                        Text(
-                            "새 학기 기간을 정하고 수업을 다시 등록해 주세요. 추천 기간은 " +
-                                "${koreanDateLabel(suggestion.start, today)} ~ ${koreanDateLabel(suggestion.end, today)}" +
-                                (if (suggestion.published) "이에요." else "이에요 (학교 일정 발표 전 예상)."),
-                            style = MaterialTheme.typography.bodySmall,
-                        )
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            FilledTonalButton(
-                                onClick = { scope.launch { repository.setTerm(suggestion.start, suggestion.end) } },
-                                modifier = Modifier.testTag("apply_suggested_term"),
-                            ) { Text("추천 기간으로 바꾸기") }
-                            TextButton(onClick = { showTermEditor = true }) { Text("직접 고르기") }
-                        }
-                    } else {
-                        Text("수업을 등록해 주세요", style = MaterialTheme.typography.titleMedium)
-                        Text(
-                            "아래 '수업 추가'로 과목을 넣으면 수업 전 알림과 셔틀 안내가 시작돼요. " +
-                                "다른 기기에서 저장한 시간표 파일은 설정 → 데이터 관리에서 불러올 수 있어요.",
-                            style = MaterialTheme.typography.bodySmall,
+                        GuidancePauseSetting(
+                            pause = schedule.guidancePause,
+                            today = today,
+                            onConfigure = { showPauseChoice = true },
+                            onClear = { scope.launch { repository.clearGuidancePause() } },
                         )
                     }
                 }
             }
+        }
+        // D-099: 학기가 끝났으면 새 학기 설정을 바로 안내한다
+        if (termEnded) item(key = "term_guide") {
+            val suggestion = remember(today) { com.example.dimanow.calendar.AcademicTerms.suggest(today) }
+            ElevatedCard(
+                modifier = Modifier.fillMaxWidth().testTag("term_ended_card"),
+                shape = DimaShapes.Card,
+                colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer),
+            ) {
+                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("학기가 끝났어요", style = MaterialTheme.typography.titleMedium)
+                    Text(
+                        "새 학기 기간을 정하고 수업을 다시 등록해 주세요. 추천 기간은 " +
+                            "${koreanDateLabel(suggestion.start, today)} ~ ${koreanDateLabel(suggestion.end, today)}" +
+                            (if (suggestion.published) "이에요." else "이에요 (학교 일정 발표 전 예상)."),
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        FilledTonalButton(
+                            onClick = { scope.launch { repository.setTerm(suggestion.start, suggestion.end) } },
+                            modifier = Modifier.testTag("apply_suggested_term"),
+                        ) { Text("추천 기간으로 바꾸기") }
+                        TextButton(onClick = { showTermEditor = true }) { Text("직접 고르기") }
+                    }
+                }
+            }
+        }
+        // D-102: 빈 시간표는 한 곳에서 채우는 두 방법(직접 추가, 다른 기기에서 저장한 파일)을 모두 보여 준다
+        if (noCourses) item(key = "courses_empty") {
+            EmptyState(
+                message = "아직 등록된 수업이 없어요",
+                supporting = "수업을 추가하면 수업 시작 전 알림과 셔틀 안내가 시작돼요.",
+                icon = Icons.Default.Schedule,
+                actionLabel = "수업 추가",
+                actionIcon = Icons.Default.Add,
+                onAction = { editing = null; showEditor = true },
+                actionTag = "add_course",
+                secondaryActionLabel = "시간표 파일 불러오기",
+                onSecondaryAction = timetableImport::open,
+                secondaryActionTag = "empty_import_timetable",
+                modifier = Modifier.testTag("timetable_empty_card"),
+            )
         }
 
         changeError?.let { error -> item(key = "change_error") { Text(error, color = MaterialTheme.colorScheme.error) } }
@@ -237,24 +262,22 @@ internal fun TimetableScreen(
             .sortedWith(compareBy<Course> { it.weekday.value }.thenBy { it.start })
             .groupBy { it.weekday }
 
-        if (grouped.isEmpty()) {
-            item(key = "courses_empty") {
-                OutlinedCard(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = DimaShapes.Card,
-                ) {
-                    Text(text = "등록된 수업이 없어요", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(24.dp))
-                }
-            }
-        } else {
+        if (grouped.isNotEmpty()) {
             grouped.forEach { (weekday, courses) ->
                 item(key = "day_${weekday.name}") {
-                    Text(
-                        text = koreanWeekdayLabel(weekday),
-                        style = MaterialTheme.typography.titleMedium,
-                        color = MaterialTheme.colorScheme.primary,
+                    // 오늘 요일은 식단 화면과 같은 '오늘' 배지로 찾기 쉽게 한다 (D-102)
+                    Row(
                         modifier = Modifier.padding(top = 8.dp, start = 4.dp),
-                    )
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Text(
+                            text = koreanWeekdayLabel(weekday),
+                            style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
+                        if (weekday == today.dayOfWeek) TodayBadge()
+                    }
                 }
                 // 저장 전 수업(과 기본 시간표)은 id가 0이라, id가 없으면 요일 안 순서로 키를 만든다
                 itemsIndexed(courses, key = { index, course ->
@@ -337,12 +360,24 @@ internal fun TimetableScreen(
         )
     }
     if (showEditor) {
+        val adding = editing == null
         CourseEditorDialog(
             initial = editing,
             onDismiss = { showEditor = false },
-            onSave = { course -> scope.launch { repository.saveCourse(course) }; showEditor = false },
+            onSave = { courses ->
+                showEditor = false
+                scope.launch {
+                    courses.forEach { repository.saveCourse(it) }
+                    // 새 수업은 어디에 들어갔는지 짧게 알려 준다 (D-102)
+                    if (adding) snackbarHostState.showSnackbar(
+                        if (courses.size == 1) "${koreanWeekdayLabel(courses.single().weekday)}에 수업을 추가했어요"
+                        else "${courses.joinToString("·") { koreanWeekdayLabel(it.weekday).removeSuffix("요일") }}요일에 수업을 추가했어요",
+                    )
+                }
+            },
         )
     }
+    TimetableImportConfirmation(timetableImport)
     if (showTermEditor) {
         TermEditorDialog(
             start = schedule.termStart,

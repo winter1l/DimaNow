@@ -27,14 +27,16 @@ class AppVisualReviewTest {
             compose.onNodeWithTag("nav_${page.name}").performClick().assertIsSelected()
             capture(page.name.lowercase())
             if (page == AppPage.TIMETABLE) {
-                // D-094: 수업 추가 is the Timetable FAB, expanded at the top of the list.
-                compose.onNodeWithTag("add_course").assertContentDescriptionEquals("수업 추가").performClick()
+                // D-102: an empty timetable offers 수업 추가 in its empty state instead of the FAB.
+                compose.onNodeWithTag("add_course").performClick()
                 compose.onNodeWithText("수업명").performClick()
                 capture("course-editor-keyboard", dialog = true)
                 // Large text and the keyboard may require vertical form scrolling, never hidden horizontal days.
                 compose.onNodeWithText("일").performScrollTo().performClick().assertIsSelected()
                 capture("course-editor-weekend", dialog = true)
-                compose.onNodeWithText("취소").performClick()
+                // D-102: the full-screen editor closes with its X and asks before dropping the picked day.
+                compose.onNodeWithTag("course_editor_close").performClick()
+                compose.onNodeWithTag("course_editor_discard").performClick()
             }
             if (page == AppPage.SHUTTLE) {
                 compose.onNodeWithText("4402").performClick()

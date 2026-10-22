@@ -40,7 +40,7 @@ sealed interface LmsLoginResult {
 internal fun LmsLoginResult.failureMessage(): String? = when (this) {
     LmsLoginResult.Success -> null
     LmsLoginResult.CredentialsRejected -> "계정 정보를 다시 확인해 주세요"
-    LmsLoginResult.SessionConflict -> "다른 곳에서 LMS에 로그인되어 있어요"
+    LmsLoginResult.SessionConflict -> "다른 곳에서 LMS에 로그인한 상태예요"
     is LmsLoginResult.SessionTakeoverFailed -> message
     LmsLoginResult.InteractiveAuthenticationRequired -> "공식 LMS에서 추가 인증이 필요해요"
     is LmsLoginResult.NetworkError -> LmsUserMessages.NETWORK

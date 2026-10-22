@@ -35,6 +35,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.collapse
 import androidx.compose.ui.semantics.expand
+import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.AnnotatedString
@@ -107,6 +108,17 @@ internal fun <T> SettingsChoice(
     }
 }
 
+/** A group title in Settings; screen readers can jump between groups by heading (D-102). */
+@Composable
+internal fun SettingsSectionHeader(text: String, modifier: Modifier = Modifier) {
+    Text(
+        text = text,
+        style = MaterialTheme.typography.titleSmall,
+        color = MaterialTheme.colorScheme.primary,
+        modifier = modifier.padding(start = 4.dp, top = 8.dp).semantics { heading() },
+    )
+}
+
 /**
  * A settings section that opens in place (D-094(6)): the whole row toggles it, the chevron turns,
  * and screen readers hear its expanded state and get expand/collapse actions.
@@ -118,6 +130,7 @@ internal fun SettingsExpander(
     onToggle: () -> Unit,
     modifier: Modifier = Modifier,
     supporting: String? = null,
+    supportingColor: androidx.compose.ui.graphics.Color = MaterialTheme.colorScheme.onSurfaceVariant,
 ) {
     val rotation by animateFloatAsState(
         targetValue = if (expanded) 180f else 0f,
@@ -144,7 +157,7 @@ internal fun SettingsExpander(
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 Text(title, style = MaterialTheme.typography.titleMedium)
                 supporting?.let {
-                    Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(it, style = MaterialTheme.typography.bodySmall, color = supportingColor)
                 }
             }
             Icon(

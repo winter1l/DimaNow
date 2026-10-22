@@ -18,6 +18,11 @@ import androidx.compose.material.icons.filled.Restaurant
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.School
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.outlined.DirectionsBus
+import androidx.compose.material.icons.outlined.Home
+import androidx.compose.material.icons.outlined.Restaurant
+import androidx.compose.material.icons.outlined.Schedule
+import androidx.compose.material.icons.outlined.School
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
@@ -39,6 +44,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
+import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
@@ -79,13 +86,14 @@ import java.time.ZonedDateTime
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.first
 
-internal enum class AppPage(val title: String, val icon: ImageVector) {
+/** [icon] marks the selected destination and [outlinedIcon] the others, as the M3 navigation bar does (D-102). */
+internal enum class AppPage(val title: String, val icon: ImageVector, val outlinedIcon: ImageVector = icon) {
     // D-044: 기존 4탭(홈·시간표·셔틀·식단)의 손가락 기억을 보존하기 위해 수업은 맨 뒤에 둔다
-    DASHBOARD("홈", Icons.Default.Home),
-    TIMETABLE("시간표", Icons.Default.Schedule),
-    SHUTTLE("셔틀", Icons.Default.DirectionsBus),
-    MEAL("식단", Icons.Default.Restaurant),
-    COURSES("수업", Icons.Default.School),
+    DASHBOARD("홈", Icons.Default.Home, Icons.Outlined.Home),
+    TIMETABLE("시간표", Icons.Default.Schedule, Icons.Outlined.Schedule),
+    SHUTTLE("셔틀", Icons.Default.DirectionsBus, Icons.Outlined.DirectionsBus),
+    MEAL("식단", Icons.Default.Restaurant, Icons.Outlined.Restaurant),
+    COURSES("수업", Icons.Default.School, Icons.Outlined.School),
     SETTINGS("설정", Icons.Default.Settings),
     ;
 
@@ -146,6 +154,10 @@ fun DimaNowApp(
     val homeBaseConfirmed by preferences.homeBaseSelectionConfirmed.collectAsStateWithLifecycle(initialValue = true)
     val onboardingCompleted by preferences.onboardingCompleted.collectAsStateWithLifecycle(initialValue = true)
     var showNowBarSetup by remember { mutableStateOf(false) }
+    // D-102: 홈의 '수업 추가하기'가 시간표 탭의 추가 화면을 바로 열도록 건네는 일회성 요청
+    var addCourseRequest by rememberSaveable { mutableLongStateOf(0L) }
+    // D-102: 지금 보고 있는 탭을 다시 누르면 그 화면이 맨 위로 올라간다 (M3 내비게이션 바)
+    val reselections = remember { mutableStateMapOf<AppPage, Int>() }
     val scope = rememberCoroutineScope()
     val appContext = LocalContext.current.applicationContext
     val initialUpdateState = remember { AppUpdateUiState(currentVersion = "") }
@@ -205,8 +217,10 @@ fun DimaNowApp(
                         NavigationBarItem(
                             modifier = Modifier.testTag("nav_${item.name}"),
                             selected = page == item,
-                            onClick = { page = item },
-                            icon = { Icon(item.icon, contentDescription = item.title) },
+                            onClick = {
+                                if (page == item) reselections[item] = (reselections[item] ?: 0) + 1 else page = item
+                            },
+                            icon = { Icon(if (page == item) item.icon else item.outlinedIcon, contentDescription = item.title) },
                             label = { Text(item.title, style = MaterialTheme.typography.labelMedium) },
                         )
                     }
@@ -238,6 +252,7 @@ fun DimaNowApp(
                 label = "tab_transition",
             ) { targetPage ->
               tabStateHolder.SaveableStateProvider(targetPage.name) {
+               CompositionLocalProvider(LocalScrollToTopSignal provides (reselections[targetPage] ?: 0)) {
                 val minuteNow = if (targetPage.usesMinuteTicker) rememberMinuteNow() else null
                 when (targetPage) {
                 AppPage.DASHBOARD -> DashboardRoute(
@@ -249,10 +264,18 @@ fun DimaNowApp(
                     lmsSource = lmsSource,
                     lmsSessionController = lmsSessionController,
                     onNavigateToPage = { page = it },
+                    onAddCourse = { addCourseRequest = System.currentTimeMillis(); page = AppPage.TIMETABLE },
+                    updateState = updateState,
+                    appUpdateCoordinator = appUpdateCoordinator,
                     modifier = pageModifier,
                     now = requireNotNull(minuteNow),
                 )
-                AppPage.TIMETABLE -> TimetableRoute(repository, pageModifier)
+                AppPage.TIMETABLE -> TimetableRoute(
+                    repository,
+                    pageModifier,
+                    addCourseRequest = addCourseRequest,
+                    onAddCourseRequestHandled = { addCourseRequest = 0L },
+                )
                 AppPage.COURSES -> LmsRoute(
                     credentialStore = lmsCredentialStore,
                     sessionController = lmsSessionController,
@@ -294,24 +317,13 @@ fun DimaNowApp(
                     modifier = pageModifier,
                 )
                 }
+               }
               }
             }
         }
     }
 
-    if (updateState.promptVersion != null) {
-        AlertDialog(
-            onDismissRequest = { appUpdateCoordinator?.dismissPrompt() },
-            title = { Text("업데이트 가능") },
-            text = { Text("DIMA Now ${updateState.promptVersion} 버전을 설치할 수 있어요.") },
-            confirmButton = {
-                Button(onClick = { appUpdateCoordinator?.downloadAndInstall() }) { Text("다운로드 및 설치") }
-            },
-            dismissButton = {
-                TextButton(onClick = { appUpdateCoordinator?.dismissPrompt() }) { Text("나중에") }
-            },
-        )
-    }
+    // D-102: 새 버전 안내는 앱을 열자마자 뜨는 대화상자가 아니라 홈의 카드(HomeUpdateNotice)로 보여 준다
     if (showNowBarSetup) {
         NowBarSetupDialog(
             onOpenLockScreenNotifications = { liveSurfaceController.openPromotionSettings() },
@@ -334,6 +346,9 @@ private fun DashboardRoute(
     lmsSource: LmsSource,
     lmsSessionController: LmsSessionController,
     onNavigateToPage: (AppPage) -> Unit,
+    onAddCourse: () -> Unit,
+    updateState: AppUpdateUiState,
+    appUpdateCoordinator: AppUpdateCoordinator?,
     modifier: Modifier,
     now: ZonedDateTime,
 ) {
@@ -361,15 +376,36 @@ private fun DashboardRoute(
         dormitoryMeal = dormitoryMeal,
         notices = notices,
         onNavigateToPage = onNavigateToPage,
+        onAddCourse = onAddCourse,
+        updateNotice = if (appUpdateCoordinator != null && updateState.showsHomeNotice()) {
+            {
+                HomeUpdateNotice(
+                    state = updateState,
+                    onInstall = appUpdateCoordinator::downloadAndInstall,
+                    onLater = appUpdateCoordinator::dismissPrompt,
+                    onCancel = appUpdateCoordinator::cancelDownload,
+                    onContinueInstall = appUpdateCoordinator::continueInstall,
+                )
+            }
+        } else null,
         modifier = modifier,
         now = now,
     )
 }
 
 @Composable
-private fun TimetableRoute(repository: CampusDataRepository, modifier: Modifier) {
+private fun TimetableRoute(
+    repository: CampusDataRepository,
+    modifier: Modifier,
+    addCourseRequest: Long,
+    onAddCourseRequestHandled: () -> Unit,
+) {
     val schedule by repository.schedule.collectRetainedAsState(initialValue = remember { emptyTermSchedule() })
-    TimetableScreen(repository, schedule, modifier)
+    TimetableScreen(
+        repository, schedule, modifier,
+        addCourseRequest = addCourseRequest,
+        onAddCourseRequestHandled = onAddCourseRequestHandled,
+    )
 }
 
 @Composable
@@ -483,3 +519,6 @@ private fun SettingsRoute(
 }
 
 internal val LocalOpenSettings = compositionLocalOf<(() -> Unit)?> { null }
+
+/** How many times the visible tab was selected again; [ScreenScaffold] scrolls to the top on each new value. */
+internal val LocalScrollToTopSignal = compositionLocalOf { 0 }

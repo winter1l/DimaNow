@@ -493,3 +493,6 @@ Observed: main is at ad3bfa5 (local, unpushed) with D-104. The release-signed op
 
 ## 2026-10-22 — D-105 (worktree, tablet only)
 Observed on the Galaxy Tab S9 with the worktree debug build: Home in light and dark shows elevated cards with 20dp corners and 16dp gaps on the earlier tones and a single pinned title row (date and gear) above the centred column, next to the navigation rail. 31 of 32 UI/LMS/widget classes pass (Q-022 widget failures unchanged). Not on main or the phone yet.
+
+## 2026-10-22 — D-105 on main and on the phone
+Observed: main is at 0530889 (local, unpushed). The release-signed optimized build of that commit (`dist/d105/DIMA-Now-v2.1-optimized.apk`, sha256 bbfaa092…, signer a2c49114…) was replace-installed on the user's SM-S918N with its first install time unchanged. UI behaviour on the phone was not observed.

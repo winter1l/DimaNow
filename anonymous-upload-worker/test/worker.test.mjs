@@ -858,3 +858,27 @@ test('an upload that would take the private bucket past 500 MB is refused before
   assert.equal(env.DORM_PHOTOS.putCalls, 0);
 });
 
+
+test('the published-week check uses a redirect mode the Workers runtime supports', async () => {
+  const modes = [];
+  const worker = createWorker({
+    now: () => new Date('2026-09-02T01:15:00Z'),
+    randomUUID: () => 'submission-redirect',
+    securityStoreFactory: () => new FakeSecurityStore(),
+    githubTokenProvider: async () => 'server-installation-token',
+    fetch: async (url, init = {}) => {
+      if (String(url).includes('github.io')) {
+        modes.push(init.redirect);
+        return new Response(JSON.stringify({ datasets: {} }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }
+      return new Response(null, { status: 204 });
+    },
+  });
+
+  const response = await worker.fetch(imageRequest(), uploadEnv());
+
+  assert.equal(response.status, 202);
+  assert.ok(modes.length > 0);
+  // workerd rejects redirect: 'error'; manual mode leaves 3xx unfollowed and the status check rejects it.
+  assert.ok(modes.every((mode) => mode === 'manual'));
+});

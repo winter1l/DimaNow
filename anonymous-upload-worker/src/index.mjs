@@ -588,7 +588,7 @@ async function hasCurrentDormitoryPublication(fetchImpl, current) {
   const root = 'https://winter1l.github.io/DimaNow/data/v1';
   const manifestResponse = await fetchImpl(`${root}/manifest.json`, {
     headers: { Accept: 'application/json' },
-    redirect: 'error',
+    redirect: 'manual',
   });
   if (!manifestResponse.ok) throw new Error(`manifest ${manifestResponse.status}`);
   const manifest = await readBoundedResponseJson(manifestResponse, 64 * 1024);
@@ -599,7 +599,7 @@ async function hasCurrentDormitoryPublication(fetchImpl, current) {
   }
   const payloadResponse = await fetchImpl(`${root}/${descriptor.url}`, {
     headers: { Accept: 'application/json' },
-    redirect: 'error',
+    redirect: 'manual',
   });
   if (!payloadResponse.ok) throw new Error(`dormitory payload ${payloadResponse.status}`);
   const payload = await readBoundedResponseJson(payloadResponse, 256 * 1024);

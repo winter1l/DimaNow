@@ -496,3 +496,6 @@ Observed on the Galaxy Tab S9 with the worktree debug build: Home in light and d
 
 ## 2026-10-22 — D-105 on main and on the phone
 Observed: main is at 0530889 (local, unpushed). The release-signed optimized build of that commit (`dist/d105/DIMA-Now-v2.1-optimized.apk`, sha256 bbfaa092…, signer a2c49114…) was replace-installed on the user's SM-S918N with its first install time unchanged. UI behaviour on the phone was not observed.
+
+## 2026-10-23 — D-106/D-107 on the tablet and the phone (worktree build)
+Observed on the Galaxy Tab S9 with the worktree debug build: Home's title `9주차 · 중간고사` with `10월 23일 (금)` beside it; a 학사 일정 card listing 중간고사 (10월 19일 (월) ~ 10월 23일 (금), badge 오늘까지); a 예인관 생활 card with 상벌점 불러오기 and 외출·외박 신청 under the dormitory meals; 학사 일정 (일반 알림/끔) under 알림 종류; 장비 대여 opened from Home asks for the school account on the Courses-style form when none is saved. Not observed: any signed-in read of the intranet timetable, dorm points or DIMA C equipment (no account was entered), and the morning reminder firing. The release-signed build (`dist/d107/`, sha256 b3c589cd…) was replace-installed on the user's phone; its UI there was not observed.

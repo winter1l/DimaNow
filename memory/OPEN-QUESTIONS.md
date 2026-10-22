@@ -136,3 +136,5 @@ Resolved 2026-10-22: Q-018 — the user adopted D-102/D-103; main fast-forwarded
 Resolved 2026-10-22: Q-024 — with the D-105 pinned bar and 16dp gaps the Home list overflows the tablet window again and `homeListScrollPositionSurvivesATripToShuttleAndBack` runs and passes there (no assumption skip).
 
 - Q-026 (open, D-106): the intranet 학사일정 lists 2026 only; 2027 terms and exam weeks must be added to `data-source/calendar.json` when the school publishes them, or Home falls back to `방학` after 2026-12-18. Intranet feature ideas (timetable import, 학사 일정 알림, 예인관 외출외박/상벌점) await the user's choice.
+
+- Q-027 (open, D-107): the signed-in paths are untested. Unknown whether the portal honours `?r=` for the intranet (`https://intranet.dima.ac.kr/default.aspx`) and DIMA C (`/sso/index.jsp`), which `sso.dima.ac.kr:8080/sso/*` hops they use, and whether the intranet table and 상벌점 headers match the scripts on a real account. A failure message names the last host/path (no query) to fix the route. Needs the user to try 장비 대여, 시간표 가져오기 and 상벌점 불러오기 on the phone.

@@ -85,7 +85,10 @@ footer { color: var(--muted); font-size: .85rem; margin-top: 32px; }
     button.href = asset.browser_download_url;
     meta.textContent = 'Android 12 이상 · ' + (asset.size / 1048576).toFixed(1) + 'MB · SHA-256 ' + asset.digest.replace(/^sha256:/, '');
   } catch (e) {
-    line.textContent = 'GitHub 릴리스 페이지에서 최신 버전을 받아 주세요.';
+    line.textContent = '새 버전을 준비하고 있어요. 조금 뒤에 다시 확인해 주세요.';
+    button.removeAttribute('href');
+    button.setAttribute('aria-disabled', 'true');
+    button.style.opacity = '0.5';
   }
 })();
 </script>

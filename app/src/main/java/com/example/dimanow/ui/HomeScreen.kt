@@ -26,7 +26,7 @@ import androidx.compose.material.icons.filled.Restaurant
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.Card
+import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -151,10 +151,10 @@ internal fun DashboardScreen(
 
         // 1. M3 Expressive Hero 수업 브리핑 카드
         item(key = "hero") {
-            Card(
+            ElevatedCard(
                 modifier = Modifier.fillMaxWidth(),
                 shape = DimaShapes.Card,
-                colors = CardDefaults.cardColors(
+                colors = CardDefaults.elevatedCardColors(
                     containerColor = MaterialTheme.colorScheme.primaryContainer,
                     contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
                 ),
@@ -452,7 +452,7 @@ internal fun DashboardScreen(
                                         val lastDepartureTime = annotated.lastOrNull()?.departure?.time
                                         Surface(
                                             shape = DimaShapes.Tile,
-                                            color = MaterialTheme.colorScheme.surfaceContainerLowest,
+                                            color = MaterialTheme.colorScheme.surfaceContainerHigh,
                                             modifier = Modifier.fillMaxWidth(),
                                         ) {
                                             FlowRow(
@@ -509,7 +509,7 @@ internal fun DashboardScreen(
                     ) {
                         Surface(
                             shape = DimaShapes.Badge,
-                            color = if (homeMealOpen) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerLowest,
+                            color = if (homeMealOpen) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant,
                             contentColor = if (homeMealOpen) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
                         ) {
                             Text(
@@ -560,12 +560,12 @@ internal fun DashboardScreen(
 
         // 4. 학교 공지 카드 (최근 3건, 행 탭 시 해당 공지로 이동)
         item(key = "notices") {
-            Card(
+            ElevatedCard(
                 modifier = Modifier
                     .fillMaxWidth()
                     .testTag("dashboard_notices_card"),
                 shape = DimaShapes.Card,
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHighest),
+                colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
             ) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     // 공지 카드는 행마다 다른 곳을 열므로 카드 자체는 누를 수 없고, 머리의 전체보기만 버튼이다 (D-094(9))
@@ -616,7 +616,7 @@ internal fun DashboardScreen(
                                     )
                                     Surface(
                                         shape = DimaShapes.Badge,
-                                        color = MaterialTheme.colorScheme.surfaceContainerLowest,
+                                        color = MaterialTheme.colorScheme.surfaceContainerHigh,
                                     ) {
                                         Text(
                                             text = "${notice.date.monthValue}.${notice.date.dayOfMonth}",

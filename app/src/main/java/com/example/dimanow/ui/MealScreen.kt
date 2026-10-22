@@ -30,7 +30,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.Card
+import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -622,14 +622,14 @@ private fun MealPeriodCard(
     val shape = DimaShapes.Card
     val background = when {
         isOpen -> colors.primaryContainer
-        isClosed -> colors.surfaceContainerLow
-        else -> colors.surfaceContainerHighest
+        isClosed -> colors.surfaceContainerHighest
+        else -> colors.surfaceContainerLow
     }
-    Card(
+    ElevatedCard(
         modifier = modifier.fillMaxWidth()
             .semantics { stateDescription = status.label },
         shape = shape,
-        colors = CardDefaults.cardColors(
+        colors = CardDefaults.elevatedCardColors(
             containerColor = background,
             contentColor = when {
                 isOpen -> colors.onPrimaryContainer
@@ -637,6 +637,7 @@ private fun MealPeriodCard(
                 else -> colors.onSurface
             },
         ),
+        elevation = CardDefaults.elevatedCardElevation(defaultElevation = if (isClosed) 0.dp else 1.dp),
     ) {
         // 세로 길이를 줄이려고 위아래 여백과 요소 간격을 좁힌다
         Column(Modifier.padding(horizontal = 16.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(8.dp), content = content)
@@ -717,12 +718,12 @@ private fun DormitoryWeekEmptyCard(
 /** 사진 업로드 후 서버 확인이 끝날 때까지 남아 있는 진행 카드 (D-056). */
 @Composable
 private fun DormitoryUploadProgressCard(modifier: Modifier = Modifier) {
-    Card(
+    ElevatedCard(
         modifier = modifier
             .fillMaxWidth()
             .testTag("dormitory_upload_progress"),
         shape = DimaShapes.Card,
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer),
+        colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer),
     ) {
         Row(
             modifier = Modifier.fillMaxWidth().padding(16.dp),

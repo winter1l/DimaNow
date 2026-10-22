@@ -11,7 +11,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.Card
+import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -64,7 +64,7 @@ internal fun EmptyState(
             ) {
                 Surface(
                     shape = CircleShape,
-                    color = MaterialTheme.colorScheme.surfaceContainerLowest,
+                    color = MaterialTheme.colorScheme.surfaceContainerHigh,
                     modifier = Modifier.size(56.dp),
                 ) {
                     Box(contentAlignment = Alignment.Center) {
@@ -98,10 +98,10 @@ internal fun EmptyState(
         }
     }
     if (contained) {
-        Card(
+        ElevatedCard(
             modifier = modifier.fillMaxWidth(),
             shape = DimaShapes.Card,
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHighest),
+            colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
         ) { content() }
     } else {
         Box(modifier.fillMaxWidth()) { content() }
@@ -147,10 +147,10 @@ internal fun ErrorState(
         }
     }
     if (contained) {
-        Card(
+        ElevatedCard(
             modifier = modifier.fillMaxWidth(),
             shape = DimaShapes.Card,
-            colors = CardDefaults.cardColors(
+            colors = CardDefaults.elevatedCardColors(
                 containerColor = MaterialTheme.colorScheme.errorContainer,
                 contentColor = MaterialTheme.colorScheme.onErrorContainer,
             ),

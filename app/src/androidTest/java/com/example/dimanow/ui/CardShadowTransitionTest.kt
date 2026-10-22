@@ -6,7 +6,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.Card
+import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.ui.Modifier
@@ -38,11 +38,11 @@ class CardShadowTransitionTest {
         composeRule.mainClock.autoAdvance = false
         composeRule.setContent {
             DIMANowTheme(darkTheme = false) {
-                expected = MaterialTheme.colorScheme.surfaceContainerHighest
+                expected = MaterialTheme.colorScheme.surfaceContainerLow
                 Box(Modifier.padding(24.dp)) {
-                    Card(
+                    ElevatedCard(
                         modifier = Modifier.size(240.dp, 120.dp).testTag("moving_card").entrance(),
-                        colors = CardDefaults.cardColors(containerColor = expected),
+                        colors = CardDefaults.elevatedCardColors(containerColor = expected),
                     ) { Text("셔틀 카드", Modifier.padding(24.dp)) }
                 }
             }

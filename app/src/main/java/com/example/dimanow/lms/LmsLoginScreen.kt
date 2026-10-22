@@ -104,7 +104,7 @@ internal fun LmsLoginScreen(
                     }
                     // D-099: 비공식 앱, 전송 경로, 저장 방식과 중복 로그인을 로그인 전에 알린다.
                     // D-102: 같은 내용을 한 덩어리 문단 대신 항목별로 나눠 읽기 쉽게 한다
-                    Surface(shape = DimaShapes.Tile, color = MaterialTheme.colorScheme.surfaceContainerHighest) {
+                    Surface(shape = DimaShapes.Tile, color = MaterialTheme.colorScheme.surfaceContainerLow) {
                         Column(
                             Modifier.fillMaxWidth().padding(16.dp).testTag("lms_consent"),
                             verticalArrangement = Arrangement.spacedBy(6.dp),

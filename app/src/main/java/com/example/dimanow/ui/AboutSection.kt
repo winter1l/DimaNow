@@ -21,7 +21,7 @@ import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.Card
+import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -91,10 +91,10 @@ internal fun AboutCard(modifier: Modifier = Modifier) {
         ),
     )
     Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(DimaLayout.sectionGap)) {
-        Card(
+        ElevatedCard(
             modifier = Modifier.fillMaxWidth().testTag("about_card"),
             shape = DimaShapes.Card,
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHighest),
+            colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
         ) {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text("이 앱에 대해", style = MaterialTheme.typography.titleMedium)

@@ -17,7 +17,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.Card
+import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -106,10 +106,10 @@ internal fun SettingsScreen(
     ) {
         // 1) 귀가 기준지 — 가장 자주 바꾸는 개인 설정을 최상단에
         item(key = "home_base") {
-            Card(
+            ElevatedCard(
                 modifier = Modifier.fillMaxWidth(),
                 shape = DimaShapes.Card,
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHighest),
+                colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
             ) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text("귀가 방향", style = MaterialTheme.typography.titleMedium)
@@ -157,10 +157,10 @@ internal fun SettingsScreen(
 
         item(key = "account_header") { SettingsSectionHeader("계정과 데이터") }
         item(key = "lms_account") {
-            Card(
+            ElevatedCard(
                 modifier = Modifier.fillMaxWidth(),
                 shape = DimaShapes.Card,
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHighest),
+                colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
             ) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text("수업 계정", style = MaterialTheme.typography.titleMedium)
@@ -277,10 +277,10 @@ internal fun AppUpdateCard(
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
-    Card(
+    ElevatedCard(
         modifier = modifier.fillMaxWidth(),
         shape = DimaShapes.Card,
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHighest),
+        colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
     ) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("앱 업데이트", style = MaterialTheme.typography.titleMedium)
@@ -341,10 +341,10 @@ internal fun DataAndSourcesCard(
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
-    Card(
+    ElevatedCard(
         modifier = modifier.fillMaxWidth().testTag("data_sources_card"),
         shape = DimaShapes.Card,
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHighest),
+        colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
     ) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("데이터 및 원문", style = MaterialTheme.typography.titleMedium)
@@ -424,10 +424,10 @@ fun LiveDisplaySettings(
     modifier: Modifier = Modifier,
     onShowNowBarSetup: (() -> Unit)? = null,
 ) {
-    Card(
+    ElevatedCard(
         modifier = modifier.fillMaxWidth(),
         shape = DimaShapes.Card,
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHighest),
+        colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
     ) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Text("실시간 알림", style = MaterialTheme.typography.titleMedium)

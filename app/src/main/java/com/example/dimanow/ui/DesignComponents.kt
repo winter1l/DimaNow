@@ -28,14 +28,14 @@ internal object DimaLayout {
     val readingWidth = 840.dp
     /** From this window width (the M3 medium class) the shell shows a navigation rail, not the bottom bar (D-104). */
     val railMinWidth = 600.dp
-    /** Space between cards and sections: the M3 card spec allows at most 8dp (D-104). */
-    val sectionGap = 8.dp
+    /** Space between cards and sections (D-079; D-105 restores it after D-104's 8dp). */
+    val sectionGap = 16.dp
 }
 
 /**
  * M3 Expressive segmented list (D-104): rows sit [ListItemDefaults.SegmentedGap] apart, the group's outer
  * corners are large and the inner ones small ([ListItemDefaults.segmentedShapes]), and each row takes the
- * filled-card tone so a group reads like the cards around it on the page surface.
+ * card tone (`surfaceContainerLow`) so a group reads like the cards around it on the page surface.
  */
 @Composable
 internal fun DimaSegmentedList(modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) {
@@ -44,7 +44,7 @@ internal fun DimaSegmentedList(modifier: Modifier = Modifier, content: @Composab
 
 @Composable
 internal fun dimaSegmentedListColors(): ListItemColors =
-    ListItemDefaults.segmentedColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHighest)
+    ListItemDefaults.segmentedColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)
 
 /**
  * The filled `오늘` pill shared by the meal day heading and the timetable weekday heading (D-102),

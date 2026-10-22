@@ -36,7 +36,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.MediumFlexibleTopAppBar
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarColors
 import androidx.compose.material3.TopAppBarDefaults
@@ -48,6 +47,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.semantics
@@ -56,17 +56,17 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.example.dimanow.theme.dimaScreenTitleStyle
 import com.example.dimanow.ui.motion.DimaMotion
 import com.example.dimanow.ui.motion.entrance
 
 /**
- * The top app bar of every primary screen, Settings, the Classes tab and full-screen panes (D-094 item 4).
+ * The single top app bar of every primary screen, Settings and the Classes tab (D-094 item 4).
  *
- * With [flexible] it is the M3 Expressive [MediumFlexibleTopAppBar] (D-104): the screen title shows at
- * headline size in the expanded bar and the bar collapses to a 64dp small bar with a title-large title
- * as the list scrolls. Without it (full-screen panes) it is the small [TopAppBar]. Both draw behind the
- * status bar through [windowInsets] and tint `surface` -> `surfaceContainer` when content is under them.
- * The shared settings gear is appended to [actions] whenever [LocalOpenSettings] provides one.
+ * A Material3 small [TopAppBar] (D-105: one pinned header, no large collapsing title): it stays pinned,
+ * draws behind the status bar through [windowInsets], and tints `surface` -> `surfaceContainer` once
+ * content scrolls under it. The shared settings gear is appended to [actions] whenever
+ * [LocalOpenSettings] provides one.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -79,7 +79,6 @@ internal fun DimaTopAppBar(
     scrollBehavior: TopAppBarScrollBehavior? = null,
     colors: TopAppBarColors = dimaTopAppBarColors(),
     windowInsets: WindowInsets = TopAppBarDefaults.windowInsets,
-    flexible: Boolean = false,
 ) {
     val openSettings = if (showSettings) LocalOpenSettings.current else null
     val allActions: @Composable RowScope.() -> Unit = {
@@ -90,27 +89,15 @@ internal fun DimaTopAppBar(
             }
         }
     }
-    if (flexible) {
-        MediumFlexibleTopAppBar(
-            title = title,
-            modifier = modifier,
-            navigationIcon = navigationIcon,
-            actions = allActions,
-            windowInsets = windowInsets,
-            colors = colors,
-            scrollBehavior = scrollBehavior,
-        )
-    } else {
-        TopAppBar(
-            title = title,
-            modifier = modifier,
-            navigationIcon = navigationIcon,
-            actions = allActions,
-            windowInsets = windowInsets,
-            colors = colors,
-            scrollBehavior = scrollBehavior,
-        )
-    }
+    TopAppBar(
+        title = title,
+        modifier = modifier,
+        navigationIcon = navigationIcon,
+        actions = allActions,
+        windowInsets = windowInsets,
+        colors = colors,
+        scrollBehavior = scrollBehavior,
+    )
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -120,19 +107,18 @@ internal fun dimaTopAppBarColors(): TopAppBarColors = TopAppBarDefaults.topAppBa
     scrolledContainerColor = MaterialTheme.colorScheme.surfaceContainer,
 )
 
-/** Screen title for the flexible [DimaTopAppBar]; the bar supplies the expanded and collapsed type. */
+/** Screen title text for [DimaTopAppBar]. */
 @Composable
 internal fun DimaTopAppBarTitle(text: String) {
-    Text(text = text, maxLines = 1, overflow = TextOverflow.Ellipsis)
+    Text(text = text, style = dimaScreenTitleStyle(), maxLines = 1, overflow = TextOverflow.Ellipsis)
 }
 
 /**
  * Pinned-header screen scaffold shared by every primary tab, Settings and the Classes tab
  * (D-057, D-094 items 4 and 13).
  *
- * - The flexible [DimaTopAppBar] collapses with [TopAppBarDefaults.exitUntilCollapsedScrollBehavior]
- *   into a small pinned bar (D-104); an optional [subHeader] (mode switches, day selectors) stays
- *   pinned beneath it and follows its container color.
+ * - [DimaTopAppBar] is pinned with [TopAppBarDefaults.pinnedScrollBehavior]; an optional
+ *   [subHeader] (mode switches, day selectors) is pinned beneath it and shares its container color.
  * - [content] is real lazy-list content: callers emit keyed `item(key = …)` blocks so only visible
  *   cards compose and a minute tick recomposes only the items that read the changed state.
  * - The list ends above the navigation bar: the gesture-bar inset is added to the bottom content
@@ -160,10 +146,21 @@ internal fun ScreenScaffold(
     onRefresh: (() -> Unit)? = null,
     refreshing: Boolean = false,
     refreshLabel: String = "새로고침",
-    itemSpacing: Dp = DimaLayout.sectionGap,
+    itemSpacing: Dp = 12.dp,
     content: LazyListScope.() -> Unit,
 ) {
-    val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
+    val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior()
+    // The pinned behavior only sees user drags; programmatic jumps (the meal list's scrollToItem,
+    // tests' scrollToIndex) must tint the bar too, so the list position is the source of truth.
+    LaunchedEffect(listState, scrollBehavior) {
+        snapshotFlow { listState.canScrollBackward }.collect { scrolledAway ->
+            scrollBehavior.state.contentOffset = if (scrolledAway) {
+                minOf(scrollBehavior.state.contentOffset, SCROLLED_CONTENT_OFFSET)
+            } else {
+                0f
+            }
+        }
+    }
     // D-102: selecting the visible tab again scrolls its list to the top. The last handled signal is saved
     // with the tab, so returning to a tab keeps its scroll position (D-094(12)) instead of replaying it.
     val scrollToTopSignal = LocalScrollToTopSignal.current
@@ -172,7 +169,6 @@ internal fun ScreenScaffold(
         if (scrollToTopSignal != handledScrollToTop) {
             handledScrollToTop = scrollToTopSignal
             listState.animateScrollToItem(0)
-            scrollBehavior.state.heightOffset = 0f
         }
     }
     val titleSlot: @Composable () -> Unit = titleContent ?: { title?.let { DimaTopAppBarTitle(it) } }
@@ -196,7 +192,7 @@ internal fun ScreenScaffold(
             // it change color together and, on wide windows, line up with the centered reading column.
             val defaults = dimaTopAppBarColors()
             val headerColor by animateColorAsState(
-                targetValue = if (scrollBehavior.state.collapsedFraction > 0.5f || scrollBehavior.state.overlappedFraction > 0.01f) {
+                targetValue = if (scrollBehavior.state.overlappedFraction > 0.01f) {
                     defaults.scrolledContainerColor
                 } else {
                     defaults.containerColor
@@ -213,7 +209,6 @@ internal fun ScreenScaffold(
                         actions = actions,
                         scrollBehavior = scrollBehavior,
                         colors = defaults.copy(containerColor = headerColor, scrolledContainerColor = headerColor),
-                        flexible = true,
                     )
                     if (subHeader != null) {
                         Column(
@@ -267,6 +262,9 @@ internal fun ScreenScaffold(
         }
     }
 }
+
+/** Any offset well past the bar height marks content as scrolled under the pinned bar. */
+private const val SCROLLED_CONTENT_OFFSET = -100_000f
 
 /** The reading column plus its 16dp gutters: the bar's title and the column's cards share one start edge. */
 private val HEADER_MAX_WIDTH = DimaLayout.readingWidth + 32.dp

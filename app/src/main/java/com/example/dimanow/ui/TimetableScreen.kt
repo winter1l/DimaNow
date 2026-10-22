@@ -27,7 +27,7 @@ import androidx.compose.material.icons.filled.EditCalendar
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.Card
+import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
@@ -150,10 +150,10 @@ internal fun TimetableScreen(
         floatingActionButton = addCourseFab.takeUnless { noCourses },
     ) {
         item(key = "term") {
-            Card(
+            ElevatedCard(
                 modifier = Modifier.fillMaxWidth(),
                 shape = DimaShapes.Card,
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHighest),
+                colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
             ) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Row(
@@ -165,7 +165,7 @@ internal fun TimetableScreen(
                             onClick = { showTermEditor = true },
                             modifier = Modifier.testTag("edit_term"),
                             shape = DimaShapes.Badge,
-                            color = MaterialTheme.colorScheme.surfaceContainerLowest,
+                            color = MaterialTheme.colorScheme.surfaceContainerHigh,
                         ) {
                             Row(
                                 modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
@@ -198,10 +198,10 @@ internal fun TimetableScreen(
         // D-099: 학기가 끝났으면 새 학기 설정을 바로 안내한다
         if (termEnded) item(key = "term_guide") {
             val suggestion = remember(today) { com.example.dimanow.calendar.AcademicTerms.suggest(today) }
-            Card(
+            ElevatedCard(
                 modifier = Modifier.fillMaxWidth().testTag("term_ended_card"),
                 shape = DimaShapes.Card,
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer),
+                colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer),
             ) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text("학기가 끝났어요", style = MaterialTheme.typography.titleMedium)
@@ -307,7 +307,7 @@ internal fun TimetableScreen(
         if (schedule.noClassDates.isNotEmpty()) item(key = "no_class_date_list") {
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 schedule.noClassDates.sorted().forEach { date ->
-                    Surface(modifier = Modifier.fillMaxWidth(), shape = DimaShapes.Tile, color = MaterialTheme.colorScheme.surfaceContainerHighest) {
+                    Surface(modifier = Modifier.fillMaxWidth(), shape = DimaShapes.Tile, color = MaterialTheme.colorScheme.surfaceContainerLow) {
                         Row(
                             modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
                             horizontalArrangement = Arrangement.SpaceBetween,
@@ -451,12 +451,12 @@ fun CourseSummaryCard(
     nextOccurrence: LocalDate? = null,
 ) {
     var menuExpanded by remember { mutableStateOf(false) }
-    Card(
+    ElevatedCard(
         modifier = modifier
             .fillMaxWidth()
             .expressiveBounceClick { onEdit() },
         shape = DimaShapes.Card,
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHighest),
+        colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
     ) {
         Row(
             modifier = Modifier

@@ -186,7 +186,7 @@ internal fun OnboardingScreen(
                             // D-099: 첫 화면에서 비공식 앱임과 데이터 처리 원칙을 알린다
                             Surface(
                                 shape = DimaShapes.Tile,
-                                color = MaterialTheme.colorScheme.surfaceContainerHighest,
+                                color = MaterialTheme.colorScheme.surfaceContainerLow,
                                 modifier = Modifier.fillMaxWidth(),
                             ) {
                                 Column(Modifier.padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 4.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -218,7 +218,7 @@ internal fun OnboardingScreen(
                             ).forEach { (homeBase, label, supporting) ->
                                 Surface(
                                     shape = DimaShapes.Tile,
-                                    color = if (draft.homeBase == homeBase) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerHighest,
+                                    color = if (draft.homeBase == homeBase) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerLow,
                                     modifier = Modifier.fillMaxWidth().heightIn(min = 64.dp),
                                 ) {
                                     Row(

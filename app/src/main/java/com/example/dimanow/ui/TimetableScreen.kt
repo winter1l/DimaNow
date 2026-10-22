@@ -23,6 +23,7 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.filled.EditCalendar
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material3.ButtonDefaults
@@ -33,6 +34,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.material3.MaterialTheme
 import androidx.activity.compose.BackHandler
 import androidx.compose.material3.OutlinedCard
@@ -100,6 +102,26 @@ internal fun TimetableScreen(
         }
     }
     val timetableImport = rememberTimetableImport { message -> scope.launch { snackbarHostState.showSnackbar(message) } }
+    // D-107: 인트라넷의 이번 학기 시간표를 미리 보고 한 번에 바꾼다
+    val intranetImport = rememberIntranetTimetableImport(repository) { message -> scope.launch { snackbarHostState.showSnackbar(message) } }
+    val intranetImportAction: (@Composable RowScope.() -> Unit)? = if (intranetImport == null) {
+        null
+    } else {
+        {
+            IconButton(
+                shapes = IconButtonDefaults.shapes(),
+                onClick = intranetImport::start,
+                enabled = !intranetImport.loading,
+                modifier = Modifier.testTag("intranet_timetable_import"),
+            ) {
+                if (intranetImport.loading) {
+                    DimaLoadingIndicator(size = 24.dp)
+                } else {
+                    Icon(Icons.Default.CloudDownload, contentDescription = "인트라넷에서 시간표 가져오기")
+                }
+            }
+        }
+    }
     var showTermEditor by remember { mutableStateOf(false) }
     var showPauseChoice by remember { mutableStateOf(false) }
     var pausePickerMode by remember { mutableStateOf<String?>(null) }
@@ -143,6 +165,7 @@ internal fun TimetableScreen(
         listState = listState,
         itemSpacing = DimaLayout.sectionGap,
         listTag = "timetable_list",
+        topAction = intranetImportAction,
         snackbarHost = {
             SnackbarHost(snackbarHostState, Modifier.semantics { liveRegion = LiveRegionMode.Polite })
         },
@@ -235,6 +258,15 @@ internal fun TimetableScreen(
                 onSecondaryAction = timetableImport::open,
                 secondaryActionTag = "empty_import_timetable",
                 modifier = Modifier.testTag("timetable_empty_card"),
+            )
+        }
+        if (noCourses && intranetImport != null) item(key = "intranet_import_prompt") {
+            HomeCompactPrompt(
+                icon = Icons.Default.CloudDownload,
+                text = "인트라넷 시간표를 한 번에 가져오기",
+                onClick = intranetImport::start,
+                onClickLabel = "인트라넷에서 시간표 가져오기",
+                modifier = Modifier.testTag("intranet_import_prompt"),
             )
         }
 
@@ -379,6 +411,7 @@ internal fun TimetableScreen(
         )
     }
     TimetableImportConfirmation(timetableImport)
+    intranetImport?.let { IntranetTimetablePreviewDialog(it, schedule.courses) }
     if (showTermEditor) {
         TermEditorDialog(
             start = schedule.termStart,

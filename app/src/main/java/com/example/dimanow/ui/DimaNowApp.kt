@@ -103,6 +103,8 @@ internal enum class AppPage(val title: String, val icon: ImageVector, val outlin
     MEAL("식단", Icons.Default.Restaurant, Icons.Outlined.Restaurant),
     COURSES("수업", Icons.Default.School, Icons.Outlined.School),
     SETTINGS("설정", Icons.Default.Settings),
+    // D-107: a transient page like Settings, opened from Home and the Courses tab
+    EQUIPMENT("장비 대여", Icons.Default.Settings),
     ;
 
     val usesMinuteTicker: Boolean
@@ -144,10 +146,12 @@ fun DimaNowApp(
     lmsAutoLoginCoordinator: LmsAutoLoginCoordinator,
     lmsSource: LmsSource,
     targetPageEvent: Pair<String, Long>? = null,
+    schoolServiceBridge: com.example.dimanow.school.SchoolServiceBridge? = null,
 ) {
     // D-094(12): the current tab survives configuration changes and process death
     var page by rememberSaveable { mutableStateOf(AppPage.DASHBOARD) }
     var settingsReturnPage by rememberSaveable { mutableStateOf(AppPage.DASHBOARD) }
+    var equipmentReturnPage by rememberSaveable { mutableStateOf(AppPage.DASHBOARD) }
     // After the first tab change the tab transition is the only motion; lists no longer rise in.
     var tabChanged by rememberSaveable { mutableStateOf(false) }
     val initialPage = remember { page }
@@ -193,7 +197,11 @@ fun DimaNowApp(
     }
 
     BackHandler(enabled = page != AppPage.DASHBOARD) {
-        page = if (page == AppPage.SETTINGS) settingsReturnPage else AppPage.DASHBOARD
+        page = when (page) {
+            AppPage.SETTINGS -> settingsReturnPage
+            AppPage.EQUIPMENT -> equipmentReturnPage
+            else -> AppPage.DASHBOARD
+        }
     }
 
     // D-056: 최초 설치에는 앱 셸 대신 전체화면 온보딩이 권한을 순서대로 설명하고 요청한다.
@@ -208,7 +216,7 @@ fun DimaNowApp(
         return
     }
 
-    val showNavigation = page != AppPage.SETTINGS && !(page == AppPage.COURSES && lmsFullScreen)
+    val showNavigation = page != AppPage.SETTINGS && page != AppPage.EQUIPMENT && !(page == AppPage.COURSES && lmsFullScreen)
     // D-104: compact windows keep the bottom bar; from the M3 medium width (tablets, unfolded foldables)
     // the same destinations move to a navigation rail at the start edge.
     val windowWidth = with(LocalDensity.current) { LocalWindowInfo.current.containerSize.width.toDp() }
@@ -252,6 +260,13 @@ fun DimaNowApp(
                 { settingsReturnPage = page; page = AppPage.SETTINGS }
             }
         }
+        val openEquipmentAction = remember(page) {
+            if (page == AppPage.EQUIPMENT || schoolServiceBridge == null) {
+                null
+            } else {
+                { equipmentReturnPage = page; page = AppPage.EQUIPMENT }
+            }
+        }
         // 하단 내비가 차지한 인셋을 소비해, 각 화면의 스캐폴드는 내비가 없을 때(설정)만
         // 제스처 바 인셋을 목록 아래 여백으로 더한다 (D-094)
         val pageModifier = Modifier.padding(padding).consumeWindowInsets(padding)
@@ -285,6 +300,8 @@ fun DimaNowApp(
         ) {
         CompositionLocalProvider(
             LocalOpenSettings provides openSettingsAction,
+            LocalOpenEquipment provides openEquipmentAction,
+            com.example.dimanow.school.LocalSchoolServiceBridge provides schoolServiceBridge,
             LocalEntranceMotion provides entranceMotion,
             LocalRetainedFlowValues provides retainedFlowValues,
         ) {
@@ -359,12 +376,20 @@ fun DimaNowApp(
                     onBack = { page = settingsReturnPage },
                     modifier = pageModifier,
                 )
+                AppPage.EQUIPMENT -> EquipmentScreen(
+                    onBack = { page = equipmentReturnPage },
+                    modifier = pageModifier,
+                )
                 }
                }
               }
             }
         }
         }
+      }
+      // D-107: 인트라넷·DIMA C 읽기는 셸 위의 숨은 WebView가 맡고, 로그인이 필요할 때만 공식 포털을 화면에 띄운다
+      if (schoolServiceBridge != null) {
+          com.example.dimanow.school.SchoolServiceHost(schoolServiceBridge, lmsCredentialStore)
       }
     }
 
@@ -561,6 +586,7 @@ private fun SettingsRoute(
                 lmsSource.clearPrivateData()
                 CookieManager.getInstance().removeAllCookies(null)
                 CookieManager.getInstance().flush()
+                com.example.dimanow.school.SchoolReadCache.clear()
                 lmsSessionController.transition(LmsSessionState.SIGNED_OUT)
             }
         },
@@ -570,6 +596,9 @@ private fun SettingsRoute(
 }
 
 internal val LocalOpenSettings = compositionLocalOf<(() -> Unit)?> { null }
+
+/** Opens 장비 대여 (D-107); null where the shell has no school-service bridge. */
+internal val LocalOpenEquipment = compositionLocalOf<(() -> Unit)?> { null }
 
 /** How many times the visible tab was selected again; [ScreenScaffold] scrolls to the top on each new value. */
 internal val LocalScrollToTopSignal = compositionLocalOf { 0 }

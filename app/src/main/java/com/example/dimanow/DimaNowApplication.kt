@@ -118,6 +118,8 @@ class DimaNowApplication : Application() {
             .build()
     }
     val lmsCredentialStore: AndroidLmsCredentialStore by lazy { AndroidLmsCredentialStore(this) }
+    /** D-107: one intranet/DIMA C read at a time, served by the WebView host in the app shell. */
+    val schoolServiceBridge: com.example.dimanow.school.SchoolServiceBridge by lazy { com.example.dimanow.school.SchoolServiceBridge() }
     val lmsSessionController: MutableLmsSessionController by lazy { MutableLmsSessionController() }
     val lmsLoginBridge: LmsLoginBridge by lazy { LmsLoginBridge() }
     val lmsRenderedPageBridge: com.example.dimanow.lms.LmsRenderedPageBridge by lazy {

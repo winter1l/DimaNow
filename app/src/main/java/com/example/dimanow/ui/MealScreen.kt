@@ -324,6 +324,8 @@ fun MealScreen(
                     uploadEnabled = !refreshing && !uploadPreflight && !uploadingDormitoryMeal && !preparingDormitoryImage,
                     onReport = { reportWeek = it },
                 )
+                // D-107: 기숙사생이 함께 보는 예인관 상벌점·외출외박 (인트라넷)
+                item(key = "dorm_life") { DormLifeCard() }
             } else if (meal != null) {
                 if (!meal.hasCurrentStudentWeek(today) || meal.error != null) {
                     item(key = "student_meal_sync") { StudentMealSyncStatus(meal, today, onRetry = ::refreshMeal) }

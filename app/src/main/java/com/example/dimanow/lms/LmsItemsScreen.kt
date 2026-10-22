@@ -35,6 +35,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
@@ -208,6 +209,21 @@ internal fun LmsItemsScreen(
         onRefresh = onRefresh,
         refreshing = syncing && !visibleEmpty,
         refreshLabel = "수업 새로고침",
+        // D-107: 촬영 수업에 쓰는 DIMA C 장비 대여 현황으로 가는 길
+        topAction = com.example.dimanow.ui.LocalOpenEquipment.current?.let { openEquipment ->
+            {
+                androidx.compose.material3.IconButton(
+                    shapes = androidx.compose.material3.IconButtonDefaults.shapes(),
+                    onClick = openEquipment,
+                    modifier = Modifier.testTag("lms_open_equipment"),
+                ) {
+                    androidx.compose.material3.Icon(
+                        androidx.compose.material.icons.Icons.Default.Videocam,
+                        contentDescription = "장비 대여",
+                    )
+                }
+            }
+        },
         // 모드 전환과 필터는 목록을 아무리 내려도 항상 닿을 수 있어야 한다 (D-057).
         // 이전에는 목록의 첫 항목이라 스크롤과 함께 사라졌고, 필터가 세 줄을 차지했다.
         subHeader = {

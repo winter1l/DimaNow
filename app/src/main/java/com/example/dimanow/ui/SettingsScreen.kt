@@ -69,6 +69,8 @@ internal fun SettingsScreen(
     onClassOrderChange: (LiveClassOrder) -> Unit,
     notificationPolicy: NotificationGuidancePolicy,
     onNotificationModeChange: (GuidanceKind, NotificationGuidanceMode) -> Unit,
+    academicReminders: Boolean = true,
+    onAcademicRemindersChange: (Boolean) -> Unit = {},
     homeBase: HomeBase,
     onHomeBaseChange: (HomeBase) -> Unit,
     shuttleData: ShuttleData?,
@@ -145,6 +147,8 @@ internal fun SettingsScreen(
             NotificationGuidanceSettings(
                 policy = notificationPolicy,
                 onModeChange = onNotificationModeChange,
+                academicReminders = academicReminders,
+                onAcademicRemindersChange = onAcademicRemindersChange,
             )
         }
         item(key = "live_display") {

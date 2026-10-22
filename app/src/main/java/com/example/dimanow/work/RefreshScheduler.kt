@@ -54,6 +54,7 @@ object RefreshScheduler {
             .build()
         workManager.enqueueUniquePeriodicWork("campus-static-sync-periodic", ExistingPeriodicWorkPolicy.UPDATE, periodic)
         StudentMealSync.schedule(context, (context.applicationContext as DimaNowApplication).mealSource)
+        AcademicReminderScheduler.schedule(context)
     }
 
     private const val CURRENT_POLICY_VERSION = 2

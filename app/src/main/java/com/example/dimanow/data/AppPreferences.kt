@@ -127,6 +127,16 @@ class AppPreferences(private val context: Context) {
         preferences[NOW_BAR_SETUP_COMPLETED] ?: false
     }
 
+    /** 학사 일정 아침 알림 (D-107). 설정에서 끄기 전까지 켜져 있다. */
+    val academicReminders: Flow<Boolean> = context.settingsDataStore.data.map { preferences ->
+        preferences[ACADEMIC_REMINDERS] ?: true
+    }
+
+    /** 학사 일정 알림을 마지막으로 확인한 날(epoch day). 같은 날 두 번 알리지 않는다. */
+    val academicReminderLastDay: Flow<Long?> = context.settingsDataStore.data.map { preferences ->
+        preferences[ACADEMIC_REMINDER_LAST_DAY]
+    }
+
     /** 최초 실행 권한 온보딩을 끝냈는지. 끝내기 전에는 앱 셸 대신 온보딩이 표시된다 (D-056). */
     val onboardingCompleted: Flow<Boolean> = context.settingsDataStore.data.map { preferences ->
         preferences[ONBOARDING_COMPLETED] ?: false
@@ -244,6 +254,14 @@ class AppPreferences(private val context: Context) {
         context.settingsDataStore.edit { it[NOW_BAR_SETUP_COMPLETED] = completed }
     }
 
+    suspend fun setAcademicReminders(enabled: Boolean) {
+        context.settingsDataStore.edit { it[ACADEMIC_REMINDERS] = enabled }
+    }
+
+    suspend fun setAcademicReminderLastDay(epochDay: Long) {
+        context.settingsDataStore.edit { it[ACADEMIC_REMINDER_LAST_DAY] = epochDay }
+    }
+
     /** 온보딩 완료는 귀가 기준지·나우바 안내 플래그까지 함께 확정한다. */
     suspend fun setOnboardingCompleted() {
         context.settingsDataStore.edit {
@@ -329,6 +347,8 @@ class AppPreferences(private val context: Context) {
         val HOME_BASE = stringPreferencesKey("home_base")
         val HOME_BASE_SELECTION_CONFIRMED = booleanPreferencesKey("home_base_selection_confirmed")
         val NOW_BAR_SETUP_COMPLETED = booleanPreferencesKey("now_bar_setup_completed")
+        val ACADEMIC_REMINDERS = booleanPreferencesKey("academic_reminders")
+        val ACADEMIC_REMINDER_LAST_DAY = longPreferencesKey("academic_reminder_last_day")
         val ONBOARDING_COMPLETED = booleanPreferencesKey("onboarding_completed")
         val ONBOARDING_STAGE = stringPreferencesKey("onboarding_stage")
         val ONBOARDING_DRAFT_HOME_BASE = stringPreferencesKey("onboarding_draft_home_base")

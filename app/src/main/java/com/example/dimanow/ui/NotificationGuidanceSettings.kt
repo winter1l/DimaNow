@@ -21,6 +21,8 @@ fun NotificationGuidanceSettings(
     policy: NotificationGuidancePolicy,
     onModeChange: (GuidanceKind, NotificationGuidanceMode) -> Unit,
     modifier: Modifier = Modifier,
+    academicReminders: Boolean = true,
+    onAcademicRemindersChange: (Boolean) -> Unit = {},
 ) {
     ElevatedCard(
         modifier = modifier.fillMaxWidth(),
@@ -37,6 +39,21 @@ fun NotificationGuidanceSettings(
             GuidanceModeRow("수업 안내", GuidanceKind.CLASS, policy.classGuidance, onModeChange)
             GuidanceModeRow("교내 셔틀", GuidanceKind.CAMPUS_SHUTTLE, policy.campusShuttle, onModeChange)
             GuidanceModeRow("4402 강남행", GuidanceKind.BUS_4402, policy.bus4402, onModeChange)
+            // D-107: 학사 일정은 실시간 안내가 아니라 아침 한 번의 일반 알림이라 나우바 선택지가 없다
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text("학사 일정", style = MaterialTheme.typography.labelLarge)
+                SettingsChoice(
+                    options = listOf(true to "일반 알림", false to "끔"),
+                    selected = academicReminders,
+                    onSelect = onAcademicRemindersChange,
+                    itemTag = { "notification_academic_${if (it) "ON" else "OFF"}" },
+                )
+                Text(
+                    "수강신청 정정·수업평가·시험 같은 기간이 시작하거나 끝나는 날 아침에 알려 줘요.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
         }
     }
 }

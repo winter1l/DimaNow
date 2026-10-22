@@ -519,6 +519,7 @@ private fun SettingsRoute(
         initialValue = NotificationGuidancePolicy(),
     )
     val homeBase by preferences.homeBase.collectAsStateWithLifecycle(initialValue = HomeBase.YEIN)
+    val academicReminders by preferences.academicReminders.collectAsStateWithLifecycle(initialValue = true)
     // D-094: null until the cache emits, so the diagnostics card shows loading rather than "기록 없음"
     val shuttle by shuttleSource.data.collectLoadedAsState()
     val meal by mealSource.data.collectLoadedAsState()
@@ -541,6 +542,8 @@ private fun SettingsRoute(
         onNotificationModeChange = { kind, mode ->
             scope.launch { preferences.setNotificationGuidanceMode(kind, mode) }
         },
+        academicReminders = academicReminders,
+        onAcademicRemindersChange = { scope.launch { preferences.setAcademicReminders(it) } },
         homeBase = homeBase,
         onHomeBaseChange = { scope.launch { preferences.setHomeBase(it) } },
         shuttleData = shuttle,

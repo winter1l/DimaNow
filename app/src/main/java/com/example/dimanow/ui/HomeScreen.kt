@@ -310,6 +310,12 @@ internal fun DashboardScreen(
             )
         }
 
+        // D-107: 지금 진행 중이거나 2주 안에 시작하는 학사 일정(시험 주간 포함). 없으면 카드도 없다
+        val academicAgenda = serviceCalendar.academicAgenda(now.toLocalDate()).take(4)
+        if (academicAgenda.isNotEmpty()) item(key = "academic") {
+            HomeAcademicAgendaCard(academicAgenda, now.toLocalDate())
+        }
+
         // 2. 실시간 셔틀 카드 — 카드 전체가 셔틀 탭을 연다 (D-094(9))
         item(key = "shuttle") {
             val shuttleSuspension = remember(now.toLocalDate()) { guidanceEngine.campusShuttleSuspensionOn(now.toLocalDate()) }

@@ -126,3 +126,7 @@ Resolved 2026-10-17: launch decisions — D-099 (GitHub only, new applicationId,
 - 2026-10-22 (observed): a course saved without a classroom renders dangling separators in Now Bar/notification/widget text (`GuidanceEngine`, `LiveSurfaceController`, `CampusSummaryWidgetPlanner`); Home was fixed in D-102, the rest was offered as a separate task.
 
 Resolved 2026-10-22: Q-019 and Q-020 by D-103 (fade-through tabs, bar refresh action, connected button group on Material3 1.5.0-beta02). New risk to watch: Material3 is a beta artifact until 1.5.0 is stable; move to the stable release when it ships and re-run the UI instrumentation.
+
+Resolved 2026-10-22: Q-018 — the user adopted D-102/D-103; main fast-forwarded to 67f9ea0 (not pushed) and the phone runs it.
+- Q-022 (observed, pre-existing): on the Galaxy Tab S9 (Android 16, large screen) `PortraitOrientationTest.mainActivityStaysPortraitWhenTheLargeScreenRotates` sees landscape after rotation, and `CampusSummaryWidgetLayoutTest` fails twice (compact line clipped 77 > 47; NPE in `verifySummary`). Both fail the same on the pre-D-102 build, so D-054's portrait opt-out and the widget size thresholds do not hold on this tablet. The release build also opened in landscape there.
+- Q-023 (observed): the API 36 emulator restarts system_server by watchdog during long UI runs (WindowManager blocked ~73s) with /data at 92%; consider wiping or recreating the AVD before relying on it again.

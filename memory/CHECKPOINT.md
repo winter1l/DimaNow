@@ -1,16 +1,16 @@
-# Checkpoint — R2 photo storage live, v2.1 ready — 2026-10-22
+# Checkpoint — D-102 UX pass waiting for review — 2026-10-22
 
 ## The story so far
-Observed: D-100 is deployed. Worker 6764a809 stores dormitory photos in the private R2 bucket `dima-now-dorm-photos` (30-day lifecycle rule `expire-30d` plus daily prune, 500 MB cap enforced by the Worker), wakes the publish workflow with workflow_dispatch choices, and serves photos to the workflow only with `PHOTO_READ_TOKEN` (Actions secrets `DORM_PHOTO_ENDPOINT`, `DORM_PHOTO_READ_TOKEN`). The `dorm-submissions` branch is deleted. v2.0 was withdrawn (tag unusable); v2.1 (versionCode 9) is built and signed (`dist/DIMA-Now-v2.1-optimized.apk`, sha256 fa1afb5b… after D-101) and installed on the phone next to the old v1.x app; the timetable import file is in the phone's Download folder. No v2.1 GitHub release yet.
+Observed: the user asked for a UX pass from Apple HIG, Material 3 and the Toss consumer UX guide, keeping the M3 Expressive look, in a new worktree. D-102 is implemented in `C:\project\dahak\DimaNow-ux` on branch `claude/ux-guide-pass` (from main f31e1aa): one-step permission priming, Home date title + in-place location request + update card, timetable empty state and full-screen course form, pinned shuttle header, tab re-select to top, grouped Settings, LMS login polish. Evidence and sources: `ux-guide-pass-20261022.md`. Main, the phone (v2.1) and GitHub are untouched; the branch is local only.
 
 ## Decided
-- D-098 keep the release key; D-099 GitHub-only launch; D-100 private R2 photos (30 days, 500 MB cap).
+- D-098 keep the release key; D-099 GitHub-only launch; D-100 private R2 photos; D-101 compact dorm cards; D-102 UX pass (branch only until the user adopts it).
 
 ## Waiting on the user
-Publish v2.1 when asked. On the phone: finish onboarding in the new app, import `dima-now-timetable-2026-2.json` (설정 → 데이터 관리), then remove the old v1.x app. Owner: offline backup of `.local/release-signing/`; privacy contact email; vacation suspensions and 2027 terms in `data-source/calendar.json`.
+Review `claude/ux-guide-pass` and say whether to merge it into main (Q-018). Decide on the M3-vs-standing-decision items (Q-019, Q-020). Earlier items unchanged: publish v2.1 when asked; phone migration; release-key offline backup; privacy contact email; vacation suspensions and 2027 terms.
 
 ## Next first action
-Confirm the next Worker meal-watch dispatch succeeds with the new Actions-only App permission; then publish v2.1 if the user asks.
+If the user adopts D-102: merge the branch into main (avoid the graphify session's files), run unit + instrumentation tests on main, then ask before pushing or installing on the phone.
 
 ## Open follow-ups
-OPEN-QUESTIONS 2026-10-22; first real photo upload and report on the R2 path not yet observed.
+OPEN-QUESTIONS 2026-10-22 (Q-018..Q-021, blank-room separators task offered as a separate session).

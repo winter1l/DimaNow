@@ -72,6 +72,9 @@ internal fun LmsLoginScreen(
     needsReview: Boolean,
     onLogin: (String, String, Boolean) -> Unit,
     modifier: Modifier = Modifier,
+    title: String = "수업",
+    intro: String = "과제·강의 마감과 수업 공지를 이 탭에서 모아 볼 수 있어요.",
+    navigationIcon: @Composable () -> Unit = {},
 ) {
     val activity = LocalActivity.current
     DisposableEffect(activity) {
@@ -85,8 +88,9 @@ internal fun LmsLoginScreen(
     var automatic by remember { mutableStateOf(false) }
     val canLogin = username.isNotBlank() && password.isNotEmpty()
     ScreenScaffold(
-        title = "수업",
+        title = title,
         modifier = modifier.imePadding(),
+        navigationIcon = navigationIcon,
         itemSpacing = DimaLayout.sectionGap,
         listTag = "lms_login_list",
     ) {
@@ -97,7 +101,7 @@ internal fun LmsLoginScreen(
                     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         Text("학교 계정으로 로그인", style = MaterialTheme.typography.titleMedium)
                         Text(
-                            "과제·강의 마감과 수업 공지를 이 탭에서 모아 볼 수 있어요.",
+                            intro,
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -167,7 +171,7 @@ internal fun LmsLoginScreen(
                         Column(Modifier.weight(1f)) {
                             Text("자동 로그인 (선택)")
                             Text(
-                                "켜면 학번과 비밀번호를 이 기기에만 암호화해 저장하고, 수업 탭을 열 때 자동으로 로그인해요. " +
+                                "켜면 학번과 비밀번호를 이 기기에만 암호화해 저장하고, 수업 탭이나 장비 대여 같은 학교 정보 화면을 열 때 자동으로 로그인해요. " +
                                     "설정의 수업 계정에서 언제든 지울 수 있어요.",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,

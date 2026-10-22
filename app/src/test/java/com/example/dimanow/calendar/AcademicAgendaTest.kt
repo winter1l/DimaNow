@@ -2,6 +2,7 @@ package com.example.dimanow.calendar
 
 import com.example.dimanow.sync.CalendarEvent
 import com.example.dimanow.sync.CalendarTerm
+import com.example.dimanow.sync.ServiceCalendar
 import com.example.dimanow.sync.ServiceCalendarPayload
 import com.example.dimanow.sync.serviceCalendarProblem
 import com.example.dimanow.ui.academicEventStatus
@@ -46,6 +47,21 @@ class AcademicAgendaTest {
         assertEquals(listOf("내일부터 기말고사"), titles(LocalDate.of(2026, 12, 13)))
         assertEquals(listOf("오늘부터 기말고사", "오늘부터 수업평가"), titles(LocalDate.of(2026, 12, 14)))
         assertTrue(titles(LocalDate.of(2026, 12, 9)).isEmpty())
+    }
+
+    @Test
+    fun `a calendar synchronized before exam weeks and events borrows them from the bundled copy`() {
+        val older = ServiceCalendar.from(
+            ServiceCalendarPayload(terms = listOf(CalendarTerm("2026-2", "2026-08-24", "2026-12-18")), holidays = emptyList()),
+        )
+        val completed = older.completedFrom(calendar)
+        assertEquals(ServiceCalendar.Exam.MIDTERM, completed.examOn(LocalDate.of(2026, 10, 23)))
+        assertTrue(completed.academicAgenda(LocalDate.of(2026, 12, 7)).any { it.name == "지정보강" })
+        // A term whose dates were changed in the published file keeps the published (empty) exam weeks.
+        val moved = ServiceCalendar.from(
+            ServiceCalendarPayload(terms = listOf(CalendarTerm("2026-2", "2026-08-31", "2026-12-18")), holidays = emptyList()),
+        )
+        assertEquals(null, moved.completedFrom(calendar).examOn(LocalDate.of(2026, 10, 23)))
     }
 
     @Test

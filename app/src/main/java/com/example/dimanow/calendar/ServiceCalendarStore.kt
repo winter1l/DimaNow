@@ -26,7 +26,7 @@ object ServiceCalendarStore {
     fun loadCached(context: Context) {
         val file = cacheFile(context)
         if (!file.isFile) return
-        runCatching { decode(file.readBytes()) }.onSuccess { state.value = it }
+        runCatching { decode(file.readBytes()) }.onSuccess { state.value = it.completedFrom(BuiltInServiceCalendar.calendar) }
     }
 
     /** Validates [bytes], stores them atomically and makes them current. Throws when the payload is invalid. */
@@ -39,7 +39,7 @@ object ServiceCalendarStore {
             file.delete()
             check(temporary.renameTo(file)) { "달력을 저장하지 못했어요." }
         }
-        state.value = calendar
+        state.value = calendar.completedFrom(BuiltInServiceCalendar.calendar)
     }
 
     internal fun decode(bytes: ByteArray): ServiceCalendar =
@@ -51,6 +51,18 @@ object ServiceCalendarStore {
     }
 
     private fun cacheFile(context: Context) = File(context.filesDir, "service-calendar.json")
+}
+
+/**
+ * A synchronized calendar published before exam weeks (D-106) and 학사일정 (D-107) existed borrows them from the
+ * bundled copy: exam weeks only for a term with the same id and dates, events only when it has none at all.
+ */
+internal fun ServiceCalendar.completedFrom(bundled: ServiceCalendar): ServiceCalendar {
+    val completedTerms = terms.map { term ->
+        val known = bundled.terms.firstOrNull { it.id == term.id && it.start == term.start && it.end == term.end }
+        if (known == null) term else term.copy(midterm = term.midterm ?: known.midterm, finalExam = term.finalExam ?: known.finalExam)
+    }
+    return copy(terms = completedTerms, academicEvents = academicEvents.ifEmpty { bundled.academicEvents })
 }
 
 /** The calendar compiled into the APK; must equal `data-source/calendar.json` (see ServiceCalendarBundleTest). */

@@ -152,7 +152,16 @@ internal fun EquipmentScreen(onBack: () -> Unit, modifier: Modifier = Modifier) 
             groups == null && error != null -> item(key = "equipment_error") {
                 ErrorState(requireNotNull(error), onRetry = if (bridge != null) ::loadCatalog else null)
             }
-            groups == null -> Unit
+            groups == null -> if (bridge != null) item(key = "equipment_start") {
+                // After the sign-in was closed: nothing is read until the student asks again.
+                EmptyState(
+                    message = "학교 계정으로 로그인하면 대여 현황을 볼 수 있어요",
+                    supporting = "수업 탭과 같은 학교 포털 계정을 써요.",
+                    actionLabel = "대여 현황 불러오기",
+                    onAction = ::loadCatalog,
+                    modifier = Modifier.testTag("equipment_start"),
+                )
+            }
             groups.isEmpty() -> item(key = "equipment_empty") { EmptyState("지금 빌릴 수 있는 일반 대여 장비가 없어요") }
             else -> {
                 error?.let { message -> item(key = "equipment_refresh_error") { ErrorState(message, onRetry = ::loadCatalog) } }

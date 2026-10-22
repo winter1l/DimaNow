@@ -13,8 +13,10 @@ import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.LocalActivity
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -31,12 +33,14 @@ import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
@@ -44,18 +48,21 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.dimanow.lms.LmsCredentialStore
+import com.example.dimanow.lms.LmsLoginScreen
 import com.example.dimanow.lms.SavedLmsCredentials
 import com.example.dimanow.lms.lmsCredentialSubmissionScript
 import com.example.dimanow.ui.DimaTopAppBar
+import com.example.dimanow.ui.LocalOpenSettings
+import kotlinx.coroutines.launch
 import java.io.ByteArrayInputStream
 import org.json.JSONObject
 
 /**
  * Serves [SchoolServiceBridge] requests from the app shell (D-107). Each read runs in its own WebView: it opens
- * the target page; when the site is not signed in it goes through the school portal, entering the saved
- * portal sign-in when there is one and otherwise showing the official portal page so the student signs in
- * there; then it runs the request's script on the target page. The WebView stays invisible unless the
- * student has to act, and nothing it reads leaves this request.
+ * the target page; when the site is not signed in it goes through the school portal and enters the saved
+ * portal account, or asks for it on the same sign-in form as the Courses tab (the student may save it there).
+ * Then it runs the request's script on the target page. The WebView stays invisible; the official portal page
+ * is shown only when the portal needs something the app cannot do (a challenge or the duplicate-login notice).
  */
 @Composable
 fun SchoolServiceHost(bridge: SchoolServiceBridge, credentialStore: LmsCredentialStore) {
@@ -66,17 +73,26 @@ fun SchoolServiceHost(bridge: SchoolServiceBridge, credentialStore: LmsCredentia
     }
 }
 
+/** Credentials for one read, filled from the store or the sign-in form, and the WebView's pending submission. */
+private class SchoolCredentialSlot {
+    var credentials: SavedLmsCredentials? = null
+    var submitWhenReady: (() -> Unit)? = null
+}
+
 @Composable
 private fun SchoolServiceSession(
     request: SchoolServiceRequest,
     credentialStore: LmsCredentialStore,
     onResult: (SchoolServiceResult) -> Unit,
 ) {
-    var credentials by remember { mutableStateOf<SavedLmsCredentials?>(null) }
+    val scope = rememberCoroutineScope()
+    val slot = remember { SchoolCredentialSlot() }
     var credentialsLoaded by remember { mutableStateOf(false) }
     var interactive by remember { mutableStateOf(false) }
+    var askCredentials by remember { mutableStateOf(false) }
+    var credentialsRejected by remember { mutableStateOf(false) }
     LaunchedEffect(request) {
-        credentials = runCatching { credentialStore.load() }.getOrNull()?.takeIf { it.automaticLogin }
+        slot.credentials = runCatching { credentialStore.load() }.getOrNull()?.takeIf { it.automaticLogin }
         credentialsLoaded = true
     }
     val activity = LocalActivity.current
@@ -85,47 +101,84 @@ private fun SchoolServiceSession(
         if (interactive) activity?.window?.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
         onDispose { if (interactive) activity?.window?.clearFlags(WindowManager.LayoutParams.FLAG_SECURE) }
     }
+    // Back on the sign-in form or the official page cancels this read, as the close button does.
+    BackHandler(enabled = interactive || askCredentials) { onResult(SchoolServiceResult.Cancelled) }
     if (!credentialsLoaded) return
-    Column(
-        modifier = if (interactive) {
-            Modifier
-                .fillMaxSize()
-                .background(MaterialTheme.colorScheme.surface)
-                .statusBarsPadding()
-                .navigationBarsPadding()
-                .imePadding()
-                .testTag("school_signin")
-        } else {
-            Modifier.size(1.dp)
-        },
-    ) {
-        if (interactive) {
-            DimaTopAppBar(
-                title = { Text("학교 포털 로그인", style = com.example.dimanow.theme.dimaPageTitleStyle()) },
-                navigationIcon = {
-                    IconButton(shapes = IconButtonDefaults.shapes(), onClick = { onResult(SchoolServiceResult.Cancelled) }) {
-                        Icon(Icons.Default.Close, contentDescription = "로그인 취소")
-                    }
+    val closeButton: @Composable () -> Unit = {
+        IconButton(shapes = IconButtonDefaults.shapes(), onClick = { onResult(SchoolServiceResult.Cancelled) }) {
+            Icon(Icons.Default.Close, contentDescription = "로그인 취소")
+        }
+    }
+    Box(modifier = if (interactive || askCredentials) Modifier.fillMaxSize() else Modifier.size(1.dp)) {
+        Column(
+            modifier = if (interactive) {
+                Modifier
+                    .fillMaxSize()
+                    .background(MaterialTheme.colorScheme.surface)
+                    .statusBarsPadding()
+                    .navigationBarsPadding()
+                    .imePadding()
+                    .testTag("school_signin_web")
+            } else {
+                Modifier.size(1.dp)
+            },
+        ) {
+            if (interactive) {
+                DimaTopAppBar(
+                    title = { Text("학교 포털", style = com.example.dimanow.theme.dimaPageTitleStyle()) },
+                    navigationIcon = closeButton,
+                    showSettings = false,
+                    windowInsets = androidx.compose.foundation.layout.WindowInsets(0, 0, 0, 0),
+                )
+                Text(
+                    "학교 포털이 확인을 요청했어요. 이 화면에서 이어서 진행하면 ${request.service.label}의 ${request.purpose}을 불러와요.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+                )
+            }
+            AndroidView(
+                factory = { context ->
+                    schoolServiceWebView(
+                        context = context,
+                        request = request,
+                        slot = slot,
+                        onResult = onResult,
+                        askForCredentials = { rejected ->
+                            credentialsRejected = rejected
+                            askCredentials = true
+                        },
+                        showToStudent = { interactive = true },
+                    )
                 },
-                showSettings = false,
-                windowInsets = androidx.compose.foundation.layout.WindowInsets(0, 0, 0, 0),
-            )
-            Text(
-                "공식 포털에서 로그인하면 ${request.service.label}의 ${request.purpose}을 불러와요. 입력한 비밀번호는 앱이 보거나 저장하지 않아요.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+                update = { webView -> webView.visibility = if (interactive) View.VISIBLE else View.INVISIBLE },
+                onRelease = { webView ->
+                    webView.stopLoading()
+                    webView.destroy()
+                },
+                modifier = if (interactive) Modifier.weight(1f).fillMaxWidth() else Modifier.size(1.dp),
             )
         }
-        AndroidView(
-            factory = { context -> schoolServiceWebView(context, request, credentials, onResult) { interactive = true } },
-            update = { webView -> webView.visibility = if (interactive) View.VISIBLE else View.INVISIBLE },
-            onRelease = { webView ->
-                webView.stopLoading()
-                webView.destroy()
-            },
-            modifier = if (interactive) Modifier.weight(1f).fillMaxWidth() else Modifier.size(1.dp),
-        )
+        if (askCredentials) {
+            // The same form as the Courses tab: the account goes only to the official portal page, and saving it
+            // (opt-in) also signs the Courses tab in next time.
+            CompositionLocalProvider(LocalOpenSettings provides null) {
+                LmsLoginScreen(
+                    needsReview = credentialsRejected,
+                    onLogin = { username, password, automatic ->
+                        val entered = SavedLmsCredentials(username.trim(), password, automatic)
+                        if (automatic) scope.launch { credentialStore.save(entered) }
+                        slot.credentials = entered
+                        askCredentials = false
+                        slot.submitWhenReady?.invoke()
+                    },
+                    title = "학교 계정 로그인",
+                    intro = "로그인하면 ${request.service.label}의 ${request.purpose}을 불러와요.",
+                    navigationIcon = closeButton,
+                    modifier = Modifier.fillMaxSize().testTag("school_signin"),
+                )
+            }
+        }
     }
 }
 
@@ -134,8 +187,9 @@ private enum class SchoolStage { CHECK, SIGN_IN, AFTER_SIGN_IN, DONE }
 private fun schoolServiceWebView(
     context: android.content.Context,
     request: SchoolServiceRequest,
-    credentials: SavedLmsCredentials?,
+    slot: SchoolCredentialSlot,
     onResult: (SchoolServiceResult) -> Unit,
+    askForCredentials: (rejected: Boolean) -> Unit,
     showToStudent: () -> Unit,
 ): WebView = WebView(context).apply {
     visibility = View.INVISIBLE
@@ -167,6 +221,32 @@ private fun schoolServiceWebView(
             visible = true
             showToStudent()
         }
+    }
+
+    fun submit(view: WebView, credentials: SavedLmsCredentials) {
+        slot.submitWhenReady = null
+        injected = true
+        view.evaluateJavascript(lmsCredentialSubmissionScript(credentials.username, credentials.password, portal = true)) { result ->
+            // A challenge or an unexpected form: the official page takes over.
+            if (result != "\"submitted\"") reveal()
+        }
+    }
+
+    fun submitOrAsk(view: WebView) {
+        val credentials = slot.credentials
+        if (credentials != null) {
+            submit(view, credentials)
+        } else {
+            slot.submitWhenReady = { slot.credentials?.let { submit(view, it) } }
+            askForCredentials(false)
+        }
+    }
+
+    fun rejectCredentials(view: WebView) {
+        injected = false
+        slot.credentials = null
+        slot.submitWhenReady = { slot.credentials?.let { submit(view, it) } }
+        askForCredentials(true)
     }
 
     fun startSignIn(view: WebView) {
@@ -214,6 +294,14 @@ private fun schoolServiceWebView(
         poll()
     }
 
+    webChromeClient = object : android.webkit.WebChromeClient() {
+        override fun onJsAlert(view: WebView, url: String, message: String, result: android.webkit.JsResult): Boolean {
+            // The portal answers a wrong account with an alert on its sign-in page.
+            result.confirm()
+            if (injected && SchoolUrlPolicy.isPortalCredentialPage(url)) rejectCredentials(view)
+            return true
+        }
+    }
     webViewClient = object : WebViewClient() {
         override fun shouldInterceptRequest(view: WebView, webRequest: WebResourceRequest): WebResourceResponse? {
             val url = webRequest.url.toString()
@@ -274,17 +362,12 @@ private fun schoolServiceWebView(
                         return
                     }
                     if (stage == SchoolStage.CHECK) stage = SchoolStage.SIGN_IN
-                    val saved = credentials
-                    if (saved == null || injected) {
-                        // No saved sign-in, or the portal came back after a submission (wrong password, notice):
-                        // the student continues on the official page.
-                        reveal()
+                    if (injected) {
+                        // Back on the sign-in page after a submission: the account was not accepted.
+                        rejectCredentials(view)
                         return
                     }
-                    injected = true
-                    view.evaluateJavascript(lmsCredentialSubmissionScript(saved.username, saved.password, portal = true)) { result ->
-                        if (result != "\"submitted\"") reveal()
-                    }
+                    submitOrAsk(view)
                 }
                 else -> Unit
             }
@@ -302,7 +385,8 @@ private fun schoolServiceWebView(
         }
     }
     postDelayed({
-        if (stage != SchoolStage.DONE && !visible) {
+        // Not while the student is entering the account on the form.
+        if (stage != SchoolStage.DONE && !visible && slot.submitWhenReady == null) {
             finish(SchoolServiceResult.Failure("${service.label} 응답이 너무 늦어요. 잠시 후 다시 시도해 주세요."))
         }
     }, SILENT_TIMEOUT_MILLIS)

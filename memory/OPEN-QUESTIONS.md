@@ -143,3 +143,5 @@ Resolved 2026-10-23: Q-027 — on the phone (SM-S918N, saved portal account) 상
 
 - Q-028 (open, D-108): opening DIMA C 기자재 대여신청 inside the app (signed in) is the agent's extension of the outing request; the user has not confirmed it yet. Revert to the external browser if they prefer.
 - Q-029 (open, D-108): on 2026-10-23 01:47–01:52 KST DIMA C's HTTPS (`udimac.dima.ac.kr:443`) reset connections from the phone's LTE address while port 80, the portal, intranet, LMS and the PC's network worked; it recovered by itself. Assumed (not confirmed) a rate limit after repeated test reads; the catalog now pauses between group requests. Watch for it in normal use.
+
+Resolved 2026-10-23: Q-028 — the user confirmed that DIMA C에서 신청하기 keeps opening signed in inside the app (D-108 confirmation).

@@ -63,7 +63,8 @@ class FakeBucket {
     return object ? { body: object.bytes, httpMetadata: object.httpMetadata } : null;
   }
   async list({ prefix = '', cursor } = {}) {
-    const objects = [...this.objects.values()].filter((o) => o.key.startsWith(prefix)).map((o) => ({ key: o.key, uploaded: o.uploaded }));
+    const objects = [...this.objects.values()].filter((o) => o.key.startsWith(prefix))
+      .map((o) => ({ key: o.key, uploaded: o.uploaded, size: o.size ?? o.bytes.length }));
     return { objects, truncated: false, cursor };
   }
   async delete(keys) {
@@ -839,5 +840,21 @@ test('an upload without the R2 binding is refused before any admission work', as
   const env = uploadEnv();
   delete env.DORM_PHOTOS;
   assert.equal((await worker.fetch(imageRequest(), env)).status, 503);
+});
+
+test('an upload that would take the private bucket past 500 MB is refused before the budget is spent', async () => {
+  const security = new FakeSecurityStore();
+  const worker = uploadWorker(security);
+  const env = uploadEnv();
+  env.DORM_PHOTOS.objects.set('submissions/existing.jpg', {
+    key: 'submissions/existing.jpg', bytes: new Uint8Array(0), size: 500 * 1000 * 1000 - 1000,
+    uploaded: new Date('2026-09-01T00:00:00Z'),
+  });
+
+  const response = await worker.fetch(imageRequest(), env);
+
+  assert.equal(response.status, 507);
+  assert.equal(security.totalBudgetUsed(), 0);
+  assert.equal(env.DORM_PHOTOS.putCalls, 0);
 });
 

@@ -35,6 +35,7 @@ internal object DormitoryMealSubmissionMessages {
     fun uploadFailure(message: String?): String {
         val text = message.orEmpty()
         return when {
+            "저장 공간" in text -> "사진 저장 공간이 가득 찼어요. 며칠 뒤 다시 올려 주세요."
             "처리 한도" in text -> "오늘은 올라온 사진이 많아 잠시 쉬고 있어요. 내일 다시 올려 주세요."
             "잠시 후 다시 시도" in text && "올리지 못했" !in text -> "방금 올린 사진이 있어요. 10분 뒤에 다시 올려 주세요."
             "이미 등록" in text -> "이번 주 기숙사 식단이 이미 올라와 있어요."

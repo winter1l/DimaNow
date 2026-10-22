@@ -13,6 +13,9 @@ const EXPIRED_LEASE_DELETE_LIMIT = 100;
 // D-100: photos live in the private R2 bucket under this prefix and are deleted after this many days.
 const PHOTO_PREFIX = 'submissions/';
 const PHOTO_RETENTION_DAYS = 30;
+// R2 has no per-bucket quota, so the Worker refuses an upload that would take the bucket past this size.
+const PHOTO_STORAGE_LIMIT_BYTES = 500 * 1000 * 1000;
+const STORAGE_FULL_MESSAGE = '사진 저장 공간이 가득 찼습니다. 며칠 뒤 다시 올려 주세요.';
 const PHOTO_KEY_PATTERN = /^submissions\/([A-Za-z0-9_-]{1,64})\.(jpg|png|webp)$/;
 const IMAGE_EXTENSIONS = new Map([
   ['image/jpeg', 'jpg'],
@@ -175,6 +178,17 @@ async function handleDormitoryMealUpload(request, env, dependencies) {
   }
   const imageProblem = imageSanityProblem(image, mimeType);
   if (imageProblem) return jsonResponse(imageProblem.status, imageProblem.message);
+
+  // D-100: the private bucket is capped at PHOTO_STORAGE_LIMIT_BYTES (500 MB), checked before any budget is spent.
+  try {
+    if (await photoStorageBytes(env.DORM_PHOTOS) + image.byteLength > PHOTO_STORAGE_LIMIT_BYTES) {
+      return jsonResponse(507, STORAGE_FULL_MESSAGE);
+    }
+  } catch (error) {
+    console.error('Photo storage usage check failed', error instanceof Error ? error.message : error);
+    await releaseLease();
+    return jsonResponse(503, '업로드 서비스가 준비되지 않았습니다.');
+  }
 
   // The shared daily/weekly budget is consumed only for a body that passed every local check,
   // and is refunded below if the GitHub write does not succeed.
@@ -364,6 +378,18 @@ async function handleInternalPhotoRead(request, env, url) {
     status: 200,
     headers: { 'Content-Type': object.httpMetadata?.contentType ?? 'application/octet-stream', 'Cache-Control': 'no-store' },
   });
+}
+
+/** Total size of every stored photo; the bucket holds at most a few hundred objects (30-day retention). */
+export async function photoStorageBytes(bucket) {
+  let total = 0;
+  let cursor;
+  do {
+    const page = await bucket.list({ prefix: PHOTO_PREFIX, cursor, limit: 1000 });
+    for (const object of page.objects) total += Number(object.size ?? 0);
+    cursor = page.truncated ? page.cursor : undefined;
+  } while (cursor);
+  return total;
 }
 
 /** Deletes photos older than the retention period (D-100); an R2 lifecycle rule is the second safety net. */

@@ -5,12 +5,9 @@ import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.ContentTransform
 import androidx.compose.animation.SizeTransform
 import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.FastOutLinearInEasing
-import androidx.compose.animation.core.LinearOutSlowInEasing
-import androidx.compose.animation.core.SpringSpec
+import androidx.compose.animation.core.FiniteAnimationSpec
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
-import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
@@ -20,6 +17,7 @@ import androidx.compose.foundation.IndicationNodeFactory
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.InteractionSource
 import androidx.compose.foundation.interaction.PressInteraction
+import androidx.compose.material3.MotionScheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.ripple
 import androidx.compose.runtime.Composable
@@ -54,13 +52,13 @@ import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 
 /**
- * The app's only motion tokens (D-094 item 12). Every custom animation reads one of these, except the
- * fade-through between destinations, whose sequenced handoff is duration-based ([dimaFadeThrough]).
+ * The app's motion tokens (D-094 item 12, D-104). Every custom animation reads one of these.
  *
- * They mirror the Material 3 Expressive *standard* motion scheme:
- * - **spatial** springs move or resize things; a 0.9 damping ratio settles with barely any overshoot,
- *   which suits an information app better than the bouncier expressive scheme.
- * - **effects** springs change colour and opacity; they never overshoot (damping ratio 1).
+ * Since D-104 they are the Material 3 Expressive *expressive* motion scheme itself
+ * ([MotionScheme.expressive], the scheme the theme also provides to components), not copied values:
+ * - **spatial** springs move or resize things and may overshoot slightly (fast 0.6/800,
+ *   default 0.8/380, slow 0.8/200 damping/stiffness).
+ * - **effects** springs change colour and opacity and never overshoot (damping 1; 3800/1600/800).
  * - **fast** is for small parts (press feedback, a changing number), **default** for most
  *   components, **slow** for large areas.
  *
@@ -68,16 +66,15 @@ import kotlinx.coroutines.launch
  * "remove animations" in the system settings stops them without extra code.
  */
 object DimaMotion {
-    private const val SPATIAL_DAMPING = 0.9f
-    private const val EFFECTS_DAMPING = 1f
+    private val scheme = MotionScheme.expressive()
 
-    fun <T> spatialFast(): SpringSpec<T> = spring(dampingRatio = SPATIAL_DAMPING, stiffness = 1400f)
-    fun <T> spatialDefault(): SpringSpec<T> = spring(dampingRatio = SPATIAL_DAMPING, stiffness = 700f)
-    fun <T> spatialSlow(): SpringSpec<T> = spring(dampingRatio = SPATIAL_DAMPING, stiffness = 300f)
+    fun <T> spatialFast(): FiniteAnimationSpec<T> = scheme.fastSpatialSpec()
+    fun <T> spatialDefault(): FiniteAnimationSpec<T> = scheme.defaultSpatialSpec()
+    fun <T> spatialSlow(): FiniteAnimationSpec<T> = scheme.slowSpatialSpec()
 
-    fun <T> effectsFast(): SpringSpec<T> = spring(dampingRatio = EFFECTS_DAMPING, stiffness = 3800f)
-    fun <T> effectsDefault(): SpringSpec<T> = spring(dampingRatio = EFFECTS_DAMPING, stiffness = 1600f)
-    fun <T> effectsSlow(): SpringSpec<T> = spring(dampingRatio = EFFECTS_DAMPING, stiffness = 800f)
+    fun <T> effectsFast(): FiniteAnimationSpec<T> = scheme.fastEffectsSpec()
+    fun <T> effectsDefault(): FiniteAnimationSpec<T> = scheme.defaultEffectsSpec()
+    fun <T> effectsSlow(): FiniteAnimationSpec<T> = scheme.slowEffectsSpec()
 
     /** Press feedback scale of [expressiveBounceClick]. */
     const val PRESSED_SCALE = 0.97f
@@ -108,25 +105,13 @@ fun ProvideReducedMotion(content: @Composable () -> Unit) {
 }
 
 /**
- * Material fade-through between navigation-bar destinations (D-103, superseding the D-026/D-042
- * directional slide): the outgoing page fades out first, then the incoming page fades in. Sideways
- * motion is reserved for tabs and carousels that can be swiped, which the bottom destinations cannot.
- * The handoff needs a delay, so it uses durations rather than springs.
+ * Material fade-through between navigation-bar destinations (D-103): the outgoing page fades out
+ * quickly while the incoming page fades in more slowly, so the old page is gone before the new one
+ * is fully there. Sideways motion is reserved for swipeable tabs and carousels. Since D-104 both
+ * fades use the motion scheme's effects springs (fast out, default in) instead of fixed durations.
  */
 fun dimaFadeThrough(): ContentTransform =
-    fadeIn(
-        animationSpec = tween(
-            durationMillis = FADE_THROUGH_IN_MS,
-            delayMillis = FADE_THROUGH_OUT_MS,
-            easing = LinearOutSlowInEasing,
-        ),
-    ).togetherWith(
-        fadeOut(animationSpec = tween(durationMillis = FADE_THROUGH_OUT_MS, easing = FastOutLinearInEasing)),
-    )
-
-/** Material fade-through timing: 90ms out, then 210ms in (300ms in all). */
-const val FADE_THROUGH_OUT_MS = 90
-const val FADE_THROUGH_IN_MS = 210
+    fadeIn(animationSpec = DimaMotion.effectsDefault()).togetherWith(fadeOut(animationSpec = DimaMotion.effectsFast()))
 
 /**
  * Native click behaviour (ripple, keyboard, `Role.Button` semantics) with a small spatial press scale.

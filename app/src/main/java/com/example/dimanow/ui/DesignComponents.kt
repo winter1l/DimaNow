@@ -5,7 +5,6 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.CircleShape
 import com.example.dimanow.theme.DimaShapes
-import com.example.dimanow.theme.emphasized
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -25,18 +24,39 @@ import java.time.LocalDate
 
 /** App layout decisions, not prescribed Material component dimensions. */
 internal object DimaLayout {
+    /** Widest a screen's column grows; wider windows center it (D-104 large screens). */
     val readingWidth = 840.dp
-    val sectionGap = 16.dp
+    /** From this window width (the M3 medium class) the shell shows a navigation rail, not the bottom bar (D-104). */
+    val railMinWidth = 600.dp
+    /** Space between cards and sections: the M3 card spec allows at most 8dp (D-104). */
+    val sectionGap = 8.dp
 }
 
-/** The filled `오늘` pill shared by the meal day heading and the timetable weekday heading (D-102). */
+/**
+ * M3 Expressive segmented list (D-104): rows sit [ListItemDefaults.SegmentedGap] apart, the group's outer
+ * corners are large and the inner ones small ([ListItemDefaults.segmentedShapes]), and each row takes the
+ * filled-card tone so a group reads like the cards around it on the page surface.
+ */
+@Composable
+internal fun DimaSegmentedList(modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) {
+    Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(ListItemDefaults.SegmentedGap), content = content)
+}
+
+@Composable
+internal fun dimaSegmentedListColors(): ListItemColors =
+    ListItemDefaults.segmentedColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHighest)
+
+/**
+ * The filled `오늘` pill shared by the meal day heading and the timetable weekday heading (D-102),
+ * in tertiary: M3 gives badge-like contrasting accents to the tertiary role (D-104).
+ */
 @Composable
 internal fun TodayBadge(modifier: Modifier = Modifier) {
-    Surface(modifier = modifier, shape = DimaShapes.Badge, color = MaterialTheme.colorScheme.primary) {
+    Surface(modifier = modifier, shape = DimaShapes.Badge, color = MaterialTheme.colorScheme.tertiary) {
         Text(
             text = "오늘",
             style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onPrimary,
+            color = MaterialTheme.colorScheme.onTertiary,
             modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
         )
     }
@@ -100,7 +120,7 @@ private fun <T> DimaDayCellSelector(
     if (items.isEmpty()) return
     val density = LocalDensity.current
     val textMeasurer = rememberTextMeasurer()
-    val labelStyle = MaterialTheme.typography.labelLarge.emphasized()
+    val labelStyle = MaterialTheme.typography.labelLargeEmphasized
     val dateStyle = MaterialTheme.typography.labelSmall
     val dateLabels = items.associateWith(supportingLabel)
     val widestTextPx = remember(items, dateLabels, labelStyle, dateStyle, textMeasurer) {

@@ -6,7 +6,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.ElevatedCard
+import androidx.compose.material3.Card
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.ui.Modifier
@@ -38,11 +38,11 @@ class CardShadowTransitionTest {
         composeRule.mainClock.autoAdvance = false
         composeRule.setContent {
             DIMANowTheme(darkTheme = false) {
-                expected = MaterialTheme.colorScheme.surfaceContainerLow
+                expected = MaterialTheme.colorScheme.surfaceContainerHighest
                 Box(Modifier.padding(24.dp)) {
-                    ElevatedCard(
+                    Card(
                         modifier = Modifier.size(240.dp, 120.dp).testTag("moving_card").entrance(),
-                        colors = CardDefaults.elevatedCardColors(containerColor = expected),
+                        colors = CardDefaults.cardColors(containerColor = expected),
                     ) { Text("셔틀 카드", Modifier.padding(24.dp)) }
                 }
             }
@@ -60,7 +60,7 @@ class CardShadowTransitionTest {
     }
 
     @Test
-    fun destinationsFadeThroughTheBackgroundOutgoingFirst() {
+    fun outgoingDestinationLeavesBeforeTheIncomingOneIsOpaque() {
         composeRule.mainClock.autoAdvance = false
         var page by mutableIntStateOf(0)
         composeRule.setContent {
@@ -82,21 +82,25 @@ class CardShadowTransitionTest {
 
         assertEquals("initial destination must be opaque", Color.Red.toArgb(), sceneCenter())
         composeRule.runOnIdle { page = 1 }
-        // D-103 fade-through over the black parent: the outgoing page fades out on its own first
-        // (partial red, no blue), then the incoming page fades in on its own (partial blue, no red).
-        var outgoingAloneFrame = -1
+        // D-104 expressive fade-through over the black parent: both pages move on effects springs, the
+        // outgoing one on the faster spring, so it has left (no red) while the incoming page is still
+        // fading in (partial blue), and only then does the incoming page become opaque.
+        var outgoingGoneFrame = -1
         var incomingAloneFrame = -1
-        for (frame in 0 until 30) {
+        var incomingOpaqueFrame = -1
+        for (frame in 0 until 60) {
             composeRule.mainClock.advanceTimeByFrame()
             val center = sceneCenter()
             val red = (center ushr 16) and 0xff
             val blue = center and 0xff
-            if (outgoingAloneFrame < 0 && red in 1..254 && blue == 0) outgoingAloneFrame = frame
-            if (incomingAloneFrame < 0 && blue in 1..254 && red == 0) incomingAloneFrame = frame
+            if (outgoingGoneFrame < 0 && red == 0) outgoingGoneFrame = frame
+            if (incomingAloneFrame < 0 && red == 0 && blue in 1..254) incomingAloneFrame = frame
+            if (incomingOpaqueFrame < 0 && blue == 255) incomingOpaqueFrame = frame
         }
-        assertTrue("the outgoing page never faded out on its own", outgoingAloneFrame >= 0)
+        assertTrue("the outgoing page never left", outgoingGoneFrame >= 0)
+        assertTrue("the incoming page never became opaque", incomingOpaqueFrame >= 0)
         assertTrue("the incoming page never faded in on its own", incomingAloneFrame >= 0)
-        assertTrue("the incoming page faded in before the outgoing one left", outgoingAloneFrame < incomingAloneFrame)
+        assertTrue("the outgoing page was still visible when the incoming one became opaque", outgoingGoneFrame < incomingOpaqueFrame)
         composeRule.mainClock.advanceTimeBy(2_000)
         assertEquals("final destination must be opaque", Color.Blue.toArgb(), sceneCenter())
         composeRule.onNodeWithTag("tab_0").assertDoesNotExist()

@@ -11,7 +11,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.ElevatedCard
+import androidx.compose.material3.Card
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -64,7 +64,7 @@ internal fun EmptyState(
             ) {
                 Surface(
                     shape = CircleShape,
-                    color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                    color = MaterialTheme.colorScheme.surfaceContainerLowest,
                     modifier = Modifier.size(56.dp),
                 ) {
                     Box(contentAlignment = Alignment.Center) {
@@ -98,10 +98,10 @@ internal fun EmptyState(
         }
     }
     if (contained) {
-        ElevatedCard(
+        Card(
             modifier = modifier.fillMaxWidth(),
             shape = DimaShapes.Card,
-            colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHighest),
         ) { content() }
     } else {
         Box(modifier.fillMaxWidth()) { content() }
@@ -139,7 +139,7 @@ internal fun ErrorState(
                 )
             }
             if (onRetry != null) {
-                TextButton(
+                TextButton(shapes = ButtonDefaults.shapes(), 
                     onClick = onRetry,
                     colors = ButtonDefaults.textButtonColors(contentColor = contentColor),
                 ) { Text(retryLabel) }
@@ -147,10 +147,10 @@ internal fun ErrorState(
         }
     }
     if (contained) {
-        ElevatedCard(
+        Card(
             modifier = modifier.fillMaxWidth(),
             shape = DimaShapes.Card,
-            colors = CardDefaults.elevatedCardColors(
+            colors = CardDefaults.cardColors(
                 containerColor = MaterialTheme.colorScheme.errorContainer,
                 contentColor = MaterialTheme.colorScheme.onErrorContainer,
             ),
@@ -172,7 +172,7 @@ private fun StateAction(
     if (label == null || onAction == null) return
     val tagged = if (tag != null) Modifier.testTag(tag) else Modifier
     if (tonal) {
-        FilledTonalButton(onClick = onAction, enabled = enabled, modifier = tagged) {
+        FilledTonalButton(shapes = ButtonDefaults.shapes(), onClick = onAction, enabled = enabled, modifier = tagged) {
             icon?.let {
                 Icon(it, contentDescription = null, modifier = Modifier.size(ButtonDefaults.IconSize))
                 Spacer(Modifier.width(ButtonDefaults.IconSpacing))
@@ -180,6 +180,6 @@ private fun StateAction(
             Text(label)
         }
     } else {
-        TextButton(onClick = onAction, enabled = enabled, modifier = tagged) { Text(label) }
+        TextButton(shapes = ButtonDefaults.shapes(), onClick = onAction, enabled = enabled, modifier = tagged) { Text(label) }
     }
 }

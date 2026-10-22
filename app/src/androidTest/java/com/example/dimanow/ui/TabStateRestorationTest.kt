@@ -18,6 +18,7 @@ import java.time.LocalDate
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
+import org.junit.Assume.assumeTrue
 import org.junit.Rule
 import org.junit.Test
 
@@ -38,6 +39,9 @@ class TabStateRestorationTest {
             swipeUp(startY = centerY, endY = centerY - 120f, durationMillis = 600)
         }
         composeRule.waitForIdle()
+        // A large landscape window can show the whole Home list once the flexible bar collapses (D-104);
+        // there is then no position to keep, which is not a scrolling failure.
+        assumeTrue("the whole Home list fits this window", homeScrollRange().maxValue() > 0f)
         val before = homeScrollPosition()
         assertTrue("the Home list did not scroll: $before", before > 0f)
         saveScreenshotIfRequested("before")
@@ -75,10 +79,15 @@ class TabStateRestorationTest {
         composeRule.onNodeWithTag("shuttle_day_${today.name}").assertIsNotSelected()
     }
 
-    /** Lazy-list scroll semantics encode the first visible item index and its offset. */
-    private fun homeScrollPosition(): Float =
+    /**
+     * Lazy-list scroll semantics encode the first visible item index and its offset; the maximum stays
+     * at that value when the list cannot scroll forward, so it is 0 only for a list that fits.
+     */
+    private fun homeScrollRange() =
         composeRule.onNodeWithTag("home_list").fetchSemanticsNode()
-            .config[SemanticsProperties.VerticalScrollAxisRange].value()
+            .config[SemanticsProperties.VerticalScrollAxisRange]
+
+    private fun homeScrollPosition(): Float = homeScrollRange().value()
 
     private fun waitForHomeData() {
         composeRule.waitUntil(timeoutMillis = 10_000) {

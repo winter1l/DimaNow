@@ -1,5 +1,6 @@
 package com.example.dimanow.ui
 
+import androidx.compose.material3.IconButtonDefaults
 import android.provider.Settings
 import com.example.dimanow.theme.DimaShapes
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -16,7 +17,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.ElevatedCard
+import androidx.compose.material3.Card
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -96,7 +97,7 @@ internal fun SettingsScreen(
         // 설정은 하단 내비가 없는 하위 화면이라 닫기 대신 앞쪽 뒤로 버튼을 둔다.
         // 뒤로는 설정을 연 탭으로 돌아간다 (D-035, D-043, D-094)
         navigationIcon = {
-            IconButton(onClick = onBack, modifier = Modifier.testTag("close_settings")) {
+            IconButton(shapes = IconButtonDefaults.shapes(), onClick = onBack, modifier = Modifier.testTag("close_settings")) {
                 Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "뒤로")
             }
         },
@@ -105,10 +106,10 @@ internal fun SettingsScreen(
     ) {
         // 1) 귀가 기준지 — 가장 자주 바꾸는 개인 설정을 최상단에
         item(key = "home_base") {
-            ElevatedCard(
+            Card(
                 modifier = Modifier.fillMaxWidth(),
                 shape = DimaShapes.Card,
-                colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHighest),
             ) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text("귀가 방향", style = MaterialTheme.typography.titleMedium)
@@ -138,7 +139,7 @@ internal fun SettingsScreen(
             )
         }
         if (setupExpanded) item(key = "guidance_setup") {
-            GuidanceSetupChecklist(guidanceSetup, modifier = Modifier.padding(horizontal = 8.dp))
+            GuidanceSetupChecklist(guidanceSetup)
         }
         item(key = "notification_guidance") {
             NotificationGuidanceSettings(
@@ -156,10 +157,10 @@ internal fun SettingsScreen(
 
         item(key = "account_header") { SettingsSectionHeader("계정과 데이터") }
         item(key = "lms_account") {
-            ElevatedCard(
+            Card(
                 modifier = Modifier.fillMaxWidth(),
                 shape = DimaShapes.Card,
-                colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHighest),
             ) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text("수업 계정", style = MaterialTheme.typography.titleMedium)
@@ -169,7 +170,7 @@ internal fun SettingsScreen(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                     // D-099: 계정을 저장하지 않고 로그인한 경우에도 로그아웃과 수업 정보 삭제를 할 수 있다
-                    OutlinedButton(
+                    OutlinedButton(shapes = ButtonDefaults.shapes(), 
                         onClick = { confirmDeleteLmsAccount = true },
                         modifier = Modifier.fillMaxWidth().testTag("delete_lms_account"),
                     ) {
@@ -201,7 +202,7 @@ internal fun SettingsScreen(
         }
         if (diagnosticsExpanded) {
             item(key = "nowbar_help") {
-                TextButton(onClick = onShowNowBarSetup) { Text("기기별 알림 도움말") }
+                TextButton(shapes = ButtonDefaults.shapes(), onClick = onShowNowBarSetup) { Text("기기별 알림 도움말") }
             }
             // 3) GPS 비반영 테스트 모드 — 네 구역을 가로 스크롤 없이 모두 보여 준다 (D-094(6))
             item(key = "location_test") {
@@ -224,17 +225,14 @@ internal fun SettingsScreen(
             title = { Text(if (lmsCredentialState == CredentialState.SAVED) "저장된 계정을 삭제할까요?" else "로그아웃할까요?") },
             text = { Text("저장된 계정, 로그인 상태와 이 기기의 수업 정보가 삭제돼요.") },
             confirmButton = {
-                // 되돌릴 수 없는 삭제는 error 색으로 구분한다 (D-094(6))
-                Button(
+                // 되돌릴 수 없는 삭제는 error 색 글자로 구분한다 (D-094(6)); 대화상자 동작은 텍스트 버튼이다 (D-104)
+                TextButton(shapes = ButtonDefaults.shapes(), 
                     onClick = { confirmDeleteLmsAccount = false; onDeleteLmsAccount() },
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = MaterialTheme.colorScheme.error,
-                        contentColor = MaterialTheme.colorScheme.onError,
-                    ),
+                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error),
                     modifier = Modifier.testTag("confirm_delete_lms_account"),
                 ) { Text("삭제") }
             },
-            dismissButton = { TextButton(onClick = { confirmDeleteLmsAccount = false }) { Text("취소") } },
+            dismissButton = { TextButton(shapes = ButtonDefaults.shapes(), onClick = { confirmDeleteLmsAccount = false }) { Text("취소") } },
         )
     }
 }
@@ -251,20 +249,20 @@ internal fun NowBarSetupDialog(
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text("'잠긴 상태에서 알림 내용 표시' 옵션을 항상 표시로 변경해주세요.")
-                OutlinedButton(onClick = onOpenLockScreenNotifications, modifier = Modifier.fillMaxWidth()) {
+                OutlinedButton(shapes = ButtonDefaults.shapes(), onClick = onOpenLockScreenNotifications, modifier = Modifier.fillMaxWidth()) {
                     Text("잠금화면 알림 설정 열기")
                 }
                 Text(
                     "(선택) Samsung 나우바에 띄우려면 개발자 옵션의 ‘모든 앱의 실시간 정보 보기’가 필요할 수 있어요. " +
                         "켜지 않아도 일반 알림으로 안내돼요. 일부 앱은 개발자 옵션이 켜져 있으면 실행되지 않을 수 있어요.",
                 )
-                OutlinedButton(onClick = onOpenDeveloperOptions, modifier = Modifier.fillMaxWidth()) {
+                OutlinedButton(shapes = ButtonDefaults.shapes(), onClick = onOpenDeveloperOptions, modifier = Modifier.fillMaxWidth()) {
                     Text("개발자 옵션 열기")
                 }
             }
         },
         confirmButton = {
-            Button(onClick = onComplete, modifier = Modifier.testTag("nowbar_setup_complete")) { Text("완료") }
+            TextButton(shapes = ButtonDefaults.shapes(), onClick = onComplete, modifier = Modifier.testTag("nowbar_setup_complete")) { Text("완료") }
         },
     )
 }
@@ -279,10 +277,10 @@ internal fun AppUpdateCard(
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
-    ElevatedCard(
+    Card(
         modifier = modifier.fillMaxWidth(),
         shape = DimaShapes.Card,
-        colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHighest),
     ) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("앱 업데이트", style = MaterialTheme.typography.titleMedium)
@@ -314,17 +312,17 @@ internal fun AppUpdateCard(
             }
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 when (state.phase) {
-                    AppUpdatePhase.AVAILABLE -> Button(onClick = onDownload) { Text("다운로드 및 설치") }
-                    AppUpdatePhase.DOWNLOADING -> OutlinedButton(onClick = onCancelDownload) { Text("취소") }
-                    AppUpdatePhase.READY_TO_INSTALL, AppUpdatePhase.PERMISSION_REQUIRED -> Button(onClick = onContinueInstall) { Text("설치 계속") }
-                    else -> OutlinedButton(enabled = state.phase != AppUpdatePhase.CHECKING, onClick = onCheck) { Text("업데이트 확인") }
+                    AppUpdatePhase.AVAILABLE -> Button(shapes = ButtonDefaults.shapes(), onClick = onDownload) { Text("다운로드 및 설치") }
+                    AppUpdatePhase.DOWNLOADING -> OutlinedButton(shapes = ButtonDefaults.shapes(), onClick = onCancelDownload) { Text("취소") }
+                    AppUpdatePhase.READY_TO_INSTALL, AppUpdatePhase.PERMISSION_REQUIRED -> Button(shapes = ButtonDefaults.shapes(), onClick = onContinueInstall) { Text("설치 계속") }
+                    else -> OutlinedButton(shapes = ButtonDefaults.shapes(), enabled = state.phase != AppUpdatePhase.CHECKING, onClick = onCheck) { Text("업데이트 확인") }
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     if (state.phase == AppUpdatePhase.AVAILABLE || state.phase == AppUpdatePhase.READY_TO_INSTALL || state.phase == AppUpdatePhase.PERMISSION_REQUIRED) {
-                        OutlinedButton(onClick = onCheck) { Text("업데이트 확인") }
+                        OutlinedButton(shapes = ButtonDefaults.shapes(), onClick = onCheck) { Text("업데이트 확인") }
                     }
                     state.latestRelease?.let { release ->
-                        OutlinedButton(onClick = { openUrl(context, release.releasePageUrl) }) { Text("릴리스 보기") }
+                        OutlinedButton(shapes = ButtonDefaults.shapes(), onClick = { openUrl(context, release.releasePageUrl) }) { Text("릴리스 보기") }
                     }
                 }
             }
@@ -343,10 +341,10 @@ internal fun DataAndSourcesCard(
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
-    ElevatedCard(
+    Card(
         modifier = modifier.fillMaxWidth().testTag("data_sources_card"),
         shape = DimaShapes.Card,
-        colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHighest),
     ) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("데이터 및 원문", style = MaterialTheme.typography.titleMedium)
@@ -376,7 +374,7 @@ internal fun DataAndSourcesCard(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 shuttleData.error?.let { DiagnosticErrorLine(it) }
-                OutlinedButton(onClick = { openUrl(context, shuttleData.sourceUrl) }) { Text("셔틀 원문") }
+                OutlinedButton(shapes = ButtonDefaults.shapes(), onClick = { openUrl(context, shuttleData.sourceUrl) }) { Text("셔틀 원문") }
             }
             HorizontalDivider()
             Text("식단", style = MaterialTheme.typography.titleSmall)
@@ -391,9 +389,9 @@ internal fun DataAndSourcesCard(
                 Text(mealWeeks, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 mealData.error?.let { DiagnosticErrorLine(it) }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedButton(onClick = { openUrl(context, mealData.sourceUrl) }) { Text("식단 원문") }
+                    OutlinedButton(shapes = ButtonDefaults.shapes(), onClick = { openUrl(context, mealData.sourceUrl) }) { Text("식단 원문") }
                     mealData.sourceImageUrl?.let { imageUrl ->
-                        OutlinedButton(onClick = { openUrl(context, imageUrl) }) { Text("식단 이미지") }
+                        OutlinedButton(shapes = ButtonDefaults.shapes(), onClick = { openUrl(context, imageUrl) }) { Text("식단 이미지") }
                     }
                 }
             }
@@ -426,10 +424,10 @@ fun LiveDisplaySettings(
     modifier: Modifier = Modifier,
     onShowNowBarSetup: (() -> Unit)? = null,
 ) {
-    ElevatedCard(
+    Card(
         modifier = modifier.fillMaxWidth(),
         shape = DimaShapes.Card,
-        colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHighest),
     ) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Text("실시간 알림", style = MaterialTheme.typography.titleMedium)
@@ -455,7 +453,7 @@ fun LiveDisplaySettings(
             }
 
             onShowNowBarSetup?.let { onClick ->
-                OutlinedButton(onClick = onClick, modifier = Modifier.fillMaxWidth()) {
+                OutlinedButton(shapes = ButtonDefaults.shapes(), onClick = onClick, modifier = Modifier.fillMaxWidth()) {
                     Text("나우바 설정 안내")
                 }
             }

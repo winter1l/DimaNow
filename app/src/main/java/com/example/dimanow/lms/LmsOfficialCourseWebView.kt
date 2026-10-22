@@ -309,11 +309,7 @@ internal fun LmsOfficialCourseWebView(
                 },
             )
             if (!ready) {
-                CircularProgressIndicator(
-                    Modifier.align(Alignment.Center).size(36.dp),
-                    strokeWidth = 3.dp,
-                    strokeCap = StrokeCap.Round,
-                )
+                com.example.dimanow.ui.DimaLoadingIndicator(Modifier.align(Alignment.Center))
             }
         }
     }

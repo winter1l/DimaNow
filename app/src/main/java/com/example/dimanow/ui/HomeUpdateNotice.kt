@@ -1,5 +1,6 @@
 package com.example.dimanow.ui
 
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -10,7 +11,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.SystemUpdate
 import androidx.compose.material3.Button
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.ElevatedCard
+import androidx.compose.material3.Card
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
@@ -51,10 +52,10 @@ internal fun HomeUpdateNotice(
     onContinueInstall: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    ElevatedCard(
+    Card(
         modifier = modifier.fillMaxWidth().testTag("home_update_notice"),
         shape = DimaShapes.Card,
-        colors = CardDefaults.elevatedCardColors(
+        colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.secondaryContainer,
             contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
         ),
@@ -86,12 +87,12 @@ internal fun HomeUpdateNotice(
                 horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
             ) {
                 when (state.phase) {
-                    AppUpdatePhase.DOWNLOADING -> TextButton(onClick = onCancel) { Text("취소") }
+                    AppUpdatePhase.DOWNLOADING -> TextButton(shapes = ButtonDefaults.shapes(), onClick = onCancel) { Text("취소") }
                     AppUpdatePhase.READY_TO_INSTALL, AppUpdatePhase.PERMISSION_REQUIRED ->
-                        Button(onClick = onContinueInstall, modifier = Modifier.testTag("home_update_continue")) { Text("설치 계속") }
+                        Button(shapes = ButtonDefaults.shapes(), onClick = onContinueInstall, modifier = Modifier.testTag("home_update_continue")) { Text("설치 계속") }
                     else -> {
-                        TextButton(onClick = onLater, modifier = Modifier.testTag("home_update_later")) { Text("나중에") }
-                        FilledTonalButton(onClick = onInstall, modifier = Modifier.testTag("home_update_install")) { Text("업데이트하기") }
+                        TextButton(shapes = ButtonDefaults.shapes(), onClick = onLater, modifier = Modifier.testTag("home_update_later")) { Text("나중에") }
+                        FilledTonalButton(shapes = ButtonDefaults.shapes(), onClick = onInstall, modifier = Modifier.testTag("home_update_install")) { Text("업데이트하기") }
                     }
                 }
             }

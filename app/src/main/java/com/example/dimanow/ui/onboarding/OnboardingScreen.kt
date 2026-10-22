@@ -1,5 +1,7 @@
 package com.example.dimanow.ui.onboarding
 
+import androidx.compose.material3.IconButtonDefaults
+import androidx.compose.material3.ButtonDefaults
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -52,7 +54,6 @@ import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import com.example.dimanow.theme.DimaShapes
-import com.example.dimanow.theme.emphasized
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.dimanow.data.AppPreferences
@@ -85,7 +86,7 @@ fun OnboardingRoute(
     var error by remember { mutableStateOf<String?>(null) }
     val current = draft
     if (current == null) {
-        Box(modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
+        Box(modifier.fillMaxSize(), contentAlignment = Alignment.Center) { com.example.dimanow.ui.DimaLoadingIndicator() }
         return
     }
     fun save(action: suspend () -> Unit) {
@@ -156,7 +157,7 @@ internal fun OnboardingScreen(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 if (draft.stage != OnboardingStage.WELCOME) {
-                    IconButton(onClick = ::back, enabled = !saving, modifier = Modifier.testTag("onboarding_back")) {
+                    IconButton(shapes = IconButtonDefaults.shapes(), onClick = ::back, enabled = !saving, modifier = Modifier.testTag("onboarding_back")) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "뒤로")
                     }
                 }
@@ -185,7 +186,7 @@ internal fun OnboardingScreen(
                             // D-099: 첫 화면에서 비공식 앱임과 데이터 처리 원칙을 알린다
                             Surface(
                                 shape = DimaShapes.Tile,
-                                color = MaterialTheme.colorScheme.surfaceContainerLow,
+                                color = MaterialTheme.colorScheme.surfaceContainerHighest,
                                 modifier = Modifier.fillMaxWidth(),
                             ) {
                                 Column(Modifier.padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 4.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -217,7 +218,7 @@ internal fun OnboardingScreen(
                             ).forEach { (homeBase, label, supporting) ->
                                 Surface(
                                     shape = DimaShapes.Tile,
-                                    color = if (draft.homeBase == homeBase) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerLow,
+                                    color = if (draft.homeBase == homeBase) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerHighest,
                                     modifier = Modifier.fillMaxWidth().heightIn(min = 64.dp),
                                 ) {
                                     Row(
@@ -283,7 +284,7 @@ internal fun OnboardingScreen(
                 }
                 // 권한 화면의 첫 버튼은 Android의 허용 창을 띄우는 '계속' 하나다 (HIG). 묻고 난 뒤에는 '완료'로 끝낸다.
                 val asksEssentials = draft.stage == OnboardingStage.SETUP && !essentialsHandled
-                Button(
+                Button(shapes = ButtonDefaults.shapes(), 
                     onClick = {
                         when (draft.stage) {
                             OnboardingStage.WELCOME -> onDraftChange(draft.copy(stage = OnboardingStage.HOME_BASE))
@@ -346,7 +347,7 @@ private fun OnboardingRow(icon: ImageVector, title: String, description: String,
 @Composable
 private fun StepHeading(title: String, description: String) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text(title, style = MaterialTheme.typography.headlineSmall.emphasized(), modifier = Modifier.semantics { heading() })
+        Text(title, style = MaterialTheme.typography.headlineSmallEmphasized, modifier = Modifier.semantics { heading() })
         Text(description, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }

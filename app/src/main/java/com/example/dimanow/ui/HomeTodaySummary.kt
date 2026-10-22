@@ -15,7 +15,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.School
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.ElevatedCard
+import androidx.compose.material3.Card
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -93,7 +93,7 @@ internal fun HomeTodaySummary(
         if (overview.courses.isNotEmpty()) {
             FlowRow(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 overview.courses.forEach { course ->
-                    Surface(shape = DimaShapes.Badge, color = MaterialTheme.colorScheme.surfaceContainerHigh, contentColor = MaterialTheme.colorScheme.onSurfaceVariant) {
+                    Surface(shape = DimaShapes.Badge, color = MaterialTheme.colorScheme.surfaceContainerLowest, contentColor = MaterialTheme.colorScheme.onSurfaceVariant) {
                         Text("${course.courseName} · ${course.totalCount}개", style = MaterialTheme.typography.labelMedium,
                             modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp))
                     }
@@ -137,14 +137,14 @@ internal fun HomeSummaryCard(
     content: @Composable ColumnScope.() -> Unit,
 ) {
     val open = onClick
-    ElevatedCard(
+    Card(
         onClick = open,
         // Outer semantics override the card's own click action, so this only labels the same action.
         modifier = modifier
             .fillMaxWidth()
             .semantics { labelClickAction(onClickLabel, open) },
         shape = DimaShapes.Card,
-        colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHighest),
     ) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp), content = content)
     }
@@ -159,10 +159,10 @@ internal fun HomeContainerCard(
     modifier: Modifier = Modifier,
     content: @Composable ColumnScope.() -> Unit,
 ) {
-    ElevatedCard(
+    Card(
         modifier = modifier.fillMaxWidth(),
         shape = DimaShapes.Card,
-        colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHighest),
     ) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp), content = content)
     }
@@ -217,7 +217,7 @@ internal fun HomeCompactPrompt(
             .fillMaxWidth()
             .semantics { labelClickAction(onClickLabel, open) },
         shape = DimaShapes.Tile,
-        color = MaterialTheme.colorScheme.surfaceContainerLow,
+        color = MaterialTheme.colorScheme.surfaceContainerHighest,
         contentColor = MaterialTheme.colorScheme.onSurface,
     ) {
         Row(

@@ -157,7 +157,7 @@ private fun bindCapsule(rowViews: RemoteViews, viewId: Int, capsule: ShuttleWidg
     }
     val (background, textColor) = when (capsule.tone) {
         ShuttleWidgetCapsuleTone.NEAREST -> R.drawable.widget_capsule_next_bg to R.color.widget_on_accent
-        ShuttleWidgetCapsuleTone.NEAREST_LAST -> R.drawable.widget_capsule_next_last_bg to R.color.widget_on_error
+        ShuttleWidgetCapsuleTone.NEAREST_LAST -> R.drawable.widget_capsule_next_last_bg to R.color.widget_on_warning
         ShuttleWidgetCapsuleTone.LAST -> R.drawable.widget_capsule_last_bg to R.color.widget_capsule_last_text
         ShuttleWidgetCapsuleTone.LATER, ShuttleWidgetCapsuleTone.ENDED -> R.drawable.widget_capsule_bg to R.color.widget_text_primary
     }

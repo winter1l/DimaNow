@@ -1,5 +1,6 @@
 package com.example.dimanow.ui
 
+import androidx.compose.material3.IconButtonDefaults
 import com.example.dimanow.ui.motion.expressiveBounceClick
 import com.example.dimanow.ui.schedule.KoreanDateRangePickerHeadline
 import com.example.dimanow.ui.schedule.KoreanLocale
@@ -26,7 +27,7 @@ import androidx.compose.material.icons.filled.EditCalendar
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.ElevatedCard
+import androidx.compose.material3.Card
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
@@ -149,10 +150,10 @@ internal fun TimetableScreen(
         floatingActionButton = addCourseFab.takeUnless { noCourses },
     ) {
         item(key = "term") {
-            ElevatedCard(
+            Card(
                 modifier = Modifier.fillMaxWidth(),
                 shape = DimaShapes.Card,
-                colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHighest),
             ) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Row(
@@ -164,7 +165,7 @@ internal fun TimetableScreen(
                             onClick = { showTermEditor = true },
                             modifier = Modifier.testTag("edit_term"),
                             shape = DimaShapes.Badge,
-                            color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                            color = MaterialTheme.colorScheme.surfaceContainerLowest,
                         ) {
                             Row(
                                 modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
@@ -197,10 +198,10 @@ internal fun TimetableScreen(
         // D-099: 학기가 끝났으면 새 학기 설정을 바로 안내한다
         if (termEnded) item(key = "term_guide") {
             val suggestion = remember(today) { com.example.dimanow.calendar.AcademicTerms.suggest(today) }
-            ElevatedCard(
+            Card(
                 modifier = Modifier.fillMaxWidth().testTag("term_ended_card"),
                 shape = DimaShapes.Card,
-                colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer),
             ) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text("학기가 끝났어요", style = MaterialTheme.typography.titleMedium)
@@ -211,11 +212,11 @@ internal fun TimetableScreen(
                         style = MaterialTheme.typography.bodySmall,
                     )
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        FilledTonalButton(
+                        FilledTonalButton(shapes = ButtonDefaults.shapes(), 
                             onClick = { scope.launch { repository.setTerm(suggestion.start, suggestion.end) } },
                             modifier = Modifier.testTag("apply_suggested_term"),
                         ) { Text("추천 기간으로 바꾸기") }
-                        TextButton(onClick = { showTermEditor = true }) { Text("직접 고르기") }
+                        TextButton(shapes = ButtonDefaults.shapes(), onClick = { showTermEditor = true }) { Text("직접 고르기") }
                     }
                 }
             }
@@ -252,7 +253,7 @@ internal fun TimetableScreen(
                                 Text("${(change.start ?: course?.start)?.format(TIME)}–${(change.end ?: course?.end)?.format(TIME)} · ${change.room ?: course?.room}")
                             }
                         }
-                        TextButton(onClick = { scope.launch { repository.removeCourseOverride(change.courseId, change.date) } }) { Text("되돌리기") }
+                        TextButton(shapes = ButtonDefaults.shapes(), onClick = { scope.launch { repository.removeCourseOverride(change.courseId, change.date) } }) { Text("되돌리기") }
                     }
                 }
             }
@@ -306,7 +307,7 @@ internal fun TimetableScreen(
         if (schedule.noClassDates.isNotEmpty()) item(key = "no_class_date_list") {
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 schedule.noClassDates.sorted().forEach { date ->
-                    Surface(modifier = Modifier.fillMaxWidth(), shape = DimaShapes.Tile, color = MaterialTheme.colorScheme.surfaceContainerLow) {
+                    Surface(modifier = Modifier.fillMaxWidth(), shape = DimaShapes.Tile, color = MaterialTheme.colorScheme.surfaceContainerHighest) {
                         Row(
                             modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
                             horizontalArrangement = Arrangement.SpaceBetween,
@@ -314,7 +315,7 @@ internal fun TimetableScreen(
                         ) {
                             Text(text = koreanDateLabel(date, today), style = MaterialTheme.typography.bodyMedium)
                             // 바로 지우고 스낵바의 되돌리기로 복구할 수 있게 한다 (D-094(14))
-                            TextButton(
+                            TextButton(shapes = ButtonDefaults.shapes(), 
                                 onClick = {
                                     scope.launch {
                                         repository.removeNoClassDate(date)
@@ -408,7 +409,7 @@ internal fun TimetableScreen(
         DatePickerDialog(
             onDismissRequest = { pausePickerMode = null },
             confirmButton = {
-                TextButton(
+                TextButton(shapes = ButtonDefaults.shapes(), 
                     enabled = state.selectedStartDateMillis != null && state.selectedEndDateMillis != null,
                     onClick = {
                         val start = Instant.ofEpochMilli(state.selectedStartDateMillis!!).atZone(ZoneOffset.UTC).toLocalDate()
@@ -418,7 +419,7 @@ internal fun TimetableScreen(
                     },
                 ) { Text("저장") }
             },
-            dismissButton = { TextButton(onClick = { pausePickerMode = null }) { Text("취소") } },
+            dismissButton = { TextButton(shapes = ButtonDefaults.shapes(), onClick = { pausePickerMode = null }) { Text("취소") } },
         ) {
             DateRangePicker(
                 state = state,
@@ -450,12 +451,12 @@ fun CourseSummaryCard(
     nextOccurrence: LocalDate? = null,
 ) {
     var menuExpanded by remember { mutableStateOf(false) }
-    ElevatedCard(
+    Card(
         modifier = modifier
             .fillMaxWidth()
             .expressiveBounceClick { onEdit() },
         shape = DimaShapes.Card,
-        colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHighest),
     ) {
         Row(
             modifier = Modifier
@@ -503,7 +504,7 @@ fun CourseSummaryCard(
             }
 
             Box {
-                IconButton(onClick = { menuExpanded = true }, modifier = Modifier.testTag("course_menu_${course.id}")) {
+                IconButton(shapes = IconButtonDefaults.shapes(), onClick = { menuExpanded = true }, modifier = Modifier.testTag("course_menu_${course.id}")) {
                     Icon(Icons.Default.MoreVert, contentDescription = "${course.name} 더보기")
                 }
                 DropdownMenu(expanded = menuExpanded, onDismissRequest = { menuExpanded = false }) {
@@ -517,7 +518,7 @@ fun CourseSummaryCard(
         }
         // 한 번만 바꾸기(휴강·비대면·시간 변경)는 더보기 메뉴에 숨기지 않고 다음 수업 날짜와 함께 보인다 (D-094(14))
         if (onChangeOnce != null && nextOccurrence != null) {
-            TextButton(
+            TextButton(shapes = ButtonDefaults.shapes(), 
                 onClick = onChangeOnce,
                 modifier = Modifier
                     .padding(start = 4.dp, bottom = 4.dp)

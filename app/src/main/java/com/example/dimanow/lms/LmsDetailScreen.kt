@@ -1,5 +1,6 @@
 package com.example.dimanow.lms
 
+import androidx.compose.material3.ButtonDefaults
 import android.net.Uri
 import android.provider.DocumentsContract
 import android.view.View
@@ -23,7 +24,6 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
-import com.example.dimanow.theme.emphasized
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material3.CircularProgressIndicator
@@ -154,7 +154,7 @@ internal fun LmsDetailScreen(
                     modifier = Modifier.weight(1f),
                 )
             }
-            Text(detail.item.title, style = MaterialTheme.typography.headlineSmall.emphasized())
+            Text(detail.item.title, style = MaterialTheme.typography.headlineSmallEmphasized)
             val registeredAt = detail.metadata.registeredAt ?: detail.item.registeredAt
             if (!detail.metadata.author.isNullOrBlank() || registeredAt != null) {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -190,7 +190,7 @@ internal fun LmsDetailScreen(
                     Text("첨부파일", style = MaterialTheme.typography.titleSmall)
                     detail.attachments.forEach { attachment ->
                         val attachmentKey = "${attachment.id}|${attachment.fileName}"
-                        OutlinedButton(
+                        OutlinedButton(shapes = ButtonDefaults.shapes(), 
                             onClick = {
                                 if (downloadingAttachment != null) return@OutlinedButton
                                 downloadingAttachment = attachmentKey
@@ -300,11 +300,7 @@ internal fun LmsRenderedPageWebView(
                 .fillMaxWidth(),
             contentAlignment = Alignment.Center,
         ) {
-            CircularProgressIndicator(
-                Modifier.size(36.dp),
-                strokeWidth = 3.dp,
-                strokeCap = StrokeCap.Round,
-            )
+            com.example.dimanow.ui.DimaLoadingIndicator()
             AndroidView(
                 factory = {
                     WebView(context).apply {

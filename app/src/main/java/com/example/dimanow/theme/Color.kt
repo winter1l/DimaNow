@@ -73,3 +73,15 @@ val OnErrorContainerLight = Color(0xFF410002)
 val OnErrorDark = Color(0xFF690005)
 val ErrorContainerDark = Color(0xFF93000A)
 val OnErrorContainerDark = Color(0xFFFFDAD6)
+
+// Warning (Amber) — a defined static color with four roles for "last departure" and similar cautions,
+// kept apart from the error roles, which mean an actual error (D-104, M3 "define new colors").
+val WarningLight = Color(0xFF795900)
+val OnWarningLight = Color(0xFFFFFFFF)
+val WarningContainerLight = Color(0xFFFFDF9E)
+val OnWarningContainerLight = Color(0xFF261A00)
+
+val WarningDark = Color(0xFFF8BD2A)
+val OnWarningDark = Color(0xFF3F2E00)
+val WarningContainerDark = Color(0xFF5B4300)
+val OnWarningContainerDark = Color(0xFFFFDF9E)

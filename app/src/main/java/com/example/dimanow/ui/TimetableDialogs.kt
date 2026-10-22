@@ -1,5 +1,7 @@
 package com.example.dimanow.ui
 
+import androidx.compose.material3.IconButtonDefaults
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -77,8 +79,8 @@ internal fun CourseDeleteConfirmationDialog(
                 Text("${koreanWeekdayLabel(course.weekday)} · ${course.start.format(TIME)}–${course.end.format(TIME)}")
             }
         },
-        confirmButton = { TextButton(onClick = onConfirm) { Text("삭제", color = MaterialTheme.colorScheme.error) } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("취소") } },
+        confirmButton = { TextButton(shapes = ButtonDefaults.shapes(), onClick = onConfirm) { Text("삭제", color = MaterialTheme.colorScheme.error) } },
+        dismissButton = { TextButton(shapes = ButtonDefaults.shapes(), onClick = onDismiss) { Text("취소") } },
     )
 }
 
@@ -95,26 +97,26 @@ internal fun PauseDurationDialog(
         title = { Text("휴강 기간") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                FilledTonalButton(
+                FilledTonalButton(shapes = ButtonDefaults.shapes(), 
                     onClick = { onSelection(GuidancePause(today, today)) },
                     modifier = Modifier.fillMaxWidth(),
                 ) { Text("오늘만") }
-                FilledTonalButton(
+                FilledTonalButton(shapes = ButtonDefaults.shapes(), 
                     onClick = onRangeRequested,
                     modifier = Modifier.fillMaxWidth(),
                 ) { Text("기간 지정") }
-                FilledTonalButton(
+                FilledTonalButton(shapes = ButtonDefaults.shapes(), 
                     onClick = { onSelection(GuidancePause(today, termEnd)) },
                     modifier = Modifier.fillMaxWidth(),
                 ) { Text("학기 종료일까지") }
-                FilledTonalButton(
+                FilledTonalButton(shapes = ButtonDefaults.shapes(), 
                     onClick = { onSelection(GuidancePause.untilDisabled(today)) },
                     modifier = Modifier.fillMaxWidth(),
                 ) { Text("휴강을 해제할 때까지") }
             }
         },
         confirmButton = {},
-        dismissButton = { TextButton(onClick = onDismiss) { Text("취소") } },
+        dismissButton = { TextButton(shapes = ButtonDefaults.shapes(), onClick = onDismiss) { Text("취소") } },
     )
 }
 
@@ -134,11 +136,11 @@ internal fun GuidancePauseSetting(
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            FilledTonalButton(onClick = onConfigure) {
+            FilledTonalButton(shapes = ButtonDefaults.shapes(), onClick = onConfigure) {
                 Text(if (pause == null) "설정" else "변경")
             }
             if (pause != null) {
-                TextButton(onClick = onClear, modifier = Modifier.testTag("clear_guidance_pause")) {
+                TextButton(shapes = ButtonDefaults.shapes(), onClick = onClear, modifier = Modifier.testTag("clear_guidance_pause")) {
                     Text("해제")
                 }
             }
@@ -211,12 +213,12 @@ fun CourseEditorDialog(initial: Course?, onDismiss: () -> Unit, onSave: (List<Co
                 TopAppBar(
                     title = { Text(if (adding) "수업 추가" else "수업 수정") },
                     navigationIcon = {
-                        IconButton(onClick = close, modifier = Modifier.testTag("course_editor_close")) {
+                        IconButton(shapes = IconButtonDefaults.shapes(), onClick = close, modifier = Modifier.testTag("course_editor_close")) {
                             Icon(Icons.Default.Close, contentDescription = "닫기")
                         }
                     },
                     actions = {
-                        TextButton(onClick = save, enabled = valid, modifier = Modifier.testTag("course_editor_save")) { Text("저장") }
+                        TextButton(shapes = ButtonDefaults.shapes(), onClick = save, enabled = valid, modifier = Modifier.testTag("course_editor_save")) { Text("저장") }
                     },
                 )
             },
@@ -262,10 +264,10 @@ fun CourseEditorDialog(initial: Course?, onDismiss: () -> Unit, onSave: (List<Co
 
                 EditorSection("시간") {
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        FilledTonalButton(onClick = { showStartPicker = true }, modifier = Modifier.weight(1f)) {
+                        FilledTonalButton(shapes = ButtonDefaults.shapes(), onClick = { showStartPicker = true }, modifier = Modifier.weight(1f)) {
                             Text("시작 ${start.format(TIME)}")
                         }
-                        FilledTonalButton(onClick = { showEndPicker = true }, modifier = Modifier.weight(1f)) {
+                        FilledTonalButton(shapes = ButtonDefaults.shapes(), onClick = { showEndPicker = true }, modifier = Modifier.weight(1f)) {
                             Text("종료 ${end.format(TIME)}")
                         }
                     }
@@ -328,11 +330,11 @@ fun CourseEditorDialog(initial: Course?, onDismiss: () -> Unit, onSave: (List<Co
             title = { Text("작성한 내용을 버릴까요?") },
             text = { Text("저장하지 않은 수업 정보는 남지 않아요.") },
             confirmButton = {
-                TextButton(onClick = { confirmDiscard = false; onDismiss() }, modifier = Modifier.testTag("course_editor_discard")) {
+                TextButton(shapes = ButtonDefaults.shapes(), onClick = { confirmDiscard = false; onDismiss() }, modifier = Modifier.testTag("course_editor_discard")) {
                     Text("버리기", color = MaterialTheme.colorScheme.error)
                 }
             },
-            dismissButton = { TextButton(onClick = { confirmDiscard = false }) { Text("계속 작성") } },
+            dismissButton = { TextButton(shapes = ButtonDefaults.shapes(), onClick = { confirmDiscard = false }) { Text("계속 작성") } },
         )
     }
 }
@@ -374,8 +376,8 @@ private fun CourseTimePickerDialog(title: String, initial: LocalTime, onDismiss:
     TimePickerDialog(
         onDismissRequest = onDismiss,
         title = { Text(title) },
-        confirmButton = { TextButton(onClick = { onConfirm(LocalTime.of(state.hour, state.minute)) }) { Text("확인") } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("취소") } },
+        confirmButton = { TextButton(shapes = ButtonDefaults.shapes(), onClick = { onConfirm(LocalTime.of(state.hour, state.minute)) }) { Text("확인") } },
+        dismissButton = { TextButton(shapes = ButtonDefaults.shapes(), onClick = onDismiss) { Text("취소") } },
         modeToggleButton = {
             TimePickerDialogDefaults.DisplayModeToggle(
                 onDisplayModeChange = {

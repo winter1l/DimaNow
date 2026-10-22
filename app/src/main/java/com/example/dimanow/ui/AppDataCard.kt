@@ -11,7 +11,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.ElevatedCard
+import androidx.compose.material3.Card
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
@@ -92,12 +92,12 @@ internal fun TimetableImportConfirmation(import: TimetableImport) {
         title = { Text("시간표를 바꿀까요?") },
         text = { Text("지금 시간표를 지우고 파일의 과목 ${backup.courses.size}개와 학기 ${backup.termStart} ~ ${backup.termEnd}로 바꿔요.") },
         confirmButton = {
-            Button(
+            TextButton(shapes = ButtonDefaults.shapes(), 
                 onClick = { import.pending = null; import.restore(backup) },
                 modifier = Modifier.testTag("confirm_import_timetable"),
             ) { Text("바꾸기") }
         },
-        dismissButton = { TextButton(onClick = { import.pending = null }) { Text("취소") } },
+        dismissButton = { TextButton(shapes = ButtonDefaults.shapes(), onClick = { import.pending = null }) { Text("취소") } },
     )
 }
 
@@ -124,10 +124,10 @@ internal fun AppDataCard(modifier: Modifier = Modifier) {
         }
     }
 
-    ElevatedCard(
+    Card(
         modifier = modifier.fillMaxWidth().testTag("app_data_card"),
         shape = DimaShapes.Card,
-        colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHighest),
     ) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("데이터 관리", style = MaterialTheme.typography.titleMedium)
@@ -136,15 +136,15 @@ internal fun AppDataCard(modifier: Modifier = Modifier) {
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            OutlinedButton(
+            OutlinedButton(shapes = ButtonDefaults.shapes(), 
                 onClick = { exportLauncher.launch("dima-now-시간표-${LocalDate.now(ZoneId.of("Asia/Seoul"))}.json") },
                 modifier = Modifier.fillMaxWidth().testTag("export_timetable"),
             ) { Text("시간표 파일로 저장") }
-            OutlinedButton(
+            OutlinedButton(shapes = ButtonDefaults.shapes(), 
                 onClick = timetableImport::open,
                 modifier = Modifier.fillMaxWidth().testTag("import_timetable"),
             ) { Text("시간표 파일 불러오기") }
-            TextButton(
+            TextButton(shapes = ButtonDefaults.shapes(), 
                 onClick = { confirmDeleteAll = true },
                 colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error),
                 modifier = Modifier.testTag("delete_all_data"),
@@ -160,20 +160,17 @@ internal fun AppDataCard(modifier: Modifier = Modifier) {
             title = { Text("모든 데이터를 지울까요?") },
             text = { Text("시간표, 설정, 저장된 학교 계정과 받아 둔 정보가 모두 지워지고 앱이 닫혀요. 되돌릴 수 없어요.") },
             confirmButton = {
-                Button(
+                TextButton(shapes = ButtonDefaults.shapes(), 
                     onClick = {
                         confirmDeleteAll = false
                         // Wipes databases, DataStore, WebView cookies and caches; Android then stops the app.
                         context.getSystemService(ActivityManager::class.java)?.clearApplicationUserData()
                     },
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = MaterialTheme.colorScheme.error,
-                        contentColor = MaterialTheme.colorScheme.onError,
-                    ),
+                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error),
                     modifier = Modifier.testTag("confirm_delete_all_data"),
                 ) { Text("모두 지우기") }
             },
-            dismissButton = { TextButton(onClick = { confirmDeleteAll = false }) { Text("취소") } },
+            dismissButton = { TextButton(shapes = ButtonDefaults.shapes(), onClick = { confirmDeleteAll = false }) { Text("취소") } },
         )
     }
 }

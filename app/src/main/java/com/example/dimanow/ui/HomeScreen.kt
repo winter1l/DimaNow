@@ -1,10 +1,10 @@
 package com.example.dimanow.ui
 
+import com.example.dimanow.theme.DimaTheme
 import com.example.dimanow.ui.meal.groupDormitorySections
 import com.example.dimanow.ui.motion.AnimatedCountText
 import androidx.compose.ui.text.style.TextOverflow
 import com.example.dimanow.theme.DimaShapes
-import com.example.dimanow.theme.emphasized
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -26,7 +26,7 @@ import androidx.compose.material.icons.filled.Restaurant
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.ElevatedCard
+import androidx.compose.material3.Card
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -137,23 +137,24 @@ internal fun DashboardScreen(
             Surface(
                 modifier = Modifier.fillMaxWidth(),
                 shape = DimaShapes.Tile,
-                color = MaterialTheme.colorScheme.errorContainer,
+                // 오류가 아니라 주의 상태이므로 경고색을 쓴다 (D-104)
+                color = DimaTheme.colors.warningContainer,
             ) {
                 Text(
                     text = "테스트 모드 · GPS 미반영",
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
                     style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.onErrorContainer,
+                    color = DimaTheme.colors.onWarningContainer,
                 )
             }
         }
 
         // 1. M3 Expressive Hero 수업 브리핑 카드
         item(key = "hero") {
-            ElevatedCard(
+            Card(
                 modifier = Modifier.fillMaxWidth(),
                 shape = DimaShapes.Card,
-                colors = CardDefaults.elevatedCardColors(
+                colors = CardDefaults.cardColors(
                     containerColor = MaterialTheme.colorScheme.primaryContainer,
                     contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
                 ),
@@ -179,7 +180,7 @@ internal fun DashboardScreen(
                                 ) {
                                     AnimatedCountText(
                                         text = if (isOngoing) "수업 중" else startLabel,
-                                        style = MaterialTheme.typography.labelMedium.emphasized().copy(fontFeatureSettings = TABULAR_FIGURES),
+                                        style = MaterialTheme.typography.labelMediumEmphasized.copy(fontFeatureSettings = TABULAR_FIGURES),
                                         color = if (isOngoing) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSecondary,
                                         modifier = Modifier
                                             .padding(horizontal = 8.dp, vertical = 4.dp)
@@ -194,7 +195,7 @@ internal fun DashboardScreen(
                             }
                             Text(
                                 text = nextCourse.name,
-                                style = MaterialTheme.typography.headlineSmall.emphasized(),
+                                style = MaterialTheme.typography.headlineSmallEmphasized,
                             )
                             // 비워 둔 강의실·교수는 빈 구분자 없이 건너뛴다
                             listOf(nextCourse.room, nextCourse.professor).filter(String::isNotBlank).joinToString(" · ")
@@ -243,7 +244,7 @@ internal fun DashboardScreen(
                                     schedule.coursesOn(now.toLocalDate()).isEmpty() -> "오늘은 수업이 없어요"
                                     else -> "오늘 수업이 모두 끝났어요"
                                 },
-                                style = MaterialTheme.typography.titleLarge.emphasized(),
+                                style = MaterialTheme.typography.titleLargeEmphasized,
                             )
                             // 무엇을 하면 무엇을 얻는지 한 줄로 알려 준다 (토스 UX 라이팅: 가능하게 하는 조건을 말한다)
                             when {
@@ -255,11 +256,11 @@ internal fun DashboardScreen(
                             }
                             // D-102: 빈 브리핑은 다음 행동을 버튼으로 바로 건넨다
                             when {
-                                termEnded -> Button(
+                                termEnded -> Button(shapes = ButtonDefaults.shapes(), 
                                     onClick = { onNavigateToPage(AppPage.TIMETABLE) },
                                     modifier = Modifier.testTag("home_set_term"),
                                 ) { Text("새 학기 설정하기") }
-                                schedule.courses.isEmpty() -> Button(
+                                schedule.courses.isEmpty() -> Button(shapes = ButtonDefaults.shapes(), 
                                     onClick = onAddCourse,
                                     modifier = Modifier.testTag("home_add_course"),
                                 ) {
@@ -326,11 +327,11 @@ internal fun DashboardScreen(
                         modifier = Modifier.testTag("dashboard_location_needed"),
                     )
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        FilledTonalButton(
+                        FilledTonalButton(shapes = ButtonDefaults.shapes(), 
                             onClick = locationAccess.request,
                             modifier = Modifier.testTag("dashboard_allow_location"),
                         ) { Text("위치 허용하기") }
-                        TextButton(onClick = { onNavigateToPage(AppPage.SHUTTLE) }) { Text("전체 시간표") }
+                        TextButton(shapes = ButtonDefaults.shapes(), onClick = { onNavigateToPage(AppPage.SHUTTLE) }) { Text("전체 시간표") }
                     }
                 }
             } else HomeSummaryCard(
@@ -437,17 +438,10 @@ internal fun DashboardScreen(
                                                         boardingStopLabel?.let { append(" · $it") }
                                                     },
                                                     clock = time.format(TIME),
-                                                    // D-083: 가장 가까운 출발은 primary, 그 다음은 secondary, 막차는 error 계열
-                                                    containerColor = when {
-                                                        isLastService -> MaterialTheme.colorScheme.errorContainer
-                                                        isFirst -> MaterialTheme.colorScheme.primaryContainer
-                                                        else -> MaterialTheme.colorScheme.secondaryContainer
-                                                    },
-                                                    contentColor = when {
-                                                        isLastService -> MaterialTheme.colorScheme.onErrorContainer
-                                                        isFirst -> MaterialTheme.colorScheme.onPrimaryContainer
-                                                        else -> MaterialTheme.colorScheme.onSecondaryContainer
-                                                    },
+                                                    // D-083/D-104: 셔틀 탭과 같은 색 규칙 — 가장 가까운 출발은 primary, 그다음은 secondary 계열,
+                                                    // 막차는 경고색. 라이트 모드의 primaryContainer와 secondaryContainer는 같은 톤이라 구분되지 않는다.
+                                                    containerColor = shuttleCapsuleColors(isNearest = isFirst, isLastService = isLastService).first,
+                                                    contentColor = shuttleCapsuleColors(isNearest = isFirst, isLastService = isLastService).second,
                                                     modifier = Modifier.testTag("home_departure_${destZone.name}_$index"),
                                                 )
                                             }
@@ -458,7 +452,7 @@ internal fun DashboardScreen(
                                         val lastDepartureTime = annotated.lastOrNull()?.departure?.time
                                         Surface(
                                             shape = DimaShapes.Tile,
-                                            color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                                            color = MaterialTheme.colorScheme.surfaceContainerLowest,
                                             modifier = Modifier.fillMaxWidth(),
                                         ) {
                                             FlowRow(
@@ -515,7 +509,7 @@ internal fun DashboardScreen(
                     ) {
                         Surface(
                             shape = DimaShapes.Badge,
-                            color = if (homeMealOpen) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant,
+                            color = if (homeMealOpen) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerLowest,
                             contentColor = if (homeMealOpen) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
                         ) {
                             Text(
@@ -566,17 +560,17 @@ internal fun DashboardScreen(
 
         // 4. 학교 공지 카드 (최근 3건, 행 탭 시 해당 공지로 이동)
         item(key = "notices") {
-            ElevatedCard(
+            Card(
                 modifier = Modifier
                     .fillMaxWidth()
                     .testTag("dashboard_notices_card"),
                 shape = DimaShapes.Card,
-                colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHighest),
             ) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     // 공지 카드는 행마다 다른 곳을 열므로 카드 자체는 누를 수 없고, 머리의 전체보기만 버튼이다 (D-094(9))
                     HomeCardHeader(icon = Icons.Default.Campaign, title = "학교 공지", showChevron = false) {
-                        TextButton(
+                        TextButton(shapes = ButtonDefaults.shapes(), 
                             onClick = { openUrl(context, notices?.sourceUrl ?: OFFICIAL_NOTICE_SOURCE_URL) },
                             modifier = Modifier.semantics { contentDescription = "학교 공지 전체보기" },
                         ) {
@@ -622,7 +616,7 @@ internal fun DashboardScreen(
                                     )
                                     Surface(
                                         shape = DimaShapes.Badge,
-                                        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                                        color = MaterialTheme.colorScheme.surfaceContainerLowest,
                                     ) {
                                         Text(
                                             text = "${notice.date.monthValue}.${notice.date.dayOfMonth}",
@@ -641,7 +635,7 @@ internal fun DashboardScreen(
 
         // 5. 학교 서비스 바로가기 — 수업은 하단 수업 탭과 수업 카드가 이미 열어 주므로 DIMA Portal만 둔다 (D-094(9))
         item(key = "shortcuts") {
-            FilledTonalButton(
+            FilledTonalButton(shapes = ButtonDefaults.shapes(), 
                 onClick = { openUrl(context, "https://portal.dima.ac.kr/") },
                 modifier = Modifier.fillMaxWidth(),
             ) {
@@ -669,14 +663,15 @@ private fun HeroClassPreviewRow(label: String, detail: String) {
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
+            // D-104: tertiary is the contrasting accent on the primaryContainer hero card
             Surface(
                 shape = DimaShapes.Badge,
-                color = MaterialTheme.colorScheme.primaryContainer,
+                color = MaterialTheme.colorScheme.tertiaryContainer,
             ) {
                 Text(
                     text = label,
                     style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onPrimaryContainer,
+                    color = MaterialTheme.colorScheme.onTertiaryContainer,
                     modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
                 )
             }

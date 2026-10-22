@@ -1,5 +1,7 @@
 package com.example.dimanow.lms
 
+import androidx.compose.material3.IconButtonDefaults
+import androidx.compose.material3.ButtonDefaults
 import android.graphics.Bitmap
 import android.net.Uri
 import android.os.Build
@@ -102,7 +104,7 @@ internal fun LmsLoginScreen(
                     }
                     // D-099: 비공식 앱, 전송 경로, 저장 방식과 중복 로그인을 로그인 전에 알린다.
                     // D-102: 같은 내용을 한 덩어리 문단 대신 항목별로 나눠 읽기 쉽게 한다
-                    Surface(shape = DimaShapes.Tile, color = MaterialTheme.colorScheme.surfaceContainerLow) {
+                    Surface(shape = DimaShapes.Tile, color = MaterialTheme.colorScheme.surfaceContainerHighest) {
                         Column(
                             Modifier.fillMaxWidth().padding(16.dp).testTag("lms_consent"),
                             verticalArrangement = Arrangement.spacedBy(6.dp),
@@ -145,7 +147,7 @@ internal fun LmsLoginScreen(
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, imeAction = ImeAction.Done),
                         keyboardActions = KeyboardActions(onDone = { if (canLogin) onLogin(username, password, automatic) }),
                         trailingIcon = {
-                            IconButton(onClick = { passwordVisible = !passwordVisible }, modifier = Modifier.testTag("lms_password_visibility")) {
+                            IconButton(shapes = IconButtonDefaults.shapes(), onClick = { passwordVisible = !passwordVisible }, modifier = Modifier.testTag("lms_password_visibility")) {
                                 Icon(
                                     if (passwordVisible) Icons.Default.VisibilityOff else Icons.Default.Visibility,
                                     contentDescription = if (passwordVisible) "비밀번호 숨기기" else "비밀번호 보기",
@@ -171,7 +173,7 @@ internal fun LmsLoginScreen(
                         }
                         Switch(checked = automatic, onCheckedChange = null)
                     }
-                    Button(
+                    Button(shapes = ButtonDefaults.shapes(), 
                         onClick = { onLogin(username, password, automatic) },
                         enabled = canLogin,
                         modifier = Modifier.fillMaxWidth().testTag("lms_login"),
@@ -224,11 +226,7 @@ private fun LmsAuthenticationFrame(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                CircularProgressIndicator(
-                    Modifier.size(36.dp),
-                    strokeWidth = 3.dp,
-                    strokeCap = StrokeCap.Round,
-                )
+                com.example.dimanow.ui.DimaLoadingIndicator()
                 Text("공식 포털에서 로그인 중", style = MaterialTheme.typography.titleSmall)
             }
             content()

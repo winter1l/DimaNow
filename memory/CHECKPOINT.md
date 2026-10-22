@@ -1,16 +1,16 @@
-# Checkpoint — D-102/D-103 merged and on the phone — 2026-10-22
+# Checkpoint — D-104 M3 Expressive alignment done on the worktree branch — 2026-10-22
 
 ## The story so far
-Observed: D-102 (UX pass from HIG, M3 and Toss) and D-103 (fade-through tabs, bar refresh, M3 connected button group on Material3 1.5.0-beta02 with Compose 1.12.1, compileSdk 37, AGP 9.1.1, Gradle 9.3.1) are on local main 67f9ea0, not pushed. The phone runs the release-signed v2.1 build of that commit (sha256 d9deb62d…). Instrumentation now runs on the Galaxy Tab S9 over USB; the emulator is shut down (watchdog restarts, /data 92%).
+Observed: D-102 and D-103 are on local main 7beaf93 (not pushed) and on the phone. D-104 (every item of `m3e-review-20261022.md`, per the user's answers) is implemented and committed on the worktree branch `claude/ux-guide-pass` in `DimaNow-ux`, including the large-screen layout (navigation rail from 600dp, centred 840dp column with aligned app bar, rotation on large screens). 294 JVM tests, androidTest compile and lint pass; on the Galaxy Tab S9, 31 of 32 UI/LMS/widget classes pass (the widget failures of Q-022 are unchanged).
 
 ## Decided
-- D-098..D-101 as before; D-102 UX pass; D-103 M3 recommendations and toolchain.
+- D-098..D-103 as before; D-104 (item 16 = plain time labels; large screens follow rotation, superseding D-054 there).
 
 ## Waiting on the user
-Push main when asked; publish v2.1 when asked. Decide whether to fix the tablet-only portrait and widget failures (Q-022). Earlier owner items unchanged (release-key offline backup, privacy contact email, vacation suspensions and 2027 terms, removing the old v1.x app from the phone).
+Whether to merge D-104 into main and install it on the phone (not requested yet). Whether to add a two-pane Courses layout (Q-025). Earlier owner items unchanged (push main, publish v2.1, Q-022 widget sizes, release-key backup, privacy contact email, 2027 terms, old v1.x app).
 
 ## Next first action
-Ask before pushing main; then move Material3 to 1.5.0 stable when it ships and rerun the UI instrumentation on the tablet.
+Ask the user about merging and the phone install; on merge, check phone-sized portrait behaviour (Q-024) before or right after installing.
 
 ## Open follow-ups
-OPEN-QUESTIONS Q-021..Q-023; the blank-classroom separator task offered as a separate session.
+OPEN-QUESTIONS Q-021..Q-025; the blank-classroom separator task offered as a separate session.

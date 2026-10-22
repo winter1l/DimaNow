@@ -1,6 +1,7 @@
 package com.example.dimanow
 
 import android.content.Intent
+import android.content.pm.ActivityInfo
 import android.os.Bundle
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.launch
@@ -35,6 +36,12 @@ class MainActivity : ComponentActivity() {
 
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)
+    // D-104 (supersedes D-054 on large screens): the manifest keeps phones in portrait; a large screen
+    // (smallest width 600dp+, where the app shows its navigation rail) follows the device. Android 16
+    // already ignores the manifest lock there for apps targeting API 36; this covers Android 12–15.
+    if (resources.configuration.smallestScreenWidthDp >= LARGE_SCREEN_SMALLEST_WIDTH_DP) {
+      requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+    }
     // A recreated activity restores its saved tab; only a fresh launch follows the launch intent's deep link.
     if (savedInstanceState == null) {
       intent.getStringExtra("TARGET_PAGE")?.let { targetPageEvent = it to System.nanoTime() }
@@ -66,6 +73,10 @@ class MainActivity : ComponentActivity() {
         }
       }
     }
+  }
+
+  internal companion object {
+    const val LARGE_SCREEN_SMALLEST_WIDTH_DP = 600
   }
 
   override fun onNewIntent(intent: Intent) {

@@ -7,12 +7,14 @@
     <color name="widget_text_secondary">#6B5C60</color>
     <color name="widget_tag_bg">#FFD9E4</color>
     <color name="widget_tag_text">#3E001F</color>
-    <!-- D-040/D-083: the nearest departure is a solid primary capsule, solid error when it is the last -->
+    <!-- D-040/D-083: the nearest departure is a solid primary capsule, solid warning (D-104) when it is the last -->
     <color name="widget_on_accent">#FFFFFF</color>
-    <color name="widget_on_error">#FFFFFF</color>
     <color name="widget_accent">#B31169</color>
     <color name="widget_error">#BA1A1A</color>
     <color name="widget_capsule">#FAEAED</color>
-    <color name="widget_capsule_last">#FFDAD6</color>
-    <color name="widget_capsule_last_text">#410002</color>
+    <color name="widget_capsule_last">#FFDF9E</color>
+    <color name="widget_capsule_last_text">#261A00</color>
+    <!-- D-104: last service uses the defined amber warning roles, not the error roles -->
+    <color name="widget_warning">#795900</color>
+    <color name="widget_on_warning">#FFFFFF</color>
 </resources>

@@ -1,5 +1,6 @@
 package com.example.dimanow.ui.schedule
 
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -78,7 +79,7 @@ internal fun CourseOverrideDialog(
             ) {
                 Text(course.name, style = MaterialTheme.typography.titleSmall)
                 Text("선택한 날짜의 수업에만 적용돼요", style = MaterialTheme.typography.bodySmall)
-                OutlinedButton(onClick = { pickingDate = true }, modifier = Modifier.fillMaxWidth()) {
+                OutlinedButton(shapes = ButtonDefaults.shapes(), onClick = { pickingDate = true }, modifier = Modifier.fillMaxWidth()) {
                     Text(date?.format(OVERRIDE_DATE) ?: "수업 날짜 선택")
                 }
                 if (!dateValid) {
@@ -124,7 +125,7 @@ internal fun CourseOverrideDialog(
             }
         },
         confirmButton = {
-            Button(
+            TextButton(shapes = ButtonDefaults.shapes(), 
                 enabled = valid,
                 onClick = {
                     onSave(
@@ -140,7 +141,7 @@ internal fun CourseOverrideDialog(
                 },
             ) { Text("이 날짜에 적용") }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("취소") } },
+        dismissButton = { TextButton(shapes = ButtonDefaults.shapes(), onClick = onDismiss) { Text("취소") } },
     )
 
     if (pickingDate) KoreanLocale {
@@ -158,7 +159,7 @@ internal fun CourseOverrideDialog(
         DatePickerDialog(
             onDismissRequest = { pickingDate = false },
             confirmButton = {
-                TextButton(
+                TextButton(shapes = ButtonDefaults.shapes(), 
                     enabled = pickerState.selectedDateMillis != null,
                     onClick = {
                         date = pickerState.selectedDateMillis?.let { Instant.ofEpochMilli(it).atZone(ZoneOffset.UTC).toLocalDate() }
@@ -166,7 +167,7 @@ internal fun CourseOverrideDialog(
                     },
                 ) { Text("선택") }
             },
-            dismissButton = { TextButton(onClick = { pickingDate = false }) { Text("취소") } },
+            dismissButton = { TextButton(shapes = ButtonDefaults.shapes(), onClick = { pickingDate = false }) { Text("취소") } },
         ) { DatePicker(state = pickerState, headline = { KoreanDatePickerHeadline(pickerState.selectedDateMillis) }) }
     }
 }

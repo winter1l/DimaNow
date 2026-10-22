@@ -1,5 +1,7 @@
 package com.example.dimanow.lms
 
+import androidx.compose.material3.IconButtonDefaults
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -9,7 +11,6 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import com.example.dimanow.theme.emphasized
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Close
@@ -90,7 +91,7 @@ private fun LmsFilterRow(
             modifier = Modifier.weight(1f),
         )
         if (filterActive) {
-            IconButton(
+            IconButton(shapes = IconButtonDefaults.shapes(), 
                 onClick = { onCourseChange(null); onKindChange(null) },
                 modifier = Modifier.testTag("lms_filter_clear"),
             ) {
@@ -153,7 +154,7 @@ private fun LmsSectionHeader(title: String) {
 /** 완료한 학습을 접었다 펴는 머리글. 오늘·전체 두 모드가 같은 것을 쓴다 (D-058). */
 @Composable
 private fun LmsCompletedHeader(count: Int, expanded: Boolean, onToggle: () -> Unit) {
-    TextButton(
+    TextButton(shapes = ButtonDefaults.shapes(), 
         onClick = onToggle,
         modifier = Modifier.fillMaxWidth().testTag("lms_completed_toggle"),
     ) {
@@ -251,7 +252,7 @@ internal fun LmsItemsScreen(
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.spacedBy(12.dp),
                     ) {
-                        CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 3.dp, strokeCap = StrokeCap.Round)
+                        com.example.dimanow.ui.DimaLoadingIndicator()
                         Text("수업 정보를 불러오고 있어요", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
@@ -421,7 +422,7 @@ private fun LmsItemCard(item: LmsItem, onOpenItem: (LmsItem) -> Unit, showCourse
 private fun LmsMetadataLabel(label: String, prominent: Boolean) {
     Text(
         label,
-        style = if (prominent) MaterialTheme.typography.labelMedium.emphasized() else MaterialTheme.typography.labelMedium,
+        style = if (prominent) MaterialTheme.typography.labelMediumEmphasized else MaterialTheme.typography.labelMedium,
         color = if (prominent) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
     )
 }

@@ -1,5 +1,7 @@
 package com.example.dimanow.ui
 
+import androidx.compose.material3.LoadingIndicator
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -7,7 +9,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import com.example.dimanow.theme.DimaShapes
-import com.example.dimanow.theme.emphasized
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -99,11 +100,7 @@ internal fun LoadingLine(text: String, modifier: Modifier = Modifier) {
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        CircularProgressIndicator(
-            modifier = Modifier.size(16.dp),
-            strokeWidth = 2.dp,
-            color = MaterialTheme.colorScheme.primary,
-        )
+        DimaLoadingIndicator(size = 32.dp)
         Text(
             text = text,
             style = MaterialTheme.typography.bodyMedium,
@@ -149,6 +146,17 @@ internal fun mealRefreshMessage(result: MealRefreshResult?, venue: MealVenue, to
     is MealRefreshResult.Failure -> "식단을 받지 못했어요. 잠시 후 다시 당겨 주세요"
 }
 
+/**
+ * The M3 Expressive loading indicator for waits of roughly 200ms to 5s (D-104). Inline lines use a
+ * smaller size than the 48dp default. Still `@ExperimentalMaterial3ExpressiveApi` in Material3
+ * 1.5.0-beta02, so the opt-in lives here only.
+ */
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
+@Composable
+internal fun DimaLoadingIndicator(modifier: Modifier = Modifier, size: Dp = 48.dp) {
+    LoadingIndicator(modifier = modifier.size(size))
+}
+
 /** OpenType tabular figures: every digit takes the same width, so a ticking countdown keeps its size. */
 internal const val TABULAR_FIGURES = "tnum"
 
@@ -163,7 +171,7 @@ internal fun DepartureCapsule(
     containerColor: Color,
     contentColor: Color,
     modifier: Modifier = Modifier,
-    labelStyle: TextStyle = MaterialTheme.typography.labelMedium.emphasized(),
+    labelStyle: TextStyle = MaterialTheme.typography.labelMediumEmphasized,
 ) {
     Surface(
         shape = DimaShapes.Tile,

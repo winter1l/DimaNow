@@ -1,5 +1,6 @@
 package com.example.dimanow.lms
 
+import androidx.compose.material3.ButtonDefaults
 import android.webkit.WebView
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Box
@@ -157,7 +158,7 @@ fun LmsRoute(
                 )
             },
             confirmButton = {
-                TextButton(onClick = {
+                TextButton(shapes = ButtonDefaults.shapes(), onClick = {
                     val manual = manualConflictCredentials
                     autoLoginCoordinator.dismissSessionConflict()
                     manualConflictCredentials = null
@@ -166,7 +167,7 @@ fun LmsRoute(
                 }) { Text("이 기기로 로그인") }
             },
             dismissButton = {
-                TextButton(onClick = { autoLoginCoordinator.dismissSessionConflict(); manualConflictCredentials = null }) { Text("나중에") }
+                TextButton(shapes = ButtonDefaults.shapes(), onClick = { autoLoginCoordinator.dismissSessionConflict(); manualConflictCredentials = null }) { Text("나중에") }
             },
         )
     }
@@ -306,7 +307,7 @@ fun LmsRoute(
                 onDismissRequest = { pendingOfficialCoursePage = null },
                 title = { Text("학습을 시작할까요?") },
                 confirmButton = {
-                    TextButton(
+                    TextButton(shapes = ButtonDefaults.shapes(), 
                         onClick = {
                             pendingOfficialCoursePage = null
                             officialCoursePage = pendingPage
@@ -314,7 +315,7 @@ fun LmsRoute(
                     ) { Text("학습 시작") }
                 },
                 dismissButton = {
-                    TextButton(onClick = { pendingOfficialCoursePage = null }) { Text("취소") }
+                    TextButton(shapes = ButtonDefaults.shapes(), onClick = { pendingOfficialCoursePage = null }) { Text("취소") }
                 },
             )
         }

@@ -1,12 +1,12 @@
 package com.example.dimanow.ui
 
+import androidx.compose.material3.ButtonDefaults
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import com.example.dimanow.ui.meal.groupDormitorySections
 import androidx.compose.material.icons.filled.PhotoCamera
 import com.example.dimanow.theme.DimaShapes
-import com.example.dimanow.theme.emphasized
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -30,7 +30,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.ElevatedCard
+import androidx.compose.material3.Card
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -294,7 +294,7 @@ fun MealScreen(
                             horizontalArrangement = Arrangement.spacedBy(12.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
-                            CircularProgressIndicator(Modifier.size(24.dp))
+                            DimaLoadingIndicator(size = 32.dp)
                             Text("사진을 준비하고 있어요", Modifier.semantics { liveRegion = LiveRegionMode.Polite })
                         }
                     }
@@ -345,13 +345,13 @@ fun MealScreen(
             title = { Text("기숙사 식단표") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    TextButton(
+                    TextButton(shapes = ButtonDefaults.shapes(), 
                         onClick = {
                             showDormitoryPhotoSource = false
                             photoPicker.launch(androidx.activity.result.PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
                         },
                     ) { Text("사진 선택") }
-                    TextButton(
+                    TextButton(shapes = ButtonDefaults.shapes(), 
                         onClick = {
                             showDormitoryPhotoSource = false
                             val file = File(context.cacheDir, "dorm-meals/capture-${System.currentTimeMillis()}.jpg").apply {
@@ -366,7 +366,7 @@ fun MealScreen(
             },
             confirmButton = {},
             dismissButton = {
-                TextButton(onClick = { showDormitoryPhotoSource = false }) { Text("취소") }
+                TextButton(shapes = ButtonDefaults.shapes(), onClick = { showDormitoryPhotoSource = false }) { Text("취소") }
             },
         )
     }
@@ -400,7 +400,7 @@ fun MealScreen(
                 )
             },
             confirmButton = {
-                Button(
+                TextButton(shapes = ButtonDefaults.shapes(), 
                     enabled = !uploadingDormitoryMeal,
                     onClick = {
                         pendingImage = null
@@ -408,7 +408,7 @@ fun MealScreen(
                     },
                 ) { Text("올리기") }
             },
-            dismissButton = { TextButton(onClick = { pendingImage = null }) { Text("취소") } },
+            dismissButton = { TextButton(shapes = ButtonDefaults.shapes(), onClick = { pendingImage = null }) { Text("취소") } },
         )
     }
 }
@@ -564,7 +564,7 @@ private fun androidx.compose.foundation.lazy.LazyListScope.dormitoryDayContent(
     }
     // D-099: 학생이 올린 식단은 누구나 신고할 수 있고, 운영자가 확인해 내린다
     if (onReport != null) item(key = "dorm-report-$date") {
-        TextButton(onClick = { onReport(weekStart) }, modifier = Modifier.testTag("dorm_report")) { Text("식단이 이상해요") }
+        TextButton(shapes = ButtonDefaults.shapes(), onClick = { onReport(weekStart) }, modifier = Modifier.testTag("dorm_report")) { Text("식단이 이상해요") }
     }
 }
 
@@ -622,14 +622,14 @@ private fun MealPeriodCard(
     val shape = DimaShapes.Card
     val background = when {
         isOpen -> colors.primaryContainer
-        isClosed -> colors.surfaceContainerHighest
-        else -> colors.surfaceContainerLow
+        isClosed -> colors.surfaceContainerLow
+        else -> colors.surfaceContainerHighest
     }
-    ElevatedCard(
+    Card(
         modifier = modifier.fillMaxWidth()
             .semantics { stateDescription = status.label },
         shape = shape,
-        colors = CardDefaults.elevatedCardColors(
+        colors = CardDefaults.cardColors(
             containerColor = background,
             contentColor = when {
                 isOpen -> colors.onPrimaryContainer
@@ -637,7 +637,6 @@ private fun MealPeriodCard(
                 else -> colors.onSurface
             },
         ),
-        elevation = CardDefaults.elevatedCardElevation(defaultElevation = if (isClosed) 0.dp else 1.dp),
     ) {
         // 세로 길이를 줄이려고 위아래 여백과 요소 간격을 좁힌다
         Column(Modifier.padding(horizontal = 16.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(8.dp), content = content)
@@ -649,7 +648,7 @@ private fun MealPeriodStatus(status: MealServiceStatus) {
     if (status.state == MealServiceState.UNKNOWN_HOURS) return
     Text(
         status.label,
-        style = if (status.state == MealServiceState.OPEN) MaterialTheme.typography.labelMedium.emphasized() else MaterialTheme.typography.labelMedium,
+        style = if (status.state == MealServiceState.OPEN) MaterialTheme.typography.labelMediumEmphasized else MaterialTheme.typography.labelMedium,
         color = if (status.state == MealServiceState.OPEN) MaterialTheme.colorScheme.primary else LocalContentColor.current,
     )
 }
@@ -718,24 +717,19 @@ private fun DormitoryWeekEmptyCard(
 /** 사진 업로드 후 서버 확인이 끝날 때까지 남아 있는 진행 카드 (D-056). */
 @Composable
 private fun DormitoryUploadProgressCard(modifier: Modifier = Modifier) {
-    ElevatedCard(
+    Card(
         modifier = modifier
             .fillMaxWidth()
             .testTag("dormitory_upload_progress"),
         shape = DimaShapes.Card,
-        colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer),
     ) {
         Row(
             modifier = Modifier.fillMaxWidth().padding(16.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(16.dp),
         ) {
-            CircularProgressIndicator(
-                modifier = Modifier.size(24.dp),
-                strokeWidth = 2.5.dp,
-                strokeCap = androidx.compose.ui.graphics.StrokeCap.Round,
-                color = MaterialTheme.colorScheme.onSecondaryContainer,
-            )
+            DimaLoadingIndicator(size = 40.dp)
             Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 Text(
                     text = "식단표를 확인하고 있어요",
@@ -777,8 +771,8 @@ private fun DormitoryReportDialog(onDismiss: () -> Unit, onReport: (com.example.
             }
         },
         confirmButton = {
-            Button(enabled = selected != null, onClick = { selected?.let(onReport) }, modifier = Modifier.testTag("dorm_report_send")) { Text("신고") }
+            TextButton(shapes = ButtonDefaults.shapes(), enabled = selected != null, onClick = { selected?.let(onReport) }, modifier = Modifier.testTag("dorm_report_send")) { Text("신고") }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("취소") } },
+        dismissButton = { TextButton(shapes = ButtonDefaults.shapes(), onClick = onDismiss) { Text("취소") } },
     )
 }

@@ -1,5 +1,7 @@
 package com.example.dimanow.lms
 
+import androidx.compose.material3.IconButtonDefaults
+import androidx.compose.material3.ButtonDefaults
 import android.webkit.WebResourceResponse
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
@@ -48,7 +50,7 @@ internal fun LmsFullScreenPane(
         DimaTopAppBar(
             title = { Text(title, style = com.example.dimanow.theme.dimaPageTitleStyle(), maxLines = titleMaxLines, overflow = TextOverflow.Ellipsis) },
             navigationIcon = {
-                IconButton(onClick = onBack) {
+                IconButton(shapes = IconButtonDefaults.shapes(), onClick = onBack) {
                     Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = backDescription)
                 }
             },

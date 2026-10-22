@@ -1,12 +1,11 @@
 package com.example.dimanow.ui
 
-import androidx.compose.foundation.clickable
+import androidx.compose.material3.IconButtonDefaults
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
@@ -15,19 +14,19 @@ import androidx.compose.material.icons.filled.BugReport
 import androidx.compose.material.icons.filled.Code
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.PrivacyTip
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.semantics.Role
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.ElevatedCard
+import androidx.compose.material3.Card
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.ListItemDefaults
+import androidx.compose.material3.SegmentedListItem
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -44,6 +43,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.onClick
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
@@ -65,82 +66,78 @@ internal const val DATA_ACCURACY_NOTICE =
         "중요한 일정은 학교 공지와 공식 시간표로 꼭 확인해 주세요."
 
 /**
- * 앱 정보 card: unofficial notice, accuracy note, then the links as list rows (D-102): one row per
- * destination with a leading icon, a supporting line where it helps, and a trailing mark that says whether
- * it opens the browser or a page inside the app (M3 lists, Toss ListRow).
+ * 앱 정보: a card with the unofficial notice and accuracy note, then the links as an M3 Expressive
+ * segmented list (D-102, D-104): one row per destination with a leading icon, a supporting line where it
+ * helps, and a trailing mark that says whether it opens the browser or a page inside the app.
  */
 @Composable
 internal fun AboutCard(modifier: Modifier = Modifier) {
     val context = LocalContext.current
     var showLicenses by rememberSaveable { mutableStateOf(false) }
-    ElevatedCard(
-        modifier = modifier.fillMaxWidth().testTag("about_card"),
-        shape = DimaShapes.Card,
-        colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
-    ) {
-        Column(Modifier.padding(vertical = 16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Column(Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    val links = listOf(
+        AboutLink(
+            Icons.Default.PrivacyTip, "개인정보 처리방침", "open_privacy_policy",
+            onClick = { openUrl(context, AppLinks.PRIVACY_POLICY) },
+        ),
+        AboutLink(
+            Icons.Default.BugReport, "문의·오류 제보", "open_report_problem",
+            supporting = "공개 GitHub 이슈로 남아요. 시간표·위치·학번 같은 개인정보는 적지 말아 주세요.",
+            onClick = { openUrl(context, AppLinks.REPORT_PROBLEM) },
+        ),
+        AboutLink(Icons.Default.Description, "오픈소스 라이선스", "open_licenses", external = false, onClick = { showLicenses = true }),
+        AboutLink(
+            Icons.Default.Code, "소스 코드", "open_source_code", supporting = "Apache License 2.0",
+            onClick = { openUrl(context, AppLinks.SOURCE_CODE) },
+        ),
+    )
+    Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(DimaLayout.sectionGap)) {
+        Card(
+            modifier = Modifier.fillMaxWidth().testTag("about_card"),
+            shape = DimaShapes.Card,
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHighest),
+        ) {
+            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text("이 앱에 대해", style = MaterialTheme.typography.titleMedium)
                 Text(UNOFFICIAL_NOTICE, style = MaterialTheme.typography.bodySmall)
                 Text(DATA_ACCURACY_NOTICE, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
-            Column {
-                AboutLinkRow(
-                    icon = Icons.Default.PrivacyTip, title = "개인정보 처리방침",
-                    onClick = { openUrl(context, AppLinks.PRIVACY_POLICY) }, tag = "open_privacy_policy",
-                )
-                AboutLinkRow(
-                    icon = Icons.Default.BugReport, title = "문의·오류 제보",
-                    supporting = "공개 GitHub 이슈로 남아요. 시간표·위치·학번 같은 개인정보는 적지 말아 주세요.",
-                    onClick = { openUrl(context, AppLinks.REPORT_PROBLEM) }, tag = "open_report_problem",
-                )
-                AboutLinkRow(
-                    icon = Icons.Default.Description, title = "오픈소스 라이선스",
-                    onClick = { showLicenses = true }, tag = "open_licenses", external = false,
-                )
-                AboutLinkRow(
-                    icon = Icons.Default.Code, title = "소스 코드",
-                    supporting = "Apache License 2.0",
-                    onClick = { openUrl(context, AppLinks.SOURCE_CODE) }, tag = "open_source_code",
-                )
-            }
+        }
+        DimaSegmentedList {
+            links.forEachIndexed { index, link -> AboutLinkRow(link, index, links.size) }
         }
     }
     if (showLicenses) OpenSourceLicensesDialog(onDismiss = { showLicenses = false })
 }
 
+private class AboutLink(
+    val icon: ImageVector,
+    val title: String,
+    val tag: String,
+    val supporting: String? = null,
+    val external: Boolean = true,
+    val onClick: () -> Unit,
+)
+
 @Composable
-private fun AboutLinkRow(
-    icon: ImageVector,
-    title: String,
-    onClick: () -> Unit,
-    tag: String,
-    supporting: String? = null,
-    external: Boolean = true,
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .heightIn(min = 56.dp)
-            .clickable(onClickLabel = if (external) "브라우저에서 열기" else "열기", role = Role.Button, onClick = onClick)
-            .padding(horizontal = 16.dp, vertical = 10.dp)
-            .testTag(tag),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(16.dp),
+private fun AboutLinkRow(link: AboutLink, index: Int, count: Int) {
+    val clickLabel = if (link.external) "브라우저에서 열기" else "열기"
+    SegmentedListItem(
+        onClick = link.onClick,
+        shapes = ListItemDefaults.segmentedShapes(index = index, count = count),
+        // The row keeps saying where it goes, which SegmentedListItem has no parameter for.
+        modifier = Modifier.testTag(link.tag).semantics { onClick(label = clickLabel) { link.onClick(); true } },
+        leadingContent = { Icon(link.icon, contentDescription = null) },
+        trailingContent = {
+            Icon(
+                if (link.external) Icons.AutoMirrored.Filled.OpenInNew else Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                contentDescription = null,
+                modifier = Modifier.size(20.dp),
+            )
+        },
+        supportingContent = link.supporting?.let { { Text(it) } },
+        colors = dimaSegmentedListColors(),
     ) {
-        Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(24.dp))
-        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            Text(title, style = MaterialTheme.typography.bodyLarge)
-            supporting?.let {
-                Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-        }
-        Icon(
-            if (external) Icons.AutoMirrored.Filled.OpenInNew else Icons.AutoMirrored.Filled.KeyboardArrowRight,
-            contentDescription = null,
-            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.size(20.dp),
-        )
+        Text(link.title)
     }
 }
 
@@ -173,7 +170,7 @@ private fun OpenSourceLicensesDialog(onDismiss: () -> Unit) {
                 TopAppBar(
                     title = { Text("오픈소스 라이선스") },
                     navigationIcon = {
-                        IconButton(onClick = onDismiss) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "뒤로") }
+                        IconButton(shapes = IconButtonDefaults.shapes(), onClick = onDismiss) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "뒤로") }
                     },
                 )
             },

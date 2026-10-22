@@ -7,7 +7,13 @@ import com.example.dimanow.ui.motion.LocalEntranceMotion
 import com.example.dimanow.ui.motion.dimaFadeThrough
 import com.example.dimanow.ui.onboarding.OnboardingRoute
 import com.example.dimanow.ui.onboarding.shouldShowOnboarding
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.only
+import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
@@ -26,8 +32,10 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.ShortNavigationBar
+import androidx.compose.material3.ShortNavigationBarItem
+import androidx.compose.material3.WideNavigationRail
+import androidx.compose.material3.WideNavigationRailItem
 import androidx.activity.compose.BackHandler
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -49,6 +57,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -198,28 +208,36 @@ fun DimaNowApp(
         return
     }
 
+    val showNavigation = page != AppPage.SETTINGS && !(page == AppPage.COURSES && lmsFullScreen)
+    // D-104: compact windows keep the bottom bar; from the M3 medium width (tablets, unfolded foldables)
+    // the same destinations move to a navigation rail at the start edge.
+    val windowWidth = with(LocalDensity.current) { LocalWindowInfo.current.containerSize.width.toDp() }
+    val useRail = windowWidth >= DimaLayout.railMinWidth
+    fun navigate(item: AppPage) {
+        if (page == item) reselections[item] = (reselections[item] ?: 0) + 1 else page = item
+    }
+    val navIcon: @Composable (AppPage) -> Unit = { item ->
+        Icon(if (page == item) item.icon else item.outlinedIcon, contentDescription = item.title)
+    }
+
     Scaffold(
         modifier = Modifier.semantics { testTagsAsResourceId = true },
         // 상태바 인셋을 바깥 패딩이 아닌 각 화면의 contentPadding으로 처리해
         // 스크롤 콘텐츠가 상태바 뒤까지 흐르게 한다 (상단 빈 띠 제거)
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         bottomBar = {
-            if (page != AppPage.SETTINGS && !(page == AppPage.COURSES && lmsFullScreen)) {
-                NavigationBar(
-                    containerColor = MaterialTheme.colorScheme.surfaceContainer,
-                    tonalElevation = 8.dp,
-                ) {
-                    // The M3 active indicator alone marks the selection: no icon bounce and one label
-                    // weight, so labels never reflow (D-094(12)).
+            if (showNavigation && !useRail) {
+                // D-104: the M3 Expressive flexible (short) navigation bar — 64dp on surfaceContainer with the
+                // secondaryContainer indicator; the selected destination is marked by the indicator and a
+                // filled icon (others outlined), with one label weight so labels never reflow (D-094(12)).
+                ShortNavigationBar {
                     primaryPages.forEach { item ->
-                        NavigationBarItem(
+                        ShortNavigationBarItem(
                             modifier = Modifier.testTag("nav_${item.name}"),
                             selected = page == item,
-                            onClick = {
-                                if (page == item) reselections[item] = (reselections[item] ?: 0) + 1 else page = item
-                            },
-                            icon = { Icon(if (page == item) item.icon else item.outlinedIcon, contentDescription = item.title) },
-                            label = { Text(item.title, style = MaterialTheme.typography.labelMedium) },
+                            onClick = { navigate(item) },
+                            icon = { navIcon(item) },
+                            label = { Text(item.title) },
                         )
                     }
                 }
@@ -237,6 +255,34 @@ fun DimaNowApp(
         // 하단 내비가 차지한 인셋을 소비해, 각 화면의 스캐폴드는 내비가 없을 때(설정)만
         // 제스처 바 인셋을 목록 아래 여백으로 더한다 (D-094)
         val pageModifier = Modifier.padding(padding).consumeWindowInsets(padding)
+      Row(Modifier.fillMaxSize()) {
+        if (showNavigation && useRail) {
+            // D-104: the M3 Expressive collapsed navigation rail — icons over labels, the same indicator and
+            // filled/outlined icons as the bar; it takes the status bar, cutout and start insets itself.
+            WideNavigationRail(modifier = Modifier.testTag("nav_rail")) {
+                primaryPages.forEach { item ->
+                    WideNavigationRailItem(
+                        modifier = Modifier.testTag("nav_${item.name}"),
+                        selected = page == item,
+                        onClick = { navigate(item) },
+                        icon = { navIcon(item) },
+                        label = { Text(item.title) },
+                        railExpanded = false,
+                    )
+                }
+            }
+        }
+        Box(
+            Modifier
+                .weight(1f)
+                .then(
+                    if (showNavigation && useRail) {
+                        Modifier.consumeWindowInsets(WindowInsets.safeDrawing.only(WindowInsetsSides.Start))
+                    } else {
+                        Modifier
+                    },
+                ),
+        ) {
         CompositionLocalProvider(
             LocalOpenSettings provides openSettingsAction,
             LocalEntranceMotion provides entranceMotion,
@@ -318,6 +364,8 @@ fun DimaNowApp(
               }
             }
         }
+        }
+      }
     }
 
     // D-102: 새 버전 안내는 앱을 열자마자 뜨는 대화상자가 아니라 홈의 카드(HomeUpdateNotice)로 보여 준다

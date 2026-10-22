@@ -1,5 +1,6 @@
 package com.example.dimanow.ui.schedule
 
+import androidx.compose.material3.ButtonDefaults
 import android.annotation.SuppressLint
 import android.content.res.Configuration
 import androidx.compose.foundation.layout.Arrangement
@@ -98,9 +99,9 @@ internal fun TermEditorDialog(
             }
         },
         confirmButton = {
-            Button(enabled = !reversed, onClick = { onSave(startDate, endDate) }) { Text("저장") }
+            TextButton(shapes = ButtonDefaults.shapes(), enabled = !reversed, onClick = { onSave(startDate, endDate) }) { Text("저장") }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("취소") } },
+        dismissButton = { TextButton(shapes = ButtonDefaults.shapes(), onClick = onDismiss) { Text("취소") } },
     )
 
     picking?.let { field ->
@@ -167,13 +168,13 @@ private fun TermDatePickerDialog(
         DatePickerDialog(
             onDismissRequest = onDismiss,
             confirmButton = {
-                TextButton(
+                TextButton(shapes = ButtonDefaults.shapes(), 
                     enabled = state.selectedDateMillis != null,
                     onClick = { state.selectedDateMillis?.let { onConfirm(it.toUtcLocalDate()) } },
                     modifier = Modifier.testTag("term_picker_confirm"),
                 ) { Text("선택") }
             },
-            dismissButton = { TextButton(onClick = onDismiss) { Text("취소") } },
+            dismissButton = { TextButton(shapes = ButtonDefaults.shapes(), onClick = onDismiss) { Text("취소") } },
         ) {
             DatePicker(
                 state = state,

@@ -1,5 +1,6 @@
 package com.example.dimanow.ui
 
+import com.example.dimanow.theme.DimaTheme
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -21,7 +22,6 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import com.example.dimanow.theme.DimaShapes
-import com.example.dimanow.theme.emphasized
 
 /**
  * Visual role of one full-timetable chip, shared by the campus shuttle and 4402 (D-094(5), (10)).
@@ -97,9 +97,11 @@ internal fun departureCountdownLabel(minutesLeft: Long, markers: List<String>): 
 @Composable
 internal fun shuttleCapsuleColors(isNearest: Boolean, isLastService: Boolean): Pair<Color, Color> {
     val colors = MaterialTheme.colorScheme
+    val warning = DimaTheme.colors
+    // D-104: last service uses the defined warning roles instead of the error roles (D-016/D-083)
     return when {
-        isNearest && isLastService -> colors.error to colors.onError
-        isLastService -> colors.errorContainer to colors.onErrorContainer
+        isNearest && isLastService -> warning.warning to warning.onWarning
+        isLastService -> warning.warningContainer to warning.onWarningContainer
         isNearest -> colors.primary to colors.onPrimary
         else -> colors.secondaryContainer to colors.onSecondaryContainer
     }
@@ -129,38 +131,40 @@ internal fun TimetableChipRow(
     }
 }
 
+/**
+ * One departure of the full timetable as a plain time label (D-104): the times cannot be tapped, so
+ * they no longer look like M3 chips. Colour and weight keep the meaning that the description also
+ * states: next in primary, the one after in the default text colour, last service in the warning
+ * colour, the first train in tertiary and past times in the quieter variant colour.
+ */
 @Composable
 private fun TimetableChip(chip: TimetableChipSpec) {
     val colors = MaterialTheme.colorScheme
-    val (container, content) = when (chip.tone) {
-        TimetableChipTone.NEXT_LAST -> colors.error to colors.onError
-        TimetableChipTone.LAST -> colors.errorContainer to colors.onErrorContainer
-        TimetableChipTone.NEXT -> colors.primary to colors.onPrimary
-        TimetableChipTone.SECOND -> colors.secondaryContainer to colors.onSecondaryContainer
-        TimetableChipTone.FIRST -> colors.tertiaryContainer to colors.onTertiaryContainer
-        // Past times stay readable (full-opacity onSurfaceVariant); the outline, not a fade, marks them.
-        TimetableChipTone.PAST -> colors.surfaceContainerLowest to colors.onSurfaceVariant
-        TimetableChipTone.UPCOMING -> colors.surfaceContainerHighest to colors.onSurface
+    val warning = DimaTheme.colors
+    val color = when (chip.tone) {
+        TimetableChipTone.NEXT_LAST, TimetableChipTone.LAST -> warning.warning
+        TimetableChipTone.NEXT -> colors.primary
+        TimetableChipTone.SECOND, TimetableChipTone.UPCOMING -> colors.onSurface
+        TimetableChipTone.FIRST -> colors.tertiary
+        TimetableChipTone.PAST -> colors.onSurfaceVariant
     }
-    val emphasized = chip.tone != TimetableChipTone.PAST && chip.tone != TimetableChipTone.UPCOMING
-    Surface(
-        shape = DimaShapes.Badge,
-        color = container,
-        contentColor = content,
-        border = if (chip.tone == TimetableChipTone.PAST) BorderStroke(1.dp, colors.outlineVariant) else null,
-        modifier = Modifier.semantics(mergeDescendants = true) { contentDescription = chip.description },
+    val emphasized = chip.tone == TimetableChipTone.NEXT || chip.tone == TimetableChipTone.NEXT_LAST
+    Box(
+        contentAlignment = Alignment.Center,
+        // Grows with the font scale instead of clipping at a fixed height; the spoken node spans the
+        // whole 32dp label, padding included.
+        modifier = Modifier
+            .semantics(mergeDescendants = true) { contentDescription = chip.description }
+            .heightIn(min = 32.dp)
+            .padding(horizontal = 6.dp, vertical = 4.dp),
     ) {
-        Box(
-            contentAlignment = Alignment.Center,
-            // Grows with the font scale instead of clipping at a fixed height.
-            modifier = Modifier.heightIn(min = 32.dp).padding(horizontal = 10.dp, vertical = 6.dp),
-        ) {
-            Text(
-                text = chip.text,
-                style = if (emphasized) MaterialTheme.typography.bodySmall.emphasized() else MaterialTheme.typography.bodySmall,
-                maxLines = 1,
-                softWrap = false,
-            )
-        }
+        Text(
+            text = chip.text,
+            style = (if (emphasized) MaterialTheme.typography.bodyMediumEmphasized else MaterialTheme.typography.bodyMedium)
+                .copy(fontFeatureSettings = TABULAR_FIGURES),
+            color = color,
+            maxLines = 1,
+            softWrap = false,
+        )
     }
 }

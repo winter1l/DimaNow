@@ -36,6 +36,7 @@ Purpose: durable project context that survives session and context changes.
 | `ui-review-20260930.md` | Read-only M3 Expressive UI/UX review of the D-093 baseline (findings implemented by D-094) | Append dated evidence |
 | `launch-readiness-20261017.md` | Read-only public-launch readiness review: blockers, decisions needed, external requirements and proposed order | Append dated evidence |
 | `ux-guide-pass-20261022.md` | D-102 UX pass from Apple HIG, Material 3 and the Toss guide: sources, changes, kept decisions and emulator evidence | Append dated evidence |
+| `m3e-review-20261022.md` | Read-only M3 Expressive conformance review of colors, shape, type, motion and components after D-103 | Append dated evidence |
 | `checkpoints/` | Append-only archive of superseded checkpoints | Add a timestamped copy before replacing `CHECKPOINT.md` |
 
 ## Operating principles

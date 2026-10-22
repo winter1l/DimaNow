@@ -31,8 +31,10 @@ class MealServiceScreenTest {
         }
         compose.onNodeWithText("12:00~14:00 · 운영 중").assertIsDisplayed()
         compose.onNodeWithText("중식").assertIsDisplayed()
-        compose.onNodeWithText("조식").assertIsNotDisplayed()
-        compose.onNodeWithText("-돈육:국내산-").assertIsDisplayed()
+        // The origin note sits on the dish's row, without the board's dashes.
+        compose.onNodeWithText("제육볶음").assertIsDisplayed()
+        compose.onNodeWithText("돈육:국내산").assertIsDisplayed()
+        compose.onNodeWithText("라면").assertDoesNotExist()
         screenshot("dormitory-open-dark")
         // D-093: the date heading is the list's first row, above the auto-focused meal.
         compose.onNodeWithTag("meal_list").performScrollToIndex(0)

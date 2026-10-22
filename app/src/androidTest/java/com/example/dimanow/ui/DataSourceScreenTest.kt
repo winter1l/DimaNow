@@ -440,7 +440,8 @@ class DataSourceScreenTest {
         composeRule.onNodeWithText("중식").assertExists()
         composeRule.onNodeWithText("석식").assertExists()
         // 운영시간이 없는 코너는 앞선 식사 카드 안에 남아 사라지지 않는다
-        composeRule.onNodeWithText("간편식").assertExists()
+        // 간편식은 "하나 선택" 묶음으로 보이고, 라면 같은 코너는 제목 없이 메뉴만 보인다
+        composeRule.onNodeWithText("간편식 · 하나 선택").assertExists()
         composeRule.onNodeWithText("시리얼").assertExists()
         composeRule.onNodeWithText("식단표 사진 올리기").assertDoesNotExist()
     }

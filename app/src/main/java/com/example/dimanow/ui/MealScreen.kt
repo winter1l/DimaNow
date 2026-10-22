@@ -53,6 +53,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.ui.draw.clip
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.ui.semantics.stateDescription
@@ -419,44 +421,49 @@ fun MealScreen(
     }
 }
 
-/** 선택한 날짜의 메뉴 줄을 읽기 쉬운 목록으로 그린다 (D-057). */
+/**
+ * 선택한 날짜의 메뉴를 한 줄에 음식 하나로 그린다 (D-057). 식단표가 음식 아래 따로 적은 원산지는
+ * 같은 줄 오른쪽에 작게 붙여 카드 세로 길이를 줄인다.
+ */
 @Composable
 private fun MenuLineList(lines: List<String>, modifier: Modifier = Modifier) {
-    Column(modifier = modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        // OCR can attach an origin note to a dish on the next line; classify each line separately
-        // so the dish keeps its menu style and only the note becomes supporting text.
-        lines.flatMap { it.split('\n') }.filter { it.isNotBlank() }.forEach { rawLine ->
-            val line = rawLine.trim()
-            val isOriginOrNote = line.contains("원산지") || line.contains("국내산") || line.contains("호주산") ||
-                line.contains("미국산") || line.startsWith("-") || line.startsWith("*") ||
-                (line.contains(":") && !line.contains("kcal", ignoreCase = true))
+    val items = remember(lines) { com.example.dimanow.ui.meal.parseMenuItems(lines) }
+    Column(modifier = modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        items.forEach { item -> MenuItemRow(item.name, item.origin) }
+    }
+}
 
-            if (isOriginOrNote) {
-                Text(
-                    text = line,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(start = 16.dp, top = 2.dp, bottom = 2.dp),
-                )
-            } else {
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.padding(vertical = 2.dp),
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(4.dp)
-                            .clip(CircleShape)
-                            .background(MaterialTheme.colorScheme.primary),
-                    )
-                    Text(
-                        text = line,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = LocalContentColor.current,
-                    )
-                }
-            }
+@Composable
+private fun MenuItemRow(name: String, trailing: String?, leading: String? = null) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        if (leading != null) {
+            Text(leading, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        } else {
+            Box(
+                modifier = Modifier
+                    .size(4.dp)
+                    .clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.primary),
+            )
+        }
+        Text(
+            text = name,
+            style = MaterialTheme.typography.bodyMedium,
+            color = LocalContentColor.current,
+            modifier = Modifier.weight(1f),
+        )
+        if (trailing != null) {
+            Text(
+                text = trailing,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.End,
+                modifier = Modifier.widthIn(max = 150.dp),
+            )
         }
     }
 }
@@ -522,9 +529,13 @@ private fun androidx.compose.foundation.lazy.LazyListScope.mainCafeteriaDayConte
                 status = status,
                 modifier = Modifier.testTag("main_meal_card"),
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
                     Icon(Icons.Default.Restaurant, contentDescription = null, modifier = Modifier.size(20.dp))
-                    Text("중식", style = MaterialTheme.typography.titleMedium)
+                    Text("중식", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
                     MealHoursChip(day.hours, status.state)
                 }
                 MealPeriodStatus(status)
@@ -577,26 +588,44 @@ private fun androidx.compose.foundation.lazy.LazyListScope.dormitoryDayContent(
     }
 }
 
-@OptIn(ExperimentalLayoutApi::class)
+/**
+ * 기숙사 식사 카드 내용. 제목 줄 오른쪽에 운영시간 칩을 두고, 함께 제공되는 코너는 제목 없이 메뉴만
+ * 보여 준다(라면·샐러드도시락). 간편식은 식단표처럼 여러 구성 중 하나를 고르는 묶음으로 보여 준다.
+ */
 @Composable
 internal fun DormitoryMealPeriodContent(block: DormitoryMealBlock, status: MealServiceStatus) {
-    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Icon(dormitoryBlockIcon(block.name), contentDescription = null, modifier = Modifier.size(20.dp))
-            Text(block.name, style = MaterialTheme.typography.titleMedium)
-        }
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Icon(dormitoryBlockIcon(block.name), contentDescription = null, modifier = Modifier.size(20.dp))
+        Text(block.name, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
         MealHoursChip(block.hours, status.state, includeStatus = true)
     }
     MenuLineList(block.menuLines)
     block.extras.forEach { extra ->
         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text(
-                text = extra.name,
-                style = MaterialTheme.typography.labelLarge,
-                color = LocalContentColor.current,
-            )
-            MenuLineList(extra.menuLines)
+        if (com.example.dimanow.ui.meal.isQuickMealSection(extra.name)) {
+            QuickMealOptions(extra.name, extra.menuLines)
+        } else {
+            MenuLineList(extra.menuLines, modifier = Modifier.testTag("dorm_extra_${extra.name}"))
+        }
+    }
+}
+
+/** 간편식: 식단표의 여러 구성 중 하나를 고른다(예: 단백질세트 또는 컵과일 또는 샌드위치 + 음료). */
+@Composable
+private fun QuickMealOptions(name: String, lines: List<String>) {
+    val options = remember(lines) { com.example.dimanow.ui.meal.quickMealOptions(lines) }
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.testTag("dorm_quick_meal")) {
+        Text(
+            text = "$name · 하나 선택",
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        options.forEachIndexed { index, option ->
+            MenuItemRow(option, trailing = null, leading = if (index == 0) null else "또는")
         }
     }
 }
@@ -630,7 +659,8 @@ private fun MealPeriodCard(
         ),
         elevation = CardDefaults.elevatedCardElevation(defaultElevation = if (isClosed) 0.dp else 1.dp),
     ) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp), content = content)
+        // 세로 길이를 줄이려고 위아래 여백과 요소 간격을 좁힌다
+        Column(Modifier.padding(horizontal = 16.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(8.dp), content = content)
     }
 }
 

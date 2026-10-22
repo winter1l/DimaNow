@@ -10,6 +10,7 @@ Observed: main 2baac30 (not pushed) has D-102..D-105. The worktree branch `claud
 Try 장비 대여, 시간표 가져오기 and 상벌점 불러오기 on the phone with the school account and report what happens (Q-027). Whether to merge the branch into main. Push main / publish v2.1 when asked (calendar data with exam weeks and 학사일정 is published only after main is pushed). 2027 학사일정 when the school posts it (Q-026).
 
 ## Next first action
+A handoff is waiting in `memory/HANDOFF.md` (2026-10-23): read it first.
 Ask how the signed-in reads behaved on the phone; fix the route from the failure message if one appears. Reply in Korean.
 
 ## Open follow-ups

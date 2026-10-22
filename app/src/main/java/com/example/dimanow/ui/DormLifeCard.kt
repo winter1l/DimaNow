@@ -8,10 +8,14 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Apartment
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -42,11 +46,16 @@ import com.example.dimanow.school.SchoolServiceResult
 import com.example.dimanow.school.parseDormPoints
 import com.example.dimanow.school.summarizeDormPoints
 import com.example.dimanow.theme.DimaShapes
+import java.time.Instant
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
 import kotlinx.coroutines.launch
 
 /**
  * 예인관 생활 (D-107), under the dormitory meals: this term's merit and demerit points read from the intranet
- * when the student asks, and the intranet's outing application, which stays on the school's own page.
+ * when the student asks and kept on the device, shown with when they were read until the student refreshes
+ * them (D-108); and the intranet's outing application, shown signed in inside the app for the student to fill
+ * in on the school's own page (the app enters nothing there).
  */
 @Composable
 internal fun DormLifeCard(modifier: Modifier = Modifier) {
@@ -64,12 +73,21 @@ internal fun DormLifeCard(modifier: Modifier = Modifier) {
         scope.launch {
             when (val result = service.read(SchoolService.INTRANET, INTRANET_DORM_POINTS_URL, INTRANET_DORM_POINTS_SCRIPT, "상벌점")) {
                 is SchoolServiceResult.Success -> runCatching { summarizeDormPoints(parseDormPoints(result.json)) }
-                    .onSuccess { SchoolReadCache.setDormPoints(SchoolReadCache.DormPointsRead(it)) }
+                    .onSuccess { SchoolReadCache.setDormPoints(SchoolReadCache.DormPointsRead(it, Instant.now())) }
                     .onFailure { error = "상벌점 표를 읽지 못했어요." }
                 is SchoolServiceResult.Failure -> error = result.message
                 SchoolServiceResult.Cancelled -> Unit
             }
             loading = false
+        }
+    }
+
+    fun openOuting() {
+        val service = bridge ?: return openUrl(context, INTRANET_DORM_OUTING_URL)
+        error = null
+        scope.launch {
+            val result = service.open(SchoolService.INTRANET, INTRANET_DORM_OUTING_URL, "외출·외박 신청")
+            if (result is SchoolServiceResult.Failure) error = result.message
         }
     }
 
@@ -79,10 +97,28 @@ internal fun DormLifeCard(modifier: Modifier = Modifier) {
         colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
     ) {
         Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            HomeCardHeader(icon = Icons.Default.Apartment, title = "예인관 생활", showChevron = false)
-            val summary = read?.summary
+            HomeCardHeader(icon = Icons.Default.Apartment, title = "예인관 생활", showChevron = false) {
+                // A saved read is refreshed from the header; the first read uses the button below.
+                if (bridge != null && read != null) {
+                    if (loading) {
+                        DimaLoadingIndicator(
+                            size = 24.dp,
+                            modifier = Modifier.padding(12.dp).semantics {
+                                contentDescription = "상벌점을 불러오는 중"
+                                liveRegion = LiveRegionMode.Polite
+                            },
+                        )
+                    } else {
+                        IconButton(shapes = IconButtonDefaults.shapes(), onClick = ::load, modifier = Modifier.testTag("dorm_points_refresh")) {
+                            Icon(Icons.Default.Refresh, contentDescription = "상벌점 새로고침")
+                        }
+                    }
+                }
+            }
+            val saved = read
+            val summary = saved?.summary
             when {
-                loading -> Row(
+                saved == null && loading -> Row(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
                     modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
@@ -90,29 +126,41 @@ internal fun DormLifeCard(modifier: Modifier = Modifier) {
                     DimaLoadingIndicator(size = 32.dp)
                     Text("인트라넷에서 상벌점을 불러오는 중이에요", style = MaterialTheme.typography.bodyMedium)
                 }
-                summary != null -> DormPointSummaryView(summary)
-                read != null -> Text("기록된 상벌점이 없어요.", style = MaterialTheme.typography.bodyMedium)
-                else -> Text(
-                    "인트라넷의 상벌점을 이 기기로 불러와요. 불러온 내용은 앱을 닫으면 지워져요.",
+                saved == null -> Text(
+                    "인트라넷의 상벌점을 불러와 이 기기에 저장해 둬요. 새로고침하면 다시 불러와요.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+                else -> Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    if (summary != null) {
+                        DormPointSummaryView(summary)
+                    } else {
+                        Text("기록된 상벌점이 없어요.", style = MaterialTheme.typography.bodyMedium)
+                    }
+                    Text(
+                        dormPointsReadAtLabel(saved.readAt, Instant.now()),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.testTag("dorm_points_read_at"),
+                    )
+                }
             }
             error?.let {
                 Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
             }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                if (bridge != null) {
+                if (bridge != null && read == null) {
                     FilledTonalButton(
                         shapes = ButtonDefaults.shapes(),
                         onClick = ::load,
                         enabled = !loading,
                         modifier = Modifier.heightIn(min = 48.dp).testTag("dorm_points_load"),
-                    ) { Text(if (read == null) "상벌점 불러오기" else "다시 불러오기") }
+                    ) { Text("상벌점 불러오기") }
                 }
                 TextButton(
                     shapes = ButtonDefaults.shapes(),
-                    onClick = { openUrl(context, INTRANET_DORM_OUTING_URL) },
+                    onClick = ::openOuting,
+                    enabled = !loading,
                     modifier = Modifier.heightIn(min = 48.dp).testTag("dorm_outing_open"),
                 ) { Text("외출·외박 신청") }
             }
@@ -155,3 +203,16 @@ private fun DormPointSummaryView(summary: DormPointSummary) {
     }
 }
 
+private val READ_CLOCK = DateTimeFormatter.ofPattern("HH:mm")
+
+/** When the saved 상벌점 were read: `오늘 09:12 기준`, `어제 21:40 기준`, `10월 20일 (화) 18:05 기준`. */
+internal fun dormPointsReadAtLabel(readAt: Instant, now: Instant, zone: ZoneId = ZoneId.of("Asia/Seoul")): String {
+    val at = readAt.atZone(zone)
+    val today = now.atZone(zone).toLocalDate()
+    val day = when (at.toLocalDate()) {
+        today -> "오늘"
+        today.minusDays(1) -> "어제"
+        else -> koreanDateLabel(at.toLocalDate(), today)
+    }
+    return "$day ${at.format(READ_CLOCK)} 기준"
+}

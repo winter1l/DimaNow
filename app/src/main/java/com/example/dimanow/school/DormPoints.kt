@@ -1,13 +1,26 @@
 package com.example.dimanow.school
 
+import java.io.File
+import java.time.Instant
 import java.time.LocalDate
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.addJsonObject
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.longOrNull
+import kotlinx.serialization.json.put
+import kotlinx.serialization.json.putJsonArray
+import kotlinx.serialization.json.putJsonObject
 
 /** The intranet's 예인관 상벌점조회 list and outing application (D-107). */
 const val INTRANET_DORM_POINTS_URL = "https://intranet.dima.ac.kr/dormi/P_C_List.aspx"
@@ -93,18 +106,43 @@ private fun parseDormDate(value: String): LocalDate? {
 }
 
 /**
- * What the school screens read in this run of the app (D-107). Kept in memory only: it is gone when the app
- * process ends, and the student reads it again with one press.
+ * What the school screens read (D-107). The last 상벌점 read is also kept in the app's no-backup storage, so the
+ * card shows it after a restart until the student refreshes it (D-108); equipment availability lives in memory
+ * only. Deleting the school account or all app data removes both.
  */
 object SchoolReadCache {
-    /** The last 상벌점 read; [summary] is null when the list was empty. */
-    data class DormPointsRead(val summary: DormPointSummary?)
+    /** The last 상벌점 read and when it was made; [summary] is null when the list was empty. */
+    data class DormPointsRead(val summary: DormPointSummary?, val readAt: Instant)
+
+    private val io = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private var dormPointsFile: File? = null
 
     private val mutableDormPoints = MutableStateFlow<DormPointsRead?>(null)
     val dormPoints: StateFlow<DormPointsRead?> = mutableDormPoints.asStateFlow()
 
+    /** Keeps 상벌점 reads in [file] and shows the saved one as soon as it is loaded. */
+    fun persistDormPointsIn(file: File) {
+        dormPointsFile = file
+        io.launch {
+            val saved = runCatching { decodeDormPointsRead(file.readText()) }.getOrNull() ?: return@launch
+            mutableDormPoints.compareAndSet(null, saved)
+        }
+    }
+
     fun setDormPoints(read: DormPointsRead) {
         mutableDormPoints.value = read
+        val file = dormPointsFile ?: return
+        io.launch {
+            runCatching {
+                file.parentFile?.mkdirs()
+                val partial = File(file.parentFile, file.name + ".tmp")
+                partial.writeText(encodeDormPointsRead(read))
+                if (!partial.renameTo(file)) {
+                    file.writeText(partial.readText())
+                    partial.delete()
+                }
+            }
+        }
     }
 
     private val mutableEquipmentCatalog = MutableStateFlow<List<EquipmentGroup>?>(null)
@@ -117,5 +155,59 @@ object SchoolReadCache {
     fun clear() {
         mutableDormPoints.value = null
         mutableEquipmentCatalog.value = null
+        dormPointsFile?.let { file -> io.launch { file.delete() } }
     }
+}
+
+/** The saved form of a 상벌점 read: the latest term's totals and entries, nothing else from the page. */
+internal fun encodeDormPointsRead(read: SchoolReadCache.DormPointsRead): String = buildJsonObject {
+    put("version", 1)
+    put("readAt", read.readAt.toEpochMilli())
+    read.summary?.let { summary ->
+        putJsonObject("summary") {
+            summary.year?.let { put("year", it) }
+            summary.term?.let { put("term", it) }
+            put("merit", summary.merit)
+            put("demerit", summary.demerit)
+            putJsonArray("entries") {
+                summary.entries.forEach { entry ->
+                    addJsonObject {
+                        entry.year?.let { put("year", it) }
+                        entry.term?.let { put("term", it) }
+                        entry.date?.let { put("date", it.toString()) }
+                        put("merit", entry.merit)
+                        put("demerit", entry.demerit)
+                        put("content", entry.content)
+                    }
+                }
+            }
+        }
+    }
+}.toString()
+
+internal fun decodeDormPointsRead(text: String): SchoolReadCache.DormPointsRead? {
+    val root = Json.parseToJsonElement(text) as? JsonObject ?: return null
+    if (root["version"]?.jsonPrimitive?.intOrNull != 1) return null
+    val readAt = root["readAt"]?.jsonPrimitive?.longOrNull?.let(Instant::ofEpochMilli) ?: return null
+    fun JsonObject.int(name: String) = this[name]?.jsonPrimitive?.intOrNull
+    val summary = (root["summary"] as? JsonObject)?.let { summary ->
+        DormPointSummary(
+            year = summary.int("year"),
+            term = summary.int("term"),
+            merit = summary.int("merit") ?: 0,
+            demerit = summary.int("demerit") ?: 0,
+            entries = summary["entries"]?.jsonArray.orEmpty().mapNotNull { element ->
+                val entry = element as? JsonObject ?: return@mapNotNull null
+                DormPointEntry(
+                    year = entry.int("year"),
+                    term = entry.int("term"),
+                    date = entry["date"]?.jsonPrimitive?.content?.let { runCatching { LocalDate.parse(it) }.getOrNull() },
+                    merit = entry.int("merit") ?: 0,
+                    demerit = entry.int("demerit") ?: 0,
+                    content = entry["content"]?.jsonPrimitive?.content.orEmpty(),
+                )
+            },
+        )
+    }
+    return SchoolReadCache.DormPointsRead(summary, readAt)
 }

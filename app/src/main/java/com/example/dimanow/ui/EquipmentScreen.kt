@@ -1,27 +1,25 @@
 package com.example.dimanow.ui
 
-import androidx.compose.foundation.horizontalScroll
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.OpenInNew
-import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
+import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.SegmentedListItem
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -36,18 +34,23 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.collapse
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.expand
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.dimanow.school.DIMA_C_EQUIPMENT_CATALOG_SCRIPT
 import com.example.dimanow.school.DIMA_C_EQUIPMENT_URL
 import com.example.dimanow.school.EquipmentDay
+import com.example.dimanow.school.EquipmentGroup
 import com.example.dimanow.school.EquipmentModel
 import com.example.dimanow.school.LocalSchoolServiceBridge
 import com.example.dimanow.school.SchoolReadCache
@@ -57,11 +60,16 @@ import com.example.dimanow.school.dimaCModelAvailabilityScript
 import com.example.dimanow.school.parseEquipmentAvailability
 import com.example.dimanow.school.parseEquipmentCatalog
 import com.example.dimanow.theme.DimaShapes
+import com.example.dimanow.ui.motion.DimaMotion
+import java.time.DayOfWeek
+import java.time.LocalDate
 import kotlinx.coroutines.launch
 
 /**
  * 장비 대여 (D-107): DIMA C's general-rental equipment, read with the student's sign-in when the screen opens.
- * Each model opens to the next two weeks with the units free each day; renting itself stays on DIMA C.
+ * The rental notice sits on top as a short guide with the full text under 자세히 보기; below, each equipment
+ * group is a segmented list whose models open to the next two weeks, weekday by weekday, with the units free
+ * each day. Renting itself happens on DIMA C, shown signed in inside the app.
  */
 @Composable
 internal fun EquipmentScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
@@ -71,10 +79,13 @@ internal fun EquipmentScreen(onBack: () -> Unit, modifier: Modifier = Modifier) 
     val catalog by SchoolReadCache.equipmentCatalog.collectAsStateWithLifecycle()
     var loading by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
+    var applyError by remember { mutableStateOf<String?>(null) }
+    var guideExpanded by rememberSaveable { mutableStateOf(false) }
     var expanded by rememberSaveable { mutableStateOf<Long?>(null) }
     val availability = remember { mutableStateMapOf<Long, List<EquipmentDay>>() }
     val availabilityErrors = remember { mutableStateMapOf<Long, String>() }
     var loadingModel by remember { mutableStateOf<Long?>(null) }
+    val today = LocalDate.now()
 
     fun loadCatalog() {
         val service = bridge ?: return
@@ -113,6 +124,16 @@ internal fun EquipmentScreen(onBack: () -> Unit, modifier: Modifier = Modifier) 
         }
     }
 
+    // DIMA C opened in the browser would ask for the sign-in again, so it opens signed in inside the app.
+    fun openDimaC() {
+        val service = bridge ?: return openUrl(context, DIMA_C_EQUIPMENT_URL)
+        applyError = null
+        scope.launch {
+            val result = service.open(SchoolService.DIMA_C, DIMA_C_EQUIPMENT_URL, "장비 대여 신청")
+            if (result is SchoolServiceResult.Failure) applyError = result.message
+        }
+    }
+
     LaunchedEffect(Unit) { if (catalog == null) loadCatalog() }
 
     ScreenScaffold(
@@ -128,22 +149,23 @@ internal fun EquipmentScreen(onBack: () -> Unit, modifier: Modifier = Modifier) 
         refreshing = loading && catalog != null,
         refreshLabel = "장비 대여 현황 새로고침",
     ) {
-        item(key = "equipment_intro") {
-            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        item(key = "equipment_guide") {
+            EquipmentGuideCard(
+                expanded = guideExpanded,
+                onToggle = { guideExpanded = !guideExpanded },
+                onApply = ::openDimaC,
+                onOpenNotice = { openUrl(context, EquipmentRentalNotice.SEARCH_URL) },
+            )
+        }
+        applyError?.let { message -> item(key = "equipment_apply_error") { ErrorState(message) } }
+        item(key = "equipment_section") {
+            Column(Modifier.padding(top = 8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text("일반 대여 장비", style = MaterialTheme.typography.titleMedium)
                 Text(
-                    "DIMA C 일반 대여 장비예요. 장비를 누르면 앞으로 2주 동안 날마다 빌릴 수 있는 대수를 보여 줘요. " +
-                        "신청은 DIMA C에서 하고, 당일 대여는 낮 12시 전까지만 돼요.",
+                    "장비를 누르면 앞으로 2주 동안 날마다 빌릴 수 있는 대수를 보여 줘요.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-                TextButton(
-                    shapes = ButtonDefaults.shapes(),
-                    onClick = { openUrl(context, DIMA_C_EQUIPMENT_URL) },
-                    modifier = Modifier.heightIn(min = 48.dp).testTag("equipment_open_dimac"),
-                ) {
-                    Text("DIMA C에서 신청하기")
-                    Icon(Icons.AutoMirrored.Filled.OpenInNew, contentDescription = null, modifier = Modifier.padding(start = 6.dp).size(18.dp))
-                }
             }
         }
         val groups = catalog
@@ -167,22 +189,81 @@ internal fun EquipmentScreen(onBack: () -> Unit, modifier: Modifier = Modifier) 
                 error?.let { message -> item(key = "equipment_refresh_error") { ErrorState(message, onRetry = ::loadCatalog) } }
                 groups.forEach { group ->
                     item(key = "group_${group.name}") {
-                        Text(group.displayName, style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 8.dp))
+                        EquipmentGroupList(
+                            group = group,
+                            expanded = expanded,
+                            today = today,
+                            availability = availability,
+                            availabilityErrors = availabilityErrors,
+                            loadingModel = loadingModel,
+                            onToggle = { model ->
+                                expanded = if (expanded == model.no) null else model.no
+                                if (expanded == model.no && availability[model.no] == null) loadModel(model)
+                            },
+                            onRetry = ::loadModel,
+                            onApply = ::openDimaC,
+                        )
                     }
-                    group.models.forEach { model ->
-                        item(key = "model_${model.no}") {
-                            EquipmentModelCard(
-                                model = model,
-                                expanded = expanded == model.no,
-                                days = availability[model.no],
-                                loading = loadingModel == model.no,
-                                error = availabilityErrors[model.no],
-                                onToggle = {
-                                    expanded = if (expanded == model.no) null else model.no
-                                    if (expanded == model.no && availability[model.no] == null) loadModel(model)
-                                },
-                                onRetry = { loadModel(model) },
-                            )
+                }
+            }
+        }
+    }
+}
+
+/** One group's heading and its models as an M3 Expressive segmented list; an open model adds its days below it. */
+@Composable
+private fun EquipmentGroupList(
+    group: EquipmentGroup,
+    expanded: Long?,
+    today: LocalDate,
+    availability: Map<Long, List<EquipmentDay>>,
+    availabilityErrors: Map<Long, String>,
+    loadingModel: Long?,
+    onToggle: (EquipmentModel) -> Unit,
+    onRetry: (EquipmentModel) -> Unit,
+    onApply: () -> Unit,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        SettingsSectionHeader("${group.displayName} · ${group.models.size}종")
+        val count = group.models.size + if (group.models.any { it.no == expanded }) 1 else 0
+        DimaSegmentedList {
+            var index = 0
+            group.models.forEach { model ->
+                val open = expanded == model.no
+                val days = availability[model.no]
+                EquipmentModelRow(
+                    model = model,
+                    open = open,
+                    summary = days?.let { equipmentAvailabilitySummary(it, today) },
+                    index = index++,
+                    count = count,
+                    onToggle = { onToggle(model) },
+                )
+                if (open) {
+                    Surface(
+                        shape = ListItemDefaults.segmentedShapes(index = index++, count = count).shape,
+                        color = MaterialTheme.colorScheme.surfaceContainerLow,
+                        modifier = Modifier.fillMaxWidth().testTag("equipment_days_${model.no}"),
+                    ) {
+                        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                            val message = availabilityErrors[model.no]
+                            when {
+                                loadingModel == model.no -> LoadingLine("대여 현황을 불러오는 중이에요")
+                                message != null -> ErrorState(message, onRetry = { onRetry(model) })
+                                days != null -> {
+                                    EquipmentWeekGrid(days, today)
+                                    Text(
+                                        "숫자는 그날 빌릴 수 있는 대수예요. 오픈 전은 아직 신청이 열리지 않은 날이고, 주말과 휴일에는 대여하지 않아요.",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                    TextButton(
+                                        shapes = ButtonDefaults.shapes(),
+                                        onClick = onApply,
+                                        modifier = Modifier.heightIn(min = 48.dp),
+                                    ) { Text("DIMA C에서 신청하기") }
+                                }
+                            }
                         }
                     }
                 }
@@ -192,41 +273,75 @@ internal fun EquipmentScreen(onBack: () -> Unit, modifier: Modifier = Modifier) 
 }
 
 @Composable
-private fun EquipmentModelCard(
+private fun EquipmentModelRow(
     model: EquipmentModel,
-    expanded: Boolean,
-    days: List<EquipmentDay>?,
-    loading: Boolean,
-    error: String?,
+    open: Boolean,
+    summary: String?,
+    index: Int,
+    count: Int,
     onToggle: () -> Unit,
-    onRetry: () -> Unit,
 ) {
-    ElevatedCard(
+    val rotation by animateFloatAsState(
+        targetValue = if (open) 180f else 0f,
+        animationSpec = DimaMotion.spatialDefault(),
+        label = "equipment_model_chevron",
+    )
+    SegmentedListItem(
         onClick = onToggle,
+        shapes = ListItemDefaults.segmentedShapes(index = index, count = count),
         modifier = Modifier
-            .fillMaxWidth()
             .testTag("equipment_model_${model.no}")
-            .semantics { stateDescription = if (expanded) "펼침" else "접힘" },
-        shape = DimaShapes.Card,
-        colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+            .semantics {
+                stateDescription = if (open) "펼쳐짐" else "접힘"
+                if (open) collapse { onToggle(); true } else expand { onToggle(); true }
+            },
+        trailingContent = {
+            Icon(Icons.Default.ExpandMore, contentDescription = null, modifier = Modifier.size(24.dp).rotate(rotation))
+        },
+        supportingContent = { Text(listOfNotNull("대여용 ${model.units}대", summary).joinToString(" · ")) },
+        colors = dimaSegmentedListColors(),
     ) {
-        Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                Column(Modifier.weight(1f)) {
-                    Text(model.name, style = MaterialTheme.typography.titleMedium)
-                    Text("대여용 ${model.units}대", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-                Icon(
-                    if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+        Text(model.name)
+    }
+}
+
+/** The open days as a Monday-to-Friday grid, one row per week, so no day hides off screen. */
+@Composable
+private fun EquipmentWeekGrid(days: List<EquipmentDay>, today: LocalDate) {
+    val weekdays = days.filter { it.date.dayOfWeek <= DayOfWeek.FRIDAY }
+    if (weekdays.isEmpty()) return
+    // The first cell and the first weekday of a new month show the month as well.
+    val monthStarts = weekdays.filterIndexed { index, day -> index == 0 || day.date.month != weekdays[index - 1].date.month }
+        .map { it.date }.toSet()
+    // Closed days after the last bookable one are not open for applications yet (DIMA C opens a week at a time).
+    val lastOpen = weekdays.lastOrNull { it.open }?.date
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.testTag("equipment_week_grid")) {
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            listOf("월", "화", "수", "목", "금").forEach { label ->
+                Text(
+                    label,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.weight(1f),
                 )
             }
-            if (expanded) {
-                when {
-                    loading -> LoadingLine("대여 현황을 불러오는 중이에요")
-                    error != null -> ErrorState(error, onRetry = onRetry)
-                    days != null -> EquipmentDayStrip(days)
+        }
+        weekdays.groupBy { it.date.with(DayOfWeek.MONDAY) }.toSortedMap().forEach { (monday, week) ->
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                (0L until 5L).forEach { offset ->
+                    val day = week.firstOrNull { it.date == monday.plusDays(offset) }
+                    if (day == null) {
+                        Spacer(Modifier.weight(1f))
+                    } else {
+                        EquipmentDayCell(
+                            day = day,
+                            today = today,
+                            showMonth = day.date in monthStarts,
+                            notYetOpen = !day.open && !day.holiday && (lastOpen == null || day.date.isAfter(lastOpen)),
+                            modifier = Modifier.weight(1f),
+                        )
+                    }
                 }
             }
         }
@@ -234,42 +349,72 @@ private fun EquipmentModelCard(
 }
 
 @Composable
-private fun EquipmentDayStrip(days: List<EquipmentDay>) {
-    Row(
-        modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
-    ) {
-        days.forEach { day ->
-            val label = when {
-                !day.open -> "휴무"
-                day.freeUnits == 0 -> "마감"
-                else -> "${day.freeUnits}대"
-            }
-            val available = day.open && day.freeUnits > 0
-            Surface(
-                shape = DimaShapes.Tile,
-                color = if (available) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerHighest,
-                modifier = Modifier
-                    .widthIn(min = 56.dp)
-                    .semantics(mergeDescendants = true) {
-                        contentDescription = "${koreanDateLabel(day.date)}, " + when {
-                            !day.open -> "대여하지 않는 날"
-                            day.freeUnits == 0 -> "빌릴 수 있는 장비 없음"
-                            else -> "${day.totalUnits}대 중 ${day.freeUnits}대 빌릴 수 있음"
-                        }
-                    },
-            ) {
-                Column(Modifier.padding(horizontal = 8.dp, vertical = 8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text("${day.date.monthValue}/${day.date.dayOfMonth}", style = MaterialTheme.typography.labelMedium)
-                    Text(koreanWeekdayLabel(day.date.dayOfWeek).take(1), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Text(
-                        label,
-                        style = MaterialTheme.typography.labelLarge,
-                        textAlign = TextAlign.Center,
-                        color = if (available) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
+private fun EquipmentDayCell(
+    day: EquipmentDay,
+    today: LocalDate,
+    showMonth: Boolean,
+    notYetOpen: Boolean,
+    modifier: Modifier = Modifier,
+) {
+    val available = day.open && day.freeUnits > 0
+    val isToday = day.date == today
+    Surface(
+        shape = DimaShapes.Tile,
+        color = when {
+            available -> MaterialTheme.colorScheme.primaryContainer
+            day.open -> MaterialTheme.colorScheme.surfaceContainerHighest
+            else -> Color.Transparent
+        },
+        contentColor = if (available) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
+        border = if (day.open) null else BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+        modifier = modifier
+            .heightIn(min = 56.dp)
+            .semantics(mergeDescendants = true) {
+                contentDescription = listOfNotNull(if (isToday) "오늘" else null, koreanDateLabel(day.date)).joinToString(" ") + ", " + when {
+                    day.holiday -> "휴일이라 대여하지 않음"
+                    notYetOpen -> "아직 신청이 열리지 않음"
+                    !day.open -> "대여하지 않는 날"
+                    day.freeUnits == 0 -> "빌릴 수 있는 장비 없음"
+                    else -> "${day.totalUnits}대 중 ${day.freeUnits}대 빌릴 수 있음"
                 }
-            }
+            },
+    ) {
+        Column(
+            modifier = Modifier.padding(horizontal = 2.dp, vertical = 8.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(2.dp, Alignment.CenterVertically),
+        ) {
+            Text(
+                when {
+                    isToday -> "오늘"
+                    showMonth -> "${day.date.monthValue}/${day.date.dayOfMonth}"
+                    else -> "${day.date.dayOfMonth}"
+                },
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = if (isToday) FontWeight.Bold else null,
+            )
+            Text(
+                when {
+                    day.holiday -> "휴일"
+                    notYetOpen -> "오픈 전"
+                    !day.open -> "불가"
+                    day.freeUnits == 0 -> "마감"
+                    else -> "${day.freeUnits}대"
+                },
+                style = MaterialTheme.typography.labelLarge,
+                textAlign = TextAlign.Center,
+            )
         }
+    }
+}
+
+/** The soonest day with a free unit, in a few words for the model's row. */
+internal fun equipmentAvailabilitySummary(days: List<EquipmentDay>, today: LocalDate): String {
+    val soonest = days.firstOrNull { it.open && it.freeUnits > 0 } ?: return "2주 안에 빈 날이 없어요"
+    val units = "${soonest.freeUnits}대 빌릴 수 있어요"
+    return when (soonest.date) {
+        today -> "오늘 $units"
+        today.plusDays(1) -> "내일 $units"
+        else -> "${koreanDateLabel(soonest.date, today)}에 $units"
     }
 }

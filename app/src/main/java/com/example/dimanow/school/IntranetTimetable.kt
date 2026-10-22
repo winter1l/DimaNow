@@ -55,10 +55,10 @@ data class ImportedCourse(
     val start: LocalTime get() = LocalTime.of((8 + firstPeriod).coerceAtMost(23), 0)
     val end: LocalTime get() = if (9 + lastPeriod >= 24) LocalTime.of(23, 59) else LocalTime.of(9 + lastPeriod, 0)
 
-    /** The intranet does not say which shuttle side a room is on; rooms named for 엔터관 start there, others at 본관. */
-    val suggestedZone: CampusZoneId get() = if ("엔터" in room) CampusZoneId.YEIN else CampusZoneId.MAIN
+    /** The shuttle side of the room's building, or null when the building is not one the app knows. */
+    val roomZone: CampusZoneId? get() = campusZoneForRoom(room)
 
-    fun toCourse(zone: CampusZoneId = suggestedZone) = Course(
+    fun toCourse(zone: CampusZoneId = roomZone ?: CampusZoneId.MAIN) = Course(
         weekday = weekday,
         start = start,
         end = end,
@@ -68,6 +68,26 @@ data class ImportedCourse(
         zone = zone,
     )
 }
+
+/**
+ * Which shuttle side a classroom is on, from the building in its name (the intranet writes a room as the building
+ * name followed by its number, such as `덕성관101` or `기예관201-1`; observed 2026-10-23). Buildings by the main gate — 대학본부(본관), 지성관 (학생회관),
+ * 기예관, 덕성관, 체육관, 도서관 — are 본관; those over the hill — 엔터테인먼트관, 디자인센터, DIMA 종합촬영소,
+ * 예인관 — are 엔터관 (source: namu.wiki 동아방송예술대학교/캠퍼스, read 2026-10-23, at the user's request).
+ */
+fun campusZoneForRoom(room: String): CampusZoneId? {
+    val name = room.filterNot(Char::isWhitespace)
+    val main = MAIN_SIDE_BUILDINGS.any { it in name }
+    val yein = YEIN_SIDE_BUILDINGS.any { it in name }
+    return when {
+        main == yein -> null
+        main -> CampusZoneId.MAIN
+        else -> CampusZoneId.YEIN
+    }
+}
+
+private val MAIN_SIDE_BUILDINGS = listOf("대학본부", "본관", "지성관", "학생회관", "기예관", "덕성관", "체육관", "도서관")
+private val YEIN_SIDE_BUILDINGS = listOf("엔터", "디자인센터", "촬영소", "예인관", "기숙사")
 
 private val WEEKDAYS = mapOf(
     "월" to DayOfWeek.MONDAY, "화" to DayOfWeek.TUESDAY, "수" to DayOfWeek.WEDNESDAY,

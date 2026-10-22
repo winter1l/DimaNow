@@ -117,7 +117,7 @@ internal fun LmsLoginScreen(
                             LmsNoticeLine("DIMA Now는 학교가 만든 앱이 아니에요.")
                             LmsNoticeLine("학번과 비밀번호는 학교 공식 로그인 화면(portal·lms.dima.ac.kr)에만 입력되고, 개발자나 다른 서버로 보내지 않아요.")
                             // D-107: 저장한 계정이 인트라넷·DIMA C 읽기에도 쓰인다는 것을 미리 알린다
-                            LmsNoticeLine("저장한 계정은 장비 대여·인트라넷 시간표·예인관 상벌점 화면을 열 때 같은 포털 로그인으로 인트라넷·DIMA C(intranet·udimac.dima.ac.kr)에 들어가는 데도 써요.")
+                            LmsNoticeLine("저장한 계정은 장비 대여·인트라넷 시간표·예인관 상벌점·외출·외박 신청 화면을 열 때 같은 포털 로그인으로 인트라넷·DIMA C(intranet·udimac.dima.ac.kr)에 들어가는 데도 써요.")
                             LmsNoticeLine("학교 통합 로그인 중 한 구간(sso.dima.ac.kr:8080)은 학교가 암호화하지 않은 연결을 써서, 공용 Wi-Fi에서는 로그인 정보가 노출될 수 있어요.")
                             LmsNoticeLine("학교 LMS는 한 곳에서만 로그인돼요. 다른 기기에서 로그인 중이면 그 로그인을 끊기 전에 먼저 물어봐요.")
                         }

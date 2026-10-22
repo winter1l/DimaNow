@@ -65,7 +65,7 @@ internal class IntranetTimetableImport(
                             onMessage("인트라넷 시간표에 수업이 없어요")
                         } else {
                             zones.clear()
-                            zones.addAll(courses.map { it.suggestedZone })
+                            zones.addAll(courses.map { it.roomZone ?: CampusZoneId.MAIN })
                             preview = courses
                         }
                     }
@@ -84,7 +84,7 @@ internal class IntranetTimetableImport(
     /** Replaces [existing] with the previewed courses in the chosen buildings. */
     fun confirm(existing: List<Course>) {
         val courses = preview ?: return
-        val chosen = courses.mapIndexed { index, course -> course.toCourse(zones.getOrElse(index) { course.suggestedZone }) }
+        val chosen = courses.mapIndexed { index, course -> course.toCourse(zones.getOrElse(index) { course.roomZone ?: CampusZoneId.MAIN }) }
         preview = null
         scope.launch {
             existing.forEach { repository.deleteCourse(it.id) }
@@ -116,7 +116,8 @@ internal fun IntranetTimetablePreviewDialog(state: IntranetTimetableImport, exis
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 Text(
-                    "수업 ${courses.size}개를 찾았어요. 셔틀 안내에 쓸 건물을 확인해 주세요. 1교시는 9시, 한 교시는 60분으로 넣어요.",
+                    "수업 ${courses.size}개를 찾았어요. 셔틀 안내는 강의실 건물에 맞춰 본관이나 엔터관에서 해요. " +
+                        "1교시는 9시, 한 교시는 60분으로 넣어요.",
                     style = MaterialTheme.typography.bodyMedium,
                 )
                 courses.forEachIndexed { index, course ->
@@ -125,11 +126,14 @@ internal fun IntranetTimetablePreviewDialog(state: IntranetTimetableImport, exis
                             "${koreanWeekdayLabel(course.weekday).take(1)} ${course.start.format(CLOCK)}–${course.end.format(CLOCK)} · ${course.name}",
                             style = MaterialTheme.typography.bodyLarge,
                         )
-                        val details = listOf(course.room, course.professor).filter { it.isNotBlank() }.joinToString(" · ")
+                        val known = course.roomZone
+                        val room = course.room.takeIf { it.isNotBlank() }?.let { name -> known?.let { "$name (${DisplayVocabulary.originName(it)})" } ?: name }
+                        val details = listOfNotNull(room, course.professor.takeIf { it.isNotBlank() }).joinToString(" · ")
                         if (details.isNotEmpty()) {
                             Text(details, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
-                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        // The building decides the shuttle side; only a room the app cannot place asks for it.
+                        if (known == null) Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                             listOf(CampusZoneId.MAIN, CampusZoneId.YEIN).forEach { zone ->
                                 FilterChip(
                                     selected = state.zones.getOrNull(index) == zone,

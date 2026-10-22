@@ -38,6 +38,8 @@ const val DIMA_C_EQUIPMENT_CATALOG_SCRIPT = FETCH_HELPERS + """
     var list=(groups.list||[]).filter(function(g){return g.USE_YN==='Y'&&/일반대여/.test(g.DP_GRP_NM||'');});
     for(var i=0;i<list.length;i++){
       var g=list[i];
+      // One group at a time with a short pause, as a person clicking through the groups would.
+      if(i>0)await new Promise(function(resolve){setTimeout(resolve,300);});
       var models=await dimaJson('/ajax/ST_MPRT01_SVC/ST_MPRT01_R11.do?pageNo=1&MENU_CD=03120101&recordCountPerPage=100&DP_GRP_NO='+encodeURIComponent(g.DP_GRP_NO));
       if(dimaSignedOut(models))return {state:'signin'};
       out.push({
@@ -74,8 +76,11 @@ data class EquipmentGroup(val name: String, val models: List<EquipmentModel>) {
     val displayName: String get() = name.replace("(일반대여)", "").trim()
 }
 
-/** One day for one model: [open] says whether DIMA C takes rentals that day; [freeUnits] counts units not booked. */
-data class EquipmentDay(val date: LocalDate, val open: Boolean, val freeUnits: Int, val totalUnits: Int)
+/**
+ * One day for one model: [open] says whether DIMA C takes rentals that day; [freeUnits] counts units not booked;
+ * [holiday] marks a day DIMA C's calendar names as a holiday.
+ */
+data class EquipmentDay(val date: LocalDate, val open: Boolean, val freeUnits: Int, val totalUnits: Int, val holiday: Boolean = false)
 
 fun parseEquipmentCatalog(json: String): List<EquipmentGroup> =
     Json.parseToJsonElement(json).jsonObject["groups"]?.jsonArray.orEmpty().mapNotNull { element ->
@@ -106,13 +111,14 @@ fun parseEquipmentAvailability(json: String): List<EquipmentDay> {
         val day = element as? JsonObject ?: return@mapNotNull null
         val date = day["day"]?.jsonPrimitive?.content?.toDayOrNull() ?: return@mapNotNull null
         val weekend = date.dayOfWeek == DayOfWeek.SATURDAY || date.dayOfWeek == DayOfWeek.SUNDAY
-        val open = day["rentable"]?.jsonPrimitive?.booleanOrNull == true && day["holiday"]?.jsonPrimitive?.booleanOrNull != true && !weekend
+        val holiday = day["holiday"]?.jsonPrimitive?.booleanOrNull == true
+        val open = day["rentable"]?.jsonPrimitive?.booleanOrNull == true && !holiday && !weekend
         val busy = units.count { unit ->
             val own = bookings.filter { it.first == unit }
             own.any { (_, from, to) -> date.isAfter(from) && date.isBefore(to) } ||
                 (own.any { it.third == date } && own.any { it.second == date })
         }
-        EquipmentDay(date, open, if (open) units.size - busy else 0, units.size)
+        EquipmentDay(date, open, if (open) units.size - busy else 0, units.size, holiday)
     }
 }
 

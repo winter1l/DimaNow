@@ -17,11 +17,11 @@ class SchoolReadersTest {
         val json = """
             {"days":["월","화","수","목","금","토"],
              "periods":[
-               {"period":"1교시","cells":[[],["영상기초","가동101","김교수"],[],[],[],[]]},
-               {"period":"2교시","cells":[["음향실습","나동202","이교수"],["영상기초","가동101","김교수"],[],[],[],[]]},
-               {"period":"3교시","cells":[["음향실습","나동202","이교수"],["영상기초","가동101","김교수"],[],[],["연기","엔터관301","박교수"],[]]},
+               {"period":"1교시","cells":[[],["영상기초","덕성관101","김교수"],[],[],[],[]]},
+               {"period":"2교시","cells":[["음향실습","기예관202","이교수"],["영상기초","덕성관101","김교수"],[],[],[],[]]},
+               {"period":"3교시","cells":[["음향실습","기예관202","이교수"],["영상기초","덕성관101","김교수"],[],[],["연기","엔터관301","박교수"],[]]},
                {"period":"4교시","cells":[[],[],[],[],[],[]]},
-               {"period":"5교시","cells":[[],["영상기초","가동101","김교수"],[],[],[],[]]}
+               {"period":"5교시","cells":[[],["영상기초","덕성관101","김교수"],[],[],[],[]]}
              ]}
         """.trimIndent()
         val courses = parseIntranetTimetable(json)
@@ -32,9 +32,23 @@ class SchoolReadersTest {
         val tuesday = courses.filter { it.weekday == DayOfWeek.TUESDAY }
         assertEquals(listOf(LocalTime.of(9, 0) to LocalTime.of(12, 0), LocalTime.of(13, 0) to LocalTime.of(14, 0)), tuesday.map { it.start to it.end })
         val friday = courses.first { it.weekday == DayOfWeek.FRIDAY }
-        assertEquals(CampusZoneId.YEIN, friday.suggestedZone)
-        assertEquals(CampusZoneId.MAIN, monday.suggestedZone)
+        assertEquals(CampusZoneId.YEIN, friday.roomZone)
+        assertEquals(CampusZoneId.MAIN, monday.roomZone)
+        assertEquals(CampusZoneId.YEIN, friday.toCourse().zone)
         assertEquals("이교수", monday.toCourse().professor)
+    }
+
+    @Test
+    fun `a room's building decides the shuttle side`() {
+        listOf("덕성관101", "기예관201", "덕성관305-1", "지성관 301", "대학본부201", "체육관").forEach {
+            assertEquals(it, CampusZoneId.MAIN, campusZoneForRoom(it))
+        }
+        listOf("엔터관301", "엔터테인먼트관 B101", "DIMA 종합촬영소 3스튜디오", "디자인센터102", "예인관").forEach {
+            assertEquals(it, CampusZoneId.YEIN, campusZoneForRoom(it))
+        }
+        // An unknown building is left to the student rather than guessed.
+        assertNull(campusZoneForRoom("가동101"))
+        assertNull(campusZoneForRoom(""))
     }
 
     @Test
@@ -72,6 +86,7 @@ class SchoolReadersTest {
               {"day":"20261026","weekday":"2","rentable":true,"holiday":false},
               {"day":"20261027","weekday":"3","rentable":true,"holiday":false},
               {"day":"20261028","weekday":"4","rentable":true,"holiday":false},
+              {"day":"20261029","weekday":"5","rentable":true,"holiday":true},
               {"day":"20261030","weekday":"6","rentable":true,"holiday":false},
               {"day":"20261103","weekday":"3","rentable":false,"holiday":false}
             ],
@@ -89,6 +104,9 @@ class SchoolReadersTest {
         assertEquals(1, days.getValue(LocalDate.of(2026, 10, 28)).freeUnits)
         assertEquals(2, days.getValue(LocalDate.of(2026, 10, 30)).freeUnits)
         assertFalse("past the booking window", days.getValue(LocalDate.of(2026, 11, 3)).open)
+        assertFalse(days.getValue(LocalDate.of(2026, 11, 3)).holiday)
+        val holiday = days.getValue(LocalDate.of(2026, 10, 29))
+        assertTrue(holiday.holiday && !holiday.open && holiday.freeUnits == 0)
         assertTrue(days.values.all { it.totalUnits == 2 })
     }
 
@@ -117,5 +135,43 @@ class SchoolReadersTest {
         assertTrue(SchoolUrlPolicy.isPortalCredentialPage("https://portal.dima.ac.kr/?r=https://udimac.dima.ac.kr/sso/index.jsp"))
         assertTrue(SchoolUrlPolicy.isSessionConflict("https://portal.dima.ac.kr/sso/error.aspx?errorCode=3045"))
         assertEquals("sso.dima.ac.kr/sso/pmi-sso.jsp", SchoolUrlPolicy.describe("http://sso.dima.ac.kr:8080/sso/pmi-sso.jsp?ticket=secret"))
+    }
+
+    @Test
+    fun `the intranet sign-in goes through its own SSO entry, not straight to the front page`() {
+        val entry = SchoolService.INTRANET.portalEntry
+        assertTrue(SchoolUrlPolicy.isPortalCredentialPage(entry))
+        assertTrue(entry.endsWith("?r=https://intranet.dima.ac.kr/sso/main.aspx"))
+        assertEquals("/sso/main.aspx", SchoolService.INTRANET.selfForwardingSsoPath)
+        assertNull(SchoolService.DIMA_C.selfForwardingSsoPath)
+    }
+
+    @Test
+    fun `sign-in prompts pick 을 or 를 for what is read`() {
+        assertEquals("시간표를", withObjectParticle("시간표"))
+        assertEquals("상벌점을", withObjectParticle("상벌점"))
+        assertEquals("장비 대여 현황을", withObjectParticle("장비 대여 현황"))
+        assertEquals("외출·외박 신청을", withObjectParticle("외출·외박 신청"))
+    }
+
+    @Test
+    fun `a saved 상벌점 read comes back as it was`() {
+        val summary = DormPointSummary(
+            year = 2026,
+            term = 2,
+            merit = 3,
+            demerit = 1,
+            entries = listOf(
+                DormPointEntry(2026, 2, LocalDate.of(2026, 10, 6), 0, 1, "점호 불참"),
+                DormPointEntry(2026, 2, null, 3, 0, "봉사"),
+            ),
+        )
+        val read = SchoolReadCache.DormPointsRead(summary, java.time.Instant.ofEpochMilli(1_792_000_000_000))
+        assertEquals(read, decodeDormPointsRead(encodeDormPointsRead(read)))
+        val empty = SchoolReadCache.DormPointsRead(null, java.time.Instant.ofEpochMilli(1_792_000_000_000))
+        assertEquals(empty, decodeDormPointsRead(encodeDormPointsRead(empty)))
+        // An unknown version or a damaged file reads as nothing saved.
+        assertNull(decodeDormPointsRead("""{"version":2,"readAt":1}"""))
+        assertNull(runCatching { decodeDormPointsRead("not json") }.getOrNull())
     }
 }

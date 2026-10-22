@@ -228,8 +228,10 @@ fun DimaNowApp(
         Icon(if (page == item) item.icon else item.outlinedIcon, contentDescription = item.title)
     }
 
+    // D-107: the school-site host lies over the whole window, navigation bar and rail included, so a page or
+    // sign-in it shows is full screen.
+    Box(Modifier.fillMaxSize().semantics { testTagsAsResourceId = true }) {
     Scaffold(
-        modifier = Modifier.semantics { testTagsAsResourceId = true },
         // 상태바 인셋을 바깥 패딩이 아닌 각 화면의 contentPadding으로 처리해
         // 스크롤 콘텐츠가 상태바 뒤까지 흐르게 한다 (상단 빈 띠 제거)
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
@@ -387,10 +389,11 @@ fun DimaNowApp(
         }
         }
       }
-      // D-107: 인트라넷·DIMA C 읽기는 셸 위의 숨은 WebView가 맡고, 로그인이 필요할 때만 공식 포털을 화면에 띄운다
-      if (schoolServiceBridge != null) {
-          com.example.dimanow.school.SchoolServiceHost(schoolServiceBridge, lmsCredentialStore)
-      }
+    }
+    // D-107: 인트라넷·DIMA C 읽기는 셸 위의 숨은 WebView가 맡고, 로그인이 필요할 때만 공식 포털을 화면에 띄운다
+    if (schoolServiceBridge != null) {
+        com.example.dimanow.school.SchoolServiceHost(schoolServiceBridge, lmsCredentialStore)
+    }
     }
 
     // D-102: 새 버전 안내는 앱을 열자마자 뜨는 대화상자가 아니라 홈의 카드(HomeUpdateNotice)로 보여 준다

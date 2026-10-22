@@ -4,8 +4,7 @@ import android.provider.Settings
 import android.webkit.CookieManager
 import androidx.compose.animation.AnimatedContent
 import com.example.dimanow.ui.motion.LocalEntranceMotion
-import com.example.dimanow.ui.motion.SharedAxisDistance
-import com.example.dimanow.ui.motion.dimaSharedAxisX
+import com.example.dimanow.ui.motion.dimaFadeThrough
 import com.example.dimanow.ui.onboarding.OnboardingRoute
 import com.example.dimanow.ui.onboarding.shouldShowOnboarding
 import androidx.compose.foundation.layout.WindowInsets
@@ -46,7 +45,6 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateMapOf
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -239,16 +237,15 @@ fun DimaNowApp(
         // 하단 내비가 차지한 인셋을 소비해, 각 화면의 스캐폴드는 내비가 없을 때(설정)만
         // 제스처 바 인셋을 목록 아래 여백으로 더한다 (D-094)
         val pageModifier = Modifier.padding(padding).consumeWindowInsets(padding)
-        val sharedAxisPx = with(LocalDensity.current) { SharedAxisDistance.roundToPx() }
         CompositionLocalProvider(
             LocalOpenSettings provides openSettingsAction,
             LocalEntranceMotion provides entranceMotion,
             LocalRetainedFlowValues provides retainedFlowValues,
         ) {
-            // One motion per tab change: a shared-axis X transition; the lists do not also rise in.
+            // One motion per tab change: an M3 fade-through (D-103); the lists do not also rise in.
             AnimatedContent(
                 targetState = page,
-                transitionSpec = { dimaSharedAxisX(targetState.ordinal > initialState.ordinal, sharedAxisPx) },
+                transitionSpec = { dimaFadeThrough() },
                 label = "tab_transition",
             ) { targetPage ->
               tabStateHolder.SaveableStateProvider(targetPage.name) {

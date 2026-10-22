@@ -124,3 +124,5 @@ Resolved 2026-10-17: launch decisions — D-099 (GitHub only, new applicationId,
 - Q-020 (later, library): M3 now prefers the connected button group over segmented buttons; that component needs Material3 1.5 (beta02 on 2026-10-21). Revisit when 1.5 is stable (D-094 keeps 1.4.0).
 - Q-021 (observed, unresolved): Korean word-unit line wrapping via `LineBreak.WordBreak.Phrase` + `ko-KR` did not change wrapping on the API 36 emulator (en-US system locale); unknown whether a Korean-locale Android 17 phone behaves differently. Not shipped.
 - 2026-10-22 (observed): a course saved without a classroom renders dangling separators in Now Bar/notification/widget text (`GuidanceEngine`, `LiveSurfaceController`, `CampusSummaryWidgetPlanner`); Home was fixed in D-102, the rest was offered as a separate task.
+
+Resolved 2026-10-22: Q-019 and Q-020 by D-103 (fade-through tabs, bar refresh action, connected button group on Material3 1.5.0-beta02). New risk to watch: Material3 is a beta artifact until 1.5.0 is stable; move to the stable release when it ships and re-run the UI instrumentation.

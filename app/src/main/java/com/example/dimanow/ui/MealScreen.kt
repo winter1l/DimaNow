@@ -34,9 +34,6 @@ import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.SegmentedButton
-import androidx.compose.material3.SegmentedButtonDefaults
-import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
@@ -253,24 +250,19 @@ fun MealScreen(
             title = "식단",
             listState = listState,
             modifier = Modifier.fillMaxSize(),
-            // 새로고침은 목록을 당겨서 실행한다 — 상단 아이콘 버튼은 제거했다 (D-058)
+            // 새로고침은 목록을 당기거나 상단 버튼으로 실행한다 (D-058, D-103)
             onRefresh = ::refreshMeal,
             refreshing = refreshing,
+            refreshLabel = "식단 새로고침",
             listTag = "meal_list",
             // 식당 전환과 요일 선택은 스크롤해도 항상 닿을 수 있도록 헤더에 고정한다 (D-057)
             subHeader = {
-                SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
-                    SegmentedButton(
-                        selected = venue == MealVenue.MAIN_CAFETERIA,
-                        onClick = { userVenue = MealVenue.MAIN_CAFETERIA.name },
-                        shape = SegmentedButtonDefaults.itemShape(0, 2),
-                    ) { Text("본관 학생식당") }
-                    SegmentedButton(
-                        selected = venue == MealVenue.DORMITORY,
-                        onClick = { userVenue = MealVenue.DORMITORY.name },
-                        shape = SegmentedButtonDefaults.itemShape(1, 2),
-                    ) { Text("기숙사") }
-                }
+                // D-103: 식당 전환은 M3 연결형 버튼 그룹이다
+                DimaConnectedChoice(
+                    options = listOf(MealVenue.MAIN_CAFETERIA to "본관 학생식당", MealVenue.DORMITORY to "기숙사"),
+                    selected = venue,
+                    onSelect = { userVenue = it.name },
+                )
                 // 셔틀 요일 선택과 같은 접근성 선택기: 선택 상태와 '오늘'을 읽어 준다 (D-094(11))
                 DimaDateSelector(
                     dates = (0L..4L).map { weekStart.plusDays(it) },

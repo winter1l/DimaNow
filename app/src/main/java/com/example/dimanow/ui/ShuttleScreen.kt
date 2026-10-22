@@ -16,9 +16,6 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedCard
-import androidx.compose.material3.SegmentedButton
-import androidx.compose.material3.SegmentedButtonDefaults
-import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
@@ -133,24 +130,19 @@ fun ShuttleScreen(
         title = "셔틀버스",
         modifier = Modifier.fillMaxSize(),
         itemSpacing = DimaLayout.sectionGap,
-        // 새로고침은 목록을 당겨서 실행한다 (D-058)
+        // 새로고침은 목록을 당기거나 상단 버튼으로 실행한다 (D-058, D-103)
         onRefresh = ::refreshShuttle,
         refreshing = refreshing,
+        refreshLabel = "셔틀 새로고침",
         listTag = "shuttle_list",
         // D-102: 식단 화면처럼 노선 전환과 요일 선택을 머리에 고정해, 시간표를 내려 읽다가도 바로 바꿀 수 있다 (D-057)
         subHeader = {
-            SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
-                SegmentedButton(
-                    selected = shuttleView == ShuttleView.CAMPUS,
-                    onClick = { shuttleView = ShuttleView.CAMPUS },
-                    shape = SegmentedButtonDefaults.itemShape(0, 2),
-                ) { Text("교내 셔틀") }
-                SegmentedButton(
-                    selected = shuttleView == ShuttleView.BUS_4402,
-                    onClick = { shuttleView = ShuttleView.BUS_4402 },
-                    shape = SegmentedButtonDefaults.itemShape(1, 2),
-                ) { Text("4402") }
-            }
+            // D-103: 노선 전환은 M3 연결형 버튼 그룹이다
+            DimaConnectedChoice(
+                options = listOf(ShuttleView.CAMPUS to "교내 셔틀", ShuttleView.BUS_4402 to "4402"),
+                selected = shuttleView,
+                onSelect = { shuttleView = it },
+            )
             if (shuttleView == ShuttleView.CAMPUS) {
                 // M3 Expressive 요일 선택 (DimaDaySelector)
                 DimaDaySelector(

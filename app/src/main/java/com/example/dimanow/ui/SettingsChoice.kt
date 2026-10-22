@@ -14,15 +14,14 @@ import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ExpandMore
+import androidx.compose.material3.ButtonGroupDefaults
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.RadioButton
-import androidx.compose.material3.SegmentedButton
-import androidx.compose.material3.SegmentedButtonDefaults
-import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Surface
+import androidx.compose.material3.ToggleButton
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -33,12 +32,19 @@ import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.collapse
+import androidx.compose.ui.semantics.disabled
 import androidx.compose.ui.semantics.expand
 import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.onClick
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.semantics.text
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.dp
 import com.example.dimanow.domain.CampusZoneId
@@ -46,7 +52,56 @@ import com.example.dimanow.domain.DisplayVocabulary
 import com.example.dimanow.theme.DimaShapes
 import com.example.dimanow.ui.motion.DimaMotion
 
-/** Stable Material 3 1.4 single-choice control; long labels remain readable as radio rows. */
+/**
+ * M3 connected button group for one exclusive choice (D-103), replacing segmented buttons, which Material 3
+ * no longer recommends: equal-width toggle buttons in one color style, the selected one morphing to the
+ * checked shape, at least 48dp tall. Each button reads as a radio item with its selected state, so screen
+ * readers and tests see the same semantics the segmented row exposed.
+ */
+@Composable
+internal fun <T> DimaConnectedChoice(
+    options: List<Pair<T, String>>,
+    selected: T,
+    onSelect: (T) -> Unit,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+    itemTag: (T) -> String? = { null },
+) {
+    Row(
+        modifier = modifier.fillMaxWidth().selectableGroup(),
+        horizontalArrangement = Arrangement.spacedBy(ButtonGroupDefaults.ConnectedSpaceBetween),
+    ) {
+        options.forEachIndexed { index, (value, label) ->
+            val checked = value == selected
+            ToggleButton(
+                checked = checked,
+                // A connected single-choice group never ends with nothing selected.
+                onCheckedChange = { onSelect(value) },
+                enabled = enabled,
+                shapes = when (index) {
+                    0 -> ButtonGroupDefaults.connectedLeadingButtonShapes()
+                    options.lastIndex -> ButtonGroupDefaults.connectedTrailingButtonShapes()
+                    else -> ButtonGroupDefaults.connectedMiddleButtonShapes()
+                },
+                modifier = Modifier
+                    .weight(1f)
+                    .heightIn(min = 48.dp)
+                    .then(itemTag(value)?.takeIf(String::isNotEmpty)?.let { Modifier.testTag(it) } ?: Modifier)
+                    .clearAndSetSemantics {
+                        role = Role.RadioButton
+                        this.selected = checked
+                        text = AnnotatedString(label)
+                        onClick { onSelect(value); true }
+                        if (!enabled) disabled()
+                    },
+            ) {
+                Text(label, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+        }
+    }
+}
+
+/** Single-choice settings control: a connected button group while labels fit, otherwise radio rows. */
 @Composable
 internal fun <T> SettingsChoice(
     options: List<Pair<T, String>>,
@@ -66,18 +121,7 @@ internal fun <T> SettingsChoice(
     val requiredCellWidth = with(density) { widestLabel.toDp() } + 56.dp
     BoxWithConstraints(modifier.widthIn(max = 480.dp).fillMaxWidth()) {
         if (options.size in 2..5 && requiredCellWidth * options.size <= maxWidth) {
-            SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
-                options.forEachIndexed { index, (value, label) ->
-                    SegmentedButton(
-                        selected = selected == value,
-                        onClick = { onSelect(value) },
-                        enabled = enabled,
-                        shape = SegmentedButtonDefaults.itemShape(index, options.size),
-                        modifier = Modifier.heightIn(min = 48.dp).testTag(itemTag(value)),
-                        label = { Text(label) },
-                    )
-                }
-            }
+            DimaConnectedChoice(options, selected, onSelect, enabled = enabled, itemTag = itemTag)
         } else {
             Column(Modifier.fillMaxWidth().selectableGroup()) {
                 options.forEach { (value, label) ->

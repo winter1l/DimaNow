@@ -7,7 +7,7 @@ plugins {
 
 android {
     namespace = "com.example.dimanow"
-    compileSdk = 36
+    compileSdk = 37
     defaultConfig {
         applicationId = "io.github.winter1l.dimanow"
         minSdk = 31

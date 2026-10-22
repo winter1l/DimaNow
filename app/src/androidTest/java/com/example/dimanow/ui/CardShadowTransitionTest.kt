@@ -22,7 +22,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.setValue
 import com.example.dimanow.theme.DIMANowTheme
-import com.example.dimanow.ui.motion.dimaSharedAxisX
+import com.example.dimanow.ui.motion.dimaFadeThrough
 import com.example.dimanow.ui.motion.entrance
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -60,14 +60,14 @@ class CardShadowTransitionTest {
     }
 
     @Test
-    fun incomingAndOutgoingTabsBothFadeBetweenOpaqueDestinationStates() {
+    fun destinationsFadeThroughTheBackgroundOutgoingFirst() {
         composeRule.mainClock.autoAdvance = false
         var page by mutableIntStateOf(0)
         composeRule.setContent {
             Box(Modifier.size(200.dp).background(Color.Black).testTag("transition_scene")) {
                 AnimatedContent(
                     targetState = page,
-                    transitionSpec = { dimaSharedAxisX(targetState > initialState, slideDistancePx = 60) },
+                    transitionSpec = { dimaFadeThrough() },
                     label = "tab_transition_test",
                 ) { target ->
                     Box(
@@ -82,22 +82,21 @@ class CardShadowTransitionTest {
 
         assertEquals("initial destination must be opaque", Color.Red.toArgb(), sceneCenter())
         composeRule.runOnIdle { page = 1 }
-        var blendedFrame: Int? = null
-        // Sample a bounded number of actual frames, without assuming a duration-based midpoint.
-        // Both panels cover the center throughout this short shared-axis slide. Over the black parent,
-        // red + blue < 255 proves the outgoing layer fades too, rather than only the incoming one.
-        for (frame in 0 until 20) {
+        // D-103 fade-through over the black parent: the outgoing page fades out on its own first
+        // (partial red, no blue), then the incoming page fades in on its own (partial blue, no red).
+        var outgoingAloneFrame = -1
+        var incomingAloneFrame = -1
+        for (frame in 0 until 30) {
             composeRule.mainClock.advanceTimeByFrame()
             val center = sceneCenter()
             val red = (center ushr 16) and 0xff
             val blue = center and 0xff
-            if (red in 1..254 && blue in 1..254 && red + blue < 250) {
-                blendedFrame = center
-                break
-            }
+            if (outgoingAloneFrame < 0 && red in 1..254 && blue == 0) outgoingAloneFrame = frame
+            if (incomingAloneFrame < 0 && blue in 1..254 && red == 0) incomingAloneFrame = frame
         }
-        assertTrue("no rendered frame showed both destination layers fading", blendedFrame != null)
-        // This is a completion bound, not an expectation about spring duration or its midpoint.
+        assertTrue("the outgoing page never faded out on its own", outgoingAloneFrame >= 0)
+        assertTrue("the incoming page never faded in on its own", incomingAloneFrame >= 0)
+        assertTrue("the incoming page faded in before the outgoing one left", outgoingAloneFrame < incomingAloneFrame)
         composeRule.mainClock.advanceTimeBy(2_000)
         assertEquals("final destination must be opaque", Color.Blue.toArgb(), sceneCenter())
         composeRule.onNodeWithTag("tab_0").assertDoesNotExist()

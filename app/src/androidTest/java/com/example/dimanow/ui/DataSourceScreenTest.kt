@@ -3,6 +3,8 @@ package com.example.dimanow.ui
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertHeightIsAtLeast
+import androidx.compose.ui.test.assertIsEnabled
+import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertIsNotSelected
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.unit.dp
@@ -103,11 +105,11 @@ class DataSourceScreenTest {
             departure("B", "headquarters", LocalTime.of(19, 30), CampusZoneId.MAIN, CampusZoneId.YEIN, serviceDay),
             departure("C", "one-room", LocalTime.of(19, 0), CampusZoneId.ONE_ROOM, CampusZoneId.MAIN, serviceDay),
         )
+        // Snapshot the fake sources outside composition (Compose 1.12 lint: no StateFlow.value in composition).
+        val shuttleData = FakeShuttleSource(departures).data.value
+        val mealData = FakeMealSource().data.value
         composeRule.setContent {
-            DataAndSourcesCard(
-                shuttleData = FakeShuttleSource(departures).data.value,
-                mealData = FakeMealSource().data.value,
-            )
+            DataAndSourcesCard(shuttleData = shuttleData, mealData = mealData)
         }
 
         val expected = "기기 동기화: 2026년 8월 26일 21:00 KST"
@@ -144,8 +146,8 @@ class DataSourceScreenTest {
             ShuttleScreen(shuttleSource = source, currentZone = CampusZoneId.OUTSIDE)
         }
 
-        // D-058: 새로고침은 상단 아이콘이 아니라 M3 당겨서 새로고침이다
-        composeRule.onNodeWithContentDescription("셔틀 새로고침").assertDoesNotExist()
+        // D-058/D-103: 당겨서 새로고침에 더해 상단 바에도 같은 새로고침 버튼이 있다
+        composeRule.onNodeWithContentDescription("셔틀 새로고침").assertIsEnabled()
         composeRule.onNodeWithTag("shuttle_list").performTouchInput {
             swipeDown(startY = centerY, endY = centerY + 600f)
         }
@@ -162,6 +164,26 @@ class DataSourceScreenTest {
             composeRule.onAllNodesWithText("셔틀 시간표를 새로 받았어요").fetchSemanticsNodes().isNotEmpty()
         }
         composeRule.onNodeWithText("2건 저장 완료").assertDoesNotExist()
+        assertEquals(1, source.refreshCount)
+    }
+
+    @Test
+    fun theBarRefreshActionDoesWhatPullingDoesAndRestsWhileItRuns() {
+        val source = BlockingShuttleSource()
+        composeRule.setContent {
+            ShuttleScreen(shuttleSource = source, currentZone = CampusZoneId.OUTSIDE)
+        }
+
+        // D-103: M3 asks for a one-tap alternative to pull-to-refresh.
+        composeRule.onNodeWithContentDescription("셔틀 새로고침").performClick()
+        composeRule.waitUntil(5_000) { source.started.isCompleted }
+        composeRule.onNodeWithContentDescription("셔틀 새로고침").assertIsNotEnabled()
+
+        source.release.complete(Unit)
+        composeRule.waitUntil(5_000) {
+            composeRule.onAllNodesWithText("셔틀 시간표를 새로 받았어요").fetchSemanticsNodes().isNotEmpty()
+        }
+        composeRule.onNodeWithContentDescription("셔틀 새로고침").assertIsEnabled()
         assertEquals(1, source.refreshCount)
     }
 
@@ -236,7 +258,6 @@ class DataSourceScreenTest {
             )
         }
 
-        composeRule.onNodeWithContentDescription("셔틀 새로고침").assertDoesNotExist()
         composeRule.onNodeWithText("셔틀 데이터 상태").assertDoesNotExist()
         composeRule.onNodeWithText("셔틀 데이터 관리").assertDoesNotExist()
         composeRule.onNodeWithText("요일 선택").assertDoesNotExist()
@@ -492,7 +513,7 @@ class DataSourceScreenTest {
     }
 
     @Test
-    fun mealKeepsDataDetailsOutOfTheScreenAndHasNoTopRefreshButton() {
+    fun mealKeepsDataDetailsOutOfTheScreenAndOffersATapRefresh() {
         composeRule.setContent {
             MealScreen(
                 mealSource = FakeMealSource(listOf(mealDay("2026-08-24", "제육볶음"))),
@@ -500,7 +521,8 @@ class DataSourceScreenTest {
             )
         }
 
-        composeRule.onNodeWithContentDescription("식단 새로고침").assertDoesNotExist()
+        // D-103: the bar carries the one-tap refresh; data details still stay in Settings
+        composeRule.onNodeWithContentDescription("식단 새로고침").assertExists()
         composeRule.onNodeWithText("식단 데이터 상태").assertDoesNotExist()
         composeRule.onNodeWithText("식단 데이터 관리").assertDoesNotExist()
     }

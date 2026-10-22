@@ -5,14 +5,15 @@ import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.ContentTransform
 import androidx.compose.animation.SizeTransform
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.FastOutLinearInEasing
+import androidx.compose.animation.core.LinearOutSlowInEasing
 import androidx.compose.animation.core.SpringSpec
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideInVertically
-import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.IndicationNodeFactory
@@ -53,10 +54,10 @@ import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 
 /**
- * The app's only motion tokens (D-094 item 12). Every custom animation reads one of these.
+ * The app's only motion tokens (D-094 item 12). Every custom animation reads one of these, except the
+ * fade-through between destinations, whose sequenced handoff is duration-based ([dimaFadeThrough]).
  *
- * They mirror the Material 3 Expressive *standard* motion scheme, whose `MotionScheme` is internal
- * in the pinned material3 1.4.0:
+ * They mirror the Material 3 Expressive *standard* motion scheme:
  * - **spatial** springs move or resize things; a 0.9 damping ratio settles with barely any overshoot,
  *   which suits an information app better than the bouncier expressive scheme.
  * - **effects** springs change colour and opacity; they never overshoot (damping ratio 1).
@@ -107,23 +108,25 @@ fun ProvideReducedMotion(content: @Composable () -> Unit) {
 }
 
 /**
- * Material shared-axis X transition between bottom tabs: a short directional slide with both pages
- * fading (D-042), on non-overshooting effects springs so it never competes with content motion.
- * [slideDistancePx] is the M3 shared-axis travel (30dp).
+ * Material fade-through between navigation-bar destinations (D-103, superseding the D-026/D-042
+ * directional slide): the outgoing page fades out first, then the incoming page fades in. Sideways
+ * motion is reserved for tabs and carousels that can be swiped, which the bottom destinations cannot.
+ * The handoff needs a delay, so it uses durations rather than springs.
  */
-fun dimaSharedAxisX(forward: Boolean, slideDistancePx: Int): ContentTransform {
-    val distance = if (forward) slideDistancePx else -slideDistancePx
-    return (
-        slideInHorizontally(animationSpec = DimaMotion.effectsDefault<IntOffset>(), initialOffsetX = { distance }) +
-            fadeIn(animationSpec = DimaMotion.effectsDefault())
-        ).togetherWith(
-        slideOutHorizontally(animationSpec = DimaMotion.effectsDefault<IntOffset>(), targetOffsetX = { -distance }) +
-            fadeOut(animationSpec = DimaMotion.effectsFast()),
-    ).apply { targetContentZIndex = 1f }
-}
+fun dimaFadeThrough(): ContentTransform =
+    fadeIn(
+        animationSpec = tween(
+            durationMillis = FADE_THROUGH_IN_MS,
+            delayMillis = FADE_THROUGH_OUT_MS,
+            easing = LinearOutSlowInEasing,
+        ),
+    ).togetherWith(
+        fadeOut(animationSpec = tween(durationMillis = FADE_THROUGH_OUT_MS, easing = FastOutLinearInEasing)),
+    )
 
-/** M3 shared-axis travel distance. */
-val SharedAxisDistance = 30.dp
+/** Material fade-through timing: 90ms out, then 210ms in (300ms in all). */
+const val FADE_THROUGH_OUT_MS = 90
+const val FADE_THROUGH_IN_MS = 210
 
 /**
  * Native click behaviour (ripple, keyboard, `Role.Button` semantics) with a small spatial press scale.

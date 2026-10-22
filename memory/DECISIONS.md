@@ -556,3 +556,9 @@ Confirmed (delegated): the user asked to check the Apple HIG, Material 3 and Tos
 4. Shuttle pins its view switch and weekday selector in the header (extends D-057); re-selecting a tab scrolls it to the top; unselected tabs use outlined icons (D-094(12)'s single label weight kept).
 5. Settings groups sections and summarises permission state; about links become list rows; LMS login shows its D-099 disclosure as bullets and adds a password visibility toggle, autofill hints and keyboard actions.
 6. Copy follows 해요체/active voice; dialog dismiss buttons keep `취소`. Tab motion (D-026/D-042), pull-to-refresh (D-058), segmented buttons on Material3 1.4.0 (D-094) and widget wording are unchanged.
+
+## D-103 — Follow the three remaining Material 3 recommendations — 2026-10-22
+Confirmed: after D-102 listed three M3 recommendations it had kept because of standing decisions, the user answered "권장대로 진행해줘" and asked to merge the branch and install it on the phone afterwards. Scope:
+1. Navigation-bar destinations change with the M3 fade-through (outgoing fades out, then incoming fades in), superseding the D-026/D-042 directional slide.
+2. Every pull-to-refresh screen also has a refresh action in the app bar named after its content (`셔틀 새로고침`, `식단 새로고침`, `수업 새로고침`), superseding D-058 clause 5's removal of the top refresh button.
+3. Segmented buttons are replaced by the M3 connected button group (`DimaConnectedChoice`) for the meal venue, shuttle view, Courses mode and Settings single choices. This needs Material3 1.5.0-beta02 (beta; superseding D-094's "Material3 stays on stable 1.4.0"), which requires Compose 1.12 (BOM 2026.09.00), compileSdk 37 (Android SDK Platform 37.0 installed locally), AGP 9.1.1 and Gradle 9.3.1. targetSdk stays 36 (D-054 unchanged).

@@ -19,6 +19,7 @@ import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -112,7 +113,8 @@ internal fun DimaTopAppBarTitle(text: String) {
  *   cards compose and a minute tick recomposes only the items that read the changed state.
  * - The list ends above the navigation bar: the gesture-bar inset is added to the bottom content
  *   padding when no bottom NavigationBar consumed it (Settings), plus clearance for [floatingActionButton].
- * - [onRefresh] enables Material pull-to-refresh (D-058); without it no refresh node is added.
+ * - [onRefresh] enables Material pull-to-refresh (D-058) and a [refreshLabel] action in the bar
+ *   (D-103); without it no refresh node or action is added.
  * - [snackbarHost] is laid out by the Scaffold, so undo snackbars sit above the FAB.
  */
 @OptIn(ExperimentalMaterial3Api::class)
@@ -130,6 +132,7 @@ internal fun ScreenScaffold(
     listTag: String? = null,
     onRefresh: (() -> Unit)? = null,
     refreshing: Boolean = false,
+    refreshLabel: String = "새로고침",
     itemSpacing: Dp = 12.dp,
     content: LazyListScope.() -> Unit,
 ) {
@@ -156,7 +159,16 @@ internal fun ScreenScaffold(
         }
     }
     val titleSlot: @Composable () -> Unit = titleContent ?: { title?.let { DimaTopAppBarTitle(it) } }
-    val actions: @Composable RowScope.() -> Unit = { topAction?.invoke(this) }
+    val actions: @Composable RowScope.() -> Unit = {
+        // D-103: pull-to-refresh gets a one-tap equivalent in the bar (M3 pull-to-refresh guidance),
+        // named after what it refreshes; it rests while a refresh is already running.
+        if (onRefresh != null) {
+            IconButton(onClick = onRefresh, enabled = !refreshing, modifier = Modifier.testTag("refresh_action")) {
+                Icon(Icons.Default.Refresh, contentDescription = refreshLabel)
+            }
+        }
+        topAction?.invoke(this)
+    }
 
     Scaffold(
         modifier = modifier

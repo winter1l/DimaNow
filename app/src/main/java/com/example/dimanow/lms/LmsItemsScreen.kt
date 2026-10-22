@@ -23,9 +23,6 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.ListItemDefaults
-import androidx.compose.material3.SegmentedButton
-import androidx.compose.material3.SegmentedButtonDefaults
-import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -206,23 +203,20 @@ internal fun LmsItemsScreen(
         title = "수업",
         modifier = modifier,
         listTag = "lms_history",
-        // 새로고침은 목록을 당겨서 실행한다 (D-058)
+        // 새로고침은 목록을 당기거나 상단 버튼으로 실행한다 (D-058, D-103)
         onRefresh = onRefresh,
         refreshing = syncing && !visibleEmpty,
+        refreshLabel = "수업 새로고침",
         // 모드 전환과 필터는 목록을 아무리 내려도 항상 닿을 수 있어야 한다 (D-057).
         // 이전에는 목록의 첫 항목이라 스크롤과 함께 사라졌고, 필터가 세 줄을 차지했다.
         subHeader = {
-            SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
-                listOf(true to "오늘", false to "전체").forEachIndexed { index, (isToday, label) ->
-                    SegmentedButton(
-                        selected = todayMode == isToday,
-                        onClick = { todayMode = isToday },
-                        shape = SegmentedButtonDefaults.itemShape(index, 2),
-                        label = { Text(label) },
-                        modifier = Modifier.weight(1f).testTag(if (isToday) "lms_mode_today" else "lms_mode_all"),
-                    )
-                }
-            }
+            // D-103: 모드 전환은 M3 연결형 버튼 그룹이다
+            com.example.dimanow.ui.DimaConnectedChoice(
+                options = listOf(true to "오늘", false to "전체"),
+                selected = todayMode,
+                onSelect = { todayMode = it },
+                itemTag = { if (it) "lms_mode_today" else "lms_mode_all" },
+            )
             if (!todayMode || filterActive) {
                 LmsFilterRow(
                     courses = snapshot.courses,

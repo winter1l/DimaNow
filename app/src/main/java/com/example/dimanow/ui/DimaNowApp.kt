@@ -409,9 +409,12 @@ private fun DashboardRoute(
     val emptyNotices = remember { NoticeData(emptyList(), null, null, null, OFFICIAL_NOTICE_SOURCE_URL) }
     val notices by (noticeSource?.data ?: remember { kotlinx.coroutines.flow.flowOf(emptyNotices) })
         .collectLoadedAsState()
+    // D-106: exam weeks and the next term start for Home's title follow the published calendar
+    val serviceCalendar by com.example.dimanow.calendar.ServiceCalendarStore.calendar.collectAsStateWithLifecycle()
 
     DashboardScreen(
         schedule = schedule,
+        serviceCalendar = serviceCalendar,
         lmsSnapshot = homeLms,
         lmsSessionState = homeLmsSession,
         zone = resolvedZone,

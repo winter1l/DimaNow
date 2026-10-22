@@ -134,3 +134,5 @@ Resolved 2026-10-22: Q-018 — the user adopted D-102/D-103; main fast-forwarded
 - Q-025 (open, D-104): the large-screen step has the rail, a centred 840dp column and rotation, but no two-pane (list-detail) layout. The natural candidate is Courses (LMS list and detail), which needs a signed-in session to verify. Ask the user whether to add it.
 
 Resolved 2026-10-22: Q-024 — with the D-105 pinned bar and 16dp gaps the Home list overflows the tablet window again and `homeListScrollPositionSurvivesATripToShuttleAndBack` runs and passes there (no assumption skip).
+
+- Q-026 (open, D-106): the intranet 학사일정 lists 2026 only; 2027 terms and exam weeks must be added to `data-source/calendar.json` when the school publishes them, or Home falls back to `방학` after 2026-12-18. Intranet feature ideas (timetable import, 학사 일정 알림, 예인관 외출외박/상벌점) await the user's choice.

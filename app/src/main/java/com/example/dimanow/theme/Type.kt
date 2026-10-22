@@ -59,6 +59,6 @@ private fun TextStyle.korean(lineHeightSp: Int): TextStyle = copy(lineHeight = l
 @Composable
 internal fun dimaPageTitleStyle(): TextStyle = MaterialTheme.typography.titleLargeEmphasized
 
-/** Page title in the expanded top app bar (headline-medium emphasized). */
+/** Screen title in the pinned top app bar: headline-medium at its baseline weight, as D-104 showed it (D-106). */
 @Composable
-internal fun dimaScreenTitleStyle(): TextStyle = MaterialTheme.typography.headlineMediumEmphasized
+internal fun dimaScreenTitleStyle(): TextStyle = MaterialTheme.typography.headlineMedium

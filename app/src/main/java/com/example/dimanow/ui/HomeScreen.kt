@@ -1,6 +1,18 @@
 package com.example.dimanow.ui
 
 import com.example.dimanow.theme.DimaTheme
+import com.example.dimanow.theme.dimaScreenTitleStyle
+import com.example.dimanow.calendar.ServiceCalendarStore
+import com.example.dimanow.calendar.TermHeadline
+import com.example.dimanow.calendar.detail
+import com.example.dimanow.calendar.label
+import com.example.dimanow.calendar.termHeadline
+import com.example.dimanow.sync.ServiceCalendar
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.semantics.heading
+import java.time.LocalDate
 import com.example.dimanow.ui.meal.groupDormitorySections
 import com.example.dimanow.ui.motion.AnimatedCountText
 import androidx.compose.ui.text.style.TextOverflow
@@ -85,6 +97,7 @@ internal fun DashboardScreen(
     lmsSessionState: LmsSessionState = LmsSessionState.SIGNED_OUT,
     onAddCourse: () -> Unit = { onNavigateToPage(AppPage.TIMETABLE) },
     updateNotice: (@Composable () -> Unit)? = null,
+    serviceCalendar: ServiceCalendar = ServiceCalendarStore.current,
 ) {
     val context = LocalContext.current
     val nowTime = now.toLocalTime()
@@ -120,11 +133,11 @@ internal fun DashboardScreen(
     } else mealStatusNow?.state == MealServiceState.OPEN
     val originName = DisplayVocabulary.originName(zone)
 
-    // D-102: 홈의 제목은 오늘 날짜다. 현재 위치는 그 위치가 바꾸는 셔틀 카드 머리에서 '○○ 출발'로 보여 준다
-    // (D-029의 위치 배지를 대체). 설정 톱니는 오른쪽 끝에 둔다 (D-094)
+    // D-106: 홈의 제목은 학기 주차(시험 주간·방학 포함)이고, 오늘 날짜는 그 옆에 작게 둔다. 현재 위치는
+    // 그 위치가 바꾸는 셔틀 카드 머리에서 '○○ 출발'로 보여 준다 (D-029의 위치 배지를 대체). 설정 톱니는 오른쪽 끝 (D-094)
+    val headline = termHeadline(now.toLocalDate(), schedule.termStart, schedule.termEnd, serviceCalendar)
     ScreenScaffold(
-        // 다른 탭 제목과 같은 크기의 제목 자리에 날짜를 둔다
-        title = "${now.monthValue}월 ${now.dayOfMonth}일 ${koreanWeekdayLabel(now.dayOfWeek)}",
+        titleContent = { HomeTitle(headline, now.toLocalDate()) },
         modifier = modifier,
         itemSpacing = DimaLayout.sectionGap,
         listTag = "home_list",
@@ -690,3 +703,43 @@ private fun HeroClassPreviewRow(label: String, detail: String) {
 internal fun courseWithRoom(name: String, room: String): String = if (room.isBlank()) name else "$name ($room)"
 
 private val TIME = DateTimeFormatter.ofPattern("HH:mm")
+
+/**
+ * Home's title (D-106): the semester week, or the vacation countdown, at the screen-title size with the
+ * exam week or countdown in primary, then today's date in a quieter, smaller style on the same line.
+ */
+@Composable
+private fun HomeTitle(headline: TermHeadline, today: LocalDate) {
+    val lead = when (headline) {
+        is TermHeadline.InTerm -> "${headline.week}주차"
+        is TermHeadline.Vacation -> "방학"
+    }
+    val detail = headline.detail
+    val title = buildAnnotatedString {
+        append(lead)
+        if (detail != null) {
+            append(" · ")
+            withStyle(SpanStyle(color = MaterialTheme.colorScheme.primary)) { append(detail) }
+        }
+    }
+    val spokenDate = "${today.monthValue}월 ${today.dayOfMonth}일 ${koreanWeekdayLabel(today.dayOfWeek)}"
+    Row(
+        modifier = Modifier
+            .testTag("home_title")
+            .semantics(mergeDescendants = true) {
+                heading()
+                contentDescription = "${headline.label}, $spokenDate"
+            },
+    ) {
+        Text(title, style = dimaScreenTitleStyle(), maxLines = 1, softWrap = false, modifier = Modifier.alignByBaseline())
+        Spacer(Modifier.width(10.dp))
+        Text(
+            koreanDateLabel(today),
+            style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.alignByBaseline().weight(1f, fill = false),
+        )
+    }
+}

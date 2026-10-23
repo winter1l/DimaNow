@@ -117,7 +117,7 @@ class LiveSurfacePlannerTest {
     }
 
     @Test
-    fun `a class countdown also leaves text empty for the system chronometer`() {
+    fun `a class countdown chip shows the course short name and whole minutes`() {
         val snapshot = GuidanceSnapshot(
             classContent = ClassContent(
                 title = "10:00 · 조명기초및실습",
@@ -126,23 +126,32 @@ class LiveSurfacePlannerTest {
                 courseName = "조명기초및실습",
                 room = "덕성관 402",
                 remainingText = "시작까지 42분",
+                minutesUntilStart = 42,
             ),
             shuttleLines = emptyList(),
             phase = GuidancePhase.BEFORE_CLASS,
             countdownMeaning = CountdownMeaning.CLASS_START,
             countdownTarget = java.time.Instant.parse("2026-09-04T01:00:00Z"),
         )
+        val countdown = LiveDisplayOptions(chipContent = LiveChipContent.COUNTDOWN)
 
-        assertEquals(
-            null,
-            LiveSurfaceController.statusChipText(
-                snapshot = snapshot,
-                presentation = LiveDisplayOptions(chipContent = LiveChipContent.COUNTDOWN),
-                deviceLocked = false,
+        assertEquals("조기실 42분", LiveSurfaceController.statusChipText(snapshot, countdown, deviceLocked = false))
+        assertEquals("조기실 곧", LiveSurfaceController.statusChipText(
+            snapshot.copy(classContent = snapshot.classContent!!.copy(minutesUntilStart = 0)), countdown, deviceLocked = false))
+        assertEquals("조기실 수업 중", LiveSurfaceController.statusChipText(
+            snapshot.copy(
+                classContent = snapshot.classContent!!.copy(minutesUntilStart = null, remainingText = "수업 중"),
+                phase = GuidancePhase.IN_CLASS,
+                countdownTarget = null,
+                countdownMeaning = null,
             ),
-        )
+            countdown,
+            deviceLocked = true,
+        ))
         assertEquals(R.drawable.ic_stat_class, LiveSurfaceController.smallIcon(snapshot))
-        assertEquals(true, LiveSurfaceController.usesSystemChronometer(snapshot))
+        // The text carries the minutes; only the classroom chip keeps the system timer beside the room.
+        assertEquals(false, LiveSurfaceController.usesSystemChronometer(snapshot, countdown))
+        assertEquals(true, LiveSurfaceController.usesSystemChronometer(snapshot, LiveDisplayOptions(chipContent = LiveChipContent.CLASSROOM)))
     }
 
     @Test

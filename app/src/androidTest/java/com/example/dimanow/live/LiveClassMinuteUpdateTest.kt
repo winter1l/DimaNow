@@ -97,9 +97,9 @@ class LiveClassMinuteUpdateTest {
             val minute = awaitText(manager, "시작까지 1분", timeoutMillis = 70_000)
             assertEquals("시작까지 1분 · 본관 301", minute.extras.getCharSequence(Notification.EXTRA_TEXT).toString())
             assertEquals("시작까지 1분 · 본관 301", minute.extras.getCharSequence(Notification.EXTRA_BIG_TEXT).toString())
-            assertEquals(startsAt.toInstant().toEpochMilli(), minute.`when`)
-            assertTrue(minute.extras.getBoolean(Notification.EXTRA_SHOW_CHRONOMETER))
-            assertNull(minute.shortCriticalText)
+            // D-109: the chip carries the course short name and the whole minutes, reposted each minute.
+            assertFalse(minute.extras.getBoolean(Notification.EXTRA_SHOW_CHRONOMETER))
+            assertEquals("분갱검 1분", minute.shortCriticalText)
 
             val inClass = awaitText(manager, "수업 중", timeoutMillis = 70_000)
             assertEquals("수업 중 · 본관 301", inClass.extras.getCharSequence(Notification.EXTRA_TEXT).toString())

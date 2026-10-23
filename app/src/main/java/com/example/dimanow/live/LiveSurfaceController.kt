@@ -98,9 +98,8 @@ interface LiveSurfaceController {
         /**
          * 나우바 상단 칩에 들어갈 짧은 텍스트.
          *
-         * 수업 countdown은 `null`을 반환해 `when` 기반 시스템 크로노미터가 흐르게 한다.
-         * 셔틀은 목적지가 반드시 보여야 하므로 `본관행 8분`처럼 정적 텍스트를 사용하고
-         * 활성 Live 안내 서비스가 분 경계마다 다시 게시한다. 강의실 모드는 선택한 방을 유지한다.
+         * 셔틀은 `본관행 8분`, 수업은 약칭과 남은 분 `방시전 12분`(시작 후 `방시전 수업 중`)을 정적 텍스트로 쓰고
+         * 활성 Live 안내가 분 경계마다 다시 게시한다 (D-061, D-109). 강의실 모드는 선택한 방을 유지한다.
          */
         @Suppress("UNUSED_PARAMETER")
         fun statusChipText(
@@ -115,10 +114,15 @@ interface LiveSurfaceController {
                 if (minutes > 60) return null
                 return if (minutes <= 0) "$destination 곧" else "$destination ${minutes}분"
             }
-            return if (presentation.chipContent == LiveChipContent.CLASSROOM) {
-                snapshot.classContent?.room
-            } else {
-                null
+            val classContent = snapshot.classContent ?: return null
+            if (presentation.chipContent == LiveChipContent.CLASSROOM) return classContent.room
+            val name = (classContent.courseName ?: classContent.title).takeIf(String::isNotBlank) ?: return null
+            val short = com.example.dimanow.domain.CourseAbbreviation.of(name)
+            val minutes = classContent.minutesUntilStart
+            return when {
+                minutes != null -> if (minutes <= 0) "$short 곧" else "$short ${minutes}분"
+                snapshot.phase == com.example.dimanow.domain.GuidancePhase.IN_CLASS -> "$short 수업 중"
+                else -> null
             }
         }
 
@@ -134,8 +138,10 @@ interface LiveSurfaceController {
             else -> R.drawable.ic_stat_dima
         }
 
-        fun usesSystemChronometer(snapshot: GuidanceSnapshot): Boolean =
-            snapshot.countdownTarget != null && snapshot.countdownMeaning != CountdownMeaning.SHUTTLE_DEPARTURE
+        /** Only the classroom chip leaves the countdown to the system timer; text chips carry the minutes (D-109). */
+        fun usesSystemChronometer(snapshot: GuidanceSnapshot, presentation: LiveDisplayOptions = LiveDisplayOptions()): Boolean =
+            snapshot.countdownTarget != null && snapshot.countdownMeaning == CountdownMeaning.CLASS_START &&
+                presentation.chipContent == LiveChipContent.CLASSROOM
     }
 }
 
@@ -362,8 +368,8 @@ class AndroidLiveSurfaceController(private val context: Context) : LiveSurfaceCo
             .setOnlyAlertOnce(true)
             .setSilent(true)
             .setCategory(NotificationCompat.CATEGORY_NAVIGATION)
-            .setShowWhen(LiveSurfaceController.usesSystemChronometer(snapshot))
-        snapshot.countdownTarget?.takeIf { LiveSurfaceController.usesSystemChronometer(snapshot) }?.let {
+            .setShowWhen(LiveSurfaceController.usesSystemChronometer(snapshot, presentation))
+        snapshot.countdownTarget?.takeIf { LiveSurfaceController.usesSystemChronometer(snapshot, presentation) }?.let {
             builder.setWhen(it.toEpochMilli()).setUsesChronometer(true).setChronometerCountDown(true)
         }
         snapshot.occurrenceKey?.let { key ->
@@ -377,7 +383,7 @@ class AndroidLiveSurfaceController(private val context: Context) : LiveSurfaceCo
             builder.addAction(0, "이번 안내만 종료", dismissIntent)
         }
         if (Build.VERSION.SDK_INT >= 36) {
-            // 수업 countdown은 시스템 chronometer, 셔틀 countdown은 목적지 포함 분 단위 텍스트를 쓴다.
+            // 셔틀은 목적지, 수업은 약칭을 붙인 분 단위 텍스트를 쓴다. 강의실 칩만 시스템 chronometer를 함께 쓴다.
             criticalText?.takeIf(String::isNotBlank)?.let(builder::setShortCriticalText)
             snapshot.classContent?.remainingText?.takeIf(String::isNotBlank)?.let(builder::setSubText)
         }

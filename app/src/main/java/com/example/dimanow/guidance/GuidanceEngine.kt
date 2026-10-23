@@ -566,6 +566,7 @@ class GuidanceEngine(
                 courseName = course.name,
                 room = course.room,
                 remainingText = remainingText,
+                minutesUntilStart = if (isInClass) null else minutesUntilStart,
             ),
             shuttleLines = shuttleLine,
             phase = phase,

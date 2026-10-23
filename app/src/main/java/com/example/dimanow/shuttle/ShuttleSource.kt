@@ -38,7 +38,8 @@ data class ShuttleData(
 )
 
 sealed interface ShuttleRefreshResult {
-    data class Success(val departureCount: Int, val at: Instant) : ShuttleRefreshResult
+    /** [changed] is false when the published timetable was already the one on this device. */
+    data class Success(val departureCount: Int, val at: Instant, val changed: Boolean = true) : ShuttleRefreshResult
     data class Failure(val message: String, val cachedDepartureCount: Int) : ShuttleRefreshResult
 }
 
@@ -67,8 +68,9 @@ class StaticShuttleSource(
         dao.observeShuttleDepartures()
             .map { rows -> FieldShuttleOverrides.apply(rows.map { it.toDomain() }) }
             .distinctUntilChanged(),
-        dao.observeSourceStatus(SOURCE_KEY),
-        dao.observeSyncState(SOURCE_KEY),
+        // Room re-emits after any write to the status tables every source shares; repeats are dropped.
+        dao.observeSourceStatus(SOURCE_KEY).distinctUntilChanged(),
+        dao.observeSyncState(SOURCE_KEY).distinctUntilChanged(),
     ) { departures, status, sync ->
         ShuttleData(
             departures,
@@ -81,7 +83,7 @@ class StaticShuttleSource(
             sync?.serverState,
             sync?.revision,
         )
-    }
+    }.distinctUntilChanged()
 
     override suspend fun refresh(): ShuttleRefreshResult = refreshMutex.withLock { withContext(ioDispatcher) {
         val attempt = clock.instant()
@@ -114,7 +116,7 @@ class StaticShuttleSource(
                         ),
                     )
                 }
-                return@withContext ShuttleRefreshResult.Success(dao.shuttleDepartureCount(), attempt)
+                return@withContext ShuttleRefreshResult.Success(dao.shuttleDepartureCount(), attempt, changed = false)
             }
             val relativeUrl = requirePayloadUrl(descriptor.url, "shuttle")
             val payloadBytes = transport.get("$DATA_ROOT/$relativeUrl")

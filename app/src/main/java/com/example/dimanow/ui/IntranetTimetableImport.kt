@@ -89,8 +89,11 @@ internal class IntranetTimetableImport(
         val chosen = courses.mapIndexed { index, course -> course.toCourse(zones.getOrElse(index) { course.roomZone ?: CampusZoneId.MAIN }) }
         preview = null
         scope.launch {
-            existing.forEach { repository.deleteCourse(it.id) }
-            chosen.forEach { repository.saveCourse(it) }
+            // Leaving the page mid-way must not leave the old timetable deleted and the new one half saved.
+            kotlinx.coroutines.withContext(kotlinx.coroutines.NonCancellable) {
+                existing.forEach { repository.deleteCourse(it.id) }
+                chosen.forEach { repository.saveCourse(it) }
+            }
             onMessage("인트라넷에서 수업 ${chosen.size}개를 가져왔어요")
         }
     }

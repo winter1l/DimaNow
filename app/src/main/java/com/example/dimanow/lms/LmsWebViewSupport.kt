@@ -55,7 +55,6 @@ internal fun LmsFullScreenPane(
                 }
             },
             actions = { trailing?.invoke() },
-            showSettings = false,
             windowInsets = WindowInsets(0, 0, 0, 0),
         )
         content()

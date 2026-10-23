@@ -54,7 +54,6 @@ import com.example.dimanow.theme.DimaTheme
 /** Public pages and channels shown in 앱 정보 (D-099 clause 5). */
 internal object AppLinks {
     const val PRIVACY_POLICY = "https://winter1l.github.io/DimaNow/privacy.html"
-    const val DOWNLOAD_PAGE = "https://winter1l.github.io/DimaNow/"
     const val SOURCE_CODE = "https://github.com/winter1l/DimaNow"
 }
 

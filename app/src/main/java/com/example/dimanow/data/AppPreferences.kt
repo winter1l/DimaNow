@@ -272,14 +272,6 @@ class AppPreferences(private val context: Context) {
         context.settingsDataStore.edit { it[ACADEMIC_REMINDER_LAST_DAY] = epochDay }
     }
 
-    /** 온보딩 완료는 귀가 기준지·나우바 안내 플래그까지 함께 확정한다. */
-    suspend fun setOnboardingCompleted() {
-        context.settingsDataStore.edit {
-            it[ONBOARDING_COMPLETED] = true
-            it[NOW_BAR_SETUP_COMPLETED] = true
-        }
-    }
-
     suspend fun saveOnboardingDraft(draft: OnboardingDraft) {
         context.settingsDataStore.edit {
             it[ONBOARDING_STAGE] = draft.stage.name

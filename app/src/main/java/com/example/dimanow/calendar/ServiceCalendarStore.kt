@@ -45,11 +45,6 @@ object ServiceCalendarStore {
     internal fun decode(bytes: ByteArray): ServiceCalendar =
         ServiceCalendar.from(json.decodeFromString<ServiceCalendarPayload>(bytes.decodeToString()))
 
-    /** Test hook: replaces the current calendar. */
-    fun replaceForTest(calendar: ServiceCalendar) {
-        state.value = calendar
-    }
-
     private fun cacheFile(context: Context) = File(context.filesDir, "service-calendar.json")
 }
 

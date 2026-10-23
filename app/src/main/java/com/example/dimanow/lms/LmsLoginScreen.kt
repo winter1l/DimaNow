@@ -4,7 +4,6 @@ import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.ButtonDefaults
 import android.graphics.Bitmap
 import android.net.Uri
-import android.os.Build
 import android.view.View
 import android.view.ViewGroup
 import android.view.WindowManager
@@ -271,7 +270,7 @@ internal fun LmsAuthenticationWebView(
                         settings.allowFileAccess = false
                         settings.allowContentAccess = false
                         settings.mixedContentMode = android.webkit.WebSettings.MIXED_CONTENT_NEVER_ALLOW
-                        if (Build.VERSION.SDK_INT >= 26) WebView.startSafeBrowsing(context, null)
+                        WebView.startSafeBrowsing(context, null)
                         var injected = false
                         var catalogRequested = false
                         var flowState = LmsLoginFlowState.initial(request.allowSessionTakeover)

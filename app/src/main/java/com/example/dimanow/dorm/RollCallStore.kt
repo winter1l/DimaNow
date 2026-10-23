@@ -33,7 +33,11 @@ import kotlinx.serialization.json.put
  */
 object RollCallStore {
     private const val KEEP_DAYS = 14L
-    private val io = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    // One file, one writer: the load, every save and the delete run in launch order on a single IO lane, and a save
+    // writes the notices as they are when it runs (after the load merged), so concurrent adds cannot interleave
+    // the file or drop what was saved before.
+    @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+    private val io = CoroutineScope(SupervisorJob() + Dispatchers.IO.limitedParallelism(1))
     @Volatile private var file: File? = null
 
     private val mutableNotices = MutableStateFlow<List<RollCallNotice>>(emptyList())
@@ -64,12 +68,11 @@ object RollCallStore {
 
     private fun save() {
         val target = file ?: return
-        val snapshot = mutableNotices.value
         io.launch {
             runCatching {
                 target.parentFile?.mkdirs()
                 val partial = File(target.parentFile, target.name + ".tmp")
-                partial.writeText(encodeRollCallNotices(snapshot))
+                partial.writeText(encodeRollCallNotices(mutableNotices.value))
                 if (!partial.renameTo(target)) {
                     target.writeText(partial.readText())
                     partial.delete()
@@ -81,6 +84,16 @@ object RollCallStore {
     /** Whether the student allowed DIMA Now to read notifications (the only switch for this feature). */
     fun accessGranted(context: Context): Boolean =
         context.packageName in NotificationManagerCompat.getEnabledListenerPackages(context)
+
+    /**
+     * Opens the notification-access page for this app, or the general list where a build has no per-app page
+     * (some OEM and work-profile builds), instead of crashing.
+     */
+    fun openAccessSettings(context: Context) {
+        runCatching { context.startActivity(accessSettingsIntent(context)) }.onFailure {
+            runCatching { context.startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)) }
+        }
+    }
 
     /** The system page where notification access for this app is turned on or off. */
     fun accessSettingsIntent(context: Context): Intent =

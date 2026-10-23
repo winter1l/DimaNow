@@ -122,6 +122,7 @@ fun OnboardingRoute(
 
 /**
  * First run (D-075 order, D-102 content): what the app does, the home direction, then one permission step.
+ * Each step opens with a small decorative graphic of Material shapes ([OnboardingHero]) that morphs between steps.
  *
  * The permission step follows Apple HIG and the Toss guide: it names the two permissions guidance needs with
  * one sentence each, and its single `계속` button lets Android ask for both in turn. Refusing never blocks the
@@ -169,11 +170,14 @@ internal fun OnboardingScreen(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
+            // Outside the per-step key, so the graphic morphs from one step to the next instead of starting over.
+            val hero = rememberOnboardingHeroState(draft.stage)
             key(draft.stage) {
                 Column(
                     Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 24.dp, vertical = 16.dp),
                     verticalArrangement = Arrangement.spacedBy(20.dp),
                 ) {
+                    OnboardingHero(hero)
                     when (draft.stage) {
                         OnboardingStage.WELCOME -> {
                             StepHeading("학교생활을 한눈에", "수업, 셔틀, 식단을 한곳에서 확인해요.")

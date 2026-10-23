@@ -345,7 +345,7 @@ class AndroidLiveSurfaceController(private val context: Context) : LiveSurfaceCo
                     val minutes = requireNotNull(firstShuttle.minutes)
                     append(if (minutes <= 0) "곧 출발" else "${minutes}분 후 출발")
                     snapshot.countdownTarget?.atZone(com.example.dimanow.time.MinuteTicker.CAMPUS_ZONE)?.let {
-                        append(" · ${it.format(java.time.format.DateTimeFormatter.ofPattern("HH:mm"))}")
+                        append(" · ${it.format(com.example.dimanow.guidance.GUIDANCE_CLOCK)}")
                     }
                 })
             } else if (complementaryShuttle) add(requireNotNull(criticalText))

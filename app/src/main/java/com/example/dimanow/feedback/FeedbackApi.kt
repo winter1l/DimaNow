@@ -27,6 +27,13 @@ sealed interface FeedbackResult {
     /** This network sent one a moment ago, or today's reports are used up. */
     data object TooOften : FeedbackResult
 
+    /** The screenshot space is full (507): the same report goes through without screenshots. */
+    data object NoRoomForScreenshots : FeedbackResult
+
+    /** The gateway refused this report as it is (400/413/415): resending it unchanged will not help. */
+    data object Rejected : FeedbackResult
+
+    /** No answer or a server error: worth sending again. */
     data object Failed : FeedbackResult
 }
 
@@ -105,9 +112,12 @@ internal fun feedbackResult(code: Int, body: String): FeedbackResult = when (cod
     201 -> runCatching {
         val json = Json.parseToJsonElement(body) as JsonObject
         val number = json["number"]?.jsonPrimitive?.intOrNull
-        val url = json["url"]?.jsonPrimitive?.content?.takeIf { it.startsWith("https://github.com/winter1l/DimaNow/issues/") }
+        // Any github.com issue address: a renamed repository must not turn a posted report into a "failed" one.
+        val url = json["url"]?.jsonPrimitive?.content?.takeIf { it.startsWith("https://github.com/") && "/issues/" in it }
         if (number != null && url != null) FeedbackResult.Posted(number, url) else FeedbackResult.Failed
     }.getOrDefault(FeedbackResult.Failed)
     429 -> FeedbackResult.TooOften
+    507 -> FeedbackResult.NoRoomForScreenshots
+    400, 413, 415 -> FeedbackResult.Rejected
     else -> FeedbackResult.Failed
 }

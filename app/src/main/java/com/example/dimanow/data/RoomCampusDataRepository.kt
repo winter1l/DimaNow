@@ -10,6 +10,7 @@ import com.example.dimanow.domain.TermSchedule
 import java.time.LocalDate
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.first
@@ -41,7 +42,8 @@ class RoomCampusDataRepository(
                 )
             },
         )
-    }
+    // Room re-emits after any write to these tables; an unchanged schedule is not passed on again.
+    }.distinctUntilChanged()
 
     override val zones: Flow<List<CampusZone>> = dao.observeZones().map { zones -> zones.map { it.toDomain() } }
 

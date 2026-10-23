@@ -100,6 +100,8 @@ internal fun DashboardScreen(
     onAddCourse: () -> Unit = { onNavigateToPage(AppPage.TIMETABLE) },
     updateNotice: (@Composable () -> Unit)? = null,
     serviceCalendar: ServiceCalendar = ServiceCalendarStore.current,
+    /** Today's 점호 when Home should show it (엔터관 residents on a 점호 day, D-122); null hides the card. */
+    rollCall: com.example.dimanow.dorm.RollCallStatus? = null,
 ) {
     val context = LocalContext.current
     val nowTime = now.toLocalTime()
@@ -113,11 +115,13 @@ internal fun DashboardScreen(
     val guidanceEngine = remember { GuidanceEngine() }
     val locationAccess = rememberLocationAccess()
     val shuttleDepartures = shuttle?.departures.orEmpty()
-    val shuttleBoard = remember(now, zone, shuttleDepartures) {
+    // The week's schedule index changes only with the timetable; the minute tick reuses it.
+    val shuttleIndex = remember(shuttleDepartures) { guidanceEngine.prepareShuttleSchedule(shuttleDepartures) }
+    val shuttleBoard = remember(now, zone, shuttleIndex) {
         guidanceEngine.shuttleBoard(
             now = now,
             originZone = zone,
-            departures = shuttleDepartures,
+            index = shuttleIndex,
             purpose = ShuttleBoardPurpose.GENERAL,
         )
     }
@@ -362,7 +366,7 @@ internal fun DashboardScreen(
                 HomeContainerCard(modifier = Modifier.testTag("dashboard_shuttle_card")) {
                     shuttleHeader(false)
                     Text(
-                        "위치를 허용하면 지금 있는 곳에서 출발하는 셔틀을 바로 보여 줘요. 위치는 이 기기 안에서만 써요.",
+                        "위치를 허용하면 있는 곳의 셔틀을 바로 보여 줘요. 위치는 기기 안에서만 써요.",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.testTag("dashboard_location_needed"),
@@ -409,7 +413,7 @@ internal fun DashboardScreen(
                     zone == CampusZoneId.OUTSIDE -> {
                         // 위치를 쓸 수 있는데 캠퍼스 밖이면, 무엇이 언제 나타나는지만 알려 준다 (D-102)
                         Text(
-                            "캠퍼스에 들어오면 그곳에서 출발하는 셔틀을 바로 보여 줘요",
+                            "캠퍼스에 오면 바로 보여 줘요",
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.testTag("dashboard_outside"),
@@ -530,6 +534,13 @@ internal fun DashboardScreen(
         }
 
         // 3. 현재 구역의 오늘 식단 카드 — 카드 전체가 식단 탭을 연다 (D-094(9))
+        // D-122: 엔터관으로 돌아가는 학생에게는 점호 날 점호 안내와 외출·외박 신청을 홈에서 바로 준다
+        rollCall?.let { status ->
+            item(key = "roll_call") {
+                HomeRollCallCard(rollCall = status, time = nowTime, onOpenDorm = { onNavigateToPage(AppPage.DORM) })
+            }
+        }
+
         item(key = "meal") {
             HomeSummaryCard(
                 onClick = { onNavigateToPage(AppPage.MEAL) },
@@ -609,7 +620,12 @@ internal fun DashboardScreen(
                 shape = DimaShapes.Card,
                 colors = CardDefaults.elevatedCardColors(containerColor = DimaTheme.colors.card),
             ) {
-                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                // D-122: 머리의 전체보기 버튼(48dp)과 공지 행(48dp)이 이미 위아래 여백을 가지므로, 카드 여백은 위아래를
+                // 줄여 다른 홈 카드와 같은 간격으로 보이게 한다
+                Column(
+                    Modifier.padding(start = 16.dp, end = 12.dp, top = 8.dp, bottom = 8.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
                     // 공지 카드는 행마다 다른 곳을 열므로 카드 자체는 누를 수 없고, 머리의 전체보기만 버튼이다 (D-094(9))
                     HomeCardHeader(icon = Icons.Default.Campaign, title = "학교 공지", showChevron = false) {
                         TextButton(shapes = ButtonDefaults.shapes(), 
@@ -644,7 +660,7 @@ internal fun DashboardScreen(
                                         .heightIn(min = 48.dp)
                                         .clip(DimaShapes.Small)
                                         .clickable(onClickLabel = "공지 열기", role = Role.Button) { openUrl(context, notice.url) }
-                                        .padding(horizontal = 4.dp, vertical = 8.dp)
+                                        .padding(end = 4.dp, top = 8.dp, bottom = 8.dp)
                                         .testTag("dashboard_notice_${notice.id}"),
                                     verticalAlignment = Alignment.CenterVertically,
                                     horizontalArrangement = Arrangement.spacedBy(8.dp),

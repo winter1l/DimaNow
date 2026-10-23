@@ -230,15 +230,13 @@ class MaterialInteractionTest {
     }
 
     @Test
-    fun screenTitleAndSettingsRemainReachableAfterScrollingToTheEnd() {
-        var settingsClicks = 0
+    fun screenTitleAndRefreshActionRemainReachableAfterScrollingToTheEnd() {
+        var refreshClicks = 0
         composeRule.setContent {
             DIMANowTheme {
-                CompositionLocalProvider(LocalOpenSettings provides { settingsClicks++ }) {
-                    Box(Modifier.height(480.dp)) {
-                        ScreenScaffold(title = "시간표", listTag = "schedule_list") {
-                            items(40) { index -> Text("수업 $index", Modifier.fillMaxWidth().height(64.dp)) }
-                        }
+                Box(Modifier.height(480.dp)) {
+                    ScreenScaffold(title = "시간표", listTag = "schedule_list", onRefresh = { refreshClicks++ }) {
+                        items(40) { index -> Text("수업 $index", Modifier.fillMaxWidth().height(64.dp)) }
                     }
                 }
             }
@@ -246,13 +244,13 @@ class MaterialInteractionTest {
         composeRule.onNodeWithTag("schedule_list").performScrollToIndex(39)
         composeRule.onNodeWithText("수업 39").assertIsDisplayed()
         composeRule.onNodeWithText("시간표").assertIsDisplayed()
-        val settings = composeRule.onNodeWithTag("open_settings").assertIsDisplayed()
+        val refresh = composeRule.onNodeWithTag("refresh_action").assertIsDisplayed()
         // Material's 40dp visual IconButton expands its touch target to at least 48dp.
-        val touchBounds = settings.fetchSemanticsNode().touchBoundsInRoot
+        val touchBounds = refresh.fetchSemanticsNode().touchBoundsInRoot
         val minimumTouchSize = with(composeRule.density) { 48.dp.toPx() }
-        assertTrue("settings touch height is below 48dp", touchBounds.height >= minimumTouchSize - 0.5f)
-        assertTrue("settings touch width is below 48dp", touchBounds.width >= minimumTouchSize - 0.5f)
-        settings.performTouchInput { click() }
-        composeRule.runOnIdle { assertEquals(1, settingsClicks) }
+        assertTrue("refresh touch height is below 48dp", touchBounds.height >= minimumTouchSize - 0.5f)
+        assertTrue("refresh touch width is below 48dp", touchBounds.width >= minimumTouchSize - 0.5f)
+        refresh.performTouchInput { click() }
+        composeRule.runOnIdle { assertEquals(1, refreshClicks) }
     }
 }

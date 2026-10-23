@@ -97,7 +97,7 @@ private fun KakaoRollCallSetting() {
         )
         OutlinedButton(
             shapes = ButtonDefaults.shapes(),
-            onClick = { context.startActivity(RollCallStore.accessSettingsIntent(context)) },
+            onClick = { RollCallStore.openAccessSettings(context) },
             modifier = Modifier.heightIn(min = 48.dp).testTag("kakao_roll_call_access"),
         ) { Text(if (granted) "설정에서 끄기" else "알림 접근 허용하기") }
     }

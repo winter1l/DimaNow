@@ -46,7 +46,6 @@ import androidx.compose.material3.SegmentedListItem
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -68,14 +67,12 @@ import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.dimanow.calendar.ServiceCalendarStore
 import com.example.dimanow.dorm.DormHours
-import com.example.dimanow.dorm.OutingRules
 import com.example.dimanow.dorm.OutingWarning
 import com.example.dimanow.dorm.RollCallRules
 import com.example.dimanow.dorm.RollCallStatus
 import com.example.dimanow.dorm.RollCallStore
 import com.example.dimanow.school.DormPointEntry
 import com.example.dimanow.school.DormPointSummary
-import com.example.dimanow.school.INTRANET_DORM_OUTING_URL
 import com.example.dimanow.school.INTRANET_DORM_POINTS_SCRIPT
 import com.example.dimanow.school.INTRANET_DORM_POINTS_URL
 import com.example.dimanow.school.LocalSchoolServiceBridge
@@ -90,9 +87,7 @@ import com.example.dimanow.theme.DimaTheme
 import java.time.Instant
 import java.time.LocalTime
 import java.time.ZoneId
-import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 /** The pages behind the 기숙사 first screen (D-113): each opens over it with Back. */
@@ -121,7 +116,6 @@ internal fun DormScreen(onBack: () -> Unit, onOpenMeals: () -> Unit, modifier: M
     val calendar by ServiceCalendarStore.calendar.collectAsStateWithLifecycle()
     var loading by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
-    var outingError by remember { mutableStateOf<String?>(null) }
     var kakaoAccess by remember { mutableStateOf(RollCallStore.accessGranted(context)) }
     var showKakaoDialog by rememberSaveable { mutableStateOf(false) }
     var topic by rememberSaveable { mutableStateOf<DormTopic?>(null) }
@@ -131,13 +125,8 @@ internal fun DormScreen(onBack: () -> Unit, onOpenMeals: () -> Unit, modifier: M
         if (!kakaoAccess) RollCallStore.clear()
     }
     // The door, 점호 and opening times change through the day; a minute is fine enough.
-    var now by remember { mutableStateOf(ZonedDateTime.now(DormHours.CAMPUS_ZONE)) }
-    LaunchedEffect(Unit) {
-        while (true) {
-            delay(60_000L - now.second * 1_000L)
-            now = ZonedDateTime.now(DormHours.CAMPUS_ZONE)
-        }
-    }
+    // The shared minute ticker: lifecycle-aware, and it follows clock and time-zone changes.
+    val now = rememberMinuteNow()
     // Back from a detail page returns to the first screen before leaving 기숙사.
     BackHandler(enabled = topic != null) { topic = null }
 
@@ -158,27 +147,12 @@ internal fun DormScreen(onBack: () -> Unit, onOpenMeals: () -> Unit, modifier: M
         }
     }
 
-    var outingWarning by remember { mutableStateOf<Pair<OutingWarning, LocalTime>?>(null) }
-
-    fun openOuting() {
-        val service = bridge ?: return openUrl(context, INTRANET_DORM_OUTING_URL)
-        outingError = null
-        scope.launch {
-            val result = service.open(SchoolService.INTRANET, INTRANET_DORM_OUTING_URL, "외출·외박 신청")
-            if (result is SchoolServiceResult.Failure) outingError = result.message
-        }
-    }
-
     val today = now.toLocalDate()
-    val rollCall = RollCallRules.status(today, notices, calendar.holidays[today], calendar.examOn(today)?.let(::examName))
+    val rollCall = todayRollCall(today, notices, calendar)
     val announcedApplyBy = (rollCall as? RollCallStatus.Announced)?.notice?.takeIf { it.held }?.applyBy
-
-    // D-119: past the 점호 deadline or the overnight cut-off, ask before opening the application page.
-    fun requestOuting() {
-        val time = ZonedDateTime.now(DormHours.CAMPUS_ZONE).toLocalTime()
-        val warning = OutingRules.warning(time, rollCall)
-        if (warning == null) openOuting() else outingWarning = warning to time
-    }
+    // D-119: past the 점호 deadline or the overnight cut-off, ask before opening the application page (shared with Home).
+    val outing = rememberOutingLauncher(rollCall)
+    fun requestOuting() = outing.request()
     val read = saved
     val summary = read?.summary
     val shown = topic
@@ -255,7 +229,7 @@ internal fun DormScreen(onBack: () -> Unit, onOpenMeals: () -> Unit, modifier: M
                         }
                     }
                 }
-                outingError?.let { message -> item(key = "outing_error") { ErrorState(message) } }
+                outing.error?.let { message -> item(key = "outing_error") { ErrorState(message) } }
                 item(key = "info_header") { SettingsSectionHeader("생활 정보") }
                 item(key = "info") {
                     val openNow = DormGuide.facilities.count { facility ->
@@ -423,15 +397,6 @@ internal fun DormScreen(onBack: () -> Unit, onOpenMeals: () -> Unit, modifier: M
         }
     }
 
-    outingWarning?.let { (warning, time) ->
-        OutingWarningDialog(
-            warning = warning,
-            now = time,
-            onOpen = { outingWarning = null; openOuting() },
-            onDismiss = { outingWarning = null },
-        )
-    }
-
     if (showKakaoDialog) {
         // One explanation, one action that opens Android's notification-access page; back or a tap outside closes it.
         AlertDialog(
@@ -440,8 +405,8 @@ internal fun DormScreen(onBack: () -> Unit, onOpenMeals: () -> Unit, modifier: M
             title = { Text("카톡 공지로 점호 확인하기") },
             text = {
                 Text(
-                    "자치회 카톡방의 점호 공지를 읽어 오늘 점호가 있는지 알려 드려요. 점호 공지만 읽고, " +
-                        "날짜와 점호 여부만 이 기기에 2주 동안 보관해요. 공지방 알림이 꺼져 있으면 읽을 수 없어요.",
+                    "카카오톡 알림 중 점호 공지 문구가 있는 알림만 읽어 오늘 점호가 있는지 알려 드려요. " +
+                        "날짜와 점호 여부만 이 기기에 2주 동안 보관해요. 자치회 공지방 알림이 꺼져 있으면 읽을 수 없어요.",
                 )
             },
             confirmButton = {
@@ -449,7 +414,7 @@ internal fun DormScreen(onBack: () -> Unit, onOpenMeals: () -> Unit, modifier: M
                     shapes = ButtonDefaults.shapes(),
                     onClick = {
                         showKakaoDialog = false
-                        context.startActivity(RollCallStore.accessSettingsIntent(context))
+                        RollCallStore.openAccessSettings(context)
                     },
                     modifier = Modifier.testTag("dorm_kakao_open_settings"),
                 ) { Text("설정 열기") }
@@ -475,7 +440,7 @@ internal fun OutingWarningDialog(warning: OutingWarning, now: LocalTime, onOpen:
         )
         OutingWarning.OvernightClosed -> Triple(
             "외박 신청 시간이 지났어요",
-            "외박은 전날 23:59까지 신청해야 해요. 출입문이 다시 열릴 때까지는 신청이 반영되지 않을 수 있어요.",
+            "외박은 전날 23:59까지 신청해야 해요. 마감이 지나 신청하면 신청 날짜가 자동으로 다음 날로 넘어가요.",
             listOf("신청 마감" to "23:59", "지금" to nowText, "출입문 열림" to DormHours.DOOR_OPENS.format(CLOCK)),
         )
     }
@@ -498,52 +463,47 @@ internal fun OutingWarningDialog(warning: OutingWarning, now: LocalTime, onOpen:
     }
 }
 
-/** 오늘: 점호 and the front door; while notices are not read, one quiet button explains reading them. */
-@Composable
-private fun DormTodayCard(rollCall: RollCallStatus, time: LocalTime, kakaoAccess: Boolean, onAskKakao: () -> Unit) {
-    val (headline, detail) = rollCallText(rollCall)
-    val doorOpen = DormHours.doorOpen(time)
-    HomeContainerCard(Modifier.testTag("dorm_today")) {
-        HomeCardHeader(icon = Icons.Default.NotificationsActive, title = "오늘", showChevron = false)
-        Column(verticalArrangement = Arrangement.spacedBy(2.dp), modifier = Modifier.testTag("dorm_roll_call")) {
-            Text(headline, style = MaterialTheme.typography.titleMedium)
-            detail?.let { Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) }
-        }
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            Icon(Icons.Default.DoorFront, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(20.dp))
-            Text(
-                if (doorOpen) "출입문 열림 · 02:00에 닫혀요" else "출입문 닫힘 · 06:00에 열려요",
-                style = MaterialTheme.typography.bodyMedium,
-                modifier = Modifier.weight(1f).testTag("dorm_door"),
-            )
-        }
-        if (!kakaoAccess) {
-            TextButton(
-                shapes = ButtonDefaults.shapes(),
-                onClick = onAskKakao,
-                modifier = Modifier.heightIn(min = 48.dp).testTag("dorm_allow_kakao"),
-            ) { Text("카톡 공지로 점호 확인하기") }
-        }
-    }
-}
-
 /** This term's points at a glance; the whole card opens the 상벌점 page. */
 @Composable
 private fun PointsSummaryCard(summary: DormPointSummary?, readAt: Instant, onOpen: () -> Unit) {
-    val totals = "상점 ${summary?.merit ?: 0}점 · 벌점 ${summary?.demerit ?: 0}점"
+    val merit = summary?.merit ?: 0
+    val demerit = summary?.demerit ?: 0
     HomeSummaryCard(
         onClick = onOpen,
         onClickLabel = "상벌점 자세히 보기",
         modifier = Modifier.testTag("dorm_points_card"),
     ) {
         HomeCardHeader(icon = Icons.Default.Apartment, title = summary?.let { termLabel(it) }?.let { "$it 상벌점" } ?: "상벌점")
-        Text(totals, style = MaterialTheme.typography.titleLarge, modifier = Modifier.testTag("dorm_points_total"))
+        // D-122: two number tiles read faster than one sentence; the line stays for screen readers.
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier.testTag("dorm_points_total").semantics(mergeDescendants = true) {},
+        ) {
+            PointTile("상점", merit, MaterialTheme.colorScheme.secondaryContainer, MaterialTheme.colorScheme.onSecondaryContainer, Modifier.weight(1f))
+            PointTile(
+                "벌점",
+                demerit,
+                if (demerit > 0) DimaTheme.colors.warningContainer else DimaTheme.colors.cardInner,
+                if (demerit > 0) DimaTheme.colors.onWarningContainer else MaterialTheme.colorScheme.onSurfaceVariant,
+                Modifier.weight(1f),
+            )
+        }
         Text(
             dormPointsReadAtLabel(readAt, Instant.now()),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.testTag("dorm_points_read_at"),
         )
+    }
+}
+
+@Composable
+private fun PointTile(label: String, points: Int, container: androidx.compose.ui.graphics.Color, content: androidx.compose.ui.graphics.Color, modifier: Modifier) {
+    Surface(modifier = modifier, shape = DimaShapes.Tile, color = container, contentColor = content) {
+        Column(Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
+            Text(label, style = MaterialTheme.typography.labelLarge)
+            Text("${points}점", style = MaterialTheme.typography.headlineSmall)
+        }
     }
 }
 
@@ -581,11 +541,6 @@ internal fun rollCallText(status: RollCallStatus, zone: ZoneId = DormHours.CAMPU
         }
     is RollCallStatus.Holiday -> "오늘은 점호가 없어요" to "${status.name} · 공휴일에는 점호를 하지 않아요"
     is RollCallStatus.NotToday -> "오늘은 점호가 없어요" to "다음 점호는 ${koreanDateLabel(status.next)} 23:00 예정이에요"
-}
-
-private fun examName(exam: ServiceCalendar.Exam): String = when (exam) {
-    ServiceCalendar.Exam.MIDTERM -> "중간고사"
-    ServiceCalendar.Exam.FINAL -> "기말고사"
 }
 
 private fun copyAddress(context: Context) {

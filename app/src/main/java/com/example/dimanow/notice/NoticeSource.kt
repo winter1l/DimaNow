@@ -14,6 +14,7 @@ import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -55,10 +56,11 @@ class StaticNoticeSource(
     // Tolerates fields added by a later publisher (D-099); schemaVersion still gates incompatible payloads.
     private val json = Json { ignoreUnknownKeys = true }
 
+    // Room re-emits after any write to the shared status tables; repeats are dropped.
     override val data: Flow<NoticeData> = combine(
-        dao.observeNotices(),
-        dao.observeSourceStatus(SOURCE_KEY),
-        dao.observeSyncState(SOURCE_KEY),
+        dao.observeNotices().distinctUntilChanged(),
+        dao.observeSourceStatus(SOURCE_KEY).distinctUntilChanged(),
+        dao.observeSyncState(SOURCE_KEY).distinctUntilChanged(),
     ) { notices, status, sync ->
         NoticeData(
             notices = notices.map { it.toDomain() },
@@ -69,7 +71,7 @@ class StaticNoticeSource(
             serverPublishedAt = sync?.serverPublishedEpochMillis?.let(Instant::ofEpochMilli),
             serverState = sync?.serverState,
         )
-    }
+    }.distinctUntilChanged()
 
     override suspend fun refresh(): NoticeRefreshResult = refreshMutex.withLock { withContext(ioDispatcher) {
         val attempt = clock.instant()

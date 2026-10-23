@@ -28,8 +28,10 @@ class ImminentDepartureShapeTest {
     @Test
     fun imminentCapsuleRoundsItsCornersIntoAPill() {
         var imminent by mutableStateOf(false)
+        var tertiary = Color.Unspecified
         composeRule.setContent {
             DIMANowTheme(darkTheme = false) {
+                tertiary = androidx.compose.material3.MaterialTheme.colorScheme.tertiary
                 Box(Modifier.testTag("capsule_scene").background(Color.Black).padding(8.dp)) {
                     DepartureCapsule(
                         label = "3분 후",
@@ -47,9 +49,18 @@ class ImminentDepartureShapeTest {
         composeRule.runOnIdle { imminent = true }
         composeRule.waitForIdle()
         assertEquals("a pill leaves its corner empty", Color.Black.toArgb(), cornerProbe())
+        assertEquals("D-122: the pill also takes the tertiary accent", tertiary.toArgb(), edgeProbe())
         composeRule.runOnIdle { imminent = false }
         composeRule.waitForIdle()
         assertEquals("the tile comes back once the departure is no longer imminent", Color.White.toArgb(), cornerProbe())
+        assertEquals("and its own colour with it", Color.White.toArgb(), edgeProbe())
+    }
+
+    /** A pixel just inside the capsule's left edge at half height, clear of the text. */
+    private fun edgeProbe(): Int {
+        val image = composeRule.onNodeWithTag("capsule_scene").captureToImage()
+        val x = with(composeRule.density) { (8.dp + 4.dp).roundToPx() }
+        return image.toPixelMap()[x, image.height / 2].toArgb()
     }
 
     private fun cornerProbe(): Int {

@@ -3,6 +3,10 @@ package com.example.dimanow.ui.motion
 import android.provider.Settings
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.ContentTransform
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.SizeTransform
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FiniteAnimationSpec
@@ -314,6 +318,30 @@ fun dimaContentSwap(): ContentTransform = ContentTransform(
     initialContentExit = slideOutVertically(DimaMotion.spatialDefault()) { -it / 3 } + fadeOut(DimaMotion.effectsFast()),
     sizeTransform = SizeTransform(clip = false) { _, _ -> DimaMotion.spatialDefault() },
 )
+
+/**
+ * Content arriving in place of a placeholder (a loading line, an empty or error message), such as a list that has
+ * just been read: the placeholder fades out on the fast effects spring, the content fades in on the default one and
+ * the container's height follows on the default spatial spring, so the page grows into the new content instead of
+ * popping. Nothing moves sideways or vertically; use [dimaContentSwap] for one block replaced by the next of its kind.
+ * Under the system's "remove animations" Compose finishes it at once.
+ */
+fun dimaContentReveal(): ContentTransform = ContentTransform(
+    targetContentEnter = fadeIn(DimaMotion.effectsDefault()),
+    initialContentExit = fadeOut(DimaMotion.effectsFast()),
+    sizeTransform = SizeTransform(clip = false) { _, _ -> DimaMotion.spatialDefault() },
+)
+
+/**
+ * A fold or a card section opening (D-118): it grows downward on the default spatial spring while it fades in.
+ * Pair with [dimaCollapseOut] and a chevron turning on the same spring.
+ */
+fun dimaExpandIn(): EnterTransition =
+    expandVertically(DimaMotion.spatialDefault()) + fadeIn(DimaMotion.effectsDefault())
+
+/** A fold or a card section closing (D-118): it shrinks on the default spatial spring and fades on the fast one. */
+fun dimaCollapseOut(): ExitTransition =
+    shrinkVertically(DimaMotion.spatialDefault()) + fadeOut(DimaMotion.effectsFast())
 
 /** Spatial motion for the changing count, non-overshooting effects for opacity. */
 @Composable

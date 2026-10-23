@@ -30,8 +30,9 @@ object RollCallNoticeParser {
     // Narrow on purpose: the held notice also says "노크하지 않습니다" about closed doors.
     private val CANCELLED = Regex("""(실시|진행)\s*(되|하)지\s*않|미\s*실시|점호\s*(는|가)?\s*없|점호\s*취소|취소\s*되었""")
     private val HELD = Regex("""(실시|진행)\s*(될\s*예정|합니다|됩니다|예정)""")
-    private val TIME = Regex("""(\d{1,2})\s*시(?:\s*(\d{1,2})\s*분)?""")
-    private val APPLY_BY = Regex("""신청은?\s*(\d{1,2})\s*시(?:\s*(\d{1,2})\s*분)?\s*까지""")
+    // 오전/오후 is optional; "오후 11시" is 23:00.
+    private val TIME = Regex("""(오전|오후)?\s*(\d{1,2})\s*시(?:\s*(\d{1,2})\s*분)?""")
+    private val APPLY_BY = Regex("""신청은?\s*(오전|오후)?\s*(\d{1,2})\s*시(?:\s*(\d{1,2})\s*분)?\s*까지""")
     private val DATE = Regex("""(\d{1,2})\s*월\s*(\d{1,2})\s*일""")
     private val REASON = Regex("""([가-힣]+\s*기간)\s*(?:으로|로)\s*인해""")
 
@@ -73,8 +74,13 @@ object RollCallNoticeParser {
     }
 
     private fun time(match: MatchResult): LocalTime? {
-        val hour = match.groupValues[1].toIntOrNull() ?: return null
-        val minute = match.groupValues.getOrNull(2)?.toIntOrNull() ?: 0
+        val written = match.groupValues[2].toIntOrNull() ?: return null
+        val hour = when (match.groupValues[1]) {
+            "오후" -> if (written in 1..11) written + 12 else written
+            "오전" -> if (written == 12) 0 else written
+            else -> written
+        }
+        val minute = match.groupValues.getOrNull(3)?.toIntOrNull() ?: 0
         return if (hour in 0..23 && minute in 0..59) LocalTime.of(hour, minute) else null
     }
 }
@@ -138,13 +144,15 @@ object OutingRules {
         if (time >= OVERNIGHT_DEADLINE || time < DormHours.DOOR_OPENS) return OutingWarning.OvernightClosed
         val heldNotice = (rollCall as? RollCallStatus.Announced)?.notice?.takeIf { it.held }
         // An announced time is the last minute applications count ("20시 59분까지"); the usual rule is "21:00 전까지".
-        val (closesAt, text) = when {
-            heldNotice?.applyBy != null -> heldNotice.applyBy.plusMinutes(1) to "${heldNotice.applyBy.format(CLOCK)}까지"
+        // Compared as "after the last minute" so a 23:59 deadline does not wrap to midnight.
+        val (late, text) = when {
+            heldNotice?.applyBy != null ->
+                (time.truncatedTo(java.time.temporal.ChronoUnit.MINUTES) > heldNotice.applyBy) to "${heldNotice.applyBy.format(CLOCK)}까지"
             heldNotice != null || rollCall is RollCallStatus.Scheduled ->
-                RollCallRules.USUAL_APPLY_BY to "${RollCallRules.USUAL_APPLY_BY.format(CLOCK)} 전까지"
+                (time >= RollCallRules.USUAL_APPLY_BY) to "${RollCallRules.USUAL_APPLY_BY.format(CLOCK)} 전까지"
             else -> return null
         }
-        return if (time >= closesAt) OutingWarning.AfterRollCallDeadline(text) else null
+        return if (late) OutingWarning.AfterRollCallDeadline(text) else null
     }
 
     private val CLOCK = java.time.format.DateTimeFormatter.ofPattern("HH:mm")

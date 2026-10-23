@@ -41,6 +41,7 @@ import com.example.dimanow.domain.ShuttleDeparture
 import com.example.dimanow.guidance.GuidanceEngine
 import com.example.dimanow.guidance.AnnotatedServiceDeparture
 import com.example.dimanow.guidance.ShuttleBoardPurpose
+import com.example.dimanow.guidance.ShuttleScheduleIndex
 import com.example.dimanow.shuttle.ShuttleSource
 import com.example.dimanow.time.MinuteTicker
 import java.time.DayOfWeek
@@ -99,6 +100,8 @@ fun ShuttleScreen(
     // 요일별 출발지 묶음은 컴포저블 범위에서 한 번만 계산하고, 목록은 카드마다 키가 있는 지연 항목으로 낸다 (D-094)
     val activeDay = selectedDay
     val isToday = activeDay == now.dayOfWeek
+    // One schedule index per timetable, shared by every card's countdown instead of rebuilt per card each minute.
+    val shuttleIndex = remember(shuttleDepartures) { guidanceEngine.prepareShuttleSchedule(shuttleDepartures) }
     // D-099: 공휴일·운행 중지일에는 오늘 시간표 대신 미운행을, 학기 밖(방학)에는 시간 변동 가능성을 알린다
     val todaySuspension = remember(now.toLocalDate()) { guidanceEngine.campusShuttleSuspensionOn(now.toLocalDate()) }
     val outsideTerm = remember(now.toLocalDate()) {
@@ -227,6 +230,7 @@ fun ShuttleScreen(
                                         destinationZone = destinationZone,
                                         routeDepartures = routeDepartures,
                                         shuttleDepartures = shuttleDepartures,
+                                        shuttleIndex = shuttleIndex,
                                         activeDay = activeDay,
                                         isToday = isToday,
                                         isCurrentLocation = isCurrentLocation,
@@ -292,6 +296,7 @@ private fun ShuttleRouteCard(
     destinationZone: CampusZoneId?,
     routeDepartures: List<ShuttleDeparture>,
     shuttleDepartures: List<ShuttleDeparture>,
+    shuttleIndex: ShuttleScheduleIndex,
     activeDay: DayOfWeek,
     isToday: Boolean,
     isCurrentLocation: Boolean,
@@ -321,12 +326,12 @@ private fun ShuttleRouteCard(
     }
     val sortedTimes = annotatedDepartures.map { it.departure.time }
 
-    val upcomingCountdowns = remember(shuttleDepartures, now, activeDay, isToday, originZone, destinationZone) {
+    val upcomingCountdowns = remember(shuttleIndex, now, activeDay, isToday, originZone, destinationZone) {
         if (isToday && destinationZone != null) {
             guidanceEngine.shuttleBoard(
                 now = now,
                 originZone = originZone,
-                departures = shuttleDepartures,
+                index = shuttleIndex,
                 purpose = ShuttleBoardPurpose.GENERAL,
             ).rows.firstOrNull { it.destinationZone == destinationZone }?.departures.orEmpty()
         } else emptyList()

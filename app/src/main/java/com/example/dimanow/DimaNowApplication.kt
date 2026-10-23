@@ -259,6 +259,9 @@ class DimaNowApplication : Application() {
                     nearbyTransitStop = transitStop?.let { NearbyTransitStop(it.stopNumber, it.displayName) },
                 )
             }
+                // An equal snapshot (Room re-emitting unchanged rows) would only rebuild the same notification and
+                // alarms; the minute and lock-state refreshes go through requestRefresh, not through here.
+                .distinctUntilChanged()
                 .collectLatest { snapshot ->
                     guidanceRuntimeCoordinator.update(snapshot)
                     if (widgetRefreshPlanner.shouldRefresh(previousWidgetZone, snapshot.resolvedZone)) {

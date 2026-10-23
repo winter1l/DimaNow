@@ -73,8 +73,10 @@ data class ShuttleBoardRow(
 
 data class ShuttleBoard(val rows: List<ShuttleBoardRow>)
 
+/** `HH:mm`, built once: guidance text, the shuttle list rows and the live notification all format clocks with it. */
+internal val GUIDANCE_CLOCK: DateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm")
+
 class ShuttleScheduleIndex internal constructor(
-    internal val rawDepartures: List<ShuttleDeparture>,
     internal val grouped: Map<ShuttleScheduleKey, List<ShuttleDeparture>>,
     internal val destinations: Map<Pair<DayOfWeek, CampusZoneId>, List<CampusZoneId>>,
 )
@@ -93,7 +95,7 @@ data class AnnotatedServiceDeparture(
     val isBoardingStopTransition: Boolean = false,
 ) {
     val displayText: String
-        get() = departure.time.format(DateTimeFormatter.ofPattern("HH:mm")) + when {
+        get() = departure.time.format(GUIDANCE_CLOCK) + when {
             isFirst && isLast -> " (첫차·막차)"
             isFirst -> " (첫차)"
             isLast -> " (막차)"
@@ -235,7 +237,7 @@ class GuidanceEngine(
         val destinations = grouped.keys
             .groupBy({ it.serviceDay to it.originZone }, { it.destinationZone })
             .mapValues { (_, values) -> values.distinct().sortedBy { it.ordinal } }
-        return ShuttleScheduleIndex(departures, grouped, destinations)
+        return ShuttleScheduleIndex(grouped, destinations)
     }
 
     fun boardingOriginName(
@@ -626,7 +628,7 @@ class GuidanceEngine(
     private companion object {
         const val STADIUM_STOP_ID = "stadium-stop"
         const val STADIUM_ORIGIN_NAME = "운동장"
-        val TIME_FORMAT: DateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm")
+        val TIME_FORMAT: DateTimeFormatter = GUIDANCE_CLOCK
 
         fun shuttleWaitText(now: ZonedDateTime, minutes: Long): String =
             if (minutes > 60) {

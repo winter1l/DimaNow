@@ -10,11 +10,15 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.collapse
+import androidx.compose.ui.semantics.expand
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
@@ -244,4 +248,34 @@ private fun <T> DimaDayCellSelector(
             }
         }
     }
+}
+
+/**
+ * The down chevron of an expandable row: it turns half a turn when [expanded], on the spatial spring. The rotation is
+ * read in the draw phase, so the turning chevron does not recompose the row it sits in.
+ */
+@Composable
+internal fun ExpandChevron(
+    expanded: Boolean,
+    modifier: Modifier = Modifier,
+    tint: Color = LocalContentColor.current,
+    label: String = "expand_chevron",
+) {
+    val rotation = androidx.compose.animation.core.animateFloatAsState(
+        targetValue = if (expanded) 180f else 0f,
+        animationSpec = com.example.dimanow.ui.motion.DimaMotion.spatialDefault(),
+        label = label,
+    )
+    Icon(
+        androidx.compose.material.icons.Icons.Default.ExpandMore,
+        contentDescription = null,
+        tint = tint,
+        modifier = modifier.graphicsLayer { rotationZ = rotation.value },
+    )
+}
+
+/** Screen readers hear an expandable row's state (`펼쳐짐`/`접힘`) and get the matching expand or collapse action. */
+internal fun Modifier.expandableSemantics(expanded: Boolean, onToggle: () -> Unit): Modifier = semantics {
+    stateDescription = if (expanded) "펼쳐짐" else "접힘"
+    if (expanded) collapse { onToggle(); true } else expand { onToggle(); true }
 }

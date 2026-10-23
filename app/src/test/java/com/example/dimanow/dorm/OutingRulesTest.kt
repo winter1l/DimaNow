@@ -38,4 +38,21 @@ class OutingRulesTest {
         }
         assertNull(OutingRules.warning(LocalTime.of(6, 0), noRollCall))
     }
+
+    @Test
+    fun `an announced 23_59 deadline does not wrap to midnight`() {
+        val notice = RollCallNotice(LocalDate.of(2026, 10, 20), held = true, applyBy = LocalTime.of(23, 59), receivedAt = Instant.EPOCH)
+        assertNull(OutingRules.warning(LocalTime.of(22, 0), RollCallStatus.Announced(notice)))
+        assertNull(OutingRules.warning(LocalTime.of(23, 58, 30), RollCallStatus.Announced(notice)))
+    }
+
+    @Test
+    fun `Home shows the 점호 card only to 엔터관 residents on a day with 점호 news`() {
+        val notice = RollCallNotice(LocalDate.of(2026, 10, 20), held = false, receivedAt = Instant.EPOCH)
+        org.junit.Assert.assertTrue(com.example.dimanow.ui.showsHomeRollCall(true, scheduled))
+        org.junit.Assert.assertTrue(com.example.dimanow.ui.showsHomeRollCall(true, RollCallStatus.Announced(notice)))
+        org.junit.Assert.assertFalse(com.example.dimanow.ui.showsHomeRollCall(false, scheduled))
+        org.junit.Assert.assertFalse(com.example.dimanow.ui.showsHomeRollCall(true, noRollCall))
+        org.junit.Assert.assertFalse(com.example.dimanow.ui.showsHomeRollCall(true, RollCallStatus.Holiday("개천절")))
+    }
 }

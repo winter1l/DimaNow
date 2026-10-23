@@ -16,6 +16,7 @@ class DataLoadStateTest {
     @Test
     fun `shuttle pull-to-refresh messages are plain and never expose raw errors`() {
         assertEquals("셔틀 시간표를 새로 받았어요", shuttleRefreshMessage(ShuttleRefreshResult.Success(625, at)))
+        assertEquals("이미 최신 셔틀 시간표예요", shuttleRefreshMessage(ShuttleRefreshResult.Success(625, at, changed = false)))
         assertEquals(
             "셔틀 시간표를 받지 못했어요. 저장된 시간표를 보여 드릴게요",
             shuttleRefreshMessage(ShuttleRefreshResult.Failure("java.net.UnknownHostException: www.dima.ac.kr", 625)),

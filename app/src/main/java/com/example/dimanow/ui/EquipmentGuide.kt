@@ -1,11 +1,6 @@
 package com.example.dimanow.ui
 
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.expandVertically
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -17,7 +12,6 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.filled.EditNote
-import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Inventory2
 import androidx.compose.material.icons.filled.Person
@@ -33,18 +27,15 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.semantics.collapse
-import androidx.compose.ui.semantics.expand
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.dp
 import com.example.dimanow.theme.DimaShapes
 import com.example.dimanow.theme.DimaTheme
-import com.example.dimanow.ui.motion.DimaMotion
+import com.example.dimanow.ui.motion.dimaCollapseOut
+import com.example.dimanow.ui.motion.dimaExpandIn
 
 /**
  * The 창의실습지원센터 rental notice (2026학년도 2학기, as the user gave it on 2026-10-23): 대여사유 작성 요령 and
@@ -97,29 +88,21 @@ internal fun EquipmentGuideCard(
             GuidePoint(Icons.Default.Person, "수령과 반납은 본인이 직접 해요. 대여 당일에 받지 않으면 취소돼요.")
             GuidePoint(Icons.Default.Inventory2, "받자마자 구성품과 상태를 확인해요. 그 뒤 발견된 문제는 대여자가 배상해요.")
         }
-        val rotation by animateFloatAsState(
-            targetValue = if (expanded) 180f else 0f,
-            animationSpec = DimaMotion.spatialDefault(),
-            label = "equipment_guide_chevron",
-        )
         TextButton(
             shapes = ButtonDefaults.shapes(),
             onClick = onToggle,
             modifier = Modifier
                 .heightIn(min = 48.dp)
                 .testTag("equipment_guide_more")
-                .semantics {
-                    stateDescription = if (expanded) "펼쳐짐" else "접힘"
-                    if (expanded) collapse { onToggle(); true } else expand { onToggle(); true }
-                },
+                .expandableSemantics(expanded, onToggle),
         ) {
             Text(if (expanded) "접기" else "자세히 보기")
-            Icon(Icons.Default.ExpandMore, contentDescription = null, modifier = Modifier.padding(start = 4.dp).size(20.dp).rotate(rotation))
+            ExpandChevron(expanded, Modifier.padding(start = 4.dp).size(20.dp), label = "equipment_guide_chevron")
         }
         AnimatedVisibility(
             visible = expanded,
-            enter = expandVertically(DimaMotion.spatialDefault()) + fadeIn(DimaMotion.effectsDefault()),
-            exit = shrinkVertically(DimaMotion.spatialDefault()) + fadeOut(DimaMotion.effectsFast()),
+            enter = dimaExpandIn(),
+            exit = dimaCollapseOut(),
         ) {
             EquipmentNoticeDetails(onOpenNotice)
         }

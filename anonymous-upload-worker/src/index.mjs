@@ -57,6 +57,9 @@ export function createWorker(dependencies = {}) {
           helpers: {
             jsonResponse, jsonHeaders, rateLimitClientKey, sha256Hex, positiveLimit, uploadBudgetWindows,
             hasExpectedImageSignature, imageDimensions,
+            // Streams the body with a byte cap, so a chunked request without Content-Length cannot exhaust memory.
+            readBody: readBoundedRequestBody,
+            isBodyTooLarge: (error) => error instanceof BodyTooLargeError,
           },
         });
       }

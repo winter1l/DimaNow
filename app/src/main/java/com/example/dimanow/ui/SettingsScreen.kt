@@ -83,6 +83,11 @@ internal fun SettingsScreen(
     onDeleteLmsAccount: () -> Unit,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
+    updateState: AppUpdateUiState? = null,
+    onCheckUpdate: () -> Unit = {},
+    onDownloadUpdate: () -> Unit = {},
+    onContinueInstall: () -> Unit = {},
+    onCancelDownload: () -> Unit = {},
 ) {
     var confirmDeleteLmsAccount by remember { mutableStateOf(false) }
     var diagnosticsExpanded by rememberSaveable { mutableStateOf(false) }
@@ -182,7 +187,20 @@ internal fun SettingsScreen(
             }
         }
         item(key = "app_data") { AppDataCard() }
-        // D-119: 앱 정보 (업데이트, 이 앱에 대해, 링크) is its own page under 전체, below 설정.
+        // D-122: 앱 정보 is back in 설정 (D-119 had moved it to its own 전체 page); 전체 keeps 문의·오류 제보.
+        item(key = "app_info_header") { SettingsSectionHeader("앱 정보") }
+        if (updateState != null) {
+            item(key = "app_update") {
+                AppUpdateCard(
+                    state = updateState,
+                    onCheck = onCheckUpdate,
+                    onDownload = onDownloadUpdate,
+                    onContinueInstall = onContinueInstall,
+                    onCancelDownload = onCancelDownload,
+                )
+            }
+        }
+        item(key = "about") { AboutCard() }
         item(key = "diagnostics_toggle") {
             SettingsExpander(
                 title = "고급 및 진단",

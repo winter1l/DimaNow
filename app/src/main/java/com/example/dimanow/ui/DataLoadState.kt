@@ -126,7 +126,7 @@ internal fun homeShuttleUnavailableMessage(data: ShuttleData): String =
 
 /** Snackbar text for a user-initiated shuttle pull-to-refresh (D-094(3)). */
 internal fun shuttleRefreshMessage(result: ShuttleRefreshResult): String = when (result) {
-    is ShuttleRefreshResult.Success -> "셔틀 시간표를 새로 받았어요"
+    is ShuttleRefreshResult.Success -> if (result.changed) "셔틀 시간표를 새로 받았어요" else "이미 최신 셔틀 시간표예요"
     is ShuttleRefreshResult.Failure -> if (result.cachedDepartureCount > 0) {
         "셔틀 시간표를 받지 못했어요. 저장된 시간표를 보여 드릴게요"
     } else {
@@ -197,8 +197,18 @@ internal fun DepartureCapsule(
         animationSpec = DimaMotion.spatialDefault(),
         label = "departure_capsule_shape",
     )
-    val fill by animateColorAsState(containerColor, DimaMotion.effectsDefault(), label = "departure_capsule_fill")
-    val ink by animateColorAsState(contentColor, DimaMotion.effectsDefault(), label = "departure_capsule_ink")
+    // D-122: an imminent departure also turns to the strong tertiary accent as it becomes a pill, so the change of
+    // shape reads as "hurry" at a glance (the colour eases on the effects spring alongside the shape).
+    val fill by animateColorAsState(
+        if (imminent) MaterialTheme.colorScheme.tertiary else containerColor,
+        DimaMotion.effectsDefault(),
+        label = "departure_capsule_fill",
+    )
+    val ink by animateColorAsState(
+        if (imminent) MaterialTheme.colorScheme.onTertiary else contentColor,
+        DimaMotion.effectsDefault(),
+        label = "departure_capsule_ink",
+    )
     Surface(
         shape = if (pillFraction == 0f) DimaShapes.Tile else DimaShapes.tileToPill(pillFraction),
         color = fill,

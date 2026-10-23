@@ -131,4 +131,13 @@ class RollCallTest {
             com.example.dimanow.ui.rollCallText(RollCallStatus.Scheduled(LocalTime.of(23, 0), "중간고사")),
         )
     }
+
+    @Test
+    fun `오후 and 오전 clock times are read on a 24-hour clock`() {
+        val notice = requireNotNull(
+            RollCallNoticeParser.parse("금일 오후 11시에 점호가 진행될 예정입니다. 외출 신청은 오후 8시 59분까지 가능합니다.", tuesday),
+        )
+        assertEquals(LocalTime.of(23, 0), notice.time)
+        assertEquals(LocalTime.of(20, 59), notice.applyBy)
+    }
 }

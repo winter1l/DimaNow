@@ -1,18 +1,12 @@
 package com.example.dimanow.lms
 
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.TaskAlt
 import androidx.compose.material3.Surface
-import androidx.compose.ui.draw.rotate
-import androidx.compose.ui.semantics.collapse
-import androidx.compose.ui.semantics.expand
-import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -71,6 +65,8 @@ import com.example.dimanow.theme.DimaTheme
 import com.example.dimanow.ui.DimaIconBadge
 import com.example.dimanow.ui.DimaSegmentedList
 import com.example.dimanow.ui.EmptyState
+import com.example.dimanow.ui.ExpandChevron
+import com.example.dimanow.ui.expandableSemantics
 import com.example.dimanow.ui.ErrorState
 import com.example.dimanow.ui.ScreenScaffold
 import com.example.dimanow.ui.dimaSegmentedListColors
@@ -231,17 +227,13 @@ private fun LmsFoldedSection(
  */
 @Composable
 private fun LmsFoldHeader(title: String, count: Int, completed: Boolean, expanded: Boolean, onToggle: () -> Unit, tag: String) {
-    val rotation by animateFloatAsState(if (expanded) 180f else 0f, animationSpec = DimaMotion.spatialDefault(), label = "lms_fold_chevron")
     Surface(
         onClick = onToggle,
         modifier = Modifier
             .fillMaxWidth()
             .heightIn(min = 48.dp)
             .testTag(tag)
-            .semantics {
-                stateDescription = if (expanded) "펼쳐짐" else "접힘"
-                if (expanded) collapse { onToggle(); true } else expand { onToggle(); true }
-            },
+            .expandableSemantics(expanded, onToggle),
         shape = RoundedCornerShape(14.dp),
         color = DimaTheme.colors.cardMuted,
         contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -259,7 +251,7 @@ private fun LmsFoldHeader(title: String, count: Int, completed: Boolean, expande
             )
             Text(title, style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
             Text("${count}개", style = MaterialTheme.typography.labelLarge)
-            Icon(Icons.Default.ExpandMore, contentDescription = null, modifier = Modifier.size(20.dp).rotate(rotation))
+            ExpandChevron(expanded, Modifier.size(20.dp), label = "lms_fold_chevron")
         }
     }
 }

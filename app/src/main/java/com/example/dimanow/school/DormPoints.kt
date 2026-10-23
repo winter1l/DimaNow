@@ -115,7 +115,11 @@ object SchoolReadCache {
     /** The last 상벌점 read and when it was made; [summary] is null when the list was empty. */
     data class DormPointsRead(val summary: DormPointSummary?, val readAt: Instant)
 
-    private val io = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    // The load, writes and the delete run in launch order on one IO lane, so 계정 삭제 cannot be undone by a write or
+    // the startup load that was still pending (a cleared generation is never loaded or written again).
+    @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+    private val io = CoroutineScope(SupervisorJob() + Dispatchers.IO.limitedParallelism(1))
+    @Volatile private var generation = 0
     private var dormPointsFile: File? = null
 
     private val mutableDormPoints = MutableStateFlow<DormPointsRead?>(null)
@@ -124,16 +128,19 @@ object SchoolReadCache {
     /** Keeps 상벌점 reads in [file] and shows the saved one as soon as it is loaded. */
     fun persistDormPointsIn(file: File) {
         dormPointsFile = file
+        val loading = generation
         io.launch {
             val saved = runCatching { decodeDormPointsRead(file.readText()) }.getOrNull() ?: return@launch
-            mutableDormPoints.compareAndSet(null, saved)
+            if (generation == loading) mutableDormPoints.compareAndSet(null, saved)
         }
     }
 
     fun setDormPoints(read: DormPointsRead) {
         mutableDormPoints.value = read
         val file = dormPointsFile ?: return
+        val writing = generation
         io.launch {
+            if (generation != writing) return@launch
             runCatching {
                 file.parentFile?.mkdirs()
                 val partial = File(file.parentFile, file.name + ".tmp")
@@ -174,6 +181,7 @@ object SchoolReadCache {
     }
 
     fun clear() {
+        generation++
         mutableDormPoints.value = null
         mutableEquipmentCatalog.value = null
         mutableEquipmentAvailability.value = emptyMap()

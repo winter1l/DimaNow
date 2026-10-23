@@ -30,6 +30,7 @@ import java.io.File
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 internal data class LmsPresentedDetail(
@@ -111,30 +112,31 @@ fun LmsRoute(
         }
     }
 
-    suspend fun loginAndRefresh(force: Boolean, credentialsChanged: Boolean = false) {
+    /** Returns true when the list was read from the LMS (or its fresh cache) in the end. */
+    suspend fun loginAndRefresh(force: Boolean, credentialsChanged: Boolean = false): Boolean {
         // Explicit retries bypass login cooldowns; the coordinator retains an active session
         // unless the user has just supplied new credentials.
         val state = autoLoginCoordinator.ensureActive(force = force, credentialsChanged = credentialsChanged)
-        if (state == LmsSessionState.ACTIVE) {
-            when (val result = source.refresh(force = force)) {
-                LmsRefreshResult.SessionExpired -> {
-                    autoLoginCoordinator.markExpired()
-                    if (autoLoginCoordinator.ensureActive(force = true) == LmsSessionState.ACTIVE) source.refresh(force = true)
-                }
-                LmsRefreshResult.CourseCatalogRequired -> {
-                    sessionController.transition(LmsSessionState.EXPIRED)
-                    if (autoLoginCoordinator.ensureActive(force = true) == LmsSessionState.ACTIVE) {
-                        when (val retried = source.refresh(force = true)) {
-                            is LmsRefreshResult.Failure -> snackbar.showSnackbar(LmsUserMessages.REFRESH_FAILED)
-                            LmsRefreshResult.CourseCatalogRequired -> snackbar.showSnackbar(LmsUserMessages.COURSE_CATALOG_FAILED)
-                            else -> Unit
-                        }
-                    }
-                }
-                is LmsRefreshResult.Failure -> snackbar.showSnackbar(LmsUserMessages.REFRESH_FAILED)
-                else -> Unit
+        if (state != LmsSessionState.ACTIVE) return false
+        val final = when (val result = source.refresh(force = force)) {
+            LmsRefreshResult.SessionExpired -> {
+                autoLoginCoordinator.markExpired()
+                if (autoLoginCoordinator.ensureActive(force = true) == LmsSessionState.ACTIVE) source.refresh(force = true) else result
             }
+            LmsRefreshResult.CourseCatalogRequired -> {
+                sessionController.transition(LmsSessionState.EXPIRED)
+                if (autoLoginCoordinator.ensureActive(force = true) == LmsSessionState.ACTIVE) {
+                    source.refresh(force = true).also { retried ->
+                        if (retried == LmsRefreshResult.CourseCatalogRequired) snackbar.showSnackbar(LmsUserMessages.COURSE_CATALOG_FAILED)
+                    }
+                } else {
+                    result
+                }
+            }
+            else -> result
         }
+        if (final is LmsRefreshResult.Failure) snackbar.showSnackbar(LmsUserMessages.REFRESH_FAILED)
+        return final == LmsRefreshResult.Success || final == LmsRefreshResult.Cached
     }
 
     // force 없이 시작하면 5분 캐시 TTL 내 재방문은 네트워크를 건드리지 않는다 (#26)
@@ -239,7 +241,13 @@ fun LmsRoute(
                 selectedKind = selectedKind,
                 onCourseChange = { selectedCourse = it },
                 onKindChange = { selectedKind = it },
-                onRefresh = { scope.launch { loginAndRefresh(force = true) } },
+                onRefresh = {
+                    scope.launch {
+                        // 셔틀·식단처럼 직접 당긴 새로고침은 바뀐 것이 없을 때도 알린다
+                        val before = source.snapshot.first().items
+                        if (loginAndRefresh(force = true)) snackbar.showSnackbar(lmsRefreshMessage(before, source.snapshot.first().items))
+                    }
+                },
                 onOpenItem = { item ->
                     scope.launch {
                         suspend fun present(result: LmsDetailLoadResult): Boolean = when (result) {
@@ -329,7 +337,6 @@ fun LmsRoute(
 }
 
 internal val SEOUL = ZoneId.of("Asia/Seoul")
-internal val LMS_TIME = DateTimeFormatter.ofPattern("M월 d일 HH:mm")
 internal val LMS_DETAIL_TIME = DateTimeFormatter.ofPattern("yyyy년 M월 d일 HH:mm")
 internal const val OFFICIAL_LMS_LOGIN_URL =
     "https://portal.dima.ac.kr/?r=https://lms.dima.ac.kr/sso/index.jsp"

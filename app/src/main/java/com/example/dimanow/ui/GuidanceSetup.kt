@@ -186,16 +186,6 @@ internal fun rememberGuidanceSetupController(
 
 /** Settings' checklist: every row with its state, read from Android, including on return from Settings. */
 @Composable
-fun GuidanceSetup(
-    liveSurfaceController: LiveSurfaceController,
-    modifier: Modifier = Modifier,
-    onPermissionsChanged: () -> Unit = {},
-) {
-    val controller = rememberGuidanceSetupController(liveSurfaceController, onPermissionsChanged)
-    GuidanceSetupChecklist(controller, modifier)
-}
-
-@Composable
 internal fun GuidanceSetupChecklist(
     controller: GuidanceSetupController,
     modifier: Modifier = Modifier,

@@ -198,3 +198,26 @@ test('screenshots and logs belong to 오류 reports only and must be real images
   assert.equal(feedbackReport({ category: 'bug', message: '오류가 있어요', images: [{ type: 'image/png', data: pngBase64(10, 10) }] }, helpers), null);
   assert.equal(feedbackReport({ category: 'bug', message: '오류가 있어요', images: [{ type: 'image/png', data: pngBase64() }] }, helpers).images.length, 1);
 });
+
+test('a chunked report without Content-Length is cut off at the size limit', async () => {
+  const store = new MemoryStore();
+  const calls = {};
+  const chunk = new Uint8Array(1024 * 1024).fill(0x61);
+  let sent = 0;
+  const body = new ReadableStream({
+    pull(controller) {
+      if (sent >= 12) return controller.close();
+      sent += 1;
+      controller.enqueue(chunk);
+    },
+  });
+  const request = new Request('https://upload.example/v1/feedback', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'CF-Connecting-IP': '203.0.113.9' },
+    body,
+    duplex: 'half',
+  });
+  const response = await worker(store, calls).fetch(request, env, {});
+  assert.equal(response.status, 413);
+  assert.ok(sent < 12, 'the stream is not read to the end');
+});

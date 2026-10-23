@@ -9,7 +9,6 @@ export const FEEDBACK_IMAGE_PREFIX = 'feedback/';
 export const FEEDBACK_IMAGE_KEY_PATTERN = /^feedback\/([A-Za-z0-9_-]{1,64})\.(jpg|png|webp)$/;
 
 const MAX_FEEDBACK_BODY_BYTES = 8 * 1024 * 1024;
-const MAX_TEXT_ONLY_BODY_BYTES = 40 * 1024;
 const MIN_MESSAGE_CHARS = 5;
 const MAX_MESSAGE_CHARS = 2000;
 const MAX_LOG_CHARS = 20000;
@@ -42,14 +41,13 @@ export async function handleFeedback(request, env, dependencies) {
   if (request.method !== 'POST') return jsonResponse(405, 'POST 요청만 지원합니다.', { Allow: 'POST' });
   const mimeType = request.headers.get('Content-Type')?.split(';', 1)[0]?.trim().toLowerCase();
   if (mimeType !== 'application/json') return jsonResponse(415, 'JSON 요청만 지원합니다.');
-  const declared = Number(request.headers.get('Content-Length'));
-  if (Number.isFinite(declared) && declared > MAX_FEEDBACK_BODY_BYTES) return jsonResponse(413, '제보 내용이 너무 깁니다.');
+  const { readBody, isBodyTooLarge } = dependencies.helpers;
   let body;
   try {
-    const text = await request.text();
-    if (new TextEncoder().encode(text).length > MAX_FEEDBACK_BODY_BYTES) return jsonResponse(413, '제보 내용이 너무 깁니다.');
-    body = JSON.parse(text);
-  } catch {
+    const bytes = await readBody(request, MAX_FEEDBACK_BODY_BYTES);
+    body = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes));
+  } catch (error) {
+    if (isBodyTooLarge?.(error)) return jsonResponse(413, '제보 내용이 너무 깁니다.');
     return jsonResponse(400, '제보 내용을 읽지 못했습니다.');
   }
   const report = feedbackReport(body, dependencies.helpers);

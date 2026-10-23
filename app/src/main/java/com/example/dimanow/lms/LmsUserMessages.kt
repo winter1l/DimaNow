@@ -16,3 +16,18 @@ internal object LmsUserMessages {
     const val ATTACHMENT_SAVE_FAILED = "첨부파일을 저장하지 못했어요. 저장 위치를 확인하고 다시 시도해 주세요"
     const val UNSAFE_PAGE_BLOCKED = "안전하지 않은 페이지라서 열지 않았어요"
 }
+
+/**
+ * Snackbar text after a pull-to-refresh of the 수업 tab, like the shuttle and meal tabs: it says when nothing
+ * changed. Only what the list shows counts (title, kind, deadline, completion), so read marks don't.
+ */
+internal fun lmsRefreshMessage(before: List<LmsItem>, after: List<LmsItem>): String {
+    fun LmsItem.shown() = listOf(id, courseId, kind, title, dueAt, completionState)
+    val known = before.mapTo(HashSet()) { it.id }
+    val added = after.count { it.id !in known }
+    return when {
+        added > 0 -> "새 항목 ${added}개를 받았어요"
+        before.map { it.shown() }.toSet() == after.map { it.shown() }.toSet() -> "이미 최신 수업 정보예요"
+        else -> "수업 정보를 새로 받았어요"
+    }
+}

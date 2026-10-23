@@ -2,7 +2,6 @@ package com.example.dimanow.school
 
 import android.graphics.Bitmap
 import android.net.Uri
-import android.os.Build
 import android.view.View
 import android.view.ViewGroup
 import android.view.WindowManager
@@ -34,7 +33,6 @@ import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -58,7 +56,6 @@ import com.example.dimanow.lms.SavedLmsCredentials
 import com.example.dimanow.lms.lmsCredentialSubmissionScript
 import com.example.dimanow.ui.DimaLoadingIndicator
 import com.example.dimanow.ui.DimaTopAppBar
-import com.example.dimanow.ui.LocalOpenSettings
 import com.example.dimanow.ui.openUrl
 import kotlinx.coroutines.launch
 import java.io.ByteArrayInputStream
@@ -159,7 +156,6 @@ private fun SchoolServiceSession(
                         )
                     },
                     navigationIcon = closeButton,
-                    showSettings = false,
                     windowInsets = androidx.compose.foundation.layout.WindowInsets(0, 0, 0, 0),
                 )
             }
@@ -219,22 +215,20 @@ private fun SchoolServiceSession(
         if (askCredentials) {
             // The same form as the Courses tab: the account goes only to the official portal page, and saving it
             // (opt-in) also signs the Courses tab in next time.
-            CompositionLocalProvider(LocalOpenSettings provides null) {
-                LmsLoginScreen(
-                    needsReview = credentialsRejected,
-                    onLogin = { username, password, automatic ->
-                        val entered = SavedLmsCredentials(username.trim(), password, automatic)
-                        if (automatic) scope.launch { credentialStore.save(entered) }
-                        slot.credentials = entered
-                        askCredentials = false
-                        slot.submitWhenReady?.invoke()
-                    },
-                    title = "학교 계정 로그인",
-                    intro = "로그인하면 $goal.",
-                    navigationIcon = closeButton,
-                    modifier = Modifier.fillMaxSize().testTag("school_signin"),
-                )
-            }
+            LmsLoginScreen(
+                needsReview = credentialsRejected,
+                onLogin = { username, password, automatic ->
+                    val entered = SavedLmsCredentials(username.trim(), password, automatic)
+                    if (automatic) scope.launch { credentialStore.save(entered) }
+                    slot.credentials = entered
+                    askCredentials = false
+                    slot.submitWhenReady?.invoke()
+                },
+                title = "학교 계정 로그인",
+                intro = "로그인하면 $goal.",
+                navigationIcon = closeButton,
+                modifier = Modifier.fillMaxSize().testTag("school_signin"),
+            )
         }
     }
 }
@@ -264,7 +258,7 @@ private fun schoolServiceWebView(
         settings.builtInZoomControls = true
         settings.displayZoomControls = false
     }
-    if (Build.VERSION.SDK_INT >= 26) WebView.startSafeBrowsing(context, null)
+    WebView.startSafeBrowsing(context, null)
 
     val service = request.service
     val targetPath = Uri.parse(request.targetUrl).path.orEmpty()

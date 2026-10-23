@@ -26,5 +26,8 @@ class FeedbackApiTest {
         assertEquals(FeedbackResult.Failed, feedbackResult(201, """{"number":1,"url":"https://example.com/x"}"""))
         assertEquals(FeedbackResult.TooOften, feedbackResult(429, """{"message":"x"}"""))
         assertEquals(FeedbackResult.Failed, feedbackResult(502, ""))
+        assertEquals(FeedbackResult.NoRoomForScreenshots, feedbackResult(507, """{"message":"x"}"""))
+        assertEquals(FeedbackResult.Rejected, feedbackResult(400, """{"message":"x"}"""))
+        assertEquals(FeedbackResult.Rejected, feedbackResult(413, ""))
     }
 }

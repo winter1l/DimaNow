@@ -72,6 +72,8 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.window.DialogWindowProvider
 import androidx.core.view.WindowCompat
+import androidx.compose.ui.res.stringResource
+import com.example.dimanow.BuildConfig
 import com.example.dimanow.R
 import com.example.dimanow.feedback.FEEDBACK_MAX_CHARS
 import com.example.dimanow.feedback.FEEDBACK_MAX_SCREENSHOTS
@@ -280,7 +282,18 @@ internal fun FeedbackDialog(
                 when (result) {
                     FeedbackResult.TooOften -> ErrorState(
                         message = "잠시 뒤에 다시 보내 주세요",
-                        supporting = "제보는 10분에 한 번 보낼 수 있고, 하루에 받는 수도 정해져 있어요.",
+                        // The limit is per network address, so on campus Wi-Fi it may be someone else's report (D-122).
+                        supporting = "같은 네트워크에서는 10분에 한 번 보낼 수 있고, 하루에 받는 수도 정해져 있어요.",
+                        modifier = Modifier.testTag("feedback_error"),
+                    )
+                    FeedbackResult.NoRoomForScreenshots -> ErrorState(
+                        message = "지금은 스크린샷을 받을 수 없어요",
+                        supporting = "스크린샷을 빼고 다시 보내 주세요. 쓴 내용은 그대로 있어요.",
+                        modifier = Modifier.testTag("feedback_error"),
+                    )
+                    FeedbackResult.Rejected -> ErrorState(
+                        message = "이대로는 보낼 수 없어요",
+                        supporting = "내용이나 스크린샷을 줄이거나 다른 스크린샷으로 바꿔 다시 보내 주세요.",
                         modifier = Modifier.testTag("feedback_error"),
                     )
                     FeedbackResult.Failed -> ErrorState(
@@ -435,10 +448,11 @@ private fun feedbackPlaceholder(category: FeedbackCategory): String = when (cate
 /** Sends through the gateway with this build's version name and the phone's Android SDK level. */
 @Composable
 private fun rememberFeedbackSender(): suspend (FeedbackDraft) -> FeedbackResult {
-    val context = LocalContext.current
-    return remember(context) {
-        val api = FeedbackApi(context.getString(R.string.dormitory_meal_upload_url))
-        val version = runCatching { context.packageManager.getPackageInfo(context.packageName, 0).versionName }.getOrNull()
+    val uploadUrl = stringResource(R.string.dormitory_meal_upload_url)
+    return remember(uploadUrl) {
+        val api = FeedbackApi(uploadUrl)
+        // The build's own version name (no versionNameSuffix is configured), without a PackageManager call.
+        val version: String? = BuildConfig.VERSION_NAME
         val sender: suspend (FeedbackDraft) -> FeedbackResult = { draft ->
             api.send(
                 draft.category,

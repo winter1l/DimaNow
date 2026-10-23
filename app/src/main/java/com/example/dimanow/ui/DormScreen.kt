@@ -4,6 +4,12 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.widget.Toast
+import androidx.compose.material.icons.automirrored.filled.Rule
+import androidx.compose.material.icons.filled.Inventory2
+import androidx.compose.material.icons.filled.LocalLaundryService
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.AlertDialog
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -21,7 +27,7 @@ import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.DoorFront
 import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.filled.Luggage
-import androidx.compose.material.icons.filled.MenuBook
+import androidx.compose.material.icons.automirrored.filled.MenuBook
 import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.Restaurant
 import androidx.compose.material3.ButtonDefaults
@@ -84,10 +90,21 @@ import java.time.format.DateTimeFormatter
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
+/** The pages behind the 기숙사 first screen (D-113): each opens over it with Back. */
+private enum class DormTopic(val title: String) {
+    POINTS("상벌점"),
+    FACILITIES("시설 이용 시간"),
+    DELIVERY("택배"),
+    MEALS("식권·식당"),
+    RULES("생활 규칙과 입·퇴사"),
+    LINKS("공지와 수칙"),
+}
+
 /**
- * 기숙사 (D-110–D-112), opened from 전체: 오늘 (점호 from KakaoTalk announcements or the Tuesday rule, and the front
- * door), this term's 상벌점 with the rules behind them, 외출·외박, opening hours, deliveries, meal tickets, living
- * rules and where the 자치회 posts. Pull down or use the bar's refresh action to read the points again.
+ * 기숙사 (D-110–D-113), opened from 전체. The first screen keeps what a resident checks every day — 오늘 (점호 and
+ * the front door), this term's 상벌점 at a glance, 외출·외박 신청 — and a short 생활 정보 list whose rows open their
+ * own pages (points in full, opening hours, deliveries, meal tickets, rules, links), so details arrive one step at
+ * a time. Reading KakaoTalk 점호 notices is offered as one button that explains itself in a dialog.
  */
 @Composable
 internal fun DormScreen(onBack: () -> Unit, onOpenMeals: () -> Unit, modifier: Modifier = Modifier) {
@@ -101,8 +118,8 @@ internal fun DormScreen(onBack: () -> Unit, onOpenMeals: () -> Unit, modifier: M
     var error by remember { mutableStateOf<String?>(null) }
     var outingError by remember { mutableStateOf<String?>(null) }
     var kakaoAccess by remember { mutableStateOf(RollCallStore.accessGranted(context)) }
-    var showPointRules by rememberSaveable { mutableStateOf(false) }
-    var showLivingRules by rememberSaveable { mutableStateOf(false) }
+    var showKakaoDialog by rememberSaveable { mutableStateOf(false) }
+    var topic by rememberSaveable { mutableStateOf<DormTopic?>(null) }
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
         kakaoAccess = RollCallStore.accessGranted(context)
         // Turning notification access off also drops what was read (D-112).
@@ -116,6 +133,8 @@ internal fun DormScreen(onBack: () -> Unit, onOpenMeals: () -> Unit, modifier: M
             now = ZonedDateTime.now(DormHours.CAMPUS_ZONE)
         }
     }
+    // Back from a detail page returns to the first screen before leaving 기숙사.
+    BackHandler(enabled = topic != null) { topic = null }
 
     fun load() {
         val service = bridge ?: return
@@ -146,224 +165,279 @@ internal fun DormScreen(onBack: () -> Unit, onOpenMeals: () -> Unit, modifier: M
     val today = now.toLocalDate()
     val rollCall = RollCallRules.status(today, notices, calendar.holidays[today], calendar.examOn(today)?.let(::examName))
     val announcedApplyBy = (rollCall as? RollCallStatus.Announced)?.notice?.takeIf { it.held }?.applyBy
+    val read = saved
+    val summary = read?.summary
+    val shown = topic
 
     ScreenScaffold(
-        title = AppPage.DORM.title,
+        title = shown?.title ?: AppPage.DORM.title,
         modifier = modifier,
         navigationIcon = {
-            IconButton(shapes = IconButtonDefaults.shapes(), onClick = onBack, modifier = Modifier.testTag("close_dorm")) {
+            IconButton(
+                shapes = IconButtonDefaults.shapes(),
+                onClick = { if (shown != null) topic = null else onBack() },
+                modifier = Modifier.testTag(if (shown != null) "close_dorm_topic" else "close_dorm"),
+            ) {
                 Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "뒤로")
             }
         },
-        listTag = "dorm_list",
-        onRefresh = if (bridge != null) ::load else null,
+        listTag = if (shown != null) "dorm_topic_list" else "dorm_list",
+        // The points are what refreshes: on the first screen and on the 상벌점 page.
+        onRefresh = if (bridge != null && (shown == null || shown == DormTopic.POINTS)) ::load else null,
         refreshing = loading && saved != null,
         refreshLabel = "상벌점 새로고침",
     ) {
-        item(key = "today") {
-            DormTodayCard(
-                rollCall = rollCall,
-                time = now.toLocalTime(),
-                kakaoAccess = kakaoAccess,
-                onAllowKakao = { context.startActivity(RollCallStore.accessSettingsIntent(context)) },
-            )
-        }
-
-        val read = saved
-        val summary = read?.summary
-        item(key = "points_header") {
-            SettingsSectionHeader(summary?.let { termLabel(it) }?.let { "$it 상벌점" } ?: "상벌점")
-        }
-        when {
-            read == null && loading -> item(key = "points_loading") { LoadingLine("인트라넷에서 상벌점을 불러오는 중이에요") }
-            read == null -> item(key = "points_empty") {
-                EmptyState(
-                    message = "상벌점을 아직 불러오지 않았어요",
-                    supporting = "인트라넷의 상벌점을 불러와 이 기기에 저장해 둬요. 다음부터는 열자마자 보여요.",
-                    icon = Icons.Default.Apartment,
-                    actionLabel = if (bridge != null) "상벌점 불러오기" else null,
-                    onAction = if (bridge != null) ::load else null,
-                    actionTag = "dorm_points_load",
-                )
-            }
-            else -> {
-                item(key = "points_totals") {
-                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.testTag("dorm_points_total")) {
-                            PointTotal("상점", summary?.merit ?: 0, MaterialTheme.colorScheme.primary, Modifier.weight(1f))
-                            PointTotal("벌점", summary?.demerit ?: 0, MaterialTheme.colorScheme.error, Modifier.weight(1f))
+        when (shown) {
+            null -> {
+                item(key = "today") {
+                    DormTodayCard(
+                        rollCall = rollCall,
+                        time = now.toLocalTime(),
+                        kakaoAccess = kakaoAccess,
+                        onAskKakao = { showKakaoDialog = true },
+                    )
+                }
+                item(key = "points") {
+                    when {
+                        read == null && loading -> LoadingLine("인트라넷에서 상벌점을 불러오는 중이에요")
+                        read == null -> HomeContainerCard(Modifier.testTag("dorm_points_card")) {
+                            HomeCardHeader(icon = Icons.Default.Apartment, title = "상벌점", showChevron = false)
+                            Text(
+                                "인트라넷의 상벌점을 불러와 이 기기에 저장해 둬요.",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                            if (bridge != null) {
+                                FilledTonalButton(
+                                    shapes = ButtonDefaults.shapes(),
+                                    onClick = ::load,
+                                    modifier = Modifier.heightIn(min = 48.dp).testTag("dorm_points_load"),
+                                ) { Text("상벌점 불러오기") }
+                            }
                         }
+                        else -> PointsSummaryCard(summary, read.readAt) { topic = DormTopic.POINTS }
+                    }
+                }
+                error?.let { message -> item(key = "points_error") { ErrorState(message, onRetry = if (bridge != null) ::load else null) } }
+                item(key = "outing") {
+                    DimaSegmentedList {
+                        SegmentedListItem(
+                            onClick = ::openOuting,
+                            shapes = ListItemDefaults.segmentedShapes(index = 0, count = 1),
+                            modifier = Modifier.testTag("dorm_outing_open").semantics { onClick(label = "열기") { openOuting(); true } },
+                            leadingContent = { Icon(Icons.Default.Luggage, contentDescription = null) },
+                            trailingContent = {
+                                Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null, modifier = Modifier.size(20.dp))
+                            },
+                            supportingContent = {
+                                Text(
+                                    announcedApplyBy?.let { "오늘은 ${it.format(CLOCK)}까지 신청할 수 있어요." }
+                                        ?: "점호가 있는 날은 21:00 전까지 신청해요.",
+                                )
+                            },
+                            colors = dimaSegmentedListColors(),
+                        ) {
+                            Text("외출·외박 신청")
+                        }
+                    }
+                }
+                outingError?.let { message -> item(key = "outing_error") { ErrorState(message) } }
+                item(key = "info_header") { SettingsSectionHeader("생활 정보") }
+                item(key = "info") {
+                    val openNow = DormGuide.facilities.count { facility ->
+                        facility.opens == null || facility.closes == null || DormHours.isOpen(now.toLocalTime(), facility.opens, facility.closes)
+                    }
+                    val topics = listOf(
+                        Triple(DormTopic.FACILITIES, Icons.Default.LocalLaundryService, "지금 ${openNow}곳 이용 가능 · 세탁실·휴게실·편의점"),
+                        Triple(DormTopic.DELIVERY, Icons.Default.Inventory2, "09:00~02:00 · 받는 주소 복사"),
+                        Triple(DormTopic.MEALS, Icons.Default.Restaurant, "하루 2장 · 한 끼에 1장"),
+                        Triple(DormTopic.RULES, Icons.AutoMirrored.Filled.Rule, "금지 사항, 퇴사 일정과 보증금"),
+                        Triple(DormTopic.LINKS, Icons.Default.Groups, "자치회 인스타그램, 예인관 수칙"),
+                    )
+                    DimaSegmentedList(Modifier.testTag("dorm_info")) {
+                        topics.forEachIndexed { index, (item, icon, supporting) ->
+                            SegmentedListItem(
+                                onClick = { topic = item },
+                                shapes = ListItemDefaults.segmentedShapes(index = index, count = topics.size),
+                                modifier = Modifier.testTag("dorm_topic_${item.name}").semantics { onClick(label = "열기") { topic = item; true } },
+                                leadingContent = { Icon(icon, contentDescription = null) },
+                                trailingContent = {
+                                    Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null, modifier = Modifier.size(20.dp))
+                                },
+                                supportingContent = { Text(supporting) },
+                                colors = dimaSegmentedListColors(),
+                            ) {
+                                Text(item.title)
+                            }
+                        }
+                    }
+                }
+            }
+            DormTopic.POINTS -> {
+                when {
+                    read == null && loading -> item(key = "points_loading") { LoadingLine("인트라넷에서 상벌점을 불러오는 중이에요") }
+                    read != null -> {
+                        item(key = "points_totals") {
+                            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                summary?.let { termLabel(it) }?.let { SettingsSectionHeader("$it 상벌점") }
+                                Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.testTag("dorm_points_total")) {
+                                    PointTotal("상점", summary?.merit ?: 0, MaterialTheme.colorScheme.primary, Modifier.weight(1f))
+                                    PointTotal("벌점", summary?.demerit ?: 0, MaterialTheme.colorScheme.error, Modifier.weight(1f))
+                                }
+                                Text(
+                                    dormPointsReadAtLabel(read.readAt, Instant.now()),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.padding(start = 4.dp).testTag("dorm_points_read_at"),
+                                )
+                            }
+                        }
+                        val entries = summary?.entries.orEmpty()
+                        item(key = "entries_header") { SettingsSectionHeader("이번 학기 내역") }
+                        if (entries.isEmpty()) {
+                            item(key = "entries_empty") { EmptyState("이번 학기에 기록된 상벌점이 없어요") }
+                        } else {
+                            item(key = "entries") {
+                                DimaSegmentedList(Modifier.testTag("dorm_points_entries")) {
+                                    entries.forEachIndexed { index, entry -> PointEntryRow(entry, index, entries.size) }
+                                }
+                            }
+                        }
+                    }
+                }
+                error?.let { message -> item(key = "points_error") { ErrorState(message, onRetry = if (bridge != null) ::load else null) } }
+                item(key = "point_rules_header") { SettingsSectionHeader("벌점과 상점") }
+                item(key = "point_rules") {
+                    GuideCard {
                         Text(
                             "벌점이 20점 쌓이면 즉시 퇴사예요. 상점으로 상쇄할 수 있고, 벌점이 있으면 다음 학기 선발에 불리해요.",
                             style = MaterialTheme.typography.bodyMedium,
-                            modifier = Modifier.padding(horizontal = 4.dp),
                         )
-                        Text(
-                            dormPointsReadAtLabel(read.readAt, Instant.now()),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(start = 4.dp).testTag("dorm_points_read_at"),
-                        )
+                        DormGuide.pointRules.forEach { (points, what) -> GuideLine(marker = "벌점 $points", text = what) }
+                        Text("상점 받는 법", style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(top = 4.dp))
+                        DormGuide.meritWays.forEach { GuideLine(text = it) }
                     }
                 }
-                val entries = summary?.entries.orEmpty()
-                if (entries.isEmpty()) {
-                    item(key = "entries_empty") { EmptyState("이번 학기에 기록된 상벌점이 없어요") }
-                } else {
-                    item(key = "entries") {
-                        DimaSegmentedList(Modifier.testTag("dorm_points_entries")) {
-                            entries.forEachIndexed { index, entry -> PointEntryRow(entry, index, entries.size) }
+                item(key = "source") { SourceLine() }
+            }
+            DormTopic.FACILITIES -> {
+                item(key = "facilities") {
+                    DimaSegmentedList(Modifier.testTag("dorm_facilities")) {
+                        DormGuide.facilities.forEachIndexed { index, facility ->
+                            val open = facility.opens == null || facility.closes == null ||
+                                DormHours.isOpen(now.toLocalTime(), facility.opens, facility.closes)
+                            HoursRow(facility.name, facility.detail, open, index, DormGuide.facilities.size)
                         }
                     }
                 }
+                item(key = "microwaves") {
+                    Text(
+                        DormGuide.MICROWAVES,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(horizontal = 4.dp),
+                    )
+                }
+                item(key = "source") { SourceLine() }
+            }
+            DormTopic.DELIVERY -> {
+                item(key = "delivery") {
+                    val open = DormHours.isOpen(now.toLocalTime(), DormGuide.DELIVERY_OPENS, DormGuide.DELIVERY_CLOSES)
+                    GuideCard {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Text("운영실 택배 업무", style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
+                            OpenBadge(open)
+                        }
+                        Text(DormGuide.DELIVERY_HOURS, style = MaterialTheme.typography.bodyMedium)
+                        DormGuide.delivery.forEach { GuideLine(text = it) }
+                    }
+                }
+                item(key = "address") {
+                    GuideCard {
+                        Text("받는 주소", style = MaterialTheme.typography.titleSmall)
+                        Text("${DormGuide.ADDRESS}(호수) (이름)", style = MaterialTheme.typography.bodyMedium)
+                        OutlinedButton(
+                            shapes = ButtonDefaults.shapes(),
+                            onClick = { copyAddress(context) },
+                            modifier = Modifier.heightIn(min = 48.dp).testTag("dorm_copy_address"),
+                        ) {
+                            Icon(Icons.Default.ContentCopy, contentDescription = null, modifier = Modifier.size(ButtonDefaults.IconSize))
+                            Text("주소 복사", modifier = Modifier.padding(start = ButtonDefaults.IconSpacing))
+                        }
+                    }
+                }
+                item(key = "source") { SourceLine() }
+            }
+            DormTopic.MEALS -> {
+                item(key = "meal") {
+                    GuideCard {
+                        DormGuide.mealTickets.forEach { GuideLine(text = it) }
+                        FilledTonalButton(
+                            shapes = ButtonDefaults.shapes(),
+                            onClick = onOpenMeals,
+                            modifier = Modifier.heightIn(min = 48.dp).testTag("dorm_open_meals"),
+                        ) {
+                            Icon(Icons.Default.Restaurant, contentDescription = null, modifier = Modifier.size(ButtonDefaults.IconSize))
+                            Text("기숙사 식단 보기", modifier = Modifier.padding(start = ButtonDefaults.IconSpacing))
+                        }
+                    }
+                }
+                item(key = "source") { SourceLine() }
+            }
+            DormTopic.RULES -> {
+                item(key = "living_header") { SettingsSectionHeader("생활 규칙") }
+                item(key = "living") { GuideCard { DormGuide.livingRules.forEach { GuideLine(text = it) } } }
+                item(key = "move_header") { SettingsSectionHeader("입·퇴사") }
+                item(key = "move") { GuideCard { DormGuide.moveRules.forEach { GuideLine(text = it) } } }
+                item(key = "outing_rules_header") { SettingsSectionHeader("외출·외박") }
+                item(key = "outing_rules") { GuideCard { DormGuide.outingRules.forEach { GuideLine(text = it) } } }
+                item(key = "source") { SourceLine() }
+            }
+            DormTopic.LINKS -> {
+                item(key = "links") {
+                    DimaSegmentedList {
+                        LinkRow(Icons.Default.Groups, "예인관 자치회 인스타그램", "@dima_dorm", 0, 2, "dorm_instagram") {
+                            openUrl(context, DormGuide.INSTAGRAM_URL)
+                        }
+                        LinkRow(Icons.AutoMirrored.Filled.MenuBook, "예인관 수칙 안내", "학교 홈페이지", 1, 2, "dorm_rules_page") {
+                            openUrl(context, DormGuide.RULES_URL)
+                        }
+                    }
+                }
+                item(key = "source") { SourceLine() }
             }
         }
-        error?.let { message -> item(key = "points_error") { ErrorState(message, onRetry = if (bridge != null) ::load else null) } }
-        item(key = "point_rules") {
-            SettingsExpander(
-                title = "벌점 기준과 상점 받는 법",
-                expanded = showPointRules,
-                onToggle = { showPointRules = !showPointRules },
-                modifier = Modifier.testTag("dorm_point_rules"),
-            )
-        }
-        if (showPointRules) item(key = "point_rules_body") {
-            GuideCard {
-                DormGuide.pointRules.forEach { (points, what) -> GuideLine(marker = "벌점 $points", text = what) }
-                Text("상점 받는 법", style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(top = 4.dp))
-                DormGuide.meritWays.forEach { GuideLine(text = it) }
+    }
+
+    if (showKakaoDialog) {
+        // One explanation, one action that opens Android's notification-access page; back or a tap outside closes it.
+        AlertDialog(
+            onDismissRequest = { showKakaoDialog = false },
+            title = { Text("카톡 점호 공지 읽기") },
+            text = {
                 Text(
-                    "자세한 기준은 관생 수칙에 있어요.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    "자치회가 카톡으로 알리는 점호 공지를 읽어 오늘 점호가 있는지 보여 줘요. 카카오톡 알림 중 점호 공지만 읽고, " +
+                        "날짜와 점호 여부만 이 기기에 2주 동안 저장해요. 공지방 알림을 꺼 두면 읽을 수 없어요.",
                 )
-            }
-        }
-
-        item(key = "outing_header") { SettingsSectionHeader("외출·외박") }
-        item(key = "outing") {
-            DimaSegmentedList {
-                SegmentedListItem(
-                    onClick = ::openOuting,
-                    shapes = ListItemDefaults.segmentedShapes(index = 0, count = 1),
-                    modifier = Modifier.testTag("dorm_outing_open").semantics { onClick(label = "열기") { openOuting(); true } },
-                    leadingContent = { Icon(Icons.Default.Luggage, contentDescription = null) },
-                    trailingContent = {
-                        Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null, modifier = Modifier.size(20.dp))
-                    },
-                    supportingContent = {
-                        Text(
-                            announcedApplyBy?.let { "오늘은 ${it.format(CLOCK)}까지 신청할 수 있어요(카톡 공지)." }
-                                ?: "인트라넷 신청 페이지를 로그인된 채로 앱 안에서 열어요.",
-                        )
-                    },
-                    colors = dimaSegmentedListColors(),
-                ) {
-                    Text("외출·외박 신청")
-                }
-            }
-        }
-        outingError?.let { message -> item(key = "outing_error") { ErrorState(message) } }
-        item(key = "outing_rules") { GuideCard { DormGuide.outingRules.forEach { GuideLine(text = it) } } }
-
-        item(key = "facilities_header") { SettingsSectionHeader("시설 이용 시간") }
-        item(key = "facilities") {
-            DimaSegmentedList(Modifier.testTag("dorm_facilities")) {
-                DormGuide.facilities.forEachIndexed { index, facility ->
-                    val open = facility.opens == null || facility.closes == null ||
-                        DormHours.isOpen(now.toLocalTime(), facility.opens, facility.closes)
-                    HoursRow(facility.name, facility.detail, open, index, DormGuide.facilities.size)
-                }
-            }
-        }
-        item(key = "microwaves") {
-            Text(
-                DormGuide.MICROWAVES,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(horizontal = 4.dp),
-            )
-        }
-
-        item(key = "delivery_header") { SettingsSectionHeader("택배") }
-        item(key = "delivery") {
-            val open = DormHours.isOpen(now.toLocalTime(), DormGuide.DELIVERY_OPENS, DormGuide.DELIVERY_CLOSES)
-            GuideCard {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("운영실 택배 업무", style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
-                    OpenBadge(open)
-                }
-                Text(DormGuide.DELIVERY_HOURS, style = MaterialTheme.typography.bodyMedium)
-                DormGuide.delivery.forEach { GuideLine(text = it) }
-                Text("받는 주소", style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(top = 4.dp))
-                Text("${DormGuide.ADDRESS}(호수) (이름)", style = MaterialTheme.typography.bodyMedium)
-                OutlinedButton(
+            },
+            confirmButton = {
+                TextButton(
                     shapes = ButtonDefaults.shapes(),
-                    onClick = { copyAddress(context) },
-                    modifier = Modifier.heightIn(min = 48.dp).testTag("dorm_copy_address"),
-                ) {
-                    Icon(Icons.Default.ContentCopy, contentDescription = null, modifier = Modifier.size(ButtonDefaults.IconSize))
-                    Text("주소 복사", modifier = Modifier.padding(start = ButtonDefaults.IconSpacing))
-                }
-            }
-        }
-
-        item(key = "meal_header") { SettingsSectionHeader("식권·식당") }
-        item(key = "meal") {
-            GuideCard {
-                DormGuide.mealTickets.forEach { GuideLine(text = it) }
-                FilledTonalButton(
-                    shapes = ButtonDefaults.shapes(),
-                    onClick = onOpenMeals,
-                    modifier = Modifier.heightIn(min = 48.dp).testTag("dorm_open_meals"),
-                ) {
-                    Icon(Icons.Default.Restaurant, contentDescription = null, modifier = Modifier.size(ButtonDefaults.IconSize))
-                    Text("기숙사 식단 보기", modifier = Modifier.padding(start = ButtonDefaults.IconSpacing))
-                }
-            }
-        }
-
-        item(key = "living_rules") {
-            SettingsExpander(
-                title = "생활 규칙과 입·퇴사",
-                expanded = showLivingRules,
-                onToggle = { showLivingRules = !showLivingRules },
-                modifier = Modifier.testTag("dorm_living_rules"),
-            )
-        }
-        if (showLivingRules) item(key = "living_rules_body") {
-            GuideCard {
-                DormGuide.livingRules.forEach { GuideLine(text = it) }
-                Text("입·퇴사", style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(top = 4.dp))
-                DormGuide.moveRules.forEach { GuideLine(text = it) }
-            }
-        }
-
-        item(key = "links_header") { SettingsSectionHeader("공지와 수칙") }
-        item(key = "links") {
-            DimaSegmentedList {
-                LinkRow(Icons.Default.Groups, "예인관 자치회 인스타그램", "@dima_dorm", 0, 2, "dorm_instagram") {
-                    openUrl(context, DormGuide.INSTAGRAM_URL)
-                }
-                LinkRow(Icons.Default.MenuBook, "예인관 수칙 안내", "학교 홈페이지", 1, 2, "dorm_rules_page") {
-                    openUrl(context, DormGuide.RULES_URL)
-                }
-            }
-        }
-        item(key = "source") {
-            Text(
-                DormGuide.SOURCE,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(horizontal = 4.dp, vertical = 8.dp),
-            )
-        }
+                    onClick = {
+                        showKakaoDialog = false
+                        context.startActivity(RollCallStore.accessSettingsIntent(context))
+                    },
+                    modifier = Modifier.testTag("dorm_kakao_open_settings"),
+                ) { Text("설정 열기") }
+            },
+            modifier = Modifier.testTag("dorm_kakao_dialog"),
+        )
     }
 }
 
-/** 오늘: 점호 (announced, usual, holiday or not today) and the front door, with the Kakao switch when it is off. */
+/** 오늘: 점호 and the front door; while notices are not read, one quiet button explains reading them. */
 @Composable
-private fun DormTodayCard(rollCall: RollCallStatus, time: LocalTime, kakaoAccess: Boolean, onAllowKakao: () -> Unit) {
+private fun DormTodayCard(rollCall: RollCallStatus, time: LocalTime, kakaoAccess: Boolean, onAskKakao: () -> Unit) {
     val (headline, detail) = rollCallText(rollCall)
     val doorOpen = DormHours.doorOpen(time)
     HomeContainerCard(Modifier.testTag("dorm_today")) {
@@ -381,22 +455,43 @@ private fun DormTodayCard(rollCall: RollCallStatus, time: LocalTime, kakaoAccess
             )
         }
         if (!kakaoAccess) {
-            Surface(shape = DimaShapes.Tile, color = MaterialTheme.colorScheme.surfaceContainerHighest) {
-                Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(
-                        "점호가 없는 날은 자치회가 카톡으로 알려요. 알림 접근을 허용하면 카카오톡 알림 중 점호 공지만 읽어 여기에 보여 줘요. " +
-                            "공지방 알림이 꺼져 있으면 읽을 수 없어요.",
-                        style = MaterialTheme.typography.bodySmall,
-                    )
-                    FilledTonalButton(
-                        shapes = ButtonDefaults.shapes(),
-                        onClick = onAllowKakao,
-                        modifier = Modifier.heightIn(min = 48.dp).testTag("dorm_allow_kakao"),
-                    ) { Text("카톡 점호 공지 읽기 켜기") }
-                }
-            }
+            TextButton(
+                shapes = ButtonDefaults.shapes(),
+                onClick = onAskKakao,
+                modifier = Modifier.heightIn(min = 48.dp).testTag("dorm_allow_kakao"),
+            ) { Text("카톡 공지로 점호 확인하기") }
         }
     }
+}
+
+/** This term's points at a glance; the whole card opens the 상벌점 page. */
+@Composable
+private fun PointsSummaryCard(summary: DormPointSummary?, readAt: Instant, onOpen: () -> Unit) {
+    val totals = "상점 ${summary?.merit ?: 0}점 · 벌점 ${summary?.demerit ?: 0}점"
+    HomeSummaryCard(
+        onClick = onOpen,
+        onClickLabel = "상벌점 자세히 보기",
+        modifier = Modifier.testTag("dorm_points_card"),
+    ) {
+        HomeCardHeader(icon = Icons.Default.Apartment, title = summary?.let { termLabel(it) }?.let { "$it 상벌점" } ?: "상벌점")
+        Text(totals, style = MaterialTheme.typography.titleLarge, modifier = Modifier.testTag("dorm_points_total"))
+        Text(
+            dormPointsReadAtLabel(readAt, Instant.now()),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.testTag("dorm_points_read_at"),
+        )
+    }
+}
+
+@Composable
+private fun SourceLine() {
+    Text(
+        DormGuide.SOURCE,
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(horizontal = 4.dp, vertical = 8.dp),
+    )
 }
 
 private val CLOCK = DateTimeFormatter.ofPattern("HH:mm")

@@ -232,6 +232,9 @@ internal fun KoreanLocale(content: @Composable () -> Unit) {
     CompositionLocalProvider(
         LocalConfiguration provides configuration,
         LocalContext provides localized,
+        // Material3 1.5 pickers read Compose's LocalLocale (derived from this list), not the configuration.
+        androidx.compose.ui.platform.LocalProvidableLocaleList provides
+            androidx.compose.ui.text.intl.LocaleList(androidx.compose.ui.text.intl.Locale("ko-KR")),
         content = content,
     )
 }

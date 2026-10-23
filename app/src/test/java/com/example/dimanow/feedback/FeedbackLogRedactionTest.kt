@@ -10,12 +10,12 @@ class FeedbackLogRedactionTest {
     fun `personal values in the log are masked and the rest stays readable`() {
         val raw = """
             10-24 00:44:49.123 W/DimaNow( 4120): sign-in failed for student 20231234 at https://lms.dima.ac.kr/lms/myLecture/doListView.dunet?to_do_type=all
-            10-24 00:44:50.001 E/DimaNow( 4120): contact me@example.com or 010-1234-5678 from 192.168.0.12
+            10-24 00:44:50.001 E/DimaNow( 4120): contact me@example.com or 010-1234-5678 from 203.0.113.12
             10-24 00:44:51.500 W/WebView( 4120): cookie=JSESSIONID=abcDEF1234567890abcdef1234567890
             10-24 00:44:52.000 E/AndroidRuntime( 4120): java.lang.IllegalStateException: 시간표 표를 찾지 못했어요
         """.trimIndent()
         val masked = redactFeedbackLog(raw)
-        for (secret in listOf("20231234", "me@example.com", "010-1234-5678", "192.168.0.12", "doListView", "abcDEF1234567890abcdef1234567890")) {
+        for (secret in listOf("20231234", "me@example.com", "010-1234-5678", "203.0.113.12", "doListView", "abcDEF1234567890abcdef1234567890")) {
             assertFalse(secret, secret in masked)
         }
         assertTrue("https://lms.dima.ac.kr/…" in masked)

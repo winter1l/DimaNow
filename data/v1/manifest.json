@@ -1,11 +1,11 @@
 {
-    "generatedAt": "2026-10-23T05:18:07.615490449Z",
+    "generatedAt": "2026-10-23T18:13:11.307912973Z",
     "datasets": {
         "shuttle": {
             "revision": 2,
             "state": "READY",
             "publishedAt": "2026-09-08T04:05:22.381366544Z",
-            "lastAttemptAt": "2026-10-22T08:33:52.436176056Z",
+            "lastAttemptAt": "2026-10-23T18:13:09.008815238Z",
             "url": "shuttle/eaf4754e62fb743b4f65af9e907a3c2ceba484d3e3dd2121afbe49b84e92c487.json",
             "sha256": "eaf4754e62fb743b4f65af9e907a3c2ceba484d3e3dd2121afbe49b84e92c487",
             "sourceUrl": "https://www.dima.ac.kr/?p=97"
@@ -38,12 +38,12 @@
             "sourceUrl": "r2://dima-now-dorm-photos/submissions"
         },
         "calendar": {
-            "revision": 1,
+            "revision": 2,
             "state": "READY",
-            "publishedAt": "2026-10-17T15:21:34.054586288Z",
-            "lastAttemptAt": "2026-10-22T08:33:54.822257029Z",
-            "url": "calendar/3c4d6c4e83acebaa2b0b6f0991836f152c59fc69f0842a917f45e757c8203061.json",
-            "sha256": "3c4d6c4e83acebaa2b0b6f0991836f152c59fc69f0842a917f45e757c8203061",
+            "publishedAt": "2026-10-23T18:13:11.307912973Z",
+            "lastAttemptAt": "2026-10-23T18:13:11.307912973Z",
+            "url": "calendar/3f224938c6cd89d0a5a5ef13f4e185c064fbf36d33b106662193f3ffea8388bf.json",
+            "sha256": "3f224938c6cd89d0a5a5ef13f4e185c064fbf36d33b106662193f3ffea8388bf",
             "sourceUrl": "https://www.dima.ac.kr/?p=78"
         },
         "app_release": {

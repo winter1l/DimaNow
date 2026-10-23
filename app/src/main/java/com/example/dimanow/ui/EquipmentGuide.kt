@@ -43,6 +43,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.dp
 import com.example.dimanow.theme.DimaShapes
+import com.example.dimanow.theme.DimaTheme
 import com.example.dimanow.ui.motion.DimaMotion
 
 /**
@@ -153,7 +154,7 @@ private fun EquipmentNoticeDetails(onOpenNotice: () -> Unit) {
             if (index == 1) {
                 Surface(
                     shape = DimaShapes.Tile,
-                    color = MaterialTheme.colorScheme.surfaceContainerHighest,
+                    color = DimaTheme.colors.cardInner,
                     modifier = Modifier.fillMaxWidth().padding(start = 28.dp),
                 ) {
                     Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {

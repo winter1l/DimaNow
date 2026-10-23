@@ -29,6 +29,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.example.dimanow.theme.DimaShapes
+import com.example.dimanow.theme.DimaTheme
 
 /**
  * Shared "nothing here" message for lists and cards (D-094(14)): Shuttle, Meal, Home notices and
@@ -64,7 +65,7 @@ internal fun EmptyState(
             ) {
                 Surface(
                     shape = CircleShape,
-                    color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                    color = DimaTheme.colors.cardInner,
                     modifier = Modifier.size(56.dp),
                 ) {
                     Box(contentAlignment = Alignment.Center) {
@@ -101,7 +102,7 @@ internal fun EmptyState(
         ElevatedCard(
             modifier = modifier.fillMaxWidth(),
             shape = DimaShapes.Card,
-            colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+            colors = CardDefaults.elevatedCardColors(containerColor = DimaTheme.colors.card),
         ) { content() }
     } else {
         Box(modifier.fillMaxWidth()) { content() }

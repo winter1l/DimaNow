@@ -20,6 +20,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import com.example.dimanow.sync.ServiceCalendar
 import com.example.dimanow.theme.DimaShapes
+import com.example.dimanow.theme.DimaTheme
 import java.time.LocalDate
 import java.time.temporal.ChronoUnit
 
@@ -65,7 +66,7 @@ internal fun HomeAcademicAgendaCard(events: List<ServiceCalendar.AcademicEvent>,
                     }
                     Surface(
                         shape = DimaShapes.Badge,
-                        color = if (running) MaterialTheme.colorScheme.tertiaryContainer else MaterialTheme.colorScheme.surfaceContainerHighest,
+                        color = if (running) MaterialTheme.colorScheme.tertiaryContainer else DimaTheme.colors.cardInner,
                     ) {
                         Text(
                             status,

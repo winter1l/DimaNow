@@ -82,6 +82,7 @@ import com.example.dimanow.school.parseDormPoints
 import com.example.dimanow.school.summarizeDormPoints
 import com.example.dimanow.sync.ServiceCalendar
 import com.example.dimanow.theme.DimaShapes
+import com.example.dimanow.theme.DimaTheme
 import java.time.Instant
 import java.time.LocalTime
 import java.time.ZoneId
@@ -225,7 +226,7 @@ internal fun DormScreen(onBack: () -> Unit, onOpenMeals: () -> Unit, modifier: M
                             onClick = ::openOuting,
                             shapes = ListItemDefaults.segmentedShapes(index = 0, count = 1),
                             modifier = Modifier.testTag("dorm_outing_open").semantics { onClick(label = "열기") { openOuting(); true } },
-                            leadingContent = { Icon(Icons.Default.Luggage, contentDescription = null) },
+                            leadingContent = { DimaIconBadge(Icons.Default.Luggage) },
                             trailingContent = {
                                 Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null, modifier = Modifier.size(20.dp))
                             },
@@ -260,7 +261,7 @@ internal fun DormScreen(onBack: () -> Unit, onOpenMeals: () -> Unit, modifier: M
                                 onClick = { topic = item },
                                 shapes = ListItemDefaults.segmentedShapes(index = index, count = topics.size),
                                 modifier = Modifier.testTag("dorm_topic_${item.name}").semantics { onClick(label = "열기") { topic = item; true } },
-                                leadingContent = { Icon(icon, contentDescription = null) },
+                                leadingContent = { DimaIconBadge(icon) },
                                 trailingContent = {
                                     Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null, modifier = Modifier.size(20.dp))
                                 },
@@ -536,7 +537,7 @@ private fun GuideCard(content: @Composable () -> Unit) {
     ElevatedCard(
         modifier = Modifier.fillMaxWidth(),
         shape = DimaShapes.Card,
-        colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+        colors = CardDefaults.elevatedCardColors(containerColor = DimaTheme.colors.card),
     ) {
         Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) { content() }
     }
@@ -559,7 +560,7 @@ private fun GuideLine(text: String, marker: String = "•") {
 private fun OpenBadge(open: Boolean) {
     Surface(
         shape = DimaShapes.Badge,
-        color = if (open) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerHighest,
+        color = if (open) MaterialTheme.colorScheme.primaryContainer else DimaTheme.colors.cardInner,
     ) {
         Text(
             if (open) "지금 이용 가능" else "지금은 닫힘",
@@ -574,7 +575,7 @@ private fun OpenBadge(open: Boolean) {
 private fun HoursRow(name: String, detail: String, open: Boolean, index: Int, count: Int) {
     Surface(
         shape = ListItemDefaults.segmentedShapes(index = index, count = count).shape,
-        color = MaterialTheme.colorScheme.surfaceContainerLow,
+        color = DimaTheme.colors.card,
         modifier = Modifier.fillMaxWidth().semantics(mergeDescendants = true) {
             contentDescription = "$name, $detail, ${if (open) "지금 이용 가능" else "지금은 닫힘"}"
         },
@@ -599,7 +600,7 @@ private fun LinkRow(icon: ImageVector, title: String, supporting: String, index:
         onClick = onClick,
         shapes = ListItemDefaults.segmentedShapes(index = index, count = count),
         modifier = Modifier.testTag(tag).semantics { onClick(label = "브라우저에서 열기") { onClick(); true } },
-        leadingContent = { Icon(icon, contentDescription = null) },
+        leadingContent = { DimaIconBadge(icon) },
         trailingContent = { Icon(Icons.AutoMirrored.Filled.OpenInNew, contentDescription = null, modifier = Modifier.size(20.dp)) },
         supportingContent = { Text(supporting) },
         colors = dimaSegmentedListColors(),
@@ -616,7 +617,7 @@ private fun PointTotal(label: String, points: Int, accent: Color, modifier: Modi
     ElevatedCard(
         modifier = modifier.semantics(mergeDescendants = true) { contentDescription = "$label ${points}점" },
         shape = DimaShapes.Card,
-        colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+        colors = CardDefaults.elevatedCardColors(containerColor = DimaTheme.colors.card),
     ) {
         Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text(label, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -634,7 +635,7 @@ private fun PointEntryRow(entry: DormPointEntry, index: Int, count: Int) {
     val date = entry.date?.let { koreanDateLabel(it) }
     Surface(
         shape = ListItemDefaults.segmentedShapes(index = index, count = count).shape,
-        color = MaterialTheme.colorScheme.surfaceContainerLow,
+        color = DimaTheme.colors.card,
         modifier = Modifier.fillMaxWidth().semantics(mergeDescendants = true) {
             contentDescription = listOfNotNull(date, entry.content.ifBlank { null }, points.ifBlank { null }).joinToString(", ")
         },

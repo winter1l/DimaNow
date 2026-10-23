@@ -4,6 +4,7 @@ import androidx.compose.material3.ButtonDefaults
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import com.example.dimanow.theme.DimaTheme
 import com.example.dimanow.ui.meal.groupDormitorySections
 import androidx.compose.material.icons.filled.PhotoCamera
 import com.example.dimanow.theme.DimaShapes
@@ -622,8 +623,8 @@ private fun MealPeriodCard(
     val shape = DimaShapes.Card
     val background = when {
         isOpen -> colors.primaryContainer
-        isClosed -> colors.surfaceContainerHighest
-        else -> colors.surfaceContainerLow
+        isClosed -> DimaTheme.colors.cardInner
+        else -> DimaTheme.colors.card
     }
     ElevatedCard(
         modifier = modifier.fillMaxWidth()

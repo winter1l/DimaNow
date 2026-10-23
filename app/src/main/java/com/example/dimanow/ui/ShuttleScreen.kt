@@ -1,6 +1,7 @@
 package com.example.dimanow.ui
 
 import androidx.compose.foundation.border
+import com.example.dimanow.theme.DimaTheme
 import com.example.dimanow.ui.motion.DimaMotion
 import com.example.dimanow.theme.DimaShapes
 import androidx.compose.foundation.layout.Arrangement
@@ -339,7 +340,7 @@ private fun ShuttleRouteCard(
             .then(if (isCurrentLocation) Modifier.border(1.5.dp, MaterialTheme.colorScheme.primary, DimaShapes.Card) else Modifier),
         shape = DimaShapes.Card,
         colors = CardDefaults.elevatedCardColors(
-            containerColor = if (isCurrentLocation) MaterialTheme.colorScheme.surfaceContainerHigh else MaterialTheme.colorScheme.surfaceContainerLow,
+            containerColor = if (isCurrentLocation) DimaTheme.colors.cardInner else DimaTheme.colors.card,
         ),
     ) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -354,7 +355,7 @@ private fun ShuttleRouteCard(
                     color = if (isCurrentLocation) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
                 )
                 if (sortedTimes.isNotEmpty()) {
-                    Surface(shape = DimaShapes.Badge, color = MaterialTheme.colorScheme.surfaceContainerHighest) {
+                    Surface(shape = DimaShapes.Badge, color = DimaTheme.colors.cardInner) {
                         Text(
                             text = "첫차 ${sortedTimes.first().format(TIME)} · 막차 ${sortedTimes.last().format(TIME)}",
                             style = MaterialTheme.typography.labelSmall,
@@ -403,7 +404,7 @@ private fun ShuttleRouteCard(
                 } else {
                     Surface(
                         shape = DimaShapes.Tile,
-                        color = MaterialTheme.colorScheme.surfaceContainerHighest,
+                        color = DimaTheme.colors.cardInner,
                         modifier = Modifier.fillMaxWidth(),
                     ) {
                         Text(

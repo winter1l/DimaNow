@@ -31,6 +31,7 @@ import androidx.compose.ui.unit.dp
 import com.example.dimanow.sync.TimetableBackup
 import com.example.dimanow.data.TimetableBackupCodec
 import com.example.dimanow.theme.DimaShapes
+import com.example.dimanow.theme.DimaTheme
 import java.time.LocalDate
 import java.time.ZoneId
 import kotlinx.coroutines.Dispatchers
@@ -127,7 +128,7 @@ internal fun AppDataCard(modifier: Modifier = Modifier) {
     ElevatedCard(
         modifier = modifier.fillMaxWidth().testTag("app_data_card"),
         shape = DimaShapes.Card,
-        colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+        colors = CardDefaults.elevatedCardColors(containerColor = DimaTheme.colors.card),
     ) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("데이터 관리", style = MaterialTheme.typography.titleMedium)

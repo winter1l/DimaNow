@@ -56,6 +56,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.example.dimanow.theme.DimaTheme
 import com.example.dimanow.theme.dimaScreenTitleStyle
 import com.example.dimanow.ui.motion.DimaMotion
 import com.example.dimanow.ui.motion.entrance
@@ -103,8 +104,8 @@ internal fun DimaTopAppBar(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun dimaTopAppBarColors(): TopAppBarColors = TopAppBarDefaults.topAppBarColors(
-    containerColor = MaterialTheme.colorScheme.surface,
-    scrolledContainerColor = MaterialTheme.colorScheme.surfaceContainer,
+    containerColor = DimaTheme.colors.page,
+    scrolledContainerColor = DimaTheme.colors.scrolledHeader,
 )
 
 /** Screen title text for [DimaTopAppBar]. */
@@ -184,6 +185,7 @@ internal fun ScreenScaffold(
     }
 
     Scaffold(
+        containerColor = DimaTheme.colors.page,
         modifier = modifier
             .fillMaxSize()
             .nestedScroll(scrollBehavior.nestedScrollConnection),

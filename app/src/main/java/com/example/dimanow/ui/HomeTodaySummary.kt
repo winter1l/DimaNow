@@ -38,6 +38,7 @@ import com.example.dimanow.lms.LmsItemKind
 import com.example.dimanow.lms.LmsSessionState
 import com.example.dimanow.lms.LmsSnapshot
 import com.example.dimanow.lms.LmsSyncState
+import com.example.dimanow.theme.DimaTheme
 import java.time.Instant
 import java.time.ZoneId
 import java.time.ZonedDateTime
@@ -93,7 +94,7 @@ internal fun HomeTodaySummary(
         if (overview.courses.isNotEmpty()) {
             FlowRow(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 overview.courses.forEach { course ->
-                    Surface(shape = DimaShapes.Badge, color = MaterialTheme.colorScheme.surfaceContainerHigh, contentColor = MaterialTheme.colorScheme.onSurfaceVariant) {
+                    Surface(shape = DimaShapes.Badge, color = DimaTheme.colors.cardInner, contentColor = MaterialTheme.colorScheme.onSurfaceVariant) {
                         Text("${course.courseName} · ${course.totalCount}개", style = MaterialTheme.typography.labelMedium,
                             modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp))
                     }
@@ -144,7 +145,7 @@ internal fun HomeSummaryCard(
             .fillMaxWidth()
             .semantics { labelClickAction(onClickLabel, open) },
         shape = DimaShapes.Card,
-        colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+        colors = CardDefaults.elevatedCardColors(containerColor = DimaTheme.colors.card),
     ) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp), content = content)
     }
@@ -162,7 +163,7 @@ internal fun HomeContainerCard(
     ElevatedCard(
         modifier = modifier.fillMaxWidth(),
         shape = DimaShapes.Card,
-        colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+        colors = CardDefaults.elevatedCardColors(containerColor = DimaTheme.colors.card),
     ) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp), content = content)
     }
@@ -187,7 +188,7 @@ internal fun HomeCardHeader(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(22.dp))
+        DimaIconBadge(icon, size = 32.dp)
         Text(title, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
         trailing()
         if (showChevron) {
@@ -217,7 +218,7 @@ internal fun HomeCompactPrompt(
             .fillMaxWidth()
             .semantics { labelClickAction(onClickLabel, open) },
         shape = DimaShapes.Tile,
-        color = MaterialTheme.colorScheme.surfaceContainerLow,
+        color = DimaTheme.colors.card,
         contentColor = MaterialTheme.colorScheme.onSurface,
     ) {
         Row(
@@ -225,7 +226,7 @@ internal fun HomeCompactPrompt(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(22.dp))
+            DimaIconBadge(icon, size = 32.dp)
             Text(
                 text,
                 style = MaterialTheme.typography.bodyMedium,

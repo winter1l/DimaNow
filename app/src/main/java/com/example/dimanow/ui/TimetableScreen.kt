@@ -1,6 +1,7 @@
 package com.example.dimanow.ui
 
 import androidx.compose.material3.IconButtonDefaults
+import com.example.dimanow.theme.DimaTheme
 import com.example.dimanow.ui.motion.expressiveBounceClick
 import com.example.dimanow.ui.schedule.KoreanDateRangePickerHeadline
 import com.example.dimanow.ui.schedule.KoreanLocale
@@ -192,7 +193,7 @@ internal fun TimetableScreen(
             ElevatedCard(
                 modifier = Modifier.fillMaxWidth(),
                 shape = DimaShapes.Card,
-                colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+                colors = CardDefaults.elevatedCardColors(containerColor = DimaTheme.colors.card),
             ) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Row(
@@ -204,7 +205,7 @@ internal fun TimetableScreen(
                             onClick = { showTermEditor = true },
                             modifier = Modifier.testTag("edit_term"),
                             shape = DimaShapes.Badge,
-                            color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                            color = DimaTheme.colors.cardInner,
                         ) {
                             Row(
                                 modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
@@ -367,7 +368,7 @@ internal fun TimetableScreen(
         if (schedule.noClassDates.isNotEmpty()) item(key = "no_class_date_list") {
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 schedule.noClassDates.sorted().forEach { date ->
-                    Surface(modifier = Modifier.fillMaxWidth(), shape = DimaShapes.Tile, color = MaterialTheme.colorScheme.surfaceContainerLow) {
+                    Surface(modifier = Modifier.fillMaxWidth(), shape = DimaShapes.Tile, color = DimaTheme.colors.card) {
                         Row(
                             modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
                             horizontalArrangement = Arrangement.SpaceBetween,
@@ -517,7 +518,7 @@ fun CourseSummaryCard(
             .fillMaxWidth()
             .expressiveBounceClick { onEdit() },
         shape = DimaShapes.Card,
-        colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+        colors = CardDefaults.elevatedCardColors(containerColor = DimaTheme.colors.card),
     ) {
         Row(
             modifier = Modifier

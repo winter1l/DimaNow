@@ -61,6 +61,7 @@ import com.example.dimanow.data.OnboardingDraft
 import com.example.dimanow.data.OnboardingStage
 import com.example.dimanow.guidance.HomeBase
 import com.example.dimanow.live.LiveSurfaceController
+import com.example.dimanow.theme.DimaTheme
 import com.example.dimanow.ui.GuidanceSetupChecklist
 import com.example.dimanow.ui.GuidanceSetupState
 import com.example.dimanow.ui.rememberGuidanceSetupController
@@ -186,7 +187,7 @@ internal fun OnboardingScreen(
                             // D-099: 첫 화면에서 비공식 앱임과 데이터 처리 원칙을 알린다
                             Surface(
                                 shape = DimaShapes.Tile,
-                                color = MaterialTheme.colorScheme.surfaceContainerLow,
+                                color = DimaTheme.colors.card,
                                 modifier = Modifier.fillMaxWidth(),
                             ) {
                                 Column(Modifier.padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 4.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -218,7 +219,7 @@ internal fun OnboardingScreen(
                             ).forEach { (homeBase, label, supporting) ->
                                 Surface(
                                     shape = DimaShapes.Tile,
-                                    color = if (draft.homeBase == homeBase) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerLow,
+                                    color = if (draft.homeBase == homeBase) MaterialTheme.colorScheme.primaryContainer else DimaTheme.colors.card,
                                     modifier = Modifier.fillMaxWidth().heightIn(min = 64.dp),
                                 ) {
                                     Row(

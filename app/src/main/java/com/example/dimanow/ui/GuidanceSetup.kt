@@ -282,7 +282,7 @@ private fun SetupRow(item: SetupItem, index: Int, count: Int, onAction: (Guidanc
     }
     SegmentedListItem(
         shapes = ListItemDefaults.segmentedShapes(index = index, count = count),
-        leadingContent = { Icon(item.icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
+        leadingContent = { DimaIconBadge(item.icon) },
         trailingContent = {
             if (item.completed) {
                 Icon(Icons.Default.CheckCircle, contentDescription = "켜져 있음", tint = MaterialTheme.colorScheme.primary)

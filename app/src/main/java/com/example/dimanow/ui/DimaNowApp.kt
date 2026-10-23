@@ -3,6 +3,7 @@ package com.example.dimanow.ui
 import android.provider.Settings
 import android.webkit.CookieManager
 import androidx.compose.animation.AnimatedContent
+import com.example.dimanow.theme.DimaTheme
 import com.example.dimanow.ui.motion.LocalEntranceMotion
 import com.example.dimanow.ui.motion.dimaFadeThrough
 import com.example.dimanow.ui.onboarding.OnboardingRoute
@@ -237,6 +238,7 @@ fun DimaNowApp(
     // sign-in it shows is full screen.
     Box(Modifier.fillMaxSize().semantics { testTagsAsResourceId = true }) {
     Scaffold(
+        containerColor = DimaTheme.colors.page,
         // 상태바 인셋을 바깥 패딩이 아닌 각 화면의 contentPadding으로 처리해
         // 스크롤 콘텐츠가 상태바 뒤까지 흐르게 한다 (상단 빈 띠 제거)
         contentWindowInsets = WindowInsets(0, 0, 0, 0),

@@ -27,6 +27,7 @@ import com.example.dimanow.dorm.RollCallStore
 import com.example.dimanow.live.GuidanceKind
 import com.example.dimanow.live.NotificationGuidanceMode
 import com.example.dimanow.live.NotificationGuidancePolicy
+import com.example.dimanow.theme.DimaTheme
 
 @Composable
 fun NotificationGuidanceSettings(
@@ -40,7 +41,7 @@ fun NotificationGuidanceSettings(
         modifier = modifier.fillMaxWidth(),
         shape = DimaShapes.Card,
         colors = CardDefaults.elevatedCardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+            containerColor = DimaTheme.colors.card,
         ),
     ) {
         Column(

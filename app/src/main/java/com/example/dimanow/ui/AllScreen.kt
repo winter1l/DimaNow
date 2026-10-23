@@ -106,7 +106,7 @@ private fun AllRow(
         shapes = ListItemDefaults.segmentedShapes(index = index, count = count),
         // The row says where it goes, which SegmentedListItem has no parameter for.
         modifier = Modifier.testTag(tag).semantics { onClick(label = if (external) "브라우저에서 열기" else "열기") { onClick(); true } },
-        leadingContent = { Icon(icon, contentDescription = null) },
+        leadingContent = { DimaIconBadge(icon) },
         trailingContent = {
             Icon(
                 if (external) Icons.AutoMirrored.Filled.OpenInNew else Icons.AutoMirrored.Filled.KeyboardArrowRight,

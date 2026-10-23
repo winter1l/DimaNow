@@ -470,7 +470,7 @@ internal fun DashboardScreen(
                                         val lastDepartureTime = annotated.lastOrNull()?.departure?.time
                                         Surface(
                                             shape = DimaShapes.Tile,
-                                            color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                                            color = DimaTheme.colors.cardInner,
                                             modifier = Modifier.fillMaxWidth(),
                                         ) {
                                             FlowRow(
@@ -583,7 +583,7 @@ internal fun DashboardScreen(
                     .fillMaxWidth()
                     .testTag("dashboard_notices_card"),
                 shape = DimaShapes.Card,
-                colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+                colors = CardDefaults.elevatedCardColors(containerColor = DimaTheme.colors.card),
             ) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     // 공지 카드는 행마다 다른 곳을 열므로 카드 자체는 누를 수 없고, 머리의 전체보기만 버튼이다 (D-094(9))
@@ -634,7 +634,7 @@ internal fun DashboardScreen(
                                     )
                                     Surface(
                                         shape = DimaShapes.Badge,
-                                        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                                        color = DimaTheme.colors.cardInner,
                                     ) {
                                         Text(
                                             text = "${notice.date.monthValue}.${notice.date.dayOfMonth}",

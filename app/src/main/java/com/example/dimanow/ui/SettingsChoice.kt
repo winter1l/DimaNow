@@ -22,6 +22,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.ToggleButton
+import androidx.compose.material3.ToggleButtonDefaults
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -50,6 +51,7 @@ import androidx.compose.ui.unit.dp
 import com.example.dimanow.domain.CampusZoneId
 import com.example.dimanow.domain.DisplayVocabulary
 import com.example.dimanow.theme.DimaShapes
+import com.example.dimanow.theme.DimaTheme
 import com.example.dimanow.ui.motion.DimaMotion
 
 /**
@@ -78,6 +80,8 @@ internal fun <T> DimaConnectedChoice(
                 // A connected single-choice group never ends with nothing selected.
                 onCheckedChange = { onSelect(value) },
                 enabled = enabled,
+                // D-114: unselected buttons sit one tone above the card or page instead of sinking below it.
+                colors = ToggleButtonDefaults.colors(containerColor = DimaTheme.colors.cardInner),
                 shapes = when (index) {
                     0 -> ButtonGroupDefaults.connectedLeadingButtonShapes()
                     options.lastIndex -> ButtonGroupDefaults.connectedTrailingButtonShapes()
@@ -190,7 +194,7 @@ internal fun SettingsExpander(
                 if (expanded) collapse { onToggle(); true } else expand { onToggle(); true }
             },
         shape = DimaShapes.Card,
-        color = MaterialTheme.colorScheme.surfaceContainerLow,
+        color = DimaTheme.colors.card,
         contentColor = MaterialTheme.colorScheme.onSurface,
     ) {
         Row(
@@ -231,7 +235,7 @@ internal fun LocationTestCard(
     ElevatedCard(
         modifier = modifier.fillMaxWidth(),
         shape = DimaShapes.Card,
-        colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+        colors = CardDefaults.elevatedCardColors(containerColor = DimaTheme.colors.card),
     ) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("위치 테스트", style = MaterialTheme.typography.titleMedium)

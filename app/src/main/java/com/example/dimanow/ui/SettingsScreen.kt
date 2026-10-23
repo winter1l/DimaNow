@@ -50,6 +50,7 @@ import com.example.dimanow.live.NotificationGuidancePolicy
 import com.example.dimanow.meal.MealData
 import com.example.dimanow.shuttle.ShuttleData
 import com.example.dimanow.location.LocationMode
+import com.example.dimanow.theme.DimaTheme
 import com.example.dimanow.update.AppUpdatePhase
 import com.example.dimanow.update.AppUpdateUiState
 import com.example.dimanow.lms.CredentialState
@@ -111,7 +112,7 @@ internal fun SettingsScreen(
             ElevatedCard(
                 modifier = Modifier.fillMaxWidth(),
                 shape = DimaShapes.Card,
-                colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+                colors = CardDefaults.elevatedCardColors(containerColor = DimaTheme.colors.card),
             ) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text("귀가 방향", style = MaterialTheme.typography.titleMedium)
@@ -164,7 +165,7 @@ internal fun SettingsScreen(
             ElevatedCard(
                 modifier = Modifier.fillMaxWidth(),
                 shape = DimaShapes.Card,
-                colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+                colors = CardDefaults.elevatedCardColors(containerColor = DimaTheme.colors.card),
             ) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text("수업 계정", style = MaterialTheme.typography.titleMedium)
@@ -284,7 +285,7 @@ internal fun AppUpdateCard(
     ElevatedCard(
         modifier = modifier.fillMaxWidth(),
         shape = DimaShapes.Card,
-        colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+        colors = CardDefaults.elevatedCardColors(containerColor = DimaTheme.colors.card),
     ) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("앱 업데이트", style = MaterialTheme.typography.titleMedium)
@@ -348,7 +349,7 @@ internal fun DataAndSourcesCard(
     ElevatedCard(
         modifier = modifier.fillMaxWidth().testTag("data_sources_card"),
         shape = DimaShapes.Card,
-        colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+        colors = CardDefaults.elevatedCardColors(containerColor = DimaTheme.colors.card),
     ) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("데이터 및 원문", style = MaterialTheme.typography.titleMedium)
@@ -431,7 +432,7 @@ fun LiveDisplaySettings(
     ElevatedCard(
         modifier = modifier.fillMaxWidth(),
         shape = DimaShapes.Card,
-        colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+        colors = CardDefaults.elevatedCardColors(containerColor = DimaTheme.colors.card),
     ) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Text("실시간 알림", style = MaterialTheme.typography.titleMedium)

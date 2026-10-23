@@ -60,6 +60,7 @@ import com.example.dimanow.school.dimaCModelAvailabilityScript
 import com.example.dimanow.school.parseEquipmentAvailability
 import com.example.dimanow.school.parseEquipmentCatalog
 import com.example.dimanow.theme.DimaShapes
+import com.example.dimanow.theme.DimaTheme
 import com.example.dimanow.ui.motion.DimaMotion
 import java.time.DayOfWeek
 import java.time.LocalDate
@@ -246,7 +247,7 @@ private fun EquipmentGroupList(
                 if (open) {
                     Surface(
                         shape = ListItemDefaults.segmentedShapes(index = index++, count = count).shape,
-                        color = MaterialTheme.colorScheme.surfaceContainerLow,
+                        color = DimaTheme.colors.card,
                         modifier = Modifier.fillMaxWidth().testTag("equipment_days_${model.no}"),
                     ) {
                         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -366,7 +367,7 @@ private fun EquipmentDayCell(
         shape = DimaShapes.Tile,
         color = when {
             available -> MaterialTheme.colorScheme.primaryContainer
-            day.open -> MaterialTheme.colorScheme.surfaceContainerHighest
+            day.open -> DimaTheme.colors.cardInner
             else -> Color.Transparent
         },
         contentColor = if (available) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,

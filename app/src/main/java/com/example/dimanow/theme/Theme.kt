@@ -112,17 +112,39 @@ private val DarkColorScheme = darkColorScheme(
     onTertiaryFixedVariant = TertiaryContainerDark,
 )
 
-/** Static app colors outside the M3 scheme, each with its four roles (D-104). */
+/**
+ * Static app colors outside the M3 scheme: the warning roles (D-104) and the surfaces cards sit on (D-114).
+ * [page] is the screen background, [card] every card and segmented row on it, [cardInner] badges and tiles inside a
+ * card, and [scrolledHeader] the pinned header once content scrolls under it. Each is an M3 surface role chosen so a
+ * card stands clearly apart from the page in both themes: in light a white card on a tinted page, in dark a card
+ * two tones above the page, as the system Settings app does.
+ */
 @Immutable
 data class DimaExtendedColors(
     val warning: Color,
     val onWarning: Color,
     val warningContainer: Color,
     val onWarningContainer: Color,
+    val page: Color,
+    val card: Color,
+    val cardInner: Color,
+    val scrolledHeader: Color,
 )
 
-private val LightExtendedColors = DimaExtendedColors(WarningLight, OnWarningLight, WarningContainerLight, OnWarningContainerLight)
-private val DarkExtendedColors = DimaExtendedColors(WarningDark, OnWarningDark, WarningContainerDark, OnWarningContainerDark)
+private val LightExtendedColors = DimaExtendedColors(
+    WarningLight, OnWarningLight, WarningContainerLight, OnWarningContainerLight,
+    page = SurfaceContainerLowLight,
+    card = SurfaceContainerLowestLight,
+    cardInner = SurfaceContainerHighLight,
+    scrolledHeader = SurfaceContainerLight,
+)
+private val DarkExtendedColors = DimaExtendedColors(
+    WarningDark, OnWarningDark, WarningContainerDark, OnWarningContainerDark,
+    page = SurfaceDark,
+    card = SurfaceContainerHighDark,
+    cardInner = SurfaceContainerHighestDark,
+    scrolledHeader = SurfaceContainerDark,
+)
 
 private val LocalDimaExtendedColors = staticCompositionLocalOf { LightExtendedColors }
 

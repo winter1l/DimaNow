@@ -1,5 +1,5 @@
 {
-    "generatedAt": "2026-10-23T18:13:11.307912973Z",
+    "generatedAt": "2026-10-23T18:27:26.029905412Z",
     "datasets": {
         "shuttle": {
             "revision": 2,
@@ -47,14 +47,13 @@
             "sourceUrl": "https://www.dima.ac.kr/?p=78"
         },
         "app_release": {
-            "revision": 2,
-            "state": "WAITING",
-            "publishedAt": "2026-10-18T05:05:33.018929624Z",
-            "lastAttemptAt": "2026-10-23T05:18:05.193457755Z",
-            "url": "app-release/cb7a2c6c55c932048ad058471daa62dc03bc049457916c0ebb5d472ae66c23de.json",
-            "sha256": "cb7a2c6c55c932048ad058471daa62dc03bc049457916c0ebb5d472ae66c23de",
-            "sourceUrl": "https://github.com/winter1l/DimaNow/releases",
-            "message": "공개 버전을 준비하고 있어요"
+            "revision": 3,
+            "state": "READY",
+            "publishedAt": "2026-10-23T18:27:26.029905412Z",
+            "lastAttemptAt": "2026-10-23T18:27:26.029905412Z",
+            "url": "app-release/8f5eead7cb46ec18d7c90ab978f4e743700653f01d77f54ce1bcb69f8fbd8df7.json",
+            "sha256": "8f5eead7cb46ec18d7c90ab978f4e743700653f01d77f54ce1bcb69f8fbd8df7",
+            "sourceUrl": "https://github.com/winter1l/DimaNow/releases"
         }
     }
 }

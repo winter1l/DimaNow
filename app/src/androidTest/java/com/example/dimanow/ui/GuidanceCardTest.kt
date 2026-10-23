@@ -303,6 +303,9 @@ class GuidanceCardTest {
             }
         }
 
+        // At large font scales the cards above can push the shuttle card below a phone screen, and a lazy list
+        // composes only what is visible, so scroll to it first.
+        composeRule.onNodeWithTag("home_list").performScrollToNode(hasTestTag("dashboard_shuttle_card"))
         // D-094: the clock is its own single node on one line; the countdown label sits above it.
         val clock = composeRule.onNode(
             hasText("19:50") and hasAnyAncestor(hasTestTag("home_departure_YEIN_1")),

@@ -75,7 +75,8 @@ class NoticeCardTest {
         homeList.performScrollToNode(hasText("2026-2학기 국가장학금 2차 신청 안내"))
         // The notice card is composed here, so a missing fourth row means it was left out.
         composeRule.onNodeWithText("네 번째 공지는 카드에 나오지 않습니다").assertDoesNotExist()
-        homeList.performScrollToNode(hasText("DIMA 포털"))
+        // D-110: the DIMA 포털 shortcut moved from Home to 전체.
+        composeRule.onNodeWithText("DIMA 포털").assertDoesNotExist()
         // D-094(9): the LMS shortcut only duplicated the Courses tab and is gone; the signed-out
         // course card is a compact prompt whose whole row opens Courses ("수업 보기").
         homeList.performScrollToNode(hasTestTag("dashboard_learning_prompt"))

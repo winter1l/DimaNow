@@ -28,7 +28,6 @@ import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -43,8 +42,13 @@ import androidx.compose.material3.TopAppBarScrollBehavior
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
@@ -56,6 +60,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.example.dimanow.theme.DimaTheme
 import com.example.dimanow.theme.dimaScreenTitleStyle
 import com.example.dimanow.ui.motion.DimaMotion
 import com.example.dimanow.ui.motion.entrance
@@ -65,8 +70,7 @@ import com.example.dimanow.ui.motion.entrance
  *
  * A Material3 small [TopAppBar] (D-105: one pinned header, no large collapsing title): it stays pinned,
  * draws behind the status bar through [windowInsets], and tints `surface` -> `surfaceContainer` once
- * content scrolls under it. The shared settings gear is appended to [actions] whenever
- * [LocalOpenSettings] provides one.
+ * content scrolls under it. Settings opens from 전체 (D-110), so the bar carries no settings gear.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -75,25 +79,15 @@ internal fun DimaTopAppBar(
     modifier: Modifier = Modifier,
     navigationIcon: @Composable () -> Unit = {},
     actions: @Composable RowScope.() -> Unit = {},
-    showSettings: Boolean = true,
     scrollBehavior: TopAppBarScrollBehavior? = null,
     colors: TopAppBarColors = dimaTopAppBarColors(),
     windowInsets: WindowInsets = TopAppBarDefaults.windowInsets,
 ) {
-    val openSettings = if (showSettings) LocalOpenSettings.current else null
-    val allActions: @Composable RowScope.() -> Unit = {
-        actions()
-        openSettings?.let { open ->
-            IconButton(shapes = IconButtonDefaults.shapes(), onClick = open, modifier = Modifier.testTag("open_settings")) {
-                Icon(Icons.Default.Settings, contentDescription = "설정")
-            }
-        }
-    }
     TopAppBar(
         title = title,
         modifier = modifier,
         navigationIcon = navigationIcon,
-        actions = allActions,
+        actions = actions,
         windowInsets = windowInsets,
         colors = colors,
         scrollBehavior = scrollBehavior,
@@ -103,8 +97,8 @@ internal fun DimaTopAppBar(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun dimaTopAppBarColors(): TopAppBarColors = TopAppBarDefaults.topAppBarColors(
-    containerColor = MaterialTheme.colorScheme.surface,
-    scrolledContainerColor = MaterialTheme.colorScheme.surfaceContainer,
+    containerColor = DimaTheme.colors.page,
+    scrolledContainerColor = DimaTheme.colors.scrolledHeader,
 )
 
 /** Screen title text for [DimaTopAppBar]. */
@@ -184,6 +178,7 @@ internal fun ScreenScaffold(
     }
 
     Scaffold(
+        containerColor = DimaTheme.colors.page,
         modifier = modifier
             .fillMaxSize()
             .nestedScroll(scrollBehavior.nestedScrollConnection),
@@ -191,8 +186,13 @@ internal fun ScreenScaffold(
             // The header surface spans the window and tints as one; the bar and the pinned controls below
             // it change color together and, on wide windows, line up with the centered reading column.
             val defaults = dimaTopAppBarColors()
+            // Read through derivedStateOf: the pinned behavior writes contentOffset on every scroll frame, and a
+            // direct read would recompose the whole header (and the pinned sub-header) each frame.
+            val scrolledUnder by remember(scrollBehavior) {
+                derivedStateOf { scrollBehavior.state.overlappedFraction > 0.01f }
+            }
             val headerColor by animateColorAsState(
-                targetValue = if (scrollBehavior.state.overlappedFraction > 0.01f) {
+                targetValue = if (scrolledUnder) {
                     defaults.scrolledContainerColor
                 } else {
                     defaults.containerColor
@@ -290,6 +290,15 @@ private fun PullToRefresh(
         return
     }
     val state = rememberPullToRefreshState()
+    // D-121: one tick as the pull passes the refresh threshold, so the student feels "let go now" without looking.
+    // A refresh started from the bar's button also moves the indicator to the threshold; it stays silent.
+    val haptics = LocalHapticFeedback.current
+    val currentlyRefreshing by rememberUpdatedState(refreshing)
+    LaunchedEffect(state) {
+        snapshotFlow { state.distanceFraction >= 1f }.collect { armed ->
+            if (armed && !currentlyRefreshing) haptics.performHapticFeedback(HapticFeedbackType.GestureThresholdActivate)
+        }
+    }
     PullToRefreshBox(
         isRefreshing = refreshing,
         onRefresh = onRefresh,

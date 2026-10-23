@@ -1,5 +1,7 @@
 package com.example.dimanow.ui
 
+import androidx.compose.material.icons.filled.NotificationsActive
+import androidx.compose.material.icons.filled.PersonRemove
 import androidx.compose.material3.IconButtonDefaults
 import android.provider.Settings
 import com.example.dimanow.theme.DimaShapes
@@ -50,6 +52,7 @@ import com.example.dimanow.live.NotificationGuidancePolicy
 import com.example.dimanow.meal.MealData
 import com.example.dimanow.shuttle.ShuttleData
 import com.example.dimanow.location.LocationMode
+import com.example.dimanow.theme.DimaTheme
 import com.example.dimanow.update.AppUpdatePhase
 import com.example.dimanow.update.AppUpdateUiState
 import com.example.dimanow.lms.CredentialState
@@ -69,20 +72,22 @@ internal fun SettingsScreen(
     onClassOrderChange: (LiveClassOrder) -> Unit,
     notificationPolicy: NotificationGuidancePolicy,
     onNotificationModeChange: (GuidanceKind, NotificationGuidanceMode) -> Unit,
+    academicReminders: Boolean = true,
+    onAcademicRemindersChange: (Boolean) -> Unit = {},
     homeBase: HomeBase,
     onHomeBaseChange: (HomeBase) -> Unit,
     shuttleData: ShuttleData?,
     mealData: MealData?,
     onShowNowBarSetup: () -> Unit,
-    updateState: AppUpdateUiState,
-    onCheckUpdate: () -> Unit,
-    onDownloadUpdate: () -> Unit,
-    onContinueInstall: () -> Unit,
-    onCancelDownload: () -> Unit,
     lmsCredentialState: CredentialState,
     onDeleteLmsAccount: () -> Unit,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
+    updateState: AppUpdateUiState? = null,
+    onCheckUpdate: () -> Unit = {},
+    onDownloadUpdate: () -> Unit = {},
+    onContinueInstall: () -> Unit = {},
+    onCancelDownload: () -> Unit = {},
 ) {
     var confirmDeleteLmsAccount by remember { mutableStateOf(false) }
     var diagnosticsExpanded by rememberSaveable { mutableStateOf(false) }
@@ -109,7 +114,7 @@ internal fun SettingsScreen(
             ElevatedCard(
                 modifier = Modifier.fillMaxWidth(),
                 shape = DimaShapes.Card,
-                colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+                colors = CardDefaults.elevatedCardColors(containerColor = DimaTheme.colors.card),
             ) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text("귀가 방향", style = MaterialTheme.typography.titleMedium)
@@ -145,6 +150,8 @@ internal fun SettingsScreen(
             NotificationGuidanceSettings(
                 policy = notificationPolicy,
                 onModeChange = onNotificationModeChange,
+                academicReminders = academicReminders,
+                onAcademicRemindersChange = onAcademicRemindersChange,
             )
         }
         item(key = "live_display") {
@@ -160,7 +167,7 @@ internal fun SettingsScreen(
             ElevatedCard(
                 modifier = Modifier.fillMaxWidth(),
                 shape = DimaShapes.Card,
-                colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+                colors = CardDefaults.elevatedCardColors(containerColor = DimaTheme.colors.card),
             ) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text("수업 계정", style = MaterialTheme.typography.titleMedium)
@@ -180,15 +187,18 @@ internal fun SettingsScreen(
             }
         }
         item(key = "app_data") { AppDataCard() }
+        // D-122: 앱 정보 is back in 설정 (D-119 had moved it to its own 전체 page); 전체 keeps 문의·오류 제보.
         item(key = "app_info_header") { SettingsSectionHeader("앱 정보") }
-        item(key = "app_update") {
-            AppUpdateCard(
-                state = updateState,
-                onCheck = onCheckUpdate,
-                onDownload = onDownloadUpdate,
-                onContinueInstall = onContinueInstall,
-                onCancelDownload = onCancelDownload,
-            )
+        if (updateState != null) {
+            item(key = "app_update") {
+                AppUpdateCard(
+                    state = updateState,
+                    onCheck = onCheckUpdate,
+                    onDownload = onDownloadUpdate,
+                    onContinueInstall = onContinueInstall,
+                    onCancelDownload = onCancelDownload,
+                )
+            }
         }
         item(key = "about") { AboutCard() }
         item(key = "diagnostics_toggle") {
@@ -221,9 +231,10 @@ internal fun SettingsScreen(
     }
     if (confirmDeleteLmsAccount) {
         AlertDialog(
+            icon = { DimaDialogIcon(Icons.Default.PersonRemove, DialogTone.DANGER) },
             onDismissRequest = { confirmDeleteLmsAccount = false },
             title = { Text(if (lmsCredentialState == CredentialState.SAVED) "저장된 계정을 삭제할까요?" else "로그아웃할까요?") },
-            text = { Text("저장된 계정, 로그인 상태와 이 기기의 수업 정보가 삭제돼요.") },
+            text = { Text("저장된 계정과 로그인 상태, 이 기기에 받아 둔 수업 정보를 지워요.") },
             confirmButton = {
                 // 되돌릴 수 없는 삭제는 error 색 글자로 구분한다 (D-094(6)); 대화상자 동작은 텍스트 버튼이다 (D-104)
                 TextButton(shapes = ButtonDefaults.shapes(), 
@@ -244,11 +255,12 @@ internal fun NowBarSetupDialog(
     onComplete: () -> Unit,
 ) {
     AlertDialog(
+        icon = { DimaDialogIcon(Icons.Default.NotificationsActive, DialogTone.INFO) },
         onDismissRequest = onComplete,
         title = { Text("나우바 설정") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text("'잠긴 상태에서 알림 내용 표시' 옵션을 항상 표시로 변경해주세요.")
+                Text("잠금화면에서도 안내가 보이게 '알림 내용 표시'를 항상 표시로 바꿔 주세요.")
                 OutlinedButton(shapes = ButtonDefaults.shapes(), onClick = onOpenLockScreenNotifications, modifier = Modifier.fillMaxWidth()) {
                     Text("잠금화면 알림 설정 열기")
                 }
@@ -280,7 +292,7 @@ internal fun AppUpdateCard(
     ElevatedCard(
         modifier = modifier.fillMaxWidth(),
         shape = DimaShapes.Card,
-        colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+        colors = CardDefaults.elevatedCardColors(containerColor = DimaTheme.colors.card),
     ) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("앱 업데이트", style = MaterialTheme.typography.titleMedium)
@@ -344,7 +356,7 @@ internal fun DataAndSourcesCard(
     ElevatedCard(
         modifier = modifier.fillMaxWidth().testTag("data_sources_card"),
         shape = DimaShapes.Card,
-        colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+        colors = CardDefaults.elevatedCardColors(containerColor = DimaTheme.colors.card),
     ) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("데이터 및 원문", style = MaterialTheme.typography.titleMedium)
@@ -427,7 +439,7 @@ fun LiveDisplaySettings(
     ElevatedCard(
         modifier = modifier.fillMaxWidth(),
         shape = DimaShapes.Card,
-        colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+        colors = CardDefaults.elevatedCardColors(containerColor = DimaTheme.colors.card),
     ) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Text("실시간 알림", style = MaterialTheme.typography.titleMedium)

@@ -3,6 +3,15 @@ package com.example.dimanow.theme
 import androidx.compose.foundation.shape.CornerBasedShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Shapes
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.geometry.RoundRect
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Outline
+import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 
 /**
@@ -34,6 +43,29 @@ object DimaShapes {
 
     /** Dialogs and sheets (the Material default for AlertDialog). */
     val Dialog: CornerBasedShape = ExtraLarge
+
+    /**
+     * The departure capsule on its way from [Tile] (fraction 0) to a full pill (fraction 1), for the imminent
+     * departure (D-121): M3 Expressive draws attention by breaking from the surrounding shape style.
+     */
+    fun tileToPill(fraction: Float): Shape = TileToPillShape(fraction)
+}
+
+/**
+ * [DimaShapes.Tile]'s 12dp corners grown toward half the shorter side as [fraction] goes to 1 (D-121). A spatial
+ * spring may overshoot past 1; the radius never exceeds a full pill.
+ */
+internal data class TileToPillShape(val fraction: Float) : Shape {
+    override fun createOutline(size: Size, layoutDirection: LayoutDirection, density: Density): Outline {
+        val tile = with(density) { TILE_CORNER.toPx() }
+        val pill = minOf(size.width, size.height) / 2f
+        val radius = (tile + (pill - tile) * fraction).coerceIn(0f, pill)
+        return Outline.Rounded(RoundRect(Rect(Offset.Zero, size), CornerRadius(radius)))
+    }
+
+    private companion object {
+        val TILE_CORNER = 12.dp
+    }
 }
 
 val Shapes = Shapes(

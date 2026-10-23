@@ -26,7 +26,7 @@ object ServiceCalendarStore {
     fun loadCached(context: Context) {
         val file = cacheFile(context)
         if (!file.isFile) return
-        runCatching { decode(file.readBytes()) }.onSuccess { state.value = it }
+        runCatching { decode(file.readBytes()) }.onSuccess { state.value = it.completedFrom(BuiltInServiceCalendar.calendar) }
     }
 
     /** Validates [bytes], stores them atomically and makes them current. Throws when the payload is invalid. */
@@ -39,18 +39,25 @@ object ServiceCalendarStore {
             file.delete()
             check(temporary.renameTo(file)) { "달력을 저장하지 못했어요." }
         }
-        state.value = calendar
+        state.value = calendar.completedFrom(BuiltInServiceCalendar.calendar)
     }
 
     internal fun decode(bytes: ByteArray): ServiceCalendar =
         ServiceCalendar.from(json.decodeFromString<ServiceCalendarPayload>(bytes.decodeToString()))
 
-    /** Test hook: replaces the current calendar. */
-    fun replaceForTest(calendar: ServiceCalendar) {
-        state.value = calendar
-    }
-
     private fun cacheFile(context: Context) = File(context.filesDir, "service-calendar.json")
+}
+
+/**
+ * A synchronized calendar published before exam weeks (D-106) and 학사일정 (D-107) existed borrows them from the
+ * bundled copy: exam weeks only for a term with the same id and dates, events only when it has none at all.
+ */
+internal fun ServiceCalendar.completedFrom(bundled: ServiceCalendar): ServiceCalendar {
+    val completedTerms = terms.map { term ->
+        val known = bundled.terms.firstOrNull { it.id == term.id && it.start == term.start && it.end == term.end }
+        if (known == null) term else term.copy(midterm = term.midterm ?: known.midterm, finalExam = term.finalExam ?: known.finalExam)
+    }
+    return copy(terms = completedTerms, academicEvents = academicEvents.ifEmpty { bundled.academicEvents })
 }
 
 /** The calendar compiled into the APK; must equal `data-source/calendar.json` (see ServiceCalendarBundleTest). */
@@ -59,8 +66,16 @@ object BuiltInServiceCalendar {
 {
   "schemaVersion": 1,
   "terms": [
-    { "id": "2026-1", "start": "2026-03-03", "end": "2026-06-22" },
-    { "id": "2026-2", "start": "2026-08-24", "end": "2026-12-18" }
+    {
+      "id": "2026-1", "start": "2026-03-03", "end": "2026-06-22",
+      "midterm": { "start": "2026-04-21", "end": "2026-04-27" },
+      "final": { "start": "2026-06-16", "end": "2026-06-22" }
+    },
+    {
+      "id": "2026-2", "start": "2026-08-24", "end": "2026-12-18",
+      "midterm": { "start": "2026-10-19", "end": "2026-10-23" },
+      "final": { "start": "2026-12-14", "end": "2026-12-18" }
+    }
   ],
   "holidays": [
     { "date": "2026-01-01", "name": "1월 1일" },
@@ -108,7 +123,30 @@ object BuiltInServiceCalendar {
     { "date": "2027-12-25", "name": "기독탄신일" },
     { "date": "2027-12-27", "name": "대체공휴일(기독탄신일)" }
   ],
-  "campusShuttleSuspensions": []
+  "campusShuttleSuspensions": [],
+  "academicEvents": [
+    { "name": "복학 신청", "start": "2026-02-02", "end": "2026-02-27" },
+    { "name": "일반휴학 신청(1차)", "start": "2026-02-02", "end": "2026-02-13" },
+    { "name": "등록금 납부", "start": "2026-02-23", "end": "2026-02-27" },
+    { "name": "수강신청", "start": "2026-02-23", "end": "2026-02-27" },
+    { "name": "일반휴학 신청(2차)", "start": "2026-02-23", "end": "2026-02-27" },
+    { "name": "수강신청 정정", "start": "2026-03-03", "end": "2026-03-06" },
+    { "name": "학점인정 신청", "start": "2026-03-03", "end": "2026-03-06" },
+    { "name": "수강신청 포기", "start": "2026-03-09", "end": "2026-03-13" },
+    { "name": "지정보강", "start": "2026-06-09", "end": "2026-06-15" },
+    { "name": "수업평가", "start": "2026-06-16", "end": "2026-06-28" },
+    { "name": "성적 열람", "start": "2026-07-01", "end": "2026-07-03" },
+    { "name": "일반휴학 신청(1차)", "start": "2026-07-27", "end": "2026-08-07" },
+    { "name": "복학 신청", "start": "2026-08-03", "end": "2026-08-21" },
+    { "name": "등록금 납부", "start": "2026-08-18", "end": "2026-08-21" },
+    { "name": "일반휴학 신청(2차)", "start": "2026-08-18", "end": "2026-08-24" },
+    { "name": "수강신청 정정", "start": "2026-08-24", "end": "2026-08-28" },
+    { "name": "학점인정 신청", "start": "2026-08-24", "end": "2026-08-28" },
+    { "name": "수강신청 포기", "start": "2026-08-31", "end": "2026-09-04" },
+    { "name": "지정보강", "start": "2026-12-07", "end": "2026-12-11" },
+    { "name": "수업평가", "start": "2026-12-14", "end": "2026-12-26" },
+    { "name": "성적 열람", "start": "2026-12-28", "end": "2026-12-30" }
+  ]
 }
 """
 

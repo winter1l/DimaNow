@@ -61,6 +61,7 @@ import com.example.dimanow.data.OnboardingDraft
 import com.example.dimanow.data.OnboardingStage
 import com.example.dimanow.guidance.HomeBase
 import com.example.dimanow.live.LiveSurfaceController
+import com.example.dimanow.theme.DimaTheme
 import com.example.dimanow.ui.GuidanceSetupChecklist
 import com.example.dimanow.ui.GuidanceSetupState
 import com.example.dimanow.ui.rememberGuidanceSetupController
@@ -121,6 +122,7 @@ fun OnboardingRoute(
 
 /**
  * First run (D-075 order, D-102 content): what the app does, the home direction, then one permission step.
+ * Each step opens with a small decorative graphic of Material shapes ([OnboardingHero]) that morphs between steps.
  *
  * The permission step follows Apple HIG and the Toss guide: it names the two permissions guidance needs with
  * one sentence each, and its single `계속` button lets Android ask for both in turn. Refusing never blocks the
@@ -168,11 +170,14 @@ internal fun OnboardingScreen(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
+            // Outside the per-step key, so the graphic morphs from one step to the next instead of starting over.
+            val hero = rememberOnboardingHeroState(draft.stage)
             key(draft.stage) {
                 Column(
                     Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 24.dp, vertical = 16.dp),
                     verticalArrangement = Arrangement.spacedBy(20.dp),
                 ) {
+                    OnboardingHero(hero)
                     when (draft.stage) {
                         OnboardingStage.WELCOME -> {
                             StepHeading("학교생활을 한눈에", "수업, 셔틀, 식단을 한곳에서 확인해요.")
@@ -186,7 +191,7 @@ internal fun OnboardingScreen(
                             // D-099: 첫 화면에서 비공식 앱임과 데이터 처리 원칙을 알린다
                             Surface(
                                 shape = DimaShapes.Tile,
-                                color = MaterialTheme.colorScheme.surfaceContainerLow,
+                                color = DimaTheme.colors.card,
                                 modifier = Modifier.fillMaxWidth(),
                             ) {
                                 Column(Modifier.padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 4.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -218,7 +223,7 @@ internal fun OnboardingScreen(
                             ).forEach { (homeBase, label, supporting) ->
                                 Surface(
                                     shape = DimaShapes.Tile,
-                                    color = if (draft.homeBase == homeBase) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerLow,
+                                    color = if (draft.homeBase == homeBase) MaterialTheme.colorScheme.primaryContainer else DimaTheme.colors.card,
                                     modifier = Modifier.fillMaxWidth().heightIn(min = 64.dp),
                                 ) {
                                     Row(

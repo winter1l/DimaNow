@@ -5,6 +5,8 @@ import org.junit.Test
 import java.time.Instant
 
 class LmsCoursePlannerTest {
+    private val now = Instant.parse("2026-09-01T03:00:00Z")
+
     private val courses = listOf(
         LmsCourse(id = "audio", name = "음향기초실습"),
         LmsCourse(id = "video", name = "영상제작"),
@@ -34,6 +36,7 @@ class LmsCoursePlannerTest {
         val plan = planLmsByCourse(
             items = listOf(item("v1", "video"), item("a1", "audio"), item("v2", "video")),
             courses = courses,
+            now = now,
         )
 
         assertEquals(listOf("음향기초실습", "영상제작"), plan.groups.map { it.courseName })
@@ -42,17 +45,27 @@ class LmsCoursePlannerTest {
     }
 
     @Test
-    fun `completed learning leaves the course groups and collects at the bottom`() {
+    fun `each course splits what is left, missed deadlines and completed learning`() {
         val plan = planLmsByCourse(
             items = listOf(
-                item("a1", "audio"),
-                item("a2", "audio", completion = LmsCompletionState.COMPLETE),
+                item("a1", "audio", dueAt = Instant.parse("2026-09-03T00:00:00Z")),
+                item("a2", "audio", completion = LmsCompletionState.COMPLETE, dueAt = Instant.parse("2026-08-20T00:00:00Z")),
+                item("missed-long-ago", "audio", dueAt = Instant.parse("2026-08-01T00:00:00Z")),
+                item("missed-yesterday", "audio", dueAt = Instant.parse("2026-08-31T00:00:00Z")),
+                // D-118: a course with nothing left but completed learning keeps its group.
+                item("v-done", "video", completion = LmsCompletionState.COMPLETE),
             ),
             courses = courses,
+            now = now,
         )
 
-        assertEquals(listOf("a1"), plan.groups.single().items.map { it.id })
-        assertEquals(listOf("a2"), plan.completed.map { it.id })
+        val audio = plan.groups[0]
+        assertEquals(listOf("a1"), audio.items.map { it.id })
+        assertEquals(listOf("missed-yesterday", "missed-long-ago"), audio.overdue.map { it.id })
+        assertEquals(listOf("a2"), audio.completed.map { it.id })
+        val video = plan.groups[1]
+        assertEquals(emptyList<String>(), video.items.map { it.id })
+        assertEquals(listOf("v-done"), video.completed.map { it.id })
     }
 
     @Test
@@ -60,6 +73,7 @@ class LmsCoursePlannerTest {
         val plan = planLmsByCourse(
             items = listOf(item("x1", "unknown", courseName = "미등록 과목"), item("a1", "audio")),
             courses = courses,
+            now = now,
         )
 
         assertEquals(listOf("음향기초실습", "미등록 과목"), plan.groups.map { it.courseName })
@@ -75,6 +89,7 @@ class LmsCoursePlannerTest {
                 item("new-note", "audio", registeredAt = Instant.parse("2026-09-02T00:00:00Z")),
             ),
             courses = courses,
+            now = now,
         )
 
         assertEquals(

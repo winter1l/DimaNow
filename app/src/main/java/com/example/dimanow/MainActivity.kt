@@ -68,6 +68,7 @@ class MainActivity : ComponentActivity() {
               liveSurfaceController = application.liveSurfaceController,
               appUpdateCoordinator = application.appUpdateCoordinator,
               targetPageEvent = targetPageEvent,
+              schoolServiceBridge = application.schoolServiceBridge,
             )
           }
         }

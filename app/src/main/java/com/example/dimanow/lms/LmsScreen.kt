@@ -1,5 +1,8 @@
 package com.example.dimanow.lms
 
+import androidx.compose.material.icons.filled.PlayCircle
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Devices
 import androidx.compose.material3.ButtonDefaults
 import android.webkit.WebView
 import androidx.activity.compose.BackHandler
@@ -27,6 +30,7 @@ import java.io.File
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 internal data class LmsPresentedDetail(
@@ -108,30 +112,31 @@ fun LmsRoute(
         }
     }
 
-    suspend fun loginAndRefresh(force: Boolean, credentialsChanged: Boolean = false) {
+    /** Returns true when the list was read from the LMS (or its fresh cache) in the end. */
+    suspend fun loginAndRefresh(force: Boolean, credentialsChanged: Boolean = false): Boolean {
         // Explicit retries bypass login cooldowns; the coordinator retains an active session
         // unless the user has just supplied new credentials.
         val state = autoLoginCoordinator.ensureActive(force = force, credentialsChanged = credentialsChanged)
-        if (state == LmsSessionState.ACTIVE) {
-            when (val result = source.refresh(force = force)) {
-                LmsRefreshResult.SessionExpired -> {
-                    autoLoginCoordinator.markExpired()
-                    if (autoLoginCoordinator.ensureActive(force = true) == LmsSessionState.ACTIVE) source.refresh(force = true)
-                }
-                LmsRefreshResult.CourseCatalogRequired -> {
-                    sessionController.transition(LmsSessionState.EXPIRED)
-                    if (autoLoginCoordinator.ensureActive(force = true) == LmsSessionState.ACTIVE) {
-                        when (val retried = source.refresh(force = true)) {
-                            is LmsRefreshResult.Failure -> snackbar.showSnackbar(LmsUserMessages.REFRESH_FAILED)
-                            LmsRefreshResult.CourseCatalogRequired -> snackbar.showSnackbar(LmsUserMessages.COURSE_CATALOG_FAILED)
-                            else -> Unit
-                        }
-                    }
-                }
-                is LmsRefreshResult.Failure -> snackbar.showSnackbar(LmsUserMessages.REFRESH_FAILED)
-                else -> Unit
+        if (state != LmsSessionState.ACTIVE) return false
+        val final = when (val result = source.refresh(force = force)) {
+            LmsRefreshResult.SessionExpired -> {
+                autoLoginCoordinator.markExpired()
+                if (autoLoginCoordinator.ensureActive(force = true) == LmsSessionState.ACTIVE) source.refresh(force = true) else result
             }
+            LmsRefreshResult.CourseCatalogRequired -> {
+                sessionController.transition(LmsSessionState.EXPIRED)
+                if (autoLoginCoordinator.ensureActive(force = true) == LmsSessionState.ACTIVE) {
+                    source.refresh(force = true).also { retried ->
+                        if (retried == LmsRefreshResult.CourseCatalogRequired) snackbar.showSnackbar(LmsUserMessages.COURSE_CATALOG_FAILED)
+                    }
+                } else {
+                    result
+                }
+            }
+            else -> result
         }
+        if (final is LmsRefreshResult.Failure) snackbar.showSnackbar(LmsUserMessages.REFRESH_FAILED)
+        return final == LmsRefreshResult.Success || final == LmsRefreshResult.Cached
     }
 
     // force 없이 시작하면 5분 캐시 TTL 내 재방문은 네트워크를 건드리지 않는다 (#26)
@@ -149,12 +154,13 @@ fun LmsRoute(
     if (savedLoginConflict || manualConflictCredentials != null) {
         // D-099: moving the single LMS session here logs the other device out, so the user decides.
         AlertDialog(
+            icon = { com.example.dimanow.ui.DimaDialogIcon(Icons.Default.Devices, com.example.dimanow.ui.DialogTone.WARNING) },
             onDismissRequest = { autoLoginCoordinator.dismissSessionConflict(); manualConflictCredentials = null },
-            title = { Text("다른 곳에서 로그인 중이에요") },
+            title = { Text("다른 기기에서 LMS를 쓰고 있어요") },
             text = {
                 Text(
-                    "학교 LMS는 한 곳에서만 로그인돼요. 이 기기로 옮기면 PC나 다른 기기의 로그인이 끊기고, " +
-                        "시험·과제를 하는 중이면 저장되지 않을 수 있어요.",
+                    "LMS는 한 곳에서만 로그인할 수 있어요. 이 기기로 로그인하면 다른 기기의 로그인이 끊기고, " +
+                        "풀고 있던 시험이나 과제가 저장되지 않을 수 있어요.",
                 )
             },
             confirmButton = {
@@ -235,7 +241,13 @@ fun LmsRoute(
                 selectedKind = selectedKind,
                 onCourseChange = { selectedCourse = it },
                 onKindChange = { selectedKind = it },
-                onRefresh = { scope.launch { loginAndRefresh(force = true) } },
+                onRefresh = {
+                    scope.launch {
+                        // 셔틀·식단처럼 직접 당긴 새로고침은 바뀐 것이 없을 때도 알린다
+                        val before = source.snapshot.first().items
+                        if (loginAndRefresh(force = true)) snackbar.showSnackbar(lmsRefreshMessage(before, source.snapshot.first().items))
+                    }
+                },
                 onOpenItem = { item ->
                     scope.launch {
                         suspend fun present(result: LmsDetailLoadResult): Boolean = when (result) {
@@ -304,8 +316,10 @@ fun LmsRoute(
         SnackbarHost(snackbar, Modifier.align(Alignment.BottomCenter).navigationBarsPadding())
         pendingOfficialCoursePage?.let { pendingPage ->
             AlertDialog(
+                icon = { com.example.dimanow.ui.DimaDialogIcon(Icons.Default.PlayCircle, com.example.dimanow.ui.DialogTone.INFO) },
                 onDismissRequest = { pendingOfficialCoursePage = null },
                 title = { Text("학습을 시작할까요?") },
+                text = { Text("공식 LMS 학습 화면이 열리고, 열면 학습 기록이 남을 수 있어요.") },
                 confirmButton = {
                     TextButton(shapes = ButtonDefaults.shapes(), 
                         onClick = {
@@ -323,7 +337,6 @@ fun LmsRoute(
 }
 
 internal val SEOUL = ZoneId.of("Asia/Seoul")
-internal val LMS_TIME = DateTimeFormatter.ofPattern("M월 d일 HH:mm")
 internal val LMS_DETAIL_TIME = DateTimeFormatter.ofPattern("yyyy년 M월 d일 HH:mm")
 internal const val OFFICIAL_LMS_LOGIN_URL =
     "https://portal.dima.ac.kr/?r=https://lms.dima.ac.kr/sso/index.jsp"

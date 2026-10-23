@@ -317,12 +317,6 @@ interface ScheduleDao {
     @Query("SELECT id FROM campus_zones")
     suspend fun campusZoneIds(): List<String>
 
-    @Query("SELECT * FROM campus_zones ORDER BY id")
-    suspend fun campusZones(): List<CampusZoneEntity>
-
-    @Query("SELECT COUNT(*) FROM courses")
-    suspend fun courseCount(): Int
-
     @Insert
     suspend fun insertCourses(courses: List<CourseEntity>)
 

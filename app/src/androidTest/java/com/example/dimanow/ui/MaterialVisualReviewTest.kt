@@ -52,7 +52,7 @@ class MaterialVisualReviewTest {
         compose.onNodeWithText("수업 정보를 불러오고 있어요").assertExists()
         capture("learning-loading")
         compose.runOnIdle { snapshot = LmsSnapshot(syncState = LmsSyncState.READY) }
-        compose.onNodeWithText("오늘 확인할 학습이 없어요").assertExists()
+        compose.onNodeWithText("남은 할 일이 없어요").assertExists()
         capture("learning-empty")
         compose.runOnIdle { snapshot = LmsSnapshot(syncState = LmsSyncState.ERROR) }
         compose.onNodeWithText("다시 시도").performClick()

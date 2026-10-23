@@ -5,6 +5,10 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertIsSelected
@@ -67,6 +71,25 @@ class OnboardingFlowTest {
         composeRule.onNodeWithTag("guidance_setup_EXACT_ALARM").performScrollTo().assertIsEnabled()
         composeRule.onNodeWithTag("onboarding_primary").assertTextEquals("완료").assertIsEnabled().performClick()
         composeRule.runOnIdle { assertEquals(HomeBase.ONE_ROOM, completed) }
+    }
+
+    @Test
+    fun everyStepShowsTheDecorativeGraphicWithoutSpokenContent() {
+        composeRule.setContent {
+            var draft by remember { mutableStateOf(OnboardingDraft(homeBase = HomeBase.YEIN)) }
+            MaterialTheme {
+                OnboardingScreen(draft, { draft = it }, {})
+            }
+        }
+        repeat(OnboardingStage.entries.size) { step ->
+            // Decorative: one node with no text, description or click for screen readers.
+            composeRule.onNodeWithTag("onboarding_hero").assertExists()
+                .assert(SemanticsMatcher.keyNotDefined(SemanticsProperties.ContentDescription))
+                .assert(SemanticsMatcher.keyNotDefined(SemanticsProperties.Text))
+                .assert(SemanticsMatcher.keyNotDefined(SemanticsActions.OnClick))
+            if (step < OnboardingStage.entries.size - 1) composeRule.onNodeWithTag("onboarding_primary").performClick()
+        }
+        composeRule.onNodeWithText("알림과 위치를 허용해 주세요").assertExists()
     }
 
     @Test

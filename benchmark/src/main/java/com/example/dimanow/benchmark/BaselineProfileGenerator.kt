@@ -13,10 +13,19 @@ class BaselineProfileGenerator {
     @get:Rule
     val rule = BaselineProfileRule()
 
+    /** Only the cold start lays out the startup dex (Q-031: the whole journey made both profiles identical). */
     @Test
-    fun generate() = rule.collect(
+    fun startup() = rule.collect(
         packageName = TARGET_PACKAGE,
         includeInStartupProfile = true,
+    ) {
+        startDimaNow()
+    }
+
+    @Test
+    fun journey() = rule.collect(
+        packageName = TARGET_PACKAGE,
+        includeInStartupProfile = false,
     ) {
         runDimaNowJourney()
     }

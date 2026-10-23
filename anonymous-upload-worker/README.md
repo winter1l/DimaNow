@@ -12,6 +12,10 @@ Android 앱에서 GitHub 로그인 없이 식단 사진을 제출하기 위한 C
 - 사진 쓰기에 성공하면 같은 설치 토큰으로 `https://api.github.com/repos/winter1l/DimaNow/dispatches`에 `{"event_type":"dorm-submission"}`만 보내 `main`의 `publish-data.yml` 기숙사 sweep을 깨웁니다(`client_payload` 없음, 저장소는 코드에 고정). 이 호출은 `waitUntil`로 응답 뒤에 실행되는 best-effort이며 실패해도 업로드는 202로 끝나고, 정기 실행 sweep이 미처리 제출을 처리합니다.
 - 두 단계 모델 검증과 OCR, 현재 KST 주(주말에는 다음 주)·중복 주 확인을 통과한 사진만 GitHub Actions가 자동으로 `READY`와 `PUBLISHED`로 게시합니다(D-089). 실패는 짧은 사유와 함께 `REJECTED`/`ERROR`로 기록되고 기존 정상 식단은 유지됩니다.
 
+## 문의·오류 제보 (D-119)
+
+`POST /v1/feedback`은 앱의 문의·오류 제보를 이 저장소의 공개 GitHub 이슈로 올립니다. 본문은 `{"category":"bug|question|idea","message":"…","appVersion":"2.1","androidSdk":36}`이고 버전 두 개는 사용자가 켜 둔 경우에만 옵니다. 내용은 5~2000자이며 이슈 본문에 코드 블록으로 넣어 링크·이미지·멘션이 동작하지 않게 하고, 제목의 `@`는 끊습니다. 같은 주소는 10분에 한 번, 하루 `FEEDBACK_DAILY_LIMIT`(20)·한 주 `FEEDBACK_WEEKLY_LIMIT`(60)건까지 받으며, GitHub가 거절하면 주소와 예산을 되돌립니다. 이 경로만 설치 토큰을 `issues: write`로 좁혀 받습니다. **배포 전에 GitHub App에 Issues: Read and write 권한을 주고 설치에서 권한 변경을 승인해야 합니다.**
+
 ## 검증
 
 학생식당 게시 지연을 보완하는 scheduled handler도 제공합니다. 공개 식단의 SHA-256과 현재 주 월~금 데이터를 확인하고, 새 식단이 없고 최근 수집 시도도 없으면 기존 GitHub App 권한으로 `student-meal-publication-watch` 이벤트를 보냅니다. 월요일 오전에는 30분, 그 밖에는 두 시간 간격이며 현재 주 식단이 완성되면 수집을 건너뜁니다. GitHub `publish-data.yml`의 동일한 `repository_dispatch` 수신 설정이 필요합니다. 공개 HTTP 요청에서는 이 동작을 실행할 수 없습니다. 세 개 cron 중 매일 17:07 UTC 실행에서 기존 정리 작업도 수행합니다.

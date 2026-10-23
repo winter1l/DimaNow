@@ -1,5 +1,6 @@
 package com.example.dimanow.ui.schedule
 
+import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material3.ButtonDefaults
 import android.annotation.SuppressLint
 import android.content.res.Configuration
@@ -72,6 +73,7 @@ internal fun TermEditorDialog(
     val reversed = endDate.isBefore(startDate)
 
     AlertDialog(
+        icon = { com.example.dimanow.ui.DimaDialogIcon(Icons.Default.DateRange, com.example.dimanow.ui.DialogTone.INFO) },
         onDismissRequest = onDismiss,
         title = { Text("학기 기간 설정") },
         text = {

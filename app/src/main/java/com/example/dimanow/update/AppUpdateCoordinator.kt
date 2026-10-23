@@ -52,8 +52,9 @@ class AppUpdateCoordinator(
     private var downloadJob: Job? = null
 
     fun initialize() {
-        installer.cleanupIncompleteDownloads()
         scope.launch {
+            // Off the main thread: initialize runs in Application.onCreate, also for background starts (Q-031).
+            installer.cleanupIncompleteDownloads()
             var saved = preferences.appUpdatePreferences.first()
             if (saved.preparedVersion != null && !policy.shouldKeepPrepared(saved.preparedVersion, currentVersion)) {
                 saved.preparedPath?.let(::File)?.delete()

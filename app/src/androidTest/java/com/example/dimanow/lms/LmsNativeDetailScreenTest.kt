@@ -191,7 +191,7 @@ class LmsNativeDetailScreenTest {
             }
         }
 
-        composeRule.onNodeWithText("전체").performClick()
+        composeRule.onNodeWithTag("lms_mode_all").performClick()
         composeRule.onNodeWithText("2주차 음향 실습 영상").performClick()
         composeRule.onNodeWithText("학습을 시작할까요?").assertExists()
         composeRule.onNodeWithText("취소").performClick()
@@ -228,7 +228,7 @@ class LmsNativeDetailScreenTest {
             }
         }
 
-        composeRule.onNodeWithText("전체").performClick()
+        composeRule.onNodeWithTag("lms_mode_all").performClick()
         composeRule.onNodeWithText("음향 설계 토론").performClick()
         composeRule.onNodeWithText("학습을 시작할까요?").assertDoesNotExist()
         composeRule.onNodeWithTag("lms_official_course_screen").assertExists()
@@ -271,7 +271,7 @@ class LmsNativeDetailScreenTest {
             }
         }
 
-        composeRule.onNodeWithText("전체").performClick()
+        composeRule.onNodeWithTag("lms_mode_all").performClick()
         composeRule.onNodeWithText("1주차 수업안내").performClick()
         composeRule.onNodeWithText("음향기초실습").assertExists()
         composeRule.onNodeWithText("공지").assertExists()
@@ -318,7 +318,7 @@ class LmsNativeDetailScreenTest {
             }
         }
 
-        composeRule.onNodeWithText("전체").performClick()
+        composeRule.onNodeWithTag("lms_mode_all").performClick()
         composeRule.onNodeWithText("2주차 과제 · 영상사운드 구성 분석").performClick()
         composeRule.onNodeWithText("음향기초실습").assertExists()
         composeRule.onNodeWithText("과제").assertExists()

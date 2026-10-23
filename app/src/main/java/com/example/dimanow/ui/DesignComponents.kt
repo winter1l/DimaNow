@@ -10,15 +10,22 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.material.icons.filled.ExpandMore
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.collapse
+import androidx.compose.ui.semantics.expand
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.dp
+import com.example.dimanow.theme.DimaTheme
 import java.time.DayOfWeek
 import java.time.LocalDate
 
@@ -35,7 +42,7 @@ internal object DimaLayout {
 /**
  * M3 Expressive segmented list (D-104): rows sit [ListItemDefaults.SegmentedGap] apart, the group's outer
  * corners are large and the inner ones small ([ListItemDefaults.segmentedShapes]), and each row takes the
- * card tone (`surfaceContainerLow`) so a group reads like the cards around it on the page surface.
+ * card tone (`DimaTheme.colors.card`, D-114) so a group reads like the cards around it on the page.
  */
 @Composable
 internal fun DimaSegmentedList(modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) {
@@ -44,7 +51,31 @@ internal fun DimaSegmentedList(modifier: Modifier = Modifier, content: @Composab
 
 @Composable
 internal fun dimaSegmentedListColors(): ListItemColors =
-    ListItemDefaults.segmentedColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)
+    ListItemDefaults.segmentedColors(containerColor = DimaTheme.colors.card)
+
+/**
+ * An icon in a tonal circle (D-114): the leading mark of card headers and list rows, so each card and row reads as
+ * its own item at a glance, as list rows in the system Settings app do. Decorative: the row's text names it.
+ */
+@Composable
+internal fun DimaIconBadge(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    modifier: Modifier = Modifier,
+    size: androidx.compose.ui.unit.Dp = 40.dp,
+    muted: Boolean = false,
+) {
+    Surface(
+        modifier = modifier.size(size),
+        shape = CircleShape,
+        // D-119: a muted row's mark drops the accent tone, as the row itself does.
+        color = if (muted) MaterialTheme.colorScheme.surfaceVariant else MaterialTheme.colorScheme.secondaryContainer,
+        contentColor = if (muted) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSecondaryContainer,
+    ) {
+        Box(contentAlignment = Alignment.Center) {
+            Icon(icon, contentDescription = null, modifier = Modifier.size(size * 0.55f))
+        }
+    }
+}
 
 /**
  * The filled `오늘` pill shared by the meal day heading and the timetable weekday heading (D-102),
@@ -118,6 +149,7 @@ private fun <T> DimaDayCellSelector(
     supportingLabel: (T) -> String?,
 ) {
     if (items.isEmpty()) return
+    val haptics = LocalHapticFeedback.current
     val density = LocalDensity.current
     val textMeasurer = rememberTextMeasurer()
     val labelStyle = MaterialTheme.typography.labelLargeEmphasized
@@ -152,7 +184,11 @@ private fun <T> DimaDayCellSelector(
                         val description = listOfNotNull(koreanWeekdayLabel(day), date).joinToString(" ")
                         FilterChip(
                             selected = isSelected,
-                            onClick = { onSelect(item) },
+                            onClick = {
+                                // D-121: the same segment tick as the connected button group when the day changes
+                                if (!isSelected) haptics.performHapticFeedback(HapticFeedbackType.SegmentTick)
+                                onSelect(item)
+                            },
                             // Grows with the font scale; 52dp is only the resting minimum.
                             modifier = Modifier.weight(1f).heightIn(min = 52.dp)
                                 .then(itemTag(item)?.let { Modifier.testTag(it) } ?: Modifier)
@@ -171,7 +207,7 @@ private fun <T> DimaDayCellSelector(
                                 borderWidth = 1.dp,
                             ),
                             colors = FilterChipDefaults.filterChipColors(
-                                containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+                                containerColor = DimaTheme.colors.card,
                                 labelColor = MaterialTheme.colorScheme.onSurfaceVariant,
                                 selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
                                 selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer,
@@ -212,4 +248,34 @@ private fun <T> DimaDayCellSelector(
             }
         }
     }
+}
+
+/**
+ * The down chevron of an expandable row: it turns half a turn when [expanded], on the spatial spring. The rotation is
+ * read in the draw phase, so the turning chevron does not recompose the row it sits in.
+ */
+@Composable
+internal fun ExpandChevron(
+    expanded: Boolean,
+    modifier: Modifier = Modifier,
+    tint: Color = LocalContentColor.current,
+    label: String = "expand_chevron",
+) {
+    val rotation = androidx.compose.animation.core.animateFloatAsState(
+        targetValue = if (expanded) 180f else 0f,
+        animationSpec = com.example.dimanow.ui.motion.DimaMotion.spatialDefault(),
+        label = label,
+    )
+    Icon(
+        androidx.compose.material.icons.Icons.Default.ExpandMore,
+        contentDescription = null,
+        tint = tint,
+        modifier = modifier.graphicsLayer { rotationZ = rotation.value },
+    )
+}
+
+/** Screen readers hear an expandable row's state (`펼쳐짐`/`접힘`) and get the matching expand or collapse action. */
+internal fun Modifier.expandableSemantics(expanded: Boolean, onToggle: () -> Unit): Modifier = semantics {
+    stateDescription = if (expanded) "펼쳐짐" else "접힘"
+    if (expanded) collapse { onToggle(); true } else expand { onToggle(); true }
 }

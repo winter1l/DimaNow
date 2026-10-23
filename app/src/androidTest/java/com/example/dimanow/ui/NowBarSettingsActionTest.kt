@@ -76,7 +76,9 @@ class NowBarSettingsActionTest {
     }
 
     private fun openNowBarSetupGuide() {
-        composeRule.onNodeWithTag("open_settings").performClick()
+        // D-110: Settings opens from 전체.
+        composeRule.onNodeWithTag("nav_ALL").performClick()
+        composeRule.onNodeWithTag("all_settings").performClick()
         // Settings is a lazy list: scroll the list until each row is composed, then tap it.
         composeRule.onNodeWithTag("settings_list").performScrollToNode(hasText("고급 및 진단"))
         composeRule.onNodeWithText("고급 및 진단").performClick()

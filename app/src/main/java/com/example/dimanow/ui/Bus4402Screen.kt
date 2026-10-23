@@ -28,6 +28,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import com.example.dimanow.theme.DimaShapes
+import com.example.dimanow.theme.DimaTheme
 import com.example.dimanow.transit.Bus4402Departure
 import com.example.dimanow.transit.Bus4402Schedule
 import com.example.dimanow.transit.Bus4402ServiceCalendar
@@ -129,7 +130,7 @@ private fun Bus4402StopCard(
         shape = DimaShapes.Card,
         colors = CardDefaults.elevatedCardColors(
             // D-095: 가까운 정류장은 연한 컨테이너 + primary 테두리로 강조해 안쪽 칸과 칩이 묻히지 않게 한다
-            containerColor = if (isNearby) MaterialTheme.colorScheme.surfaceContainerHigh else MaterialTheme.colorScheme.surfaceContainerLow,
+            containerColor = if (isNearby) DimaTheme.colors.cardInner else DimaTheme.colors.card,
         ),
     ) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -164,7 +165,7 @@ private fun Bus4402StopCard(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 if (departures.isNotEmpty()) {
-                    Surface(shape = DimaShapes.Badge, color = MaterialTheme.colorScheme.surfaceContainerHighest) {
+                    Surface(shape = DimaShapes.Badge, color = DimaTheme.colors.cardInner) {
                         Text(
                             text = "첫차 ${departures.first().time.format(TIME)} · 막차 ${departures.last().time.format(TIME)}" +
                                 if (estimated) " · 예정" else "",
@@ -179,7 +180,7 @@ private fun Bus4402StopCard(
             if (upcoming.isEmpty()) {
                 Surface(
                     shape = DimaShapes.Tile,
-                    color = MaterialTheme.colorScheme.surfaceContainerHighest,
+                    color = DimaTheme.colors.cardInner,
                     modifier = Modifier.fillMaxWidth(),
                 ) {
                     Text(
@@ -212,6 +213,7 @@ private fun Bus4402StopCard(
                                 containerColor = container,
                                 contentColor = content,
                                 labelStyle = MaterialTheme.typography.titleSmallEmphasized,
+                                imminent = isImminentDeparture(minutesLeft, isNearest = index == 0),
                                 modifier = Modifier.testTag("bus4402_next_${stop.stopNumber}_$index"),
                             )
                         }

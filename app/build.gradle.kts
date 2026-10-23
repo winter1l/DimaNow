@@ -28,18 +28,16 @@ android {
             )
         }
         create("optimized") {
+            // Copies release's minify, resource shrinking, debug signing and ProGuard files.
             initWith(getByName("release"))
             isDebuggable = false
-            isMinifyEnabled = true
-            isShrinkResources = true
-            signingConfig = signingConfigs.getByName("debug")
             matchingFallbacks += listOf("release")
-            proguardFiles(
-                getDefaultProguardFile("proguard-android-optimize.txt"),
-                "proguard-rules.pro",
-                "proguard-optimized.pro",
-            )
         }
+    }
+    androidResources {
+        // The UI is Korean only: keep Korean library strings beside the default ones and drop the other
+        // translations bundled by AndroidX and Play services (most of resources.arsc).
+        localeFilters += "ko"
     }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
@@ -55,6 +53,8 @@ android {
     packaging {
       resources {
         excludes += "/META-INF/{AL2.0,LGPL2.1}"
+        // kotlinx-coroutines' debug-agent probe file; the app never installs the debug agent.
+        excludes += "DebugProbesKt.bin"
       }
     }
 }

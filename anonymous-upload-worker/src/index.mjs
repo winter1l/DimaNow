@@ -1,5 +1,6 @@
 import { createStudentMealPublicationWatch, STUDENT_MEAL_WATCH_CRONS } from './meal-publication-watch.mjs';
 import { dispatchPublishWorkflow } from './github-dispatch.mjs';
+import { handleFeedback, handleFeedbackImage } from './feedback.mjs';
 
 const MAX_IMAGE_BYTES = 15 * 1024 * 1024;
 const RATE_LIMIT_SECONDS = 10 * 60;
@@ -28,7 +29,7 @@ export function createWorker(dependencies = {}) {
   const now = dependencies.now ?? (() => new Date());
   const randomUUID = dependencies.randomUUID ?? (() => crypto.randomUUID());
   const githubTokenProvider = dependencies.githubTokenProvider
-    ?? ((env) => createGitHubInstallationToken(env, fetchImpl, now));
+    ?? ((env, permissions) => createGitHubInstallationToken(env, fetchImpl, now, permissions));
   const studentMealWatch = createStudentMealPublicationWatch({ fetch: fetchImpl, now, githubTokenProvider });
   // The D1 binding keeps its historical name; it now holds only the dormitory upload admission tables.
   const securityStoreFactory = dependencies.securityStoreFactory
@@ -42,6 +43,25 @@ export function createWorker(dependencies = {}) {
       const url = new URL(request.url);
       if (url.pathname === '/v1/internal/dormitory-photos' || url.pathname.startsWith('/v1/internal/dormitory-photos/')) {
         return handleInternalPhotoRead(request, env, url);
+      }
+      if (url.pathname.startsWith('/v1/feedback-images/')) {
+        return handleFeedbackImage(request, env, url, jsonResponse);
+      }
+      if (url.pathname === '/v1/feedback') {
+        return handleFeedback(request, env, {
+          now,
+          randomUUID,
+          fetchImpl,
+          githubTokenProvider,
+          securityStoreFactory,
+          helpers: {
+            jsonResponse, jsonHeaders, rateLimitClientKey, sha256Hex, positiveLimit, uploadBudgetWindows,
+            hasExpectedImageSignature, imageDimensions,
+            // Streams the body with a byte cap, so a chunked request without Content-Length cannot exhaust memory.
+            readBody: readBoundedRequestBody,
+            isBodyTooLarge: (error) => error instanceof BodyTooLargeError,
+          },
+        });
       }
       if (url.pathname === '/v1/dormitory-meal-reports') {
         return handleDormitoryMealReport(request, env, { context, now, randomUUID, fetchImpl, githubTokenProvider, securityStoreFactory });
@@ -660,7 +680,7 @@ function parseJsonObject(bytes, parser) {
   return value && typeof value === 'object' && !Array.isArray(value) ? value : null;
 }
 
-async function createGitHubInstallationToken(env, fetchImpl, now) {
+async function createGitHubInstallationToken(env, fetchImpl, now, permissions = { actions: 'write' }) {
   const appId = required(env.GITHUB_APP_ID, 'GITHUB_APP_ID');
   const installationId = required(env.GITHUB_INSTALLATION_ID, 'GITHUB_INSTALLATION_ID');
   const privateKey = required(env.GITHUB_APP_PRIVATE_KEY, 'GITHUB_APP_PRIVATE_KEY');
@@ -697,10 +717,11 @@ async function createGitHubInstallationToken(env, fetchImpl, now) {
       'X-GitHub-Api-Version': '2022-11-28',
     },
     // D-100: down-scope the installation token to this one repository and actions:write, which covers
-    // workflow_dispatch only; the Worker no longer writes repository contents.
+    // workflow_dispatch only; the Worker no longer writes repository contents. D-119: feedback asks for
+    // issues:write instead, so neither token can do the other's job.
     body: JSON.stringify({
       repositories: [repository],
-      permissions: { actions: 'write' },
+      permissions,
     }),
   });
   if (!response.ok) {

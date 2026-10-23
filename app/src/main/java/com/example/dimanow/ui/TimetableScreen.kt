@@ -1,6 +1,7 @@
 package com.example.dimanow.ui
 
 import androidx.compose.material3.IconButtonDefaults
+import com.example.dimanow.theme.DimaTheme
 import com.example.dimanow.ui.motion.expressiveBounceClick
 import com.example.dimanow.ui.schedule.KoreanDateRangePickerHeadline
 import com.example.dimanow.ui.schedule.KoreanLocale
@@ -22,7 +23,18 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
+import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.material3.ToggleFloatingActionButtonDefaults
+import androidx.compose.material3.ToggleFloatingActionButton
+import androidx.compose.material3.FloatingActionButtonMenuItem
+import androidx.compose.material3.FloatingActionButtonMenu
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.filled.EditCalendar
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material3.ButtonDefaults
@@ -33,6 +45,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.material3.MaterialTheme
 import androidx.activity.compose.BackHandler
 import androidx.compose.material3.OutlinedCard
@@ -86,6 +99,8 @@ internal fun TimetableScreen(
     today: LocalDate = LocalDate.now(MinuteTicker.CAMPUS_ZONE),
     addCourseRequest: Long = 0L,
     onAddCourseRequestHandled: () -> Unit = {},
+    /** D-110: the timetable opens from 전체 or Home as a page with a Back action. */
+    onBack: (() -> Unit)? = null,
 ) {
     val scope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
@@ -100,6 +115,10 @@ internal fun TimetableScreen(
         }
     }
     val timetableImport = rememberTimetableImport { message -> scope.launch { snackbarHostState.showSnackbar(message) } }
+    // D-107: 인트라넷의 이번 학기 시간표를 미리 보고 한 번에 바꾼다
+    val intranetImport = rememberIntranetTimetableImport(repository) { message -> scope.launch { snackbarHostState.showSnackbar(message) } }
+    // D-111: 인트라넷에서 가져오기는 수업 추가 버튼(FAB 메뉴)과 빈 시간표 안내에 함께 둔다
+    var addMenuExpanded by rememberSaveable { mutableStateOf(false) }
     var showTermEditor by remember { mutableStateOf(false) }
     var showPauseChoice by remember { mutableStateOf(false) }
     var pausePickerMode by remember { mutableStateOf<String?>(null) }
@@ -108,9 +127,11 @@ internal fun TimetableScreen(
     var changeError by remember { mutableStateOf<String?>(null) }
 
     BackHandler(
-        enabled = changingOnce != null || showEditor || showTermEditor || showPauseChoice || pausePickerMode != null || pendingDelete != null,
+        enabled = addMenuExpanded || changingOnce != null || showEditor || showTermEditor || showPauseChoice ||
+            pausePickerMode != null || pendingDelete != null,
     ) {
         when {
+            addMenuExpanded -> addMenuExpanded = false
             changingOnce != null -> changingOnce = null
             pendingDelete != null -> pendingDelete = null
             pausePickerMode != null -> pausePickerMode = null
@@ -125,7 +146,18 @@ internal fun TimetableScreen(
     val addExpanded by remember { derivedStateOf { listState.firstVisibleItemIndex == 0 } }
     val termEnded = com.example.dimanow.calendar.AcademicTerms.hasEnded(schedule.termEnd, today)
     val noCourses = schedule.courses.isEmpty()
-    val addCourseFab: @Composable () -> Unit = {
+    val addCourseFab: @Composable () -> Unit = if (intranetImport != null) {
+        {
+            AddCourseFabMenu(
+                expanded = addMenuExpanded,
+                onExpandedChange = { addMenuExpanded = it },
+                onAddByHand = { addMenuExpanded = false; editing = null; showEditor = true },
+                onImportFromIntranet = { addMenuExpanded = false; intranetImport.start() },
+                importing = intranetImport.loading,
+            )
+        }
+    } else {
+        {
         ExtendedFloatingActionButton(
             text = { Text("수업 추가") },
             icon = { Icon(Icons.Default.Add, contentDescription = null) },
@@ -136,10 +168,18 @@ internal fun TimetableScreen(
                 .testTag("add_course")
                 .semantics { contentDescription = "수업 추가" },
         )
+        }
     }
     ScreenScaffold(
         title = "시간표",
         modifier = modifier,
+        navigationIcon = {
+            onBack?.let { back ->
+                IconButton(shapes = IconButtonDefaults.shapes(), onClick = back, modifier = Modifier.testTag("close_timetable")) {
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "뒤로")
+                }
+            }
+        },
         listState = listState,
         itemSpacing = DimaLayout.sectionGap,
         listTag = "timetable_list",
@@ -153,7 +193,7 @@ internal fun TimetableScreen(
             ElevatedCard(
                 modifier = Modifier.fillMaxWidth(),
                 shape = DimaShapes.Card,
-                colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+                colors = CardDefaults.elevatedCardColors(containerColor = DimaTheme.colors.card),
             ) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Row(
@@ -165,7 +205,7 @@ internal fun TimetableScreen(
                             onClick = { showTermEditor = true },
                             modifier = Modifier.testTag("edit_term"),
                             shape = DimaShapes.Badge,
-                            color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                            color = DimaTheme.colors.cardInner,
                         ) {
                             Row(
                                 modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
@@ -222,20 +262,41 @@ internal fun TimetableScreen(
             }
         }
         // D-102: 빈 시간표는 한 곳에서 채우는 두 방법(직접 추가, 다른 기기에서 저장한 파일)을 모두 보여 준다
+        if (intranetImport?.loading == true) item(key = "intranet_import_loading") {
+            LoadingLine("인트라넷에서 시간표를 불러오는 중이에요")
+        }
         if (noCourses) item(key = "courses_empty") {
-            EmptyState(
-                message = "아직 등록된 수업이 없어요",
-                supporting = "수업을 추가하면 수업 시작 전 알림과 셔틀 안내가 시작돼요.",
-                icon = Icons.Default.Schedule,
-                actionLabel = "수업 추가",
-                actionIcon = Icons.Default.Add,
-                onAction = { editing = null; showEditor = true },
-                actionTag = "add_course",
-                secondaryActionLabel = "시간표 파일 불러오기",
-                onSecondaryAction = timetableImport::open,
-                secondaryActionTag = "empty_import_timetable",
-                modifier = Modifier.testTag("timetable_empty_card"),
-            )
+            if (intranetImport != null) {
+                // D-111: the same two ways as the add button; a saved timetable file loads from Settings.
+                EmptyState(
+                    message = "아직 등록된 수업이 없어요",
+                    supporting = "인트라넷 시간표를 가져오거나 직접 추가하면 수업 시작 전 알림과 셔틀 안내가 시작돼요.",
+                    icon = Icons.Default.Schedule,
+                    actionLabel = "인트라넷에서 가져오기",
+                    actionIcon = Icons.Default.CloudDownload,
+                    onAction = intranetImport::start,
+                    actionEnabled = !intranetImport.loading,
+                    actionTag = "intranet_import",
+                    secondaryActionLabel = "직접 추가",
+                    onSecondaryAction = { editing = null; showEditor = true },
+                    secondaryActionTag = "add_course",
+                    modifier = Modifier.testTag("timetable_empty_card"),
+                )
+            } else {
+                EmptyState(
+                    message = "아직 등록된 수업이 없어요",
+                    supporting = "수업을 추가하면 수업 시작 전 알림과 셔틀 안내가 시작돼요.",
+                    icon = Icons.Default.Schedule,
+                    actionLabel = "수업 추가",
+                    actionIcon = Icons.Default.Add,
+                    onAction = { editing = null; showEditor = true },
+                    actionTag = "add_course",
+                    secondaryActionLabel = "시간표 파일 불러오기",
+                    onSecondaryAction = timetableImport::open,
+                    secondaryActionTag = "empty_import_timetable",
+                    modifier = Modifier.testTag("timetable_empty_card"),
+                )
+            }
         }
 
         changeError?.let { error -> item(key = "change_error") { Text(error, color = MaterialTheme.colorScheme.error) } }
@@ -307,7 +368,7 @@ internal fun TimetableScreen(
         if (schedule.noClassDates.isNotEmpty()) item(key = "no_class_date_list") {
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 schedule.noClassDates.sorted().forEach { date ->
-                    Surface(modifier = Modifier.fillMaxWidth(), shape = DimaShapes.Tile, color = MaterialTheme.colorScheme.surfaceContainerLow) {
+                    Surface(modifier = Modifier.fillMaxWidth(), shape = DimaShapes.Tile, color = DimaTheme.colors.card) {
                         Row(
                             modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
                             horizontalArrangement = Arrangement.SpaceBetween,
@@ -379,6 +440,7 @@ internal fun TimetableScreen(
         )
     }
     TimetableImportConfirmation(timetableImport)
+    intranetImport?.let { IntranetTimetablePreviewDialog(it, schedule.courses) }
     if (showTermEditor) {
         TermEditorDialog(
             start = schedule.termStart,
@@ -456,7 +518,7 @@ fun CourseSummaryCard(
             .fillMaxWidth()
             .expressiveBounceClick { onEdit() },
         shape = DimaShapes.Card,
-        colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+        colors = CardDefaults.elevatedCardColors(containerColor = DimaTheme.colors.card),
     ) {
         Row(
             modifier = Modifier
@@ -533,3 +595,53 @@ fun CourseSummaryCard(
 }
 
 private val TIME = DateTimeFormatter.ofPattern("HH:mm")
+
+/**
+ * 수업 추가 as the M3 Expressive FAB menu (D-111): the toggle button opens 직접 추가 and 인트라넷에서 가져오기 above
+ * it and turns into a close button. Shown when the shell can read the intranet; elsewhere the plain extended FAB
+ * opens the course form directly.
+ */
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
+@Composable
+private fun AddCourseFabMenu(
+    expanded: Boolean,
+    onExpandedChange: (Boolean) -> Unit,
+    onAddByHand: () -> Unit,
+    onImportFromIntranet: () -> Unit,
+    importing: Boolean,
+) {
+    FloatingActionButtonMenu(
+        expanded = expanded,
+        button = {
+            ToggleFloatingActionButton(
+                checked = expanded,
+                onCheckedChange = onExpandedChange,
+                modifier = Modifier
+                    .testTag("add_course_menu")
+                    .semantics {
+                        contentDescription = if (expanded) "수업 추가 메뉴 닫기" else "수업 추가"
+                        stateDescription = if (expanded) "펼쳐짐" else "접힘"
+                    },
+            ) {
+                Icon(
+                    if (checkedProgress > 0.5f) Icons.Default.Close else Icons.Default.Add,
+                    contentDescription = null,
+                    modifier = with(ToggleFloatingActionButtonDefaults) { Modifier.animateIcon({ checkedProgress }) },
+                )
+            }
+        },
+    ) {
+        FloatingActionButtonMenuItem(
+            onClick = onAddByHand,
+            icon = { Icon(Icons.Default.Edit, contentDescription = null) },
+            text = { Text("직접 추가") },
+            modifier = Modifier.testTag("add_course"),
+        )
+        FloatingActionButtonMenuItem(
+            onClick = { if (!importing) onImportFromIntranet() },
+            icon = { Icon(Icons.Default.CloudDownload, contentDescription = null) },
+            text = { Text(if (importing) "인트라넷에서 불러오는 중" else "인트라넷에서 가져오기") },
+            modifier = Modifier.testTag("intranet_import"),
+        )
+    }
+}

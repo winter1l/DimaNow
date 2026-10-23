@@ -58,11 +58,4 @@ object DefaultCampusZones {
             ),
         ),
     )
-
-    fun evidence(zone: CampusZoneId): String = when (zone) {
-        CampusZoneId.YEIN -> "사용자 승인 고정 polygon · 예인관"
-        CampusZoneId.MAIN -> "사용자 승인 고정 polygon · 본관"
-        CampusZoneId.ONE_ROOM -> "사용자 승인 고정 polygon · 원룸촌"
-        CampusZoneId.OUTSIDE -> "고정 좌표 없음"
-    }
 }

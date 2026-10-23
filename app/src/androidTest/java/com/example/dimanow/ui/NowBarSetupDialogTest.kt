@@ -18,7 +18,7 @@ class NowBarSetupDialogTest {
             )
         }
 
-        composeRule.onNodeWithText("'잠긴 상태에서 알림 내용 표시' 옵션을 항상 표시로 변경해주세요.").assertExists()
+        composeRule.onNodeWithText("잠금화면에서도 안내가 보이게 '알림 내용 표시'를 항상 표시로 바꿔 주세요.").assertExists()
         composeRule.onNodeWithText("모든 앱의 실시간 정보 보기", substring = true).assertExists()
         composeRule.onNodeWithText("잠금화면 알림 설정 열기").assertExists()
         composeRule.onNodeWithText("개발자 옵션 열기").assertExists()

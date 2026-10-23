@@ -2,58 +2,42 @@ package com.example.dimanow.lms
 
 import java.time.Clock
 import java.time.Instant
-import java.time.LocalDate
-import java.time.ZoneId
 
-enum class LmsAgendaGroupKey { FRESH, OVERDUE, DATE, COMPLETED }
+/** The 할 일 sections in the order they are shown (D-117). */
+enum class LmsAgendaGroupKey { UPCOMING, FRESH, OVERDUE, COMPLETED }
 
 data class LmsAgendaGroup(
     val key: LmsAgendaGroupKey,
     val title: String,
     val items: List<LmsItem>,
-    val date: LocalDate? = null,
 )
 
 data class LmsAgenda(val groups: List<LmsAgendaGroup>)
 
-class LmsAgendaPlanner(
-    private val clock: Clock,
-    private val zoneId: ZoneId = ZoneId.of("Asia/Seoul"),
-) {
+/**
+ * The 수업 tab's 할 일 (D-117, reworking D-047's today agenda): every deadline still ahead, nearest first, so a
+ * deadline next week shows here and not only under 과목별; then undated news; then missed deadlines, most recently
+ * missed first, below what can still be done on time; completed learning last.
+ */
+class LmsAgendaPlanner(private val clock: Clock) {
     fun plan(items: List<LmsItem>, now: Instant = clock.instant()): LmsAgenda {
-        val today = now.atZone(zoneId).toLocalDate()
         val completed = items.filter { it.completionState == LmsCompletionState.COMPLETE }
         val active = items.filterNot { it.completionState == LmsCompletionState.COMPLETE }
         val groups = buildList {
+            active.filter { it.dueAt?.isBefore(now) == false }
+                .sortedBy { it.dueAt }
+                .takeIf { it.isNotEmpty() }
+                ?.let { add(LmsAgendaGroup(LmsAgendaGroupKey.UPCOMING, "다가오는 마감", it)) }
+
             active.filter { it.dueAt == null && it.changeState != LmsChangeState.NONE }
                 .sortedByDescending { it.registeredAt }
                 .takeIf { it.isNotEmpty() }
                 ?.let { add(LmsAgendaGroup(LmsAgendaGroupKey.FRESH, "새 소식", it)) }
 
             active.filter { it.dueAt?.isBefore(now) == true }
-                .sortedBy { it.dueAt }
+                .sortedByDescending { it.dueAt }
                 .takeIf { it.isNotEmpty() }
                 ?.let { add(LmsAgendaGroup(LmsAgendaGroupKey.OVERDUE, "기한 지남", it)) }
-
-            repeat(4) { dayOffset ->
-                val date = today.plusDays(dayOffset.toLong())
-                active.filter { item ->
-                    val dueAt = item.dueAt ?: return@filter false
-                    !dueAt.isBefore(now) && dueAt.atZone(zoneId).toLocalDate() == date
-                }
-                    .sortedBy { it.dueAt }
-                    .takeIf { it.isNotEmpty() }
-                    ?.let { dueItems ->
-                        add(
-                            LmsAgendaGroup(
-                                key = LmsAgendaGroupKey.DATE,
-                                title = if (dayOffset == 0) "오늘" else date.toString(),
-                                items = dueItems,
-                                date = date,
-                            ),
-                        )
-                    }
-            }
 
             completed.sortedByDescending { it.dueAt ?: it.registeredAt }
                 .takeIf { it.isNotEmpty() }

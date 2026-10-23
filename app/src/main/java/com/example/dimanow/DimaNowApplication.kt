@@ -118,6 +118,8 @@ class DimaNowApplication : Application() {
             .build()
     }
     val lmsCredentialStore: AndroidLmsCredentialStore by lazy { AndroidLmsCredentialStore(this) }
+    /** D-107: one intranet/DIMA C read at a time, served by the WebView host in the app shell. */
+    val schoolServiceBridge: com.example.dimanow.school.SchoolServiceBridge by lazy { com.example.dimanow.school.SchoolServiceBridge() }
     val lmsSessionController: MutableLmsSessionController by lazy { MutableLmsSessionController() }
     val lmsLoginBridge: LmsLoginBridge by lazy { LmsLoginBridge() }
     val lmsRenderedPageBridge: com.example.dimanow.lms.LmsRenderedPageBridge by lazy {
@@ -161,6 +163,10 @@ class DimaNowApplication : Application() {
     override fun onCreate() {
         super.onCreate()
         com.example.dimanow.calendar.ServiceCalendarStore.loadCached(this)
+        // D-108: the last 상벌점 read stays on this device (no-backup storage) until refreshed or deleted.
+        com.example.dimanow.school.SchoolReadCache.persistDormPointsIn(java.io.File(noBackupFilesDir, "school/dorm-points.json"))
+        // D-112: 점호 announcements read from KakaoTalk, kept two weeks on this device.
+        com.example.dimanow.dorm.RollCallStore.attach(this)
         appUpdateCoordinator.initialize()
         val lockStateFilter = IntentFilter().apply {
             addAction(Intent.ACTION_SCREEN_ON)
@@ -187,9 +193,10 @@ class DimaNowApplication : Application() {
                 repository.zones,
                 preferences.locationMode,
                 preferences.notificationGuidancePolicy,
-            ) { zones, mode, policy -> Triple(zones, mode, policy) }
-                .collectLatest { (zones, mode, policy) ->
-                    val includeBus4402 = policy.bus4402 != NotificationGuidanceMode.OFF
+            ) { zones, mode, policy -> Triple(zones, mode, policy.bus4402 != NotificationGuidanceMode.OFF) }
+                // Register again only when the plan changes, not when another guidance mode does (Q-031).
+                .distinctUntilChanged()
+                .collectLatest { (zones, mode, includeBus4402) ->
                     if (!includeBus4402) {
                         preferences.setTransitStopProximityState(TransitStopProximityState())
                         val activeCampusGeofences = preferences.activeGeofenceIds.first()
@@ -252,6 +259,9 @@ class DimaNowApplication : Application() {
                     nearbyTransitStop = transitStop?.let { NearbyTransitStop(it.stopNumber, it.displayName) },
                 )
             }
+                // An equal snapshot (Room re-emitting unchanged rows) would only rebuild the same notification and
+                // alarms; the minute and lock-state refreshes go through requestRefresh, not through here.
+                .distinctUntilChanged()
                 .collectLatest { snapshot ->
                     guidanceRuntimeCoordinator.update(snapshot)
                     if (widgetRefreshPlanner.shouldRefresh(previousWidgetZone, snapshot.resolvedZone)) {

@@ -1,8 +1,23 @@
 package com.example.dimanow.ui
 
 import com.example.dimanow.theme.DimaTheme
+import com.example.dimanow.theme.dimaScreenTitleStyle
+import com.example.dimanow.calendar.ServiceCalendarStore
+import com.example.dimanow.calendar.TermHeadline
+import com.example.dimanow.calendar.detail
+import com.example.dimanow.calendar.label
+import com.example.dimanow.calendar.termHeadline
+import com.example.dimanow.sync.ServiceCalendar
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.semantics.heading
+import java.time.LocalDate
 import com.example.dimanow.ui.meal.groupDormitorySections
 import com.example.dimanow.ui.motion.AnimatedCountText
+import com.example.dimanow.ui.motion.dimaContentSwap
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.foundation.layout.Box
 import androidx.compose.ui.text.style.TextOverflow
 import com.example.dimanow.theme.DimaShapes
 import androidx.compose.foundation.clickable
@@ -19,7 +34,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Campaign
-import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.DirectionsBus
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Restaurant
@@ -85,6 +99,9 @@ internal fun DashboardScreen(
     lmsSessionState: LmsSessionState = LmsSessionState.SIGNED_OUT,
     onAddCourse: () -> Unit = { onNavigateToPage(AppPage.TIMETABLE) },
     updateNotice: (@Composable () -> Unit)? = null,
+    serviceCalendar: ServiceCalendar = ServiceCalendarStore.current,
+    /** Today's 점호 when Home should show it (엔터관 residents on a 점호 day, D-122); null hides the card. */
+    rollCall: com.example.dimanow.dorm.RollCallStatus? = null,
 ) {
     val context = LocalContext.current
     val nowTime = now.toLocalTime()
@@ -98,11 +115,13 @@ internal fun DashboardScreen(
     val guidanceEngine = remember { GuidanceEngine() }
     val locationAccess = rememberLocationAccess()
     val shuttleDepartures = shuttle?.departures.orEmpty()
-    val shuttleBoard = remember(now, zone, shuttleDepartures) {
+    // The week's schedule index changes only with the timetable; the minute tick reuses it.
+    val shuttleIndex = remember(shuttleDepartures) { guidanceEngine.prepareShuttleSchedule(shuttleDepartures) }
+    val shuttleBoard = remember(now, zone, shuttleIndex) {
         guidanceEngine.shuttleBoard(
             now = now,
             originZone = zone,
-            departures = shuttleDepartures,
+            index = shuttleIndex,
             purpose = ShuttleBoardPurpose.GENERAL,
         )
     }
@@ -120,11 +139,11 @@ internal fun DashboardScreen(
     } else mealStatusNow?.state == MealServiceState.OPEN
     val originName = DisplayVocabulary.originName(zone)
 
-    // D-102: 홈의 제목은 오늘 날짜다. 현재 위치는 그 위치가 바꾸는 셔틀 카드 머리에서 '○○ 출발'로 보여 준다
-    // (D-029의 위치 배지를 대체). 설정 톱니는 오른쪽 끝에 둔다 (D-094)
+    // D-106: 홈의 제목은 학기 주차(시험 주간·방학 포함)이고, 오늘 날짜는 그 옆에 작게 둔다. 현재 위치는
+    // 그 위치가 바꾸는 셔틀 카드 머리에서 '○○ 출발'로 보여 준다 (D-029의 위치 배지를 대체). 설정 톱니는 오른쪽 끝 (D-094)
+    val headline = termHeadline(now.toLocalDate(), schedule.termStart, schedule.termEnd, serviceCalendar)
     ScreenScaffold(
-        // 다른 탭 제목과 같은 크기의 제목 자리에 날짜를 둔다
-        title = "${now.monthValue}월 ${now.dayOfMonth}일 ${koreanWeekdayLabel(now.dayOfWeek)}",
+        titleContent = { HomeTitle(headline, now.toLocalDate()) },
         modifier = modifier,
         itemSpacing = DimaLayout.sectionGap,
         listTag = "home_list",
@@ -159,57 +178,100 @@ internal fun DashboardScreen(
                     contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
                 ),
             ) {
+                // D-121: the briefing's shape mark sits at the end of its top block and stays one composable across
+                // every branch, so a class starting, ending or the day going free morphs it instead of replacing it.
+                val heroMoodNow = heroMood(
+                    hasNextCourse = nextCourse != null,
+                    ongoing = nextCourse != null && !nowTime.isBefore(nextCourse.start),
+                )
+                val termEnded = com.example.dimanow.calendar.AcademicTerms.hasEnded(schedule.termEnd, now.toLocalDate())
                 Column(
                     modifier = Modifier.padding(20.dp),
-                    verticalArrangement = Arrangement.spacedBy(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(if (nextCourse != null) 16.dp else 8.dp),
                 ) {
-                    // 브리핑 본문 (수업 일정)
-                    if (nextCourse != null) {
-                        val isOngoing = !nowTime.isBefore(nextCourse.start)
-                        // D-069 style: minutes only within an hour, otherwise the start clock (D-094(14))
-                        val startLabel = classStartLabel(now, now.toLocalDate().atTime(nextCourse.start).atZone(now.zone))
-
-                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            ) {
-                                Surface(
-                                    shape = DimaShapes.Badge,
-                                    color = if (isOngoing) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.secondary,
-                                ) {
-                                    AnimatedCountText(
-                                        text = if (isOngoing) "수업 중" else startLabel,
-                                        style = MaterialTheme.typography.labelMediumEmphasized.copy(fontFeatureSettings = TABULAR_FIGURES),
-                                        color = if (isOngoing) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSecondary,
-                                        modifier = Modifier
-                                            .padding(horizontal = 8.dp, vertical = 4.dp)
-                                            .testTag("home_hero_badge"),
-                                    )
+                    Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Box(Modifier.weight(1f)) {
+                            // 브리핑 본문 (수업 일정)
+                            if (nextCourse != null) {
+                                // D-121: the next class rises in as the finished one leaves, once per class change
+                                AnimatedContent(
+                                    targetState = nextCourse,
+                                    contentKey = { it.id to it.start },
+                                    transitionSpec = { dimaContentSwap() },
+                                    label = "home_hero_course",
+                                ) { course ->
+                                    val isOngoing = !nowTime.isBefore(course.start)
+                                    // D-069 style: minutes only within an hour, otherwise the start clock (D-094(14))
+                                    val startLabel = classStartLabel(now, now.toLocalDate().atTime(course.start).atZone(now.zone))
+                                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                        ) {
+                                            Surface(
+                                                shape = DimaShapes.Badge,
+                                                color = if (isOngoing) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.secondary,
+                                            ) {
+                                                AnimatedCountText(
+                                                    text = if (isOngoing) "수업 중" else startLabel,
+                                                    style = MaterialTheme.typography.labelMediumEmphasized.copy(fontFeatureSettings = TABULAR_FIGURES),
+                                                    color = if (isOngoing) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSecondary,
+                                                    modifier = Modifier
+                                                        .padding(horizontal = 8.dp, vertical = 4.dp)
+                                                        .testTag("home_hero_badge"),
+                                                )
+                                            }
+                                            Text(
+                                                text = "${course.start.format(TIME)} ~ ${course.end.format(TIME)}",
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                            )
+                                        }
+                                        Text(
+                                            text = course.name,
+                                            style = MaterialTheme.typography.headlineSmallEmphasized,
+                                        )
+                                        // 비워 둔 강의실·교수는 빈 구분자 없이 건너뛴다
+                                        listOf(course.room, course.professor).filter(String::isNotBlank).joinToString(" · ")
+                                            .takeIf(String::isNotEmpty)?.let { place ->
+                                                Text(
+                                                    text = place,
+                                                    style = MaterialTheme.typography.bodyMedium,
+                                                    color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                                )
+                                            }
+                                        // 셔틀 출발 정보는 바로 아래 셔틀 카드가 캡슐로 보여주므로
+                                        // 히어로 카드에서 같은 내용을 문장으로 반복하지 않는다 (D-056)
+                                    }
                                 }
-                                Text(
-                                    text = "${nextCourse.start.format(TIME)} ~ ${nextCourse.end.format(TIME)}",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onPrimaryContainer,
-                                )
-                            }
-                            Text(
-                                text = nextCourse.name,
-                                style = MaterialTheme.typography.headlineSmallEmphasized,
-                            )
-                            // 비워 둔 강의실·교수는 빈 구분자 없이 건너뛴다
-                            listOf(nextCourse.room, nextCourse.professor).filter(String::isNotBlank).joinToString(" · ")
-                                .takeIf(String::isNotEmpty)?.let { place ->
+                            } else {
+                                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                                     Text(
-                                        text = place,
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                        text = when {
+                                            // D-099: 학기가 끝났으면 새 학기 설정을 먼저 안내한다
+                                            termEnded -> "학기가 끝났어요"
+                                            schedule.courses.isEmpty() -> "수업을 추가해 주세요"
+                                            guidancePaused -> "오늘은 휴강이에요"
+                                            schedule.coursesOn(now.toLocalDate()).isEmpty() -> "오늘은 수업이 없어요"
+                                            else -> "오늘 수업이 모두 끝났어요"
+                                        },
+                                        style = MaterialTheme.typography.titleLargeEmphasized,
                                     )
+                                    // 무엇을 하면 무엇을 얻는지 한 줄로 알려 준다 (토스 UX 라이팅: 가능하게 하는 조건을 말한다)
+                                    when {
+                                        termEnded -> "새 학기 기간을 정하면 수업 안내를 다시 받을 수 있어요."
+                                        schedule.courses.isEmpty() -> "추가한 수업에 맞춰 수업 전 알림과 셔틀 안내를 보내 드려요."
+                                        else -> null
+                                    }?.let {
+                                        Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onPrimaryContainer)
+                                    }
                                 }
-                            // 셔틀 출발 정보는 바로 아래 셔틀 카드가 캡슐로 보여주므로
-                            // 히어로 카드에서 같은 내용을 문장으로 반복하지 않는다 (D-056)
+                            }
                         }
+                        HeroMoodMark(heroMoodNow)
+                    }
 
+                    if (nextCourse != null) {
                         // 오늘의 다음 수업 표시 (있을 경우)
                         if (upcomingAfterCourse != null) {
                             HeroClassPreviewRow(
@@ -218,6 +280,21 @@ internal fun DashboardScreen(
                             )
                         }
                     } else {
+                        // D-102: 빈 브리핑은 다음 행동을 버튼으로 바로 건넨다
+                        when {
+                            termEnded -> Button(shapes = ButtonDefaults.shapes(),
+                                onClick = { onNavigateToPage(AppPage.TIMETABLE) },
+                                modifier = Modifier.testTag("home_set_term"),
+                            ) { Text("새 학기 설정하기") }
+                            schedule.courses.isEmpty() -> Button(shapes = ButtonDefaults.shapes(),
+                                onClick = onAddCourse,
+                                modifier = Modifier.testTag("home_add_course"),
+                            ) {
+                                Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(ButtonDefaults.IconSize))
+                                Spacer(Modifier.width(ButtonDefaults.IconSpacing))
+                                Text("수업 추가하기")
+                            }
+                        }
                         // 다음 수업일(내일부터 최대 7일, 휴강일 제외)의 첫 수업 미리보기
                         val nextClassPreview = remember(schedule, now) {
                             (1L..7L).asSequence()
@@ -233,57 +310,19 @@ internal fun DashboardScreen(
                                 }
                                 .firstOrNull()
                         }
-                        val termEnded = com.example.dimanow.calendar.AcademicTerms.hasEnded(schedule.termEnd, now.toLocalDate())
-                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Text(
-                                text = when {
-                                    // D-099: 학기가 끝났으면 새 학기 설정을 먼저 안내한다
-                                    termEnded -> "학기가 끝났어요"
-                                    schedule.courses.isEmpty() -> "수업을 추가해 주세요"
-                                    guidancePaused -> "오늘은 휴강이에요"
-                                    schedule.coursesOn(now.toLocalDate()).isEmpty() -> "오늘은 수업이 없어요"
-                                    else -> "오늘 수업이 모두 끝났어요"
-                                },
-                                style = MaterialTheme.typography.titleLargeEmphasized,
+                        if (nextClassPreview != null) {
+                            val (date, course) = nextClassPreview
+                            val dayLabel = if (date == now.toLocalDate().plusDays(1)) {
+                                "내일 첫 수업"
+                            } else {
+                                "${koreanWeekdayLabel(date.dayOfWeek)} 첫 수업"
+                            }
+                            HeroClassPreviewRow(
+                                label = "$dayLabel · ${course.start.format(TIME)}",
+                                detail = courseWithRoom(course.name, course.room),
                             )
-                            // 무엇을 하면 무엇을 얻는지 한 줄로 알려 준다 (토스 UX 라이팅: 가능하게 하는 조건을 말한다)
-                            when {
-                                termEnded -> "새 학기 기간을 정하면 수업 안내를 다시 받을 수 있어요."
-                                schedule.courses.isEmpty() -> "추가한 수업에 맞춰 수업 전 알림과 셔틀 안내를 보내 드려요."
-                                else -> null
-                            }?.let {
-                                Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onPrimaryContainer)
-                            }
-                            // D-102: 빈 브리핑은 다음 행동을 버튼으로 바로 건넨다
-                            when {
-                                termEnded -> Button(shapes = ButtonDefaults.shapes(), 
-                                    onClick = { onNavigateToPage(AppPage.TIMETABLE) },
-                                    modifier = Modifier.testTag("home_set_term"),
-                                ) { Text("새 학기 설정하기") }
-                                schedule.courses.isEmpty() -> Button(shapes = ButtonDefaults.shapes(), 
-                                    onClick = onAddCourse,
-                                    modifier = Modifier.testTag("home_add_course"),
-                                ) {
-                                    Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(ButtonDefaults.IconSize))
-                                    Spacer(Modifier.width(ButtonDefaults.IconSpacing))
-                                    Text("수업 추가하기")
-                                }
-                            }
-                            if (nextClassPreview != null) {
-                                val (date, course) = nextClassPreview
-                                val dayLabel = if (date == now.toLocalDate().plusDays(1)) {
-                                    "내일 첫 수업"
-                                } else {
-                                    "${koreanWeekdayLabel(date.dayOfWeek)} 첫 수업"
-                                }
-                                HeroClassPreviewRow(
-                                    label = "$dayLabel · ${course.start.format(TIME)}",
-                                    detail = courseWithRoom(course.name, course.room),
-                                )
-                            }
                         }
                     }
-
                 }
             }
         }
@@ -295,6 +334,12 @@ internal fun DashboardScreen(
                 onOpenCourses = { onNavigateToPage(AppPage.COURSES) },
                 sessionState = lmsSessionState,
             )
+        }
+
+        // D-107: 지금 진행 중이거나 2주 안에 시작하는 학사 일정(시험 주간 포함). 없으면 카드도 없다
+        val academicAgenda = serviceCalendar.academicAgenda(now.toLocalDate()).take(4)
+        if (academicAgenda.isNotEmpty()) item(key = "academic") {
+            HomeAcademicAgendaCard(academicAgenda, now.toLocalDate())
         }
 
         // 2. 실시간 셔틀 카드 — 카드 전체가 셔틀 탭을 연다 (D-094(9))
@@ -321,7 +366,7 @@ internal fun DashboardScreen(
                 HomeContainerCard(modifier = Modifier.testTag("dashboard_shuttle_card")) {
                     shuttleHeader(false)
                     Text(
-                        "위치를 허용하면 지금 있는 곳에서 출발하는 셔틀을 바로 보여 줘요. 위치는 이 기기 안에서만 써요.",
+                        "위치를 허용하면 있는 곳의 셔틀을 바로 보여 줘요. 위치는 기기 안에서만 써요.",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.testTag("dashboard_location_needed"),
@@ -368,7 +413,7 @@ internal fun DashboardScreen(
                     zone == CampusZoneId.OUTSIDE -> {
                         // 위치를 쓸 수 있는데 캠퍼스 밖이면, 무엇이 언제 나타나는지만 알려 준다 (D-102)
                         Text(
-                            "캠퍼스에 들어오면 그곳에서 출발하는 셔틀을 바로 보여 줘요",
+                            "캠퍼스에 오면 바로 보여 줘요",
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.testTag("dashboard_outside"),
@@ -442,6 +487,7 @@ internal fun DashboardScreen(
                                                     // 막차는 경고색. 라이트 모드의 primaryContainer와 secondaryContainer는 같은 톤이라 구분되지 않는다.
                                                     containerColor = shuttleCapsuleColors(isNearest = isFirst, isLastService = isLastService).first,
                                                     contentColor = shuttleCapsuleColors(isNearest = isFirst, isLastService = isLastService).second,
+                                                    imminent = isImminentDeparture(minutesLeft, isNearest = isFirst),
                                                     modifier = Modifier.testTag("home_departure_${destZone.name}_$index"),
                                                 )
                                             }
@@ -452,7 +498,7 @@ internal fun DashboardScreen(
                                         val lastDepartureTime = annotated.lastOrNull()?.departure?.time
                                         Surface(
                                             shape = DimaShapes.Tile,
-                                            color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                                            color = DimaTheme.colors.cardInner,
                                             modifier = Modifier.fillMaxWidth(),
                                         ) {
                                             FlowRow(
@@ -488,6 +534,13 @@ internal fun DashboardScreen(
         }
 
         // 3. 현재 구역의 오늘 식단 카드 — 카드 전체가 식단 탭을 연다 (D-094(9))
+        // D-122: 엔터관으로 돌아가는 학생에게는 점호 날 점호 안내와 외출·외박 신청을 홈에서 바로 준다
+        rollCall?.let { status ->
+            item(key = "roll_call") {
+                HomeRollCallCard(rollCall = status, time = nowTime, onOpenDorm = { onNavigateToPage(AppPage.DORM) })
+            }
+        }
+
         item(key = "meal") {
             HomeSummaryCard(
                 onClick = { onNavigateToPage(AppPage.MEAL) },
@@ -565,9 +618,14 @@ internal fun DashboardScreen(
                     .fillMaxWidth()
                     .testTag("dashboard_notices_card"),
                 shape = DimaShapes.Card,
-                colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+                colors = CardDefaults.elevatedCardColors(containerColor = DimaTheme.colors.card),
             ) {
-                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                // D-122: 머리의 전체보기 버튼(48dp)과 공지 행(48dp)이 이미 위아래 여백을 가지므로, 카드 여백은 위아래를
+                // 줄여 다른 홈 카드와 같은 간격으로 보이게 한다
+                Column(
+                    Modifier.padding(start = 16.dp, end = 12.dp, top = 8.dp, bottom = 8.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
                     // 공지 카드는 행마다 다른 곳을 열므로 카드 자체는 누를 수 없고, 머리의 전체보기만 버튼이다 (D-094(9))
                     HomeCardHeader(icon = Icons.Default.Campaign, title = "학교 공지", showChevron = false) {
                         TextButton(shapes = ButtonDefaults.shapes(), 
@@ -602,7 +660,7 @@ internal fun DashboardScreen(
                                         .heightIn(min = 48.dp)
                                         .clip(DimaShapes.Small)
                                         .clickable(onClickLabel = "공지 열기", role = Role.Button) { openUrl(context, notice.url) }
-                                        .padding(horizontal = 4.dp, vertical = 8.dp)
+                                        .padding(end = 4.dp, top = 8.dp, bottom = 8.dp)
                                         .testTag("dashboard_notice_${notice.id}"),
                                     verticalAlignment = Alignment.CenterVertically,
                                     horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -616,7 +674,7 @@ internal fun DashboardScreen(
                                     )
                                     Surface(
                                         shape = DimaShapes.Badge,
-                                        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                                        color = DimaTheme.colors.cardInner,
                                     ) {
                                         Text(
                                             text = "${notice.date.monthValue}.${notice.date.dayOfMonth}",
@@ -630,18 +688,6 @@ internal fun DashboardScreen(
                         }
                     }
                 }
-            }
-        }
-
-        // 5. 학교 서비스 바로가기 — 수업은 하단 수업 탭과 수업 카드가 이미 열어 주므로 DIMA Portal만 둔다 (D-094(9))
-        item(key = "shortcuts") {
-            FilledTonalButton(shapes = ButtonDefaults.shapes(), 
-                onClick = { openUrl(context, "https://portal.dima.ac.kr/") },
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Icon(Icons.Default.Language, contentDescription = null, modifier = Modifier.size(ButtonDefaults.IconSize))
-                Spacer(Modifier.width(ButtonDefaults.IconSpacing))
-                Text("DIMA 포털")
             }
         }
     }
@@ -690,3 +736,43 @@ private fun HeroClassPreviewRow(label: String, detail: String) {
 internal fun courseWithRoom(name: String, room: String): String = if (room.isBlank()) name else "$name ($room)"
 
 private val TIME = DateTimeFormatter.ofPattern("HH:mm")
+
+/**
+ * Home's title (D-106): the semester week, or the vacation countdown, at the screen-title size with the
+ * exam week or countdown in primary, then today's date in a quieter, smaller style on the same line.
+ */
+@Composable
+private fun HomeTitle(headline: TermHeadline, today: LocalDate) {
+    val lead = when (headline) {
+        is TermHeadline.InTerm -> "${headline.week}주차"
+        is TermHeadline.Vacation -> "방학"
+    }
+    val detail = headline.detail
+    val title = buildAnnotatedString {
+        append(lead)
+        if (detail != null) {
+            append(" · ")
+            withStyle(SpanStyle(color = MaterialTheme.colorScheme.primary)) { append(detail) }
+        }
+    }
+    val spokenDate = "${today.monthValue}월 ${today.dayOfMonth}일 ${koreanWeekdayLabel(today.dayOfWeek)}"
+    Row(
+        modifier = Modifier
+            .testTag("home_title")
+            .semantics(mergeDescendants = true) {
+                heading()
+                contentDescription = "${headline.label}, $spokenDate"
+            },
+    ) {
+        Text(title, style = dimaScreenTitleStyle(), maxLines = 1, softWrap = false, modifier = Modifier.alignByBaseline())
+        Spacer(Modifier.width(10.dp))
+        Text(
+            koreanDateLabel(today),
+            style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.alignByBaseline().weight(1f, fill = false),
+        )
+    }
+}

@@ -49,13 +49,12 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.example.dimanow.theme.DimaShapes
+import com.example.dimanow.theme.DimaTheme
 
 /** Public pages and channels shown in 앱 정보 (D-099 clause 5). */
 internal object AppLinks {
     const val PRIVACY_POLICY = "https://winter1l.github.io/DimaNow/privacy.html"
-    const val DOWNLOAD_PAGE = "https://winter1l.github.io/DimaNow/"
     const val SOURCE_CODE = "https://github.com/winter1l/DimaNow"
-    const val REPORT_PROBLEM = "https://github.com/winter1l/DimaNow/issues/new/choose"
 }
 
 internal const val UNOFFICIAL_NOTICE =
@@ -79,11 +78,6 @@ internal fun AboutCard(modifier: Modifier = Modifier) {
             Icons.Default.PrivacyTip, "개인정보 처리방침", "open_privacy_policy",
             onClick = { openUrl(context, AppLinks.PRIVACY_POLICY) },
         ),
-        AboutLink(
-            Icons.Default.BugReport, "문의·오류 제보", "open_report_problem",
-            supporting = "공개 GitHub 이슈로 남아요. 시간표·위치·학번 같은 개인정보는 적지 말아 주세요.",
-            onClick = { openUrl(context, AppLinks.REPORT_PROBLEM) },
-        ),
         AboutLink(Icons.Default.Description, "오픈소스 라이선스", "open_licenses", external = false, onClick = { showLicenses = true }),
         AboutLink(
             Icons.Default.Code, "소스 코드", "open_source_code", supporting = "Apache License 2.0",
@@ -94,7 +88,7 @@ internal fun AboutCard(modifier: Modifier = Modifier) {
         ElevatedCard(
             modifier = Modifier.fillMaxWidth().testTag("about_card"),
             shape = DimaShapes.Card,
-            colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+            colors = CardDefaults.elevatedCardColors(containerColor = DimaTheme.colors.card),
         ) {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text("이 앱에 대해", style = MaterialTheme.typography.titleMedium)
@@ -126,7 +120,7 @@ private fun AboutLinkRow(link: AboutLink, index: Int, count: Int) {
         shapes = ListItemDefaults.segmentedShapes(index = index, count = count),
         // The row keeps saying where it goes, which SegmentedListItem has no parameter for.
         modifier = Modifier.testTag(link.tag).semantics { onClick(label = clickLabel) { link.onClick(); true } },
-        leadingContent = { Icon(link.icon, contentDescription = null) },
+        leadingContent = { DimaIconBadge(link.icon) },
         trailingContent = {
             Icon(
                 if (link.external) Icons.AutoMirrored.Filled.OpenInNew else Icons.AutoMirrored.Filled.KeyboardArrowRight,

@@ -1,6 +1,5 @@
 package com.example.dimanow.ui
 
-import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
@@ -12,36 +11,32 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.selection.toggleable
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material3.ButtonGroupDefaults
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ElevatedCard
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.ToggleButton
+import androidx.compose.material3.ToggleButtonDefaults
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
-import androidx.compose.ui.semantics.collapse
 import androidx.compose.ui.semantics.disabled
-import androidx.compose.ui.semantics.expand
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.semantics.text
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.style.TextOverflow
@@ -50,7 +45,7 @@ import androidx.compose.ui.unit.dp
 import com.example.dimanow.domain.CampusZoneId
 import com.example.dimanow.domain.DisplayVocabulary
 import com.example.dimanow.theme.DimaShapes
-import com.example.dimanow.ui.motion.DimaMotion
+import com.example.dimanow.theme.DimaTheme
 
 /**
  * M3 connected button group for one exclusive choice (D-103), replacing segmented buttons, which Material 3
@@ -67,6 +62,7 @@ internal fun <T> DimaConnectedChoice(
     enabled: Boolean = true,
     itemTag: (T) -> String? = { null },
 ) {
+    val haptics = LocalHapticFeedback.current
     Row(
         modifier = modifier.fillMaxWidth().selectableGroup(),
         horizontalArrangement = Arrangement.spacedBy(ButtonGroupDefaults.ConnectedSpaceBetween),
@@ -75,9 +71,15 @@ internal fun <T> DimaConnectedChoice(
             val checked = value == selected
             ToggleButton(
                 checked = checked,
-                // A connected single-choice group never ends with nothing selected.
-                onCheckedChange = { onSelect(value) },
+                // A connected single-choice group never ends with nothing selected. D-121: a segment tick confirms
+                // the change under the finger (the system touch-feedback setting still applies).
+                onCheckedChange = {
+                    if (!checked) haptics.performHapticFeedback(HapticFeedbackType.SegmentTick)
+                    onSelect(value)
+                },
                 enabled = enabled,
+                // D-114: unselected buttons sit one tone above the card or page instead of sinking below it.
+                colors = ToggleButtonDefaults.colors(containerColor = DimaTheme.colors.cardInner),
                 shapes = when (index) {
                     0 -> ButtonGroupDefaults.connectedLeadingButtonShapes()
                     options.lastIndex -> ButtonGroupDefaults.connectedTrailingButtonShapes()
@@ -176,21 +178,13 @@ internal fun SettingsExpander(
     supporting: String? = null,
     supportingColor: androidx.compose.ui.graphics.Color = MaterialTheme.colorScheme.onSurfaceVariant,
 ) {
-    val rotation by animateFloatAsState(
-        targetValue = if (expanded) 180f else 0f,
-        animationSpec = DimaMotion.spatialDefault(),
-        label = "settings_expander_chevron",
-    )
     Surface(
         onClick = onToggle,
         modifier = modifier
             .fillMaxWidth()
-            .semantics {
-                stateDescription = if (expanded) "펼쳐짐" else "접힘"
-                if (expanded) collapse { onToggle(); true } else expand { onToggle(); true }
-            },
+            .expandableSemantics(expanded, onToggle),
         shape = DimaShapes.Card,
-        color = MaterialTheme.colorScheme.surfaceContainerLow,
+        color = DimaTheme.colors.card,
         contentColor = MaterialTheme.colorScheme.onSurface,
     ) {
         Row(
@@ -204,11 +198,10 @@ internal fun SettingsExpander(
                     Text(it, style = MaterialTheme.typography.bodySmall, color = supportingColor)
                 }
             }
-            Icon(
-                Icons.Default.ExpandMore,
-                contentDescription = null,
+            ExpandChevron(
+                expanded,
                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.rotate(rotation),
+                label = "settings_expander_chevron",
             )
         }
     }
@@ -231,7 +224,7 @@ internal fun LocationTestCard(
     ElevatedCard(
         modifier = modifier.fillMaxWidth(),
         shape = DimaShapes.Card,
-        colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+        colors = CardDefaults.elevatedCardColors(containerColor = DimaTheme.colors.card),
     ) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("위치 테스트", style = MaterialTheme.typography.titleMedium)

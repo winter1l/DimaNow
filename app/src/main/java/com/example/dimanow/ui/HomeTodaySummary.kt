@@ -22,6 +22,8 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import com.example.dimanow.ui.motion.pressScale
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -38,6 +40,7 @@ import com.example.dimanow.lms.LmsItemKind
 import com.example.dimanow.lms.LmsSessionState
 import com.example.dimanow.lms.LmsSnapshot
 import com.example.dimanow.lms.LmsSyncState
+import com.example.dimanow.theme.DimaTheme
 import java.time.Instant
 import java.time.ZoneId
 import java.time.ZonedDateTime
@@ -93,7 +96,7 @@ internal fun HomeTodaySummary(
         if (overview.courses.isNotEmpty()) {
             FlowRow(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 overview.courses.forEach { course ->
-                    Surface(shape = DimaShapes.Badge, color = MaterialTheme.colorScheme.surfaceContainerHigh, contentColor = MaterialTheme.colorScheme.onSurfaceVariant) {
+                    Surface(shape = DimaShapes.Badge, color = DimaTheme.colors.cardInner, contentColor = MaterialTheme.colorScheme.onSurfaceVariant) {
                         Text("${course.courseName} · ${course.totalCount}개", style = MaterialTheme.typography.labelMedium,
                             modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp))
                     }
@@ -137,14 +140,19 @@ internal fun HomeSummaryCard(
     content: @Composable ColumnScope.() -> Unit,
 ) {
     val open = onClick
+    // D-121: the card gives slightly under the finger (the shared expressive press scale), so a whole-card tap is felt
+    // as one target; it shares the card's own interaction source and is off under reduced motion.
+    val interactionSource = remember { MutableInteractionSource() }
     ElevatedCard(
         onClick = open,
+        interactionSource = interactionSource,
         // Outer semantics override the card's own click action, so this only labels the same action.
         modifier = modifier
             .fillMaxWidth()
+            .pressScale(interactionSource)
             .semantics { labelClickAction(onClickLabel, open) },
         shape = DimaShapes.Card,
-        colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+        colors = CardDefaults.elevatedCardColors(containerColor = DimaTheme.colors.card),
     ) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp), content = content)
     }
@@ -162,7 +170,7 @@ internal fun HomeContainerCard(
     ElevatedCard(
         modifier = modifier.fillMaxWidth(),
         shape = DimaShapes.Card,
-        colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+        colors = CardDefaults.elevatedCardColors(containerColor = DimaTheme.colors.card),
     ) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp), content = content)
     }
@@ -187,7 +195,7 @@ internal fun HomeCardHeader(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(22.dp))
+        DimaIconBadge(icon, size = 32.dp)
         Text(title, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
         trailing()
         if (showChevron) {
@@ -217,7 +225,7 @@ internal fun HomeCompactPrompt(
             .fillMaxWidth()
             .semantics { labelClickAction(onClickLabel, open) },
         shape = DimaShapes.Tile,
-        color = MaterialTheme.colorScheme.surfaceContainerLow,
+        color = DimaTheme.colors.card,
         contentColor = MaterialTheme.colorScheme.onSurface,
     ) {
         Row(
@@ -225,7 +233,7 @@ internal fun HomeCompactPrompt(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(22.dp))
+            DimaIconBadge(icon, size = 32.dp)
             Text(
                 text,
                 style = MaterialTheme.typography.bodyMedium,

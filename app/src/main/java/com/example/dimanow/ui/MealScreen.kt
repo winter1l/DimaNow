@@ -1,9 +1,12 @@
 package com.example.dimanow.ui
 
+import androidx.compose.material.icons.filled.Flag
+import androidx.compose.material.icons.filled.CloudUpload
 import androidx.compose.material3.ButtonDefaults
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import com.example.dimanow.theme.DimaTheme
 import com.example.dimanow.ui.meal.groupDormitorySections
 import androidx.compose.material.icons.filled.PhotoCamera
 import com.example.dimanow.theme.DimaShapes
@@ -113,7 +116,8 @@ fun MealScreen(
     var reportWeek by remember { mutableStateOf<LocalDate?>(null) }
     var preparingDormitoryImage by remember { mutableStateOf(false) }
     var uploadingDormitoryMeal by remember { mutableStateOf(false) }
-    var cameraOutput by remember { mutableStateOf<Uri?>(null) }
+    // Saveable so a photo taken while the system kills the app for the camera still arrives (Q-031).
+    var cameraOutput by rememberSaveable { mutableStateOf<Uri?>(null) }
     var refreshMessage by remember { mutableStateOf<String?>(null) }
 
     fun loadImage(uri: Uri) {
@@ -133,6 +137,11 @@ fun MealScreen(
                 refreshMessage = "식단 사진을 읽지 못했어요. 다른 사진을 선택해 주세요."
             } finally {
                 preparingDormitoryImage = false
+                // The photo is in memory now; the camera's copy is not kept (Q-031).
+                if (uri == cameraOutput) {
+                    dormMealCaptureFile(context).delete()
+                    cameraOutput = null
+                }
             }
         }
     }
@@ -140,7 +149,12 @@ fun MealScreen(
         uri?.let(::loadImage)
     }
     val cameraLauncher = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { saved ->
-        if (saved) cameraOutput?.let(::loadImage)
+        if (saved) {
+            cameraOutput?.let(::loadImage)
+        } else {
+            dormMealCaptureFile(context).delete()
+            cameraOutput = null
+        }
     }
 
     suspend fun submitAndWatch(image: DormitoryMealImage) {
@@ -341,6 +355,7 @@ fun MealScreen(
     }
     if (showDormitoryPhotoSource) {
         AlertDialog(
+            icon = { DimaDialogIcon(Icons.Default.PhotoCamera, DialogTone.INFO) },
             onDismissRequest = { showDormitoryPhotoSource = false },
             title = { Text("기숙사 식단표") },
             text = {
@@ -354,8 +369,10 @@ fun MealScreen(
                     TextButton(shapes = ButtonDefaults.shapes(), 
                         onClick = {
                             showDormitoryPhotoSource = false
-                            val file = File(context.cacheDir, "dorm-meals/capture-${System.currentTimeMillis()}.jpg").apply {
+                            // One capture file, overwritten each time; earlier builds left one file per photo.
+                            val file = dormMealCaptureFile(context).apply {
                                 parentFile?.mkdirs()
+                                parentFile?.listFiles()?.forEach { old -> if (old.name != name) old.delete() }
                             }
                             val outputUri = FileProvider.getUriForFile(context, "${context.packageName}.updates", file)
                             cameraOutput = outputUri
@@ -387,6 +404,7 @@ fun MealScreen(
     }
     pendingImage?.let { image ->
         AlertDialog(
+            icon = { DimaDialogIcon(Icons.Default.CloudUpload, DialogTone.INFO) },
             onDismissRequest = { pendingImage = null },
             title = { Text("기숙사 식단 올리기") },
             // D-100: 비공개 보관·30일 삭제, AI 처리와 학습 활용 가능성, 촬영 정보 제거를 올리기 전에 알린다
@@ -622,8 +640,8 @@ private fun MealPeriodCard(
     val shape = DimaShapes.Card
     val background = when {
         isOpen -> colors.primaryContainer
-        isClosed -> colors.surfaceContainerHighest
-        else -> colors.surfaceContainerLow
+        isClosed -> DimaTheme.colors.cardInner
+        else -> DimaTheme.colors.card
     }
     ElevatedCard(
         modifier = modifier.fillMaxWidth()
@@ -751,6 +769,7 @@ private fun DormitoryUploadProgressCard(modifier: Modifier = Modifier) {
 private fun DormitoryReportDialog(onDismiss: () -> Unit, onReport: (com.example.dimanow.meal.DormitoryMealReportReason) -> Unit) {
     var selected by remember { mutableStateOf<com.example.dimanow.meal.DormitoryMealReportReason?>(null) }
     AlertDialog(
+        icon = { DimaDialogIcon(Icons.Default.Flag, DialogTone.WARNING) },
         onDismissRequest = onDismiss,
         title = { Text("이 식단을 신고할까요?") },
         text = {
@@ -777,3 +796,6 @@ private fun DormitoryReportDialog(onDismiss: () -> Unit, onReport: (com.example.
         dismissButton = { TextButton(shapes = ButtonDefaults.shapes(), onClick = onDismiss) { Text("취소") } },
     )
 }
+
+/** Where the camera writes a 기숙사 식단 photo before it is read into memory. */
+private fun dormMealCaptureFile(context: android.content.Context): File = File(context.cacheDir, "dorm-meals/capture.jpg")

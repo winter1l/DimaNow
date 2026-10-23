@@ -22,6 +22,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -229,10 +230,12 @@ class StaticMealSource(
     // Tolerates fields added by a later publisher (D-099); schemaVersion still gates incompatible payloads.
     private val json = Json { ignoreUnknownKeys = true }
 
+    // Room re-emits a query after any write to its table (every source shares source_status and sync_state);
+    // repeats are dropped before mapping, and equal results are not passed on.
     override val data: Flow<MealData> = combine(
-        dao.observeMealDays(),
-        dao.observeSourceStatus(SOURCE_KEY),
-        dao.observeSyncState(SOURCE_KEY),
+        dao.observeMealDays().distinctUntilChanged(),
+        dao.observeSourceStatus(SOURCE_KEY).distinctUntilChanged(),
+        dao.observeSyncState(SOURCE_KEY).distinctUntilChanged(),
     ) { days, status, sync ->
         MealData(
             days = days.map { it.toDomain() },
@@ -245,12 +248,13 @@ class StaticMealSource(
             serverPublishedAt = sync?.serverPublishedEpochMillis?.let(Instant::ofEpochMilli),
             serverState = sync?.serverState,
         )
-    }
+    }.distinctUntilChanged()
 
+    // As above; this also keeps sectionsJson from being decoded again after unrelated writes.
     override val dormitoryData: Flow<DormitoryMealData> = combine(
-        dao.observeDormitoryMealDays(),
-        dao.observeSourceStatus(DORMITORY_SOURCE_KEY),
-        dao.observeSyncState(DORMITORY_SOURCE_KEY),
+        dao.observeDormitoryMealDays().distinctUntilChanged(),
+        dao.observeSourceStatus(DORMITORY_SOURCE_KEY).distinctUntilChanged(),
+        dao.observeSyncState(DORMITORY_SOURCE_KEY).distinctUntilChanged(),
     ) { days, status, sync ->
         DormitoryMealData(
             days = days.map { entity ->
@@ -270,7 +274,7 @@ class StaticMealSource(
             serverPublishedAt = sync?.serverPublishedEpochMillis?.let(Instant::ofEpochMilli),
             serverState = sync?.serverState,
         )
-    }
+    }.distinctUntilChanged()
 
     override suspend fun refresh(): MealRefreshResult = refreshMutex.withLock { refreshLocked() }
 

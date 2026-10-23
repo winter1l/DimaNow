@@ -81,6 +81,8 @@ data class ClassContent(
     val courseName: String? = null,
     val room: String? = null,
     val remainingText: String? = null,
+    /** Whole minutes until the class starts; null once it has started. The Now Bar chip shows it (D-109). */
+    val minutesUntilStart: Long? = null,
 )
 
 /**

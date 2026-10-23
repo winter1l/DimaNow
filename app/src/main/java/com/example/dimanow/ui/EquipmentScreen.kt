@@ -58,11 +58,13 @@ import com.example.dimanow.school.SchoolService
 import com.example.dimanow.school.SchoolServiceResult
 import com.example.dimanow.school.dimaCModelAvailabilityScript
 import com.example.dimanow.school.parseEquipmentAvailability
+import com.example.dimanow.school.equipmentCatalogAutoReadAllowed
 import com.example.dimanow.school.parseEquipmentCatalog
 import com.example.dimanow.theme.DimaShapes
 import com.example.dimanow.theme.DimaTheme
 import com.example.dimanow.ui.motion.DimaMotion
 import java.time.DayOfWeek
+import java.time.Instant
 import java.time.LocalDate
 import kotlinx.coroutines.launch
 
@@ -79,7 +81,8 @@ internal fun EquipmentScreen(onBack: () -> Unit, modifier: Modifier = Modifier) 
     val scope = rememberCoroutineScope()
     val catalog by SchoolReadCache.equipmentCatalog.collectAsStateWithLifecycle()
     var loading by remember { mutableStateOf(false) }
-    var error by remember { mutableStateOf<String?>(null) }
+    // A failure from an earlier visit shows again instead of reading DIMA C once more right away (Q-031).
+    var error by remember { mutableStateOf(SchoolReadCache.equipmentCatalogFailure.value?.message) }
     var applyError by remember { mutableStateOf<String?>(null) }
     var guideExpanded by rememberSaveable { mutableStateOf(false) }
     var expanded by rememberSaveable { mutableStateOf<Long?>(null) }
@@ -94,12 +97,16 @@ internal fun EquipmentScreen(onBack: () -> Unit, modifier: Modifier = Modifier) 
         loading = true
         error = null
         scope.launch {
-            when (val result = service.read(SchoolService.DIMA_C, DIMA_C_EQUIPMENT_URL, DIMA_C_EQUIPMENT_CATALOG_SCRIPT, "장비 대여 현황")) {
+            val result = service.read(SchoolService.DIMA_C, DIMA_C_EQUIPMENT_URL, DIMA_C_EQUIPMENT_CATALOG_SCRIPT, "장비 대여 현황")
+            when (result) {
                 is SchoolServiceResult.Success -> runCatching { parseEquipmentCatalog(result.json) }
                     .onSuccess { SchoolReadCache.setEquipmentCatalog(it) }
                     .onFailure { error = "장비 목록을 읽지 못했어요." }
                 is SchoolServiceResult.Failure -> error = result.message
                 SchoolServiceResult.Cancelled -> Unit
+            }
+            if (result !is SchoolServiceResult.Cancelled) {
+                SchoolReadCache.setEquipmentCatalogFailure(error?.let { SchoolReadCache.EquipmentCatalogFailure(it, Instant.now()) })
             }
             loading = false
         }
@@ -132,7 +139,10 @@ internal fun EquipmentScreen(onBack: () -> Unit, modifier: Modifier = Modifier) 
         }
     }
 
-    LaunchedEffect(Unit) { if (catalog == null) loadCatalog() }
+    LaunchedEffect(Unit) {
+        val failedAt = SchoolReadCache.equipmentCatalogFailure.value?.at
+        if (catalog == null && equipmentCatalogAutoReadAllowed(failedAt, Instant.now())) loadCatalog()
+    }
     // The open model is remembered across visits; read its days again if they are not cached any more
     // (a new catalog, or the app process was restarted), instead of showing an empty panel.
     LaunchedEffect(expanded, catalog, availability) {

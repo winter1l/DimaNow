@@ -14,6 +14,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeout
+import java.util.concurrent.atomic.AtomicLong
 
 /** Minute updates without a foreground-service keeper notification. */
 internal class LiveMinuteUpdateScheduler(private val context: Context) {
@@ -27,7 +28,9 @@ internal class LiveMinuteUpdateScheduler(private val context: Context) {
         job = scope.launch {
             while (isActive) {
                 delay(60_000 - System.currentTimeMillis() % 60_000)
-                (context.applicationContext as DimaNowApplication).guidanceRuntimeCoordinator.requestRefresh()
+                if (MinuteRefreshGate.claim()) {
+                    (context.applicationContext as DimaNowApplication).guidanceRuntimeCoordinator.requestRefresh()
+                }
             }
         }
     }
@@ -80,13 +83,31 @@ class LiveMinuteUpdateReceiver : BroadcastReceiver() {
             try {
                 // Leave a retry if cold-start initialization exceeds the broadcast time budget.
                 LiveMinuteUpdateScheduler.scheduleWake(context)
-                withTimeout(8_000) {
-                    val app = context.applicationContext as DimaNowApplication
-                    app.guidanceOrchestrator.refresh(app.guidanceRuntimeCoordinator.awaitSnapshot())
+                if (MinuteRefreshGate.claim()) {
+                    withTimeout(8_000) {
+                        val app = context.applicationContext as DimaNowApplication
+                        app.guidanceOrchestrator.refresh(app.guidanceRuntimeCoordinator.awaitSnapshot())
+                    }
                 }
             } finally {
                 pending.finish()
             }
         }
     }
+}
+
+/**
+ * The in-process ticker and the exact alarm both fire at a minute boundary, so each minute was refreshed twice
+ * (Q-031). Whichever comes first claims the minute and the other skips it. A tick up to two seconds early counts
+ * for the coming minute, since the ticker's monotonic delay and the wall clock can disagree slightly.
+ */
+internal object MinuteRefreshGate {
+    private val lastClaimed = AtomicLong(Long.MIN_VALUE)
+
+    fun claim(nowMillis: Long = System.currentTimeMillis()): Boolean {
+        val minute = (nowMillis + EARLY_TOLERANCE_MILLIS) / 60_000
+        return lastClaimed.getAndSet(minute) != minute
+    }
+
+    private const val EARLY_TOLERANCE_MILLIS = 2_000L
 }

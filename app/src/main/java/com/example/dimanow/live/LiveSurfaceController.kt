@@ -187,6 +187,8 @@ object LiveSurfacePlanner {
 class AndroidLiveSurfaceController(private val context: Context) : LiveSurfaceController {
     private val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
     private val minuteUpdater by lazy { LiveMinuteUpdateScheduler(context.applicationContext) }
+    // The channel is set up once per process, not on every minute's notify (Q-031); diagnostics still check it.
+    @Volatile private var channelReady = false
 
     override fun show(
         snapshot: GuidanceSnapshot,
@@ -213,7 +215,10 @@ class AndroidLiveSurfaceController(private val context: Context) : LiveSurfaceCo
             stopUpdater()
             return LiveSurfaceResult.NOTIFICATION_PERMISSION_DENIED
         }
-        ensureChannel()
+        if (!channelReady) {
+            ensureChannel()
+            channelReady = true
+        }
         val promotionAllowed = delivery.requestPromotion && Build.VERSION.SDK_INT >= 36 && notificationManager.canPostPromotedNotifications()
         try {
             NotificationManagerCompat.from(context).notify(

@@ -393,11 +393,12 @@ private fun schoolServiceWebView(
             return if (scheme in setOf("http", "https") && !SchoolUrlPolicy.isAllowedNavigation(url)) {
                 WebResourceResponse("text/plain", "UTF-8", 403, "Blocked", mapOf("Cache-Control" to "no-store"), ByteArrayInputStream(ByteArray(0)))
             } else if (!onScreen.get() && !webRequest.isForMainFrame && webRequest.url.host == service.host &&
-                isPageDecoration(webRequest.url.path)
+                (isPageDecoration(webRequest.url.path) || service.hiddenReadSkipsPageScripts &&
+                    isPageScript(webRequest.url.path) && isRequestFromPage(refererOf(webRequest), service.host, targetPath))
             ) {
-                // An invisible read needs the site's scripts and data, not its images, fonts or styles: fewer
-                // requests per read (2026-10-23: DIMA C twice refused the phone after repeated reads). Portal
-                // pages load whole, since a challenge on them may be shown to the student.
+                // An invisible read needs the site's data, not its images, fonts or styles, nor on DIMA C the target
+                // page's own scripts: fewer requests per read (2026-10-23: DIMA C twice refused the phone after
+                // repeated reads; Q-031). Portal pages load whole, since a challenge on them may be shown.
                 WebResourceResponse("text/plain", "UTF-8", 204, "No Content", mapOf("Cache-Control" to "no-store"), ByteArrayInputStream(ByteArray(0)))
             } else {
                 super.shouldInterceptRequest(view, webRequest)
@@ -507,6 +508,23 @@ private val DECORATION = Regex("""\.(png|jpe?g|gif|webp|svg|ico|bmp|woff2?|ttf|o
 
 /** Images, fonts, styles and media, which a hidden read does not need. */
 internal fun isPageDecoration(path: String?): Boolean = path != null && DECORATION.containsMatchIn(path)
+
+private val PAGE_SCRIPT = Regex("""\.js$""", RegexOption.IGNORE_CASE)
+
+/** A script file the page loads. */
+internal fun isPageScript(path: String?): Boolean = path != null && PAGE_SCRIPT.containsMatchIn(path)
+
+private fun refererOf(request: WebResourceRequest): String? =
+    request.requestHeaders.entries.firstOrNull { it.key.equals("Referer", ignoreCase = true) }?.value
+
+/**
+ * Whether a request was made by the page at [path] on [host], going by its Referer. Without a Referer it is not
+ * counted as the page's, so a sign-in hop's scripts are never held back.
+ */
+internal fun isRequestFromPage(referer: String?, host: String, path: String): Boolean {
+    val uri = referer?.let { runCatching { java.net.URI(it) }.getOrNull() } ?: return false
+    return uri.host.equals(host, ignoreCase = true) && uri.path.orEmpty().equals(path, ignoreCase = true)
+}
 
 /** A script error that means the site did not answer, as the WebView words it. */
 internal fun isNetworkFailure(message: String): Boolean =

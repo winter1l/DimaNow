@@ -118,7 +118,7 @@ adb devices
 .\gradlew.bat connectedDebugAndroidTest
 ```
 
-`benchmark` 모듈은 API 36 테스트 기기에서 앱 시작, 다섯 탭 이동, 셔틀 시간표 스크롤과 Baseline Profile을 측정합니다. 성능 경로에서는 네트워크 새로고침과 식단 OCR을 실행하지 않습니다.
+`benchmark` 모듈은 API 36 테스트 기기에서 앱 시작, 다섯 탭 이동, 셔틀 시간표 스크롤, 전체의 시간표·기숙사·설정 열기와 Baseline Profile을 측정합니다. Startup Profile에는 첫 실행부터 홈 첫 화면까지만 들어갑니다. 성능 경로에서는 네트워크 새로고침과 식단 OCR을 실행하지 않습니다.
 
 각 변경은 GitHub Actions의 JVM·파이프라인·계측 컴파일·lint·optimized 빌드를 모두 통과해야 합니다. Samsung Now Bar, 실제 세 구역 geofence, 잠금화면·AOD, 하루 배터리는 실제 기기 관찰이 필요한 별도 검수 항목입니다.
 

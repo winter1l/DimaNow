@@ -7,10 +7,15 @@ import androidx.test.uiautomator.Until
 
 internal const val TARGET_PACKAGE = "io.github.winter1l.dimanow"
 
-internal fun MacrobenchmarkScope.runDimaNowJourney() {
+/** Cold start to the first Home frame: the only part that goes into the startup profile. */
+internal fun MacrobenchmarkScope.startDimaNow() {
     pressHome()
     startActivityAndWait()
     dismissFirstRunDialogs(device)
+}
+
+internal fun MacrobenchmarkScope.runDimaNowJourney() {
+    startDimaNow()
     openTab(device, "SHUTTLE")
     device.swipe(
         device.displayWidth * 3 / 4,
@@ -20,12 +25,13 @@ internal fun MacrobenchmarkScope.runDimaNowJourney() {
         12,
     )
     openTab(device, "MEAL")
-    openTab(device, "TIMETABLE")
     openTab(device, "COURSES")
+    // D-110: 시간표, 기숙사 and 설정 open from 전체 and go back to it. 장비 대여 is left out: opening it reads DIMA C.
+    openTab(device, "ALL")
+    openFromAll(device, "all_timetable")
+    openFromAll(device, "all_dorm")
+    openFromAll(device, "all_settings")
     openTab(device, "DASHBOARD")
-    // D-094: Settings opens from the top-bar gear and closes with the leading back action.
-    clickRes(device, "open_settings")
-    clickRes(device, "close_settings")
 }
 
 private fun dismissFirstRunDialogs(device: UiDevice) {
@@ -35,6 +41,12 @@ private fun dismissFirstRunDialogs(device: UiDevice) {
 }
 
 private fun openTab(device: UiDevice, label: String) = clickRes(device, "nav_$label")
+
+private fun openFromAll(device: UiDevice, resourceId: String) {
+    clickRes(device, resourceId)
+    device.pressBack()
+    checkNotNull(device.wait(Until.findObject(By.res("all_list")), 5_000)) { "Back did not return to 전체" }
+}
 
 private fun clickRes(device: UiDevice, resourceId: String) {
     checkNotNull(device.wait(Until.findObject(By.res(resourceId)), 5_000)) {

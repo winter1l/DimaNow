@@ -193,9 +193,10 @@ class DimaNowApplication : Application() {
                 repository.zones,
                 preferences.locationMode,
                 preferences.notificationGuidancePolicy,
-            ) { zones, mode, policy -> Triple(zones, mode, policy) }
-                .collectLatest { (zones, mode, policy) ->
-                    val includeBus4402 = policy.bus4402 != NotificationGuidanceMode.OFF
+            ) { zones, mode, policy -> Triple(zones, mode, policy.bus4402 != NotificationGuidanceMode.OFF) }
+                // Register again only when the plan changes, not when another guidance mode does (Q-031).
+                .distinctUntilChanged()
+                .collectLatest { (zones, mode, includeBus4402) ->
                     if (!includeBus4402) {
                         preferences.setTransitStopProximityState(TransitStopProximityState())
                         val activeCampusGeofences = preferences.activeGeofenceIds.first()

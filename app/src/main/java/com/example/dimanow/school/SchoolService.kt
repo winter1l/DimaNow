@@ -20,6 +20,12 @@ enum class SchoolService(
     val selfForwardingSsoPath: String? = null,
     /** Run on each shown page: presentation only, it never fills in or submits anything. */
     val pageFocusScript: String? = null,
+    /**
+     * A hidden read on this site needs none of the target page's own scripts: its read scripts only `fetch` the
+     * site's JSON with the page's cookies. Skipping them keeps the page from loading its libraries and making
+     * its own requests on every read (Q-031). Pages that may need their scripts (sign-in hops) still get them.
+     */
+    val hiddenReadSkipsPageScripts: Boolean = false,
 ) {
     INTRANET(
         host = "intranet.dima.ac.kr",
@@ -34,6 +40,7 @@ enum class SchoolService(
         host = "udimac.dima.ac.kr",
         label = "DIMA C",
         portalEntry = "https://portal.dima.ac.kr/?r=https://udimac.dima.ac.kr/sso/index.jsp",
+        hiddenReadSkipsPageScripts = true,
     ),
 }
 

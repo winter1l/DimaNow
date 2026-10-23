@@ -6,10 +6,12 @@ import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.core.stringSetPreferencesKey
+import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import com.example.dimanow.domain.CampusZoneId
 import com.example.dimanow.live.LiveChipContent
@@ -44,32 +46,40 @@ data class OnboardingDraft(
 )
 
 class AppPreferences(private val context: Context) {
-    val automaticClassGuidance: Flow<Boolean> = context.settingsDataStore.data.map { true }
+    /**
+     * One value of the settings store that emits only when it changes. Every setting shares one DataStore, so
+     * without this any write (the 4402 proximity state every 30 s near the stop) re-emitted every flow and re-ran
+     * their collectors: geofence registration, the runtime snapshot and the live notification (Q-031).
+     */
+    private fun <T> read(transform: suspend (Preferences) -> T): Flow<T> =
+        context.settingsDataStore.data.map(transform).distinctUntilChanged()
 
-    val lastResolvedZone: Flow<CampusZoneId> = context.settingsDataStore.data.map { preferences ->
+    val automaticClassGuidance: Flow<Boolean> = read { true }
+
+    val lastResolvedZone: Flow<CampusZoneId> = read { preferences ->
         preferences[LAST_RESOLVED_ZONE]?.let { runCatching { CampusZoneId.valueOf(it) }.getOrNull() }
             ?: CampusZoneId.OUTSIDE
     }
 
-    val activeGeofenceIds: Flow<Set<String>> = context.settingsDataStore.data.map { preferences ->
+    val activeGeofenceIds: Flow<Set<String>> = read { preferences ->
         preferences[ACTIVE_GEOFENCES] ?: emptySet()
     }
 
-    val locationMode: Flow<LocationMode> = context.settingsDataStore.data.map { preferences ->
+    val locationMode: Flow<LocationMode> = read { preferences ->
         preferences[LOCATION_MODE]
             ?.let { runCatching { LocationMode.valueOf(it) }.getOrNull() }
             ?: LocationMode.GPS
     }
 
-    val testZone: Flow<CampusZoneId> = context.settingsDataStore.data.map { preferences ->
+    val testZone: Flow<CampusZoneId> = read { preferences ->
         preferences[TEST_ZONE]
             ?.let { runCatching { CampusZoneId.valueOf(it) }.getOrNull() }
             ?: CampusZoneId.OUTSIDE
     }
 
-    val activeTransitStopNumber: Flow<String?> = context.settingsDataStore.data.map { it[ACTIVE_TRANSIT_STOP_NUMBER] }
+    val activeTransitStopNumber: Flow<String?> = read { it[ACTIVE_TRANSIT_STOP_NUMBER] }
 
-    val transitStopProximityState: Flow<TransitStopProximityState> = context.settingsDataStore.data.map { preferences ->
+    val transitStopProximityState: Flow<TransitStopProximityState> = read { preferences ->
         TransitStopProximityState(
             candidateStopNumber = preferences[TRANSIT_CANDIDATE_STOP_NUMBER],
             candidateSince = preferences[TRANSIT_CANDIDATE_SINCE]?.let(Instant::ofEpochMilli),
@@ -78,7 +88,7 @@ class AppPreferences(private val context: Context) {
         )
     }
 
-    val testTransitStopNumber: Flow<String?> = context.settingsDataStore.data.map { it[TEST_TRANSIT_STOP_NUMBER] }
+    val testTransitStopNumber: Flow<String?> = read { it[TEST_TRANSIT_STOP_NUMBER] }
 
     val effectiveZone: Flow<CampusZoneId> = combine(lastResolvedZone, locationMode, testZone) { actual, mode, test ->
         if (mode == LocationMode.TEST) test else actual
@@ -90,7 +100,7 @@ class AppPreferences(private val context: Context) {
         testTransitStopNumber,
     ) { actual, mode, test -> if (mode == LocationMode.TEST) test else actual }
 
-    val liveDisplayOptions: Flow<LiveDisplayOptions> = context.settingsDataStore.data.map { preferences ->
+    val liveDisplayOptions: Flow<LiveDisplayOptions> = read { preferences ->
         LiveDisplayOptions(
             chipContent = preferences[LIVE_CHIP_CONTENT]
                 ?.let { runCatching { LiveChipContent.valueOf(it) }.getOrNull() }
@@ -101,7 +111,7 @@ class AppPreferences(private val context: Context) {
         )
     }
 
-    val notificationGuidancePolicy: Flow<NotificationGuidancePolicy> = context.settingsDataStore.data.map { preferences ->
+    val notificationGuidancePolicy: Flow<NotificationGuidancePolicy> = read { preferences ->
         NotificationGuidancePolicy(
             classGuidance = preferences[NOTIFICATION_CLASS_MODE].toNotificationMode(),
             campusShuttle = preferences[NOTIFICATION_CAMPUS_SHUTTLE_MODE].toNotificationMode(),
@@ -109,40 +119,40 @@ class AppPreferences(private val context: Context) {
         )
     }
 
-    val campusZoneDefaultsVersion: Flow<Int> = context.settingsDataStore.data.map { preferences ->
+    val campusZoneDefaultsVersion: Flow<Int> = read { preferences ->
         preferences[CAMPUS_ZONE_DEFAULTS_VERSION] ?: 1
     }
 
-    val homeBase: Flow<HomeBase> = context.settingsDataStore.data.map { preferences ->
+    val homeBase: Flow<HomeBase> = read { preferences ->
         preferences[HOME_BASE]
             ?.let { runCatching { HomeBase.valueOf(it) }.getOrNull() }
             ?: HomeBase.YEIN
     }
 
-    val homeBaseSelectionConfirmed: Flow<Boolean> = context.settingsDataStore.data.map { preferences ->
+    val homeBaseSelectionConfirmed: Flow<Boolean> = read { preferences ->
         preferences[HOME_BASE_SELECTION_CONFIRMED] ?: false
     }
 
-    val nowBarSetupCompleted: Flow<Boolean> = context.settingsDataStore.data.map { preferences ->
+    val nowBarSetupCompleted: Flow<Boolean> = read { preferences ->
         preferences[NOW_BAR_SETUP_COMPLETED] ?: false
     }
 
     /** 학사 일정 아침 알림 (D-107). 설정에서 끄기 전까지 켜져 있다. */
-    val academicReminders: Flow<Boolean> = context.settingsDataStore.data.map { preferences ->
+    val academicReminders: Flow<Boolean> = read { preferences ->
         preferences[ACADEMIC_REMINDERS] ?: true
     }
 
     /** 학사 일정 알림을 마지막으로 확인한 날(epoch day). 같은 날 두 번 알리지 않는다. */
-    val academicReminderLastDay: Flow<Long?> = context.settingsDataStore.data.map { preferences ->
+    val academicReminderLastDay: Flow<Long?> = read { preferences ->
         preferences[ACADEMIC_REMINDER_LAST_DAY]
     }
 
     /** 최초 실행 권한 온보딩을 끝냈는지. 끝내기 전에는 앱 셸 대신 온보딩이 표시된다 (D-056). */
-    val onboardingCompleted: Flow<Boolean> = context.settingsDataStore.data.map { preferences ->
+    val onboardingCompleted: Flow<Boolean> = read { preferences ->
         preferences[ONBOARDING_COMPLETED] ?: false
     }
 
-    val onboardingDraft: Flow<OnboardingDraft> = context.settingsDataStore.data.map { preferences ->
+    val onboardingDraft: Flow<OnboardingDraft> = read { preferences ->
         val homeBase = preferences[ONBOARDING_DRAFT_HOME_BASE]
             ?.let { runCatching { HomeBase.valueOf(it) }.getOrNull() }
         val stage = preferences[ONBOARDING_STAGE]
@@ -154,11 +164,11 @@ class AppPreferences(private val context: Context) {
         )
     }
 
-    val backgroundWorkPolicyVersion: Flow<Int> = context.settingsDataStore.data.map { preferences ->
+    val backgroundWorkPolicyVersion: Flow<Int> = read { preferences ->
         preferences[BACKGROUND_WORK_POLICY_VERSION] ?: 0
     }
 
-    val appUpdatePreferences: Flow<AppUpdatePreferences> = context.settingsDataStore.data.map { preferences ->
+    val appUpdatePreferences: Flow<AppUpdatePreferences> = read { preferences ->
         val version = preferences[UPDATE_LATEST_VERSION]
         val release = if (
             version != null && preferences[UPDATE_RELEASE_PAGE] != null && preferences[UPDATE_DOWNLOAD_URL] != null &&

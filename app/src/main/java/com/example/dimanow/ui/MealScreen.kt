@@ -114,7 +114,8 @@ fun MealScreen(
     var reportWeek by remember { mutableStateOf<LocalDate?>(null) }
     var preparingDormitoryImage by remember { mutableStateOf(false) }
     var uploadingDormitoryMeal by remember { mutableStateOf(false) }
-    var cameraOutput by remember { mutableStateOf<Uri?>(null) }
+    // Saveable so a photo taken while the system kills the app for the camera still arrives (Q-031).
+    var cameraOutput by rememberSaveable { mutableStateOf<Uri?>(null) }
     var refreshMessage by remember { mutableStateOf<String?>(null) }
 
     fun loadImage(uri: Uri) {
@@ -134,6 +135,11 @@ fun MealScreen(
                 refreshMessage = "식단 사진을 읽지 못했어요. 다른 사진을 선택해 주세요."
             } finally {
                 preparingDormitoryImage = false
+                // The photo is in memory now; the camera's copy is not kept (Q-031).
+                if (uri == cameraOutput) {
+                    dormMealCaptureFile(context).delete()
+                    cameraOutput = null
+                }
             }
         }
     }
@@ -141,7 +147,12 @@ fun MealScreen(
         uri?.let(::loadImage)
     }
     val cameraLauncher = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { saved ->
-        if (saved) cameraOutput?.let(::loadImage)
+        if (saved) {
+            cameraOutput?.let(::loadImage)
+        } else {
+            dormMealCaptureFile(context).delete()
+            cameraOutput = null
+        }
     }
 
     suspend fun submitAndWatch(image: DormitoryMealImage) {
@@ -355,8 +366,10 @@ fun MealScreen(
                     TextButton(shapes = ButtonDefaults.shapes(), 
                         onClick = {
                             showDormitoryPhotoSource = false
-                            val file = File(context.cacheDir, "dorm-meals/capture-${System.currentTimeMillis()}.jpg").apply {
+                            // One capture file, overwritten each time; earlier builds left one file per photo.
+                            val file = dormMealCaptureFile(context).apply {
                                 parentFile?.mkdirs()
+                                parentFile?.listFiles()?.forEach { old -> if (old.name != name) old.delete() }
                             }
                             val outputUri = FileProvider.getUriForFile(context, "${context.packageName}.updates", file)
                             cameraOutput = outputUri
@@ -778,3 +791,6 @@ private fun DormitoryReportDialog(onDismiss: () -> Unit, onReport: (com.example.
         dismissButton = { TextButton(shapes = ButtonDefaults.shapes(), onClick = onDismiss) { Text("취소") } },
     )
 }
+
+/** Where the camera writes a 기숙사 식단 photo before it is read into memory. */
+private fun dormMealCaptureFile(context: android.content.Context): File = File(context.cacheDir, "dorm-meals/capture.jpg")

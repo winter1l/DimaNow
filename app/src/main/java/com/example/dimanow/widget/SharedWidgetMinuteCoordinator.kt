@@ -52,10 +52,12 @@ class SharedWidgetMinuteCoordinator(private val context: Context) {
             return
         }
         val trigger = plan.triggerAt!!.toEpochMilli()
+        // Not a wake-up alarm: the widgets are on the home screen only, so with the screen off a minute tick would
+        // wake the phone for nothing (Q-031). A tick missed while asleep fires as soon as the phone wakes.
         if (alarm.canScheduleExactAlarms()) {
-            alarm.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, trigger, pendingIntent)
+            alarm.setExact(AlarmManager.RTC, trigger, pendingIntent)
         } else {
-            alarm.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, trigger, pendingIntent)
+            alarm.set(AlarmManager.RTC, trigger, pendingIntent)
         }
     }
 

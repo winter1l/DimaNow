@@ -1,6 +1,7 @@
 package com.example.dimanow.school
 
 import java.io.File
+import java.time.Duration
 import java.time.Instant
 import java.time.LocalDate
 import kotlinx.coroutines.CoroutineScope
@@ -162,13 +163,35 @@ object SchoolReadCache {
         mutableEquipmentAvailability.value = mutableEquipmentAvailability.value + (modelNo to days)
     }
 
+    /** Why the last catalog read failed and when; cleared by a successful read. */
+    data class EquipmentCatalogFailure(val message: String, val at: Instant)
+
+    private val mutableEquipmentCatalogFailure = MutableStateFlow<EquipmentCatalogFailure?>(null)
+    val equipmentCatalogFailure: StateFlow<EquipmentCatalogFailure?> = mutableEquipmentCatalogFailure.asStateFlow()
+
+    fun setEquipmentCatalogFailure(failure: EquipmentCatalogFailure?) {
+        mutableEquipmentCatalogFailure.value = failure
+    }
+
     fun clear() {
         mutableDormPoints.value = null
         mutableEquipmentCatalog.value = null
         mutableEquipmentAvailability.value = emptyMap()
+        mutableEquipmentCatalogFailure.value = null
         dormPointsFile?.let { file -> io.launch { file.delete() } }
     }
 }
+
+/** How long a failed catalog read keeps the page from reading DIMA C again by itself (Q-031). */
+internal val EQUIPMENT_CATALOG_RETRY_PAUSE: Duration = Duration.ofMinutes(5)
+
+/**
+ * Whether opening 장비 대여 may read the catalog by itself: not within [EQUIPMENT_CATALOG_RETRY_PAUSE] of a failed
+ * read, so leaving and reopening the page while DIMA C refuses the phone (Q-029) does not read it again each time.
+ * 다시 시도 and pull-to-refresh still read at once.
+ */
+internal fun equipmentCatalogAutoReadAllowed(failedAt: Instant?, now: Instant): Boolean =
+    failedAt == null || Duration.between(failedAt, now) >= EQUIPMENT_CATALOG_RETRY_PAUSE
 
 /** The saved form of a 상벌점 read: the latest term's totals and entries, nothing else from the page. */
 internal fun encodeDormPointsRead(read: SchoolReadCache.DormPointsRead): String = buildJsonObject {

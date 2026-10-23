@@ -187,4 +187,18 @@ class SchoolReadersTest {
         assertTrue(isNetworkFailure("TypeError: NetworkError when attempting to fetch resource."))
         assertFalse(isNetworkFailure("인트라넷에서 시간표 표를 찾지 못했어요."))
     }
+
+    @Test
+    fun `a hidden DIMA C read holds back only the target page's own scripts`() {
+        val target = "/forward/ST/MP/RT/ST_MPRT01_L01.do"
+        assertTrue(SchoolService.DIMA_C.hiddenReadSkipsPageScripts)
+        assertFalse(SchoolService.INTRANET.hiddenReadSkipsPageScripts)
+        assertTrue(isPageScript("/js/jquery.min.js"))
+        assertFalse(isPageScript("/ajax/ST_MPRT01_SVC/ST_MPRT01_R10.do"))
+        assertTrue(isRequestFromPage("https://udimac.dima.ac.kr$target?MENU_CD=03120101", "udimac.dima.ac.kr", target))
+        // A sign-in hop or another page keeps its scripts, and so does a request without a Referer.
+        assertFalse(isRequestFromPage("https://udimac.dima.ac.kr/sso/index.jsp", "udimac.dima.ac.kr", target))
+        assertFalse(isRequestFromPage("https://portal.dima.ac.kr$target", "udimac.dima.ac.kr", target))
+        assertFalse(isRequestFromPage(null, "udimac.dima.ac.kr", target))
+    }
 }

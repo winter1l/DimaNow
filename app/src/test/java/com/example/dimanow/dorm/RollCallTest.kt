@@ -104,6 +104,17 @@ class RollCallTest {
     }
 
     @Test
+    fun `an announcement read again on reconnect is kept once`() {
+        RollCallStore.clear()
+        val notice = requireNotNull(RollCallNoticeParser.parse(held, tuesday))
+        RollCallStore.add(notice, tuesday.toLocalDate())
+        // D-115: the listener reads the shade again each time it connects.
+        RollCallStore.add(requireNotNull(RollCallNoticeParser.parse(held, tuesday)), tuesday.toLocalDate())
+        assertEquals(listOf(notice), RollCallStore.notices.value)
+        RollCallStore.clear()
+    }
+
+    @Test
     fun `the 오늘 card names the source and the deadline`() {
         val held = requireNotNull(RollCallNoticeParser.parse(held, tuesday))
         assertEquals(

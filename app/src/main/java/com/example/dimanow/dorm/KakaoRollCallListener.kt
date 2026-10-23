@@ -16,9 +16,16 @@ import java.time.ZonedDateTime
 class KakaoRollCallListener : NotificationListenerService() {
     override fun onListenerConnected() {
         RollCallStore.attach(this)
+        // D-115: an announcement already in the shade — posted before access was allowed, or while the listener was
+        // unbound for an app update — is read on connect too. Reading one again adds nothing: the store keeps each once.
+        runCatching { activeNotifications }.getOrNull().orEmpty().forEach(::read)
     }
 
     override fun onNotificationPosted(sbn: StatusBarNotification) {
+        read(sbn)
+    }
+
+    private fun read(sbn: StatusBarNotification) {
         if (sbn.packageName != KAKAO_TALK) return
         val notification = sbn.notification ?: return
         if (notification.flags and Notification.FLAG_GROUP_SUMMARY != 0) return

@@ -10,7 +10,7 @@ Observed: main 2baac30 (not pushed) has D-102..D-105. The worktree branch `claud
 D-108 is committed on the branch (66e095f); merge into main and push / publish v2.1 only when asked. 2027 학사일정 when the school posts it (Q-026).
 
 ## Next first action
-`dist/d114-contrast/` is on the phone; D-114 is not committed yet. Once the user allows notification access, confirm a real 점호 announcement reaches the 기숙사 오늘 card; look at the class chip before a class. If wireless ADB drops after an adb server restart, `adb connect` the last-known endpoint from `.local/device-connections.json` (main checkout); reply in Korean.
+`dist/d114-contrast/` is on the phone; D-114 is committed on `claude/ux-guide-pass` (not pushed). Once the user allows notification access, confirm a real 점호 announcement reaches the 기숙사 오늘 card; look at the class chip before a class. If wireless ADB drops after an adb server restart, `adb connect` the last-known endpoint from `.local/device-connections.json` (main checkout); reply in Korean.
 
 ## Open follow-ups
 OPEN-QUESTIONS Q-021..Q-023, Q-025, Q-026, Q-029; Material3 1.5.0 stable; graphify code graph of `app/src` in `graphify-out/` (refresh with `graphify update`).

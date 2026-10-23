@@ -11,40 +11,30 @@ class LmsAgendaPlannerTest {
     private val planner = LmsAgendaPlanner(clock)
 
     @Test
-    fun todayAgendaSeparatesFreshOverdueFourCalendarDatesAndCompleted() {
+    fun todoPutsEveryComingDeadlineFirstThenNewsThenMissedThenCompleted() {
         val items = listOf(
             item("fresh", registeredAt = "2026-08-30T04:30:00Z", change = LmsChangeState.NEW),
+            item("long-overdue", dueAt = "2026-08-01T00:00:00Z", completion = LmsCompletionState.INCOMPLETE),
             item("overdue", dueAt = "2026-09-01T02:59:59Z", completion = LmsCompletionState.INCOMPLETE),
-            item("today", dueAt = "2026-09-01T14:59:59Z"),
             item("tomorrow", dueAt = "2026-09-02T00:00:00Z"),
-            item("third", dueAt = "2026-09-03T00:00:00Z"),
-            item("fourth", dueAt = "2026-09-04T00:00:00Z"),
-            item("outside", dueAt = "2026-09-05T00:00:00Z"),
+            item("today", dueAt = "2026-09-01T14:59:59Z"),
+            // D-117: a deadline weeks away is part of 할 일 too, not only of 과목별.
+            item("next-month", dueAt = "2026-10-05T00:00:00Z"),
+            item("quiet", registeredAt = "2026-08-30T04:30:00Z"),
             item("done", dueAt = "2026-08-20T00:00:00Z", completion = LmsCompletionState.COMPLETE),
         )
 
         val agenda = planner.plan(items)
 
         assertEquals(
-            listOf(
-                LmsAgendaGroupKey.FRESH,
-                LmsAgendaGroupKey.OVERDUE,
-                LmsAgendaGroupKey.DATE,
-                LmsAgendaGroupKey.DATE,
-                LmsAgendaGroupKey.DATE,
-                LmsAgendaGroupKey.DATE,
-                LmsAgendaGroupKey.COMPLETED,
-            ),
+            listOf(LmsAgendaGroupKey.UPCOMING, LmsAgendaGroupKey.FRESH, LmsAgendaGroupKey.OVERDUE, LmsAgendaGroupKey.COMPLETED),
             agenda.groups.map { it.key },
         )
         assertEquals(
             listOf(
+                listOf("today", "tomorrow", "next-month"),
                 listOf("fresh"),
-                listOf("overdue"),
-                listOf("today"),
-                listOf("tomorrow"),
-                listOf("third"),
-                listOf("fourth"),
+                listOf("overdue", "long-overdue"),
                 listOf("done"),
             ),
             agenda.groups.map { group -> group.items.map { it.id } },

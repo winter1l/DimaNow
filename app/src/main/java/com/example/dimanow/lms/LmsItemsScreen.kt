@@ -1,55 +1,65 @@
 package com.example.dimanow.lms
 
-import androidx.compose.material3.IconButtonDefaults
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Article
+import androidx.compose.material.icons.automirrored.filled.Assignment
 import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material.icons.filled.Campaign
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material3.Button
-import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material.icons.filled.Description
+import androidx.compose.material.icons.filled.Forum
+import androidx.compose.material.icons.filled.Groups
+import androidx.compose.material.icons.filled.HistoryEdu
+import androidx.compose.material.icons.filled.PlayCircle
+import androidx.compose.material.icons.filled.QuestionAnswer
+import androidx.compose.material.icons.filled.Quiz
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ListItem
+import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.ListItemDefaults
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.SegmentedListItem
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.key
-import androidx.compose.runtime.setValue
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.material.icons.filled.Videocam
-import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
+import com.example.dimanow.theme.DimaTheme
+import com.example.dimanow.ui.DimaIconBadge
+import com.example.dimanow.ui.DimaSegmentedList
 import com.example.dimanow.ui.EmptyState
 import com.example.dimanow.ui.ErrorState
 import com.example.dimanow.ui.ScreenScaffold
+import com.example.dimanow.ui.SettingsExpander
+import com.example.dimanow.ui.SettingsSectionHeader
+import com.example.dimanow.ui.dimaSegmentedListColors
 import java.time.Clock
 import java.time.Instant
-import java.time.format.DateTimeFormatter
-import java.util.Locale
 
 /**
  * 종류·과목을 각각 드롭다운 칩 하나로 접은 고정 필터 바 (D-058).
@@ -141,31 +151,30 @@ private fun <T> LmsFilterMenuChip(
     }
 }
 
-/** 오늘 탭의 날짜 머리글과 전체 탭의 과목 머리글이 함께 쓰는 구분선 (D-058). */
+/** A section's heading with how many rows it holds; screen readers can jump between sections (D-117). */
 @Composable
-private fun LmsSectionHeader(title: String) {
-    Text(
-        text = title,
-        style = MaterialTheme.typography.titleSmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = Modifier.padding(top = 8.dp).semantics { heading() },
-    )
+private fun LmsSectionHeader(title: String, count: Int) {
+    SettingsSectionHeader("$title · ${count}개")
 }
 
-/** 완료한 학습을 접었다 펴는 머리글. 오늘·전체 두 모드가 같은 것을 쓴다 (D-058). */
+/** 완료한 학습, folded under one row that says how many there are (D-117, as D-058 folded it). */
 @Composable
-private fun LmsCompletedHeader(count: Int, expanded: Boolean, onToggle: () -> Unit) {
-    TextButton(shapes = ButtonDefaults.shapes(), 
-        onClick = onToggle,
-        modifier = Modifier.fillMaxWidth().testTag("lms_completed_toggle"),
-    ) {
-        Text(
-            "완료한 학습 · ${count}개",
-            style = MaterialTheme.typography.titleSmall,
-            modifier = Modifier.weight(1f),
+private fun LmsCompletedSection(
+    items: List<LmsItem>,
+    expanded: Boolean,
+    onToggle: () -> Unit,
+    now: Instant,
+    onOpenItem: (LmsItem) -> Unit,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        SettingsExpander(
+            title = "완료한 학습",
+            supporting = "${items.size}개",
+            expanded = expanded,
+            onToggle = onToggle,
+            modifier = Modifier.testTag("lms_completed_toggle"),
         )
-        Spacer(Modifier.size(8.dp))
-        Text(if (expanded) "접기" else "보기")
+        if (expanded) LmsItemList(items, now, onOpenItem, completed = true)
     }
 }
 
@@ -189,11 +198,11 @@ internal fun LmsItemsScreen(
     val hasError = loginErrorMessage != null || sessionState == LmsSessionState.ERROR || snapshot.syncState == LmsSyncState.ERROR
     var todayMode by rememberSaveable { mutableStateOf(true) }
     var completedExpanded by rememberSaveable { mutableStateOf(false) }
-    // 오늘 모드에서도 선택한 필터를 그대로 적용한다 (이전에는 칩이 조용히 무시됐다)
+    // 할 일에서도 선택한 필터를 그대로 적용한다 (이전에는 칩이 조용히 무시됐다)
     val agenda = remember(filtered, now) {
         LmsAgendaPlanner(Clock.fixed(now, SEOUL)).plan(filtered, now)
     }
-    // 전체 모드는 과목 순서로 묶고 완료한 학습을 아래로 내린다 (D-058)
+    // 과목별은 과목 순서로 묶고 완료한 학습을 아래로 내린다 (D-058)
     val coursePlan = remember(filtered, snapshot.courses) { planLmsByCourse(filtered, snapshot.courses) }
     val visibleEmpty = if (todayMode) {
         agenda.groups.none { it.key != LmsAgendaGroupKey.COMPLETED }
@@ -210,11 +219,10 @@ internal fun LmsItemsScreen(
         refreshing = syncing && !visibleEmpty,
         refreshLabel = "수업 새로고침",
         // 모드 전환과 필터는 목록을 아무리 내려도 항상 닿을 수 있어야 한다 (D-057).
-        // 이전에는 목록의 첫 항목이라 스크롤과 함께 사라졌고, 필터가 세 줄을 차지했다.
         subHeader = {
-            // D-103: 모드 전환은 M3 연결형 버튼 그룹이다
+            // D-103: 모드 전환은 M3 연결형 버튼 그룹이다. D-117: 하단 탭 '전체'와 겹치지 않게 '할 일'·'과목별'로 부른다
             com.example.dimanow.ui.DimaConnectedChoice(
-                options = listOf(true to "오늘", false to "전체"),
+                options = listOf(true to "할 일", false to "과목별"),
                 selected = todayMode,
                 onSelect = { todayMode = it },
                 itemTag = { if (it) "lms_mode_today" else "lms_mode_all" },
@@ -240,6 +248,18 @@ internal fun LmsItemsScreen(
                     lastSuccessAt = snapshot.lastSuccessAt,
                     onRetry = onRefresh,
                 )
+            }
+        } else if (!visibleEmpty) {
+            // D-117: 목록이 언제 것인지 한 줄로 알린다
+            snapshot.lastSuccessAt?.let { readAt ->
+                item(key = "lms_updated") {
+                    Text(
+                        lmsUpdatedLabel(readAt, now),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(horizontal = 4.dp).testTag("lms_updated"),
+                    )
+                }
             }
         }
 
@@ -279,8 +299,13 @@ internal fun LmsItemsScreen(
                             needsSignIn -> "수업 정보를 확인하려면 로그인해 주세요"
                             neverLoaded -> "아직 불러온 수업 정보가 없어요"
                             filterActive -> "선택한 조건에 맞는 학습이 없어요"
-                            todayMode -> "오늘 확인할 학습이 없어요"
+                            todayMode -> "남은 할 일이 없어요"
                             else -> "등록된 학습이 없어요"
+                        },
+                        supporting = if (todayMode && !needsSignIn && !neverLoaded && !filterActive) {
+                            "새 과제나 공지가 올라오면 여기에 보여요."
+                        } else {
+                            null
                         },
                         actionLabel = when {
                             needsSignIn -> "다시 시도"
@@ -300,52 +325,32 @@ internal fun LmsItemsScreen(
         }
         // Keep cached completed learning available below the status, even while refreshing or retrying.
         if (todayMode) {
+            // D-117: 다가오는 마감 → 새 소식 → 기한 지남, 섹션마다 카드 묶음 하나
             agenda.groups.forEach { group ->
-                item(key = "agenda-${group.key}-${group.date}") {
+                item(key = "agenda-${group.key}") {
                     if (group.key == LmsAgendaGroupKey.COMPLETED) {
-                        LmsCompletedHeader(
-                            count = group.items.size,
-                            expanded = completedExpanded,
-                            onToggle = { completedExpanded = !completedExpanded },
-                        )
+                        LmsCompletedSection(group.items, completedExpanded, { completedExpanded = !completedExpanded }, now, onOpenItem)
                     } else {
-                        LmsSectionHeader(agendaGroupTitle(group))
-                    }
-                }
-                if (group.key != LmsAgendaGroupKey.COMPLETED || completedExpanded) {
-                    group.items.forEach { groupItem ->
-                        item(key = "today-${groupItem.kind}-${groupItem.courseId}-${groupItem.id}") {
-                            LmsItemCard(groupItem, onOpenItem)
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            LmsSectionHeader(group.title, group.items.size)
+                            LmsItemList(group.items, now, onOpenItem)
                         }
                     }
                 }
             }
         } else {
-            // 전체 모드: 과목 순서대로 묶고, 완료한 학습은 오늘 탭과 똑같이 맨 아래에 접어 둔다 (D-058)
+            // 과목별: 과목 순서대로 묶고, 완료한 학습은 할 일과 똑같이 맨 아래에 접어 둔다 (D-058)
             coursePlan.groups.forEach { group ->
                 item(key = "course-${group.courseId}") {
-                    LmsSectionHeader("${group.courseName} · ${group.items.size}")
-                }
-                group.items.forEach { courseItem ->
-                    item(key = "all-${courseItem.kind}-${courseItem.courseId}-${courseItem.id}") {
-                        LmsItemCard(courseItem, onOpenItem, showCourseName = false)
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        LmsSectionHeader(group.courseName, group.items.size)
+                        LmsItemList(group.items, now, onOpenItem, showCourseName = false)
                     }
                 }
             }
             if (coursePlan.completed.isNotEmpty()) {
-                item(key = "all-completed-header") {
-                    LmsCompletedHeader(
-                        count = coursePlan.completed.size,
-                        expanded = completedExpanded,
-                        onToggle = { completedExpanded = !completedExpanded },
-                    )
-                }
-                if (completedExpanded) {
-                    coursePlan.completed.forEach { completedItem ->
-                        item(key = "all-done-${completedItem.kind}-${completedItem.courseId}-${completedItem.id}") {
-                            LmsItemCard(completedItem, onOpenItem)
-                        }
-                    }
+                item(key = "all-completed") {
+                    LmsCompletedSection(coursePlan.completed, completedExpanded, { completedExpanded = !completedExpanded }, now, onOpenItem)
                 }
             }
         }
@@ -370,71 +375,91 @@ private fun LmsRefreshErrorBanner(
     )
 }
 
+/** One section's rows as an M3 Expressive segmented list on the card tone, as the 전체 and 설정 pages are (D-117). */
 @Composable
-private fun LmsItemCard(item: LmsItem, onOpenItem: (LmsItem) -> Unit, showCourseName: Boolean = true) {
-    ListItem(
-        modifier = Modifier.fillMaxWidth().clickable(role = Role.Button, onClick = { onOpenItem(item) }),
-        colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.surface),
-        headlineContent = { Text(item.title, style = MaterialTheme.typography.titleMedium) },
-        supportingContent = {
-        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                LmsMetadataLabel(kindLabel(item.kind), prominent = false)
-                if (showCourseName) Text(
-                    item.courseName,
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.weight(1f),
-                )
-                // 읽음/안읽음 배지는 제거했다 — 새 항목·완료 여부만 남긴다 (D-058)
-            }
-            item.dueAt?.let {
-                Text("마감 ${LMS_TIME.format(it.atZone(SEOUL))}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            } ?: item.registeredAt?.let {
-                Text("등록 ${LMS_TIME.format(it.atZone(SEOUL))}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-            val badges = buildList {
-                when (item.changeState) {
-                    LmsChangeState.NEW -> add("새 항목")
-                    LmsChangeState.UPDATED -> add("변경됨")
-                    LmsChangeState.NONE -> Unit
-                }
-                when (item.completionState) {
-                    LmsCompletionState.COMPLETE -> add(
-                        if (item.kind == LmsItemKind.CONTENT) "수강 완료" else "완료",
-                    )
-                    LmsCompletionState.INCOMPLETE -> add(
-                        if (item.kind == LmsItemKind.CONTENT) "미수강" else "미완료",
-                    )
-                    LmsCompletionState.NOT_TRACKED, LmsCompletionState.UNKNOWN -> Unit
-                }
-            }
-            if (badges.isNotEmpty()) {
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    badges.forEach { badge -> LmsMetadataLabel(badge, prominent = badge == "새 항목" || badge == "변경됨") }
-                }
+private fun LmsItemList(
+    items: List<LmsItem>,
+    now: Instant,
+    onOpenItem: (LmsItem) -> Unit,
+    showCourseName: Boolean = true,
+    completed: Boolean = false,
+) {
+    DimaSegmentedList {
+        items.forEachIndexed { index, item ->
+            key(item.kind, item.courseId, item.id) {
+                LmsItemRow(item, index, items.size, now, onOpenItem, showCourseName, completed)
             }
         }
-        },
-    )
-}
-
-@Composable
-private fun LmsMetadataLabel(label: String, prominent: Boolean) {
-    Text(
-        label,
-        style = if (prominent) MaterialTheme.typography.labelMediumEmphasized else MaterialTheme.typography.labelMedium,
-        color = if (prominent) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-    )
-}
-
-private fun agendaGroupTitle(group: LmsAgendaGroup): String = when (group.key) {
-    LmsAgendaGroupKey.DATE -> if (group.title == "오늘") {
-        "오늘"
-    } else {
-        group.date?.format(DateTimeFormatter.ofPattern("M월 d일 EEEE", Locale.KOREAN)) ?: group.title
     }
-    else -> group.title
+}
+
+/**
+ * One learning item (D-117): its kind as an icon, the title, `새 항목 · 과제 · 과목` and the exact deadline below,
+ * and on the right how much time is left. Only a deadline within about two days takes the warning color, and its
+ * words say so too. Completion is the section's job, so rows no longer repeat 미완료.
+ */
+@Composable
+private fun LmsItemRow(
+    item: LmsItem,
+    index: Int,
+    count: Int,
+    now: Instant,
+    onOpenItem: (LmsItem) -> Unit,
+    showCourseName: Boolean,
+    completed: Boolean,
+) {
+    val due = if (completed) null else item.dueAt?.let { lmsDueLabel(it, now) }
+    val changeColor = MaterialTheme.colorScheme.primary
+    val meta = buildAnnotatedString {
+        when (item.changeState) {
+            LmsChangeState.NEW -> "새 항목"
+            LmsChangeState.UPDATED -> "변경됨"
+            LmsChangeState.NONE -> null
+        }?.let { change ->
+            withStyle(SpanStyle(color = changeColor, fontWeight = FontWeight.Bold)) { append(change) }
+            append(" · ")
+        }
+        append(kindLabel(item.kind))
+        if (showCourseName) append(" · ${item.courseName}")
+    }
+    SegmentedListItem(
+        onClick = { onOpenItem(item) },
+        shapes = ListItemDefaults.segmentedShapes(index = index, count = count),
+        modifier = Modifier.semantics { onClick(label = "열기") { onOpenItem(item); true } },
+        leadingContent = { DimaIconBadge(lmsKindIcon(item.kind)) },
+        trailingContent = due?.let { label ->
+            {
+                Text(
+                    label.text,
+                    style = if (label.urgent) MaterialTheme.typography.labelLargeEmphasized else MaterialTheme.typography.labelLarge,
+                    color = if (label.urgent) DimaTheme.colors.warning else MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        },
+        supportingContent = {
+            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text(meta, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                lmsWhenLine(item)?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
+            }
+        },
+        colors = dimaSegmentedListColors(),
+    ) {
+        Text(item.title, maxLines = 2, overflow = TextOverflow.Ellipsis)
+    }
+}
+
+/** Each kind's mark in the row's tonal circle; decorative, the row's text names the kind. */
+internal fun lmsKindIcon(kind: LmsItemKind): ImageVector = when (kind) {
+    LmsItemKind.NOTICE -> Icons.Default.Campaign
+    LmsItemKind.ASSIGNMENT -> Icons.AutoMirrored.Filled.Assignment
+    LmsItemKind.CONTENT -> Icons.Default.PlayCircle
+    LmsItemKind.MATERIAL -> Icons.Default.Description
+    LmsItemKind.QUESTION -> Icons.Default.QuestionAnswer
+    LmsItemKind.DISCUSSION -> Icons.Default.Forum
+    LmsItemKind.TEAM_PROJECT -> Icons.Default.Groups
+    LmsItemKind.QUIZ -> Icons.Default.Quiz
+    LmsItemKind.EXAM -> Icons.Default.HistoryEdu
+    LmsItemKind.OTHER -> Icons.AutoMirrored.Filled.Article
 }
 
 /** 과목과 종류로만 거른다. 읽음/안읽음 필터는 제거했다 (D-058). */

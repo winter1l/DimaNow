@@ -145,3 +145,5 @@ Resolved 2026-10-23: Q-027 — on the phone (SM-S918N, saved portal account) 상
 - Q-029 (open, D-108): on 2026-10-23 01:47–01:52 KST DIMA C's HTTPS (`udimac.dima.ac.kr:443`) reset connections from the phone's LTE address while port 80, the portal, intranet, LMS and the PC's network worked; it recovered by itself. Assumed (not confirmed) a rate limit after repeated test reads; the catalog now pauses between group requests. Watch for it in normal use.
 
 Resolved 2026-10-23: Q-028 — the user confirmed that DIMA C에서 신청하기 keeps opening signed in inside the app (D-108 confirmation).
+
+- Q-029 update (2026-10-23): DIMA C's HTTPS reset the phone's LTE address again about 11:52–11:57 KST after repeated test reads (install, catalog, model days). Hidden reads now skip page decoration on the service hosts (D-111). Still assumed, not confirmed, to be a rate limit.

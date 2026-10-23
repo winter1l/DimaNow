@@ -1,5 +1,7 @@
 package com.example.dimanow.ui
 
+import androidx.compose.material.icons.filled.Flag
+import androidx.compose.material.icons.filled.CloudUpload
 import androidx.compose.material3.ButtonDefaults
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -353,6 +355,7 @@ fun MealScreen(
     }
     if (showDormitoryPhotoSource) {
         AlertDialog(
+            icon = { DimaDialogIcon(Icons.Default.PhotoCamera, DialogTone.INFO) },
             onDismissRequest = { showDormitoryPhotoSource = false },
             title = { Text("기숙사 식단표") },
             text = {
@@ -401,6 +404,7 @@ fun MealScreen(
     }
     pendingImage?.let { image ->
         AlertDialog(
+            icon = { DimaDialogIcon(Icons.Default.CloudUpload, DialogTone.INFO) },
             onDismissRequest = { pendingImage = null },
             title = { Text("기숙사 식단 올리기") },
             // D-100: 비공개 보관·30일 삭제, AI 처리와 학습 활용 가능성, 촬영 정보 제거를 올리기 전에 알린다
@@ -765,6 +769,7 @@ private fun DormitoryUploadProgressCard(modifier: Modifier = Modifier) {
 private fun DormitoryReportDialog(onDismiss: () -> Unit, onReport: (com.example.dimanow.meal.DormitoryMealReportReason) -> Unit) {
     var selected by remember { mutableStateOf<com.example.dimanow.meal.DormitoryMealReportReason?>(null) }
     AlertDialog(
+        icon = { DimaDialogIcon(Icons.Default.Flag, DialogTone.WARNING) },
         onDismissRequest = onDismiss,
         title = { Text("이 식단을 신고할까요?") },
         text = {

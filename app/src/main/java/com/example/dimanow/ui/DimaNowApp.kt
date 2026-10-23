@@ -21,6 +21,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Apartment
 import androidx.compose.material.icons.filled.DirectionsBus
 import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Restaurant
 import androidx.compose.material.icons.filled.Schedule
@@ -110,6 +111,8 @@ internal enum class AppPage(val title: String, val icon: ImageVector, val outlin
     DORM("기숙사", Icons.Default.Apartment),
     EQUIPMENT("장비 대여", Icons.Default.Videocam),
     SETTINGS("설정", Icons.Default.Settings),
+    // D-119: updates and 이 앱에 대해, moved out of 설정.
+    APP_INFO("앱 정보", Icons.Default.Info),
     ;
 
     val usesMinuteTicker: Boolean
@@ -117,7 +120,7 @@ internal enum class AppPage(val title: String, val icon: ImageVector, val outlin
 
     /** Pages opened from 전체 (or Home's timetable buttons): no navigation bar, a Back action instead. */
     val isSubPage: Boolean
-        get() = this == TIMETABLE || this == DORM || this == EQUIPMENT || this == SETTINGS
+        get() = this == TIMETABLE || this == DORM || this == EQUIPMENT || this == SETTINGS || this == APP_INFO
 }
 
 internal val primaryAppPages = listOf(
@@ -361,11 +364,6 @@ fun DimaNowApp(
                     mealSource = mealSource,
                     liveSurfaceController = liveSurfaceController,
                     onShowNowBarSetup = { showNowBarSetup = true },
-                    updateState = updateState,
-                    onCheckUpdate = { appUpdateCoordinator?.checkManually() },
-                    onDownloadUpdate = { appUpdateCoordinator?.downloadAndInstall() },
-                    onContinueInstall = { appUpdateCoordinator?.continueInstall() },
-                    onCancelDownload = { appUpdateCoordinator?.cancelDownload() },
                     lmsCredentialStore = lmsCredentialStore,
                     lmsSessionController = lmsSessionController,
                     lmsSource = lmsSource,
@@ -373,6 +371,15 @@ fun DimaNowApp(
                     modifier = pageModifier,
                 )
                 AppPage.EQUIPMENT -> EquipmentScreen(
+                    onBack = { page = subPageReturn },
+                    modifier = pageModifier,
+                )
+                AppPage.APP_INFO -> AppInfoScreen(
+                    updateState = updateState,
+                    onCheckUpdate = { appUpdateCoordinator?.checkManually() },
+                    onDownloadUpdate = { appUpdateCoordinator?.downloadAndInstall() },
+                    onContinueInstall = { appUpdateCoordinator?.continueInstall() },
+                    onCancelDownload = { appUpdateCoordinator?.cancelDownload() },
                     onBack = { page = subPageReturn },
                     modifier = pageModifier,
                 )
@@ -522,11 +529,6 @@ private fun SettingsRoute(
     mealSource: MealSource,
     liveSurfaceController: LiveSurfaceController,
     onShowNowBarSetup: () -> Unit,
-    updateState: AppUpdateUiState,
-    onCheckUpdate: () -> Unit,
-    onDownloadUpdate: () -> Unit,
-    onContinueInstall: () -> Unit,
-    onCancelDownload: () -> Unit,
     lmsCredentialStore: LmsCredentialStore,
     lmsSessionController: LmsSessionController,
     lmsSource: LmsSource,
@@ -573,11 +575,6 @@ private fun SettingsRoute(
         shuttleData = shuttle,
         mealData = meal,
         onShowNowBarSetup = onShowNowBarSetup,
-        updateState = updateState,
-        onCheckUpdate = onCheckUpdate,
-        onDownloadUpdate = onDownloadUpdate,
-        onContinueInstall = onContinueInstall,
-        onCancelDownload = onCancelDownload,
         lmsCredentialState = credentialState,
         onDeleteLmsAccount = {
             scope.launch {

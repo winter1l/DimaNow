@@ -1,5 +1,8 @@
 package com.example.dimanow.lms
 
+import androidx.compose.material.icons.filled.PlayCircle
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Devices
 import androidx.compose.material3.ButtonDefaults
 import android.webkit.WebView
 import androidx.activity.compose.BackHandler
@@ -149,12 +152,13 @@ fun LmsRoute(
     if (savedLoginConflict || manualConflictCredentials != null) {
         // D-099: moving the single LMS session here logs the other device out, so the user decides.
         AlertDialog(
+            icon = { com.example.dimanow.ui.DimaDialogIcon(Icons.Default.Devices, com.example.dimanow.ui.DialogTone.WARNING) },
             onDismissRequest = { autoLoginCoordinator.dismissSessionConflict(); manualConflictCredentials = null },
-            title = { Text("다른 곳에서 로그인 중이에요") },
+            title = { Text("다른 기기에서 LMS를 쓰고 있어요") },
             text = {
                 Text(
-                    "학교 LMS는 한 곳에서만 로그인돼요. 이 기기로 옮기면 PC나 다른 기기의 로그인이 끊기고, " +
-                        "시험·과제를 하는 중이면 저장되지 않을 수 있어요.",
+                    "LMS는 한 곳에서만 로그인할 수 있어요. 이 기기로 로그인하면 다른 기기의 로그인이 끊기고, " +
+                        "풀고 있던 시험이나 과제가 저장되지 않을 수 있어요.",
                 )
             },
             confirmButton = {
@@ -304,8 +308,10 @@ fun LmsRoute(
         SnackbarHost(snackbar, Modifier.align(Alignment.BottomCenter).navigationBarsPadding())
         pendingOfficialCoursePage?.let { pendingPage ->
             AlertDialog(
+                icon = { com.example.dimanow.ui.DimaDialogIcon(Icons.Default.PlayCircle, com.example.dimanow.ui.DialogTone.INFO) },
                 onDismissRequest = { pendingOfficialCoursePage = null },
                 title = { Text("학습을 시작할까요?") },
+                text = { Text("공식 LMS 학습 화면이 열리고, 열면 학습 기록이 남을 수 있어요.") },
                 confirmButton = {
                     TextButton(shapes = ButtonDefaults.shapes(), 
                         onClick = {

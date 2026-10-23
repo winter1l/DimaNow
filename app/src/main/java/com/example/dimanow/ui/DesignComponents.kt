@@ -56,12 +56,14 @@ internal fun DimaIconBadge(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
     modifier: Modifier = Modifier,
     size: androidx.compose.ui.unit.Dp = 40.dp,
+    muted: Boolean = false,
 ) {
     Surface(
         modifier = modifier.size(size),
         shape = CircleShape,
-        color = MaterialTheme.colorScheme.secondaryContainer,
-        contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+        // D-119: a muted row's mark drops the accent tone, as the row itself does.
+        color = if (muted) MaterialTheme.colorScheme.surfaceVariant else MaterialTheme.colorScheme.secondaryContainer,
+        contentColor = if (muted) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSecondaryContainer,
     ) {
         Box(contentAlignment = Alignment.Center) {
             Icon(icon, contentDescription = null, modifier = Modifier.size(size * 0.55f))

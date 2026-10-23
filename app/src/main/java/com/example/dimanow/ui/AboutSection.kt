@@ -56,7 +56,6 @@ internal object AppLinks {
     const val PRIVACY_POLICY = "https://winter1l.github.io/DimaNow/privacy.html"
     const val DOWNLOAD_PAGE = "https://winter1l.github.io/DimaNow/"
     const val SOURCE_CODE = "https://github.com/winter1l/DimaNow"
-    const val REPORT_PROBLEM = "https://github.com/winter1l/DimaNow/issues/new/choose"
 }
 
 internal const val UNOFFICIAL_NOTICE =
@@ -79,11 +78,6 @@ internal fun AboutCard(modifier: Modifier = Modifier) {
         AboutLink(
             Icons.Default.PrivacyTip, "개인정보 처리방침", "open_privacy_policy",
             onClick = { openUrl(context, AppLinks.PRIVACY_POLICY) },
-        ),
-        AboutLink(
-            Icons.Default.BugReport, "문의·오류 제보", "open_report_problem",
-            supporting = "공개 GitHub 이슈로 남아요. 시간표·위치·학번 같은 개인정보는 적지 말아 주세요.",
-            onClick = { openUrl(context, AppLinks.REPORT_PROBLEM) },
         ),
         AboutLink(Icons.Default.Description, "오픈소스 라이선스", "open_licenses", external = false, onClick = { showLicenses = true }),
         AboutLink(

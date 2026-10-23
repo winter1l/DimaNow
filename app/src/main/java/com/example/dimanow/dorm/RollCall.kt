@@ -116,6 +116,40 @@ object RollCallRules {
     }
 }
 
+/** Why an outing applied for now may not count (D-119). */
+sealed interface OutingWarning {
+    /** A 점호 day after the application deadline ([deadlineText], as the page says it). */
+    data class AfterRollCallDeadline(val deadlineText: String) : OutingWarning
+
+    /** From 23:59, when overnight stays for the night close, until the front door opens again. */
+    data object OvernightClosed : OutingWarning
+}
+
+/**
+ * When to warn before opening 외출·외박 신청 (D-119). An overnight stay is applied for by 23:59 the day before, so
+ * from 23:59 until the front door opens (06:00) the application may not count; on a 점호 day, applying after the
+ * deadline (21:00, or the time an announcement gives such as 20:59) may not count either. The warning only asks;
+ * the student can still open the page.
+ */
+object OutingRules {
+    val OVERNIGHT_DEADLINE: LocalTime = LocalTime.of(23, 59)
+
+    fun warning(time: LocalTime, rollCall: RollCallStatus): OutingWarning? {
+        if (time >= OVERNIGHT_DEADLINE || time < DormHours.DOOR_OPENS) return OutingWarning.OvernightClosed
+        val heldNotice = (rollCall as? RollCallStatus.Announced)?.notice?.takeIf { it.held }
+        // An announced time is the last minute applications count ("20시 59분까지"); the usual rule is "21:00 전까지".
+        val (closesAt, text) = when {
+            heldNotice?.applyBy != null -> heldNotice.applyBy.plusMinutes(1) to "${heldNotice.applyBy.format(CLOCK)}까지"
+            heldNotice != null || rollCall is RollCallStatus.Scheduled ->
+                RollCallRules.USUAL_APPLY_BY to "${RollCallRules.USUAL_APPLY_BY.format(CLOCK)} 전까지"
+            else -> return null
+        }
+        return if (time >= closesAt) OutingWarning.AfterRollCallDeadline(text) else null
+    }
+
+    private val CLOCK = java.time.format.DateTimeFormatter.ofPattern("HH:mm")
+}
+
 /** 예인관 opening hours from the 2026-2 orientation (D-112). */
 object DormHours {
     val DOOR_OPENS: LocalTime = LocalTime.of(6, 0)

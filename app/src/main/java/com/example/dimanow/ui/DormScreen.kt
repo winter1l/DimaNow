@@ -1,5 +1,6 @@
 package com.example.dimanow.ui
 
+import androidx.compose.material.icons.filled.Forum
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
@@ -35,6 +36,7 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
+import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.ListItemDefaults
@@ -66,6 +68,8 @@ import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.dimanow.calendar.ServiceCalendarStore
 import com.example.dimanow.dorm.DormHours
+import com.example.dimanow.dorm.OutingRules
+import com.example.dimanow.dorm.OutingWarning
 import com.example.dimanow.dorm.RollCallRules
 import com.example.dimanow.dorm.RollCallStatus
 import com.example.dimanow.dorm.RollCallStore
@@ -154,6 +158,8 @@ internal fun DormScreen(onBack: () -> Unit, onOpenMeals: () -> Unit, modifier: M
         }
     }
 
+    var outingWarning by remember { mutableStateOf<Pair<OutingWarning, LocalTime>?>(null) }
+
     fun openOuting() {
         val service = bridge ?: return openUrl(context, INTRANET_DORM_OUTING_URL)
         outingError = null
@@ -166,6 +172,13 @@ internal fun DormScreen(onBack: () -> Unit, onOpenMeals: () -> Unit, modifier: M
     val today = now.toLocalDate()
     val rollCall = RollCallRules.status(today, notices, calendar.holidays[today], calendar.examOn(today)?.let(::examName))
     val announcedApplyBy = (rollCall as? RollCallStatus.Announced)?.notice?.takeIf { it.held }?.applyBy
+
+    // D-119: past the 점호 deadline or the overnight cut-off, ask before opening the application page.
+    fun requestOuting() {
+        val time = ZonedDateTime.now(DormHours.CAMPUS_ZONE).toLocalTime()
+        val warning = OutingRules.warning(time, rollCall)
+        if (warning == null) openOuting() else outingWarning = warning to time
+    }
     val read = saved
     val summary = read?.summary
     val shown = topic
@@ -223,9 +236,9 @@ internal fun DormScreen(onBack: () -> Unit, onOpenMeals: () -> Unit, modifier: M
                 item(key = "outing") {
                     DimaSegmentedList {
                         SegmentedListItem(
-                            onClick = ::openOuting,
+                            onClick = ::requestOuting,
                             shapes = ListItemDefaults.segmentedShapes(index = 0, count = 1),
-                            modifier = Modifier.testTag("dorm_outing_open").semantics { onClick(label = "열기") { openOuting(); true } },
+                            modifier = Modifier.testTag("dorm_outing_open").semantics { onClick(label = "열기") { requestOuting(); true } },
                             leadingContent = { DimaIconBadge(Icons.Default.Luggage) },
                             trailingContent = {
                                 Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null, modifier = Modifier.size(20.dp))
@@ -410,15 +423,25 @@ internal fun DormScreen(onBack: () -> Unit, onOpenMeals: () -> Unit, modifier: M
         }
     }
 
+    outingWarning?.let { (warning, time) ->
+        OutingWarningDialog(
+            warning = warning,
+            now = time,
+            onOpen = { outingWarning = null; openOuting() },
+            onDismiss = { outingWarning = null },
+        )
+    }
+
     if (showKakaoDialog) {
         // One explanation, one action that opens Android's notification-access page; back or a tap outside closes it.
         AlertDialog(
+            icon = { DimaDialogIcon(Icons.Default.Forum, DialogTone.INFO) },
             onDismissRequest = { showKakaoDialog = false },
-            title = { Text("카톡 점호 공지 읽기") },
+            title = { Text("카톡 공지로 점호 확인하기") },
             text = {
                 Text(
-                    "자치회가 카톡으로 알리는 점호 공지를 읽어 오늘 점호가 있는지 보여 줘요. 카카오톡 알림 중 점호 공지만 읽고, " +
-                        "날짜와 점호 여부만 이 기기에 2주 동안 저장해요. 공지방 알림을 꺼 두면 읽을 수 없어요.",
+                    "자치회 카톡방의 점호 공지를 읽어 오늘 점호가 있는지 알려 드려요. 점호 공지만 읽고, " +
+                        "날짜와 점호 여부만 이 기기에 2주 동안 보관해요. 공지방 알림이 꺼져 있으면 읽을 수 없어요.",
                 )
             },
             confirmButton = {
@@ -433,6 +456,45 @@ internal fun DormScreen(onBack: () -> Unit, onOpenMeals: () -> Unit, modifier: M
             },
             modifier = Modifier.testTag("dorm_kakao_dialog"),
         )
+    }
+}
+
+/**
+ * The warning before 외출·외박 신청 (D-119, styled by D-120): an amber clock, a title that says what happened, one
+ * sentence on why the application may not count, and a small time line from the deadline to now (and, at night, to
+ * when the front door opens). `신청 화면 열기` still opens the page; `닫기` keeps the student here.
+ */
+@Composable
+internal fun OutingWarningDialog(warning: OutingWarning, now: LocalTime, onOpen: () -> Unit, onDismiss: () -> Unit) {
+    val nowText = now.format(CLOCK)
+    val (title, text, points) = when (warning) {
+        is OutingWarning.AfterRollCallDeadline -> Triple(
+            "오늘은 신청 시간이 지났어요",
+            "점호가 있는 날은 ${warning.deadlineText} 신청해야 해요. 지금 신청하면 반영되지 않을 수 있어요.",
+            listOf("신청 마감" to warning.deadlineText.substringBefore(' ').removeSuffix("까지"), "지금" to nowText),
+        )
+        OutingWarning.OvernightClosed -> Triple(
+            "외박 신청 시간이 지났어요",
+            "외박은 전날 23:59까지 신청해야 해요. 출입문이 다시 열릴 때까지는 신청이 반영되지 않을 수 있어요.",
+            listOf("신청 마감" to "23:59", "지금" to nowText, "출입문 열림" to DormHours.DOOR_OPENS.format(CLOCK)),
+        )
+    }
+    DimaAlertDialog(
+        onDismissRequest = onDismiss,
+        icon = Icons.Default.Schedule,
+        tone = DialogTone.WARNING,
+        title = title,
+        confirmLabel = "신청 화면 열기",
+        onConfirm = onOpen,
+        dismissLabel = "닫기",
+        confirmTag = "dorm_outing_warning_open",
+        dismissTag = "dorm_outing_warning_close",
+        modifier = Modifier.testTag("dorm_outing_warning"),
+    ) {
+        Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+            Text(text)
+            DialogTimeline(points = points, highlight = 1, tone = DialogTone.WARNING)
+        }
     }
 }
 

@@ -5,6 +5,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.filled.Apartment
+import androidx.compose.material.icons.filled.BugReport
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Settings
@@ -15,6 +17,9 @@ import androidx.compose.material3.SegmentedListItem
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
@@ -33,6 +38,7 @@ import com.example.dimanow.school.SchoolReadCache
 @Composable
 internal fun AllScreen(onOpen: (AppPage) -> Unit, modifier: Modifier = Modifier) {
     val context = LocalContext.current
+    var showFeedback by rememberSaveable { mutableStateOf(false) }
     val dorm by SchoolReadCache.dormPoints.collectAsStateWithLifecycle()
     ScreenScaffold(title = AppPage.ALL.title, modifier = modifier, listTag = "all_list") {
         item(key = "school_header") { SettingsSectionHeader("학교 생활") }
@@ -81,13 +87,29 @@ internal fun AllScreen(onOpen: (AppPage) -> Unit, modifier: Modifier = Modifier)
                 AllRow(
                     icon = Icons.Default.Settings,
                     title = "설정",
-                    supporting = "알림, 위치, 데이터와 앱 정보",
-                    index = 0, count = 1, tag = "all_settings",
+                    supporting = "알림, 위치, 계정과 데이터",
+                    index = 0, count = 3, tag = "all_settings",
                     onClick = { onOpen(AppPage.SETTINGS) },
+                )
+                // D-119: 앱 정보 and 문의·오류 제보 have their own rows below 설정.
+                AllRow(
+                    icon = Icons.Default.Info,
+                    title = "앱 정보",
+                    supporting = "업데이트, 개인정보 처리방침, 라이선스",
+                    index = 1, count = 3, tag = "all_app_info",
+                    onClick = { onOpen(AppPage.APP_INFO) },
+                )
+                AllRow(
+                    icon = Icons.Default.BugReport,
+                    title = "문의·오류 제보",
+                    supporting = "앱에서 바로 보내면 공개 GitHub 이슈로 올라가요",
+                    index = 2, count = 3, tag = "all_feedback",
+                    onClick = { showFeedback = true },
                 )
             }
         }
     }
+    if (showFeedback) FeedbackDialog(onDismiss = { showFeedback = false })
 }
 
 @Composable

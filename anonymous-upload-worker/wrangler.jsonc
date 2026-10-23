@@ -18,7 +18,10 @@
     "GITHUB_OWNER": "winter1l",
     "GITHUB_REPOSITORY": "DimaNow",
     "UPLOAD_DAILY_LIMIT": "20",
-    "UPLOAD_WEEKLY_LIMIT": "40"
+    "UPLOAD_WEEKLY_LIMIT": "40",
+    // D-119: in-app 문의·오류 제보 become issues; one per address every ten minutes within these budgets.
+    "FEEDBACK_DAILY_LIMIT": "20",
+    "FEEDBACK_WEEKLY_LIMIT": "60"
   },
   // D-100: dormitory photos are stored privately here and deleted after 30 days.
   "r2_buckets": [

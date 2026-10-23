@@ -1,5 +1,8 @@
 package com.example.dimanow.ui
 
+import androidx.compose.material.icons.filled.DeleteForever
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Restore
 import android.app.ActivityManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -89,6 +92,7 @@ internal fun rememberTimetableImport(onMessage: (String) -> Unit): TimetableImpo
 internal fun TimetableImportConfirmation(import: TimetableImport) {
     val backup = import.pending ?: return
     AlertDialog(
+        icon = { DimaDialogIcon(Icons.Default.Restore, DialogTone.WARNING) },
         onDismissRequest = { import.pending = null },
         title = { Text("시간표를 바꿀까요?") },
         text = { Text("지금 시간표를 지우고 파일의 과목 ${backup.courses.size}개와 학기 ${backup.termStart} ~ ${backup.termEnd}로 바꿔요.") },
@@ -157,6 +161,7 @@ internal fun AppDataCard(modifier: Modifier = Modifier) {
     TimetableImportConfirmation(timetableImport)
     if (confirmDeleteAll) {
         AlertDialog(
+            icon = { DimaDialogIcon(Icons.Default.DeleteForever, DialogTone.DANGER) },
             onDismissRequest = { confirmDeleteAll = false },
             title = { Text("모든 데이터를 지울까요?") },
             text = { Text("시간표, 설정, 저장된 학교 계정과 받아 둔 정보가 모두 지워지고 앱이 닫혀요. 되돌릴 수 없어요.") },

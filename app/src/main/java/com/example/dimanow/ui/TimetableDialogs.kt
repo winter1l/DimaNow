@@ -1,5 +1,7 @@
 package com.example.dimanow.ui
 
+import androidx.compose.material.icons.filled.EventBusy
+import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.foundation.layout.Arrangement
@@ -71,6 +73,7 @@ internal fun CourseDeleteConfirmationDialog(
     onConfirm: () -> Unit,
 ) {
     AlertDialog(
+        icon = { DimaDialogIcon(Icons.Default.DeleteOutline, DialogTone.DANGER) },
         onDismissRequest = onDismiss,
         title = { Text("수업을 삭제할까요?") },
         text = {
@@ -93,8 +96,9 @@ internal fun PauseDurationDialog(
     onDismiss: () -> Unit,
 ) {
     AlertDialog(
+        icon = { DimaDialogIcon(Icons.Default.EventBusy, DialogTone.INFO) },
         onDismissRequest = onDismiss,
-        title = { Text("휴강 기간") },
+        title = { Text("언제까지 휴강할까요?") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 FilledTonalButton(shapes = ButtonDefaults.shapes(), 
@@ -326,9 +330,10 @@ fun CourseEditorDialog(initial: Course?, onDismiss: () -> Unit, onSave: (List<Co
     }
     if (confirmDiscard) {
         AlertDialog(
+            icon = { DimaDialogIcon(Icons.Default.DeleteOutline, DialogTone.DANGER) },
             onDismissRequest = { confirmDiscard = false },
             title = { Text("작성한 내용을 버릴까요?") },
-            text = { Text("저장하지 않은 수업 정보는 남지 않아요.") },
+            text = { Text("저장하지 않은 수업 정보는 사라져요.") },
             confirmButton = {
                 TextButton(shapes = ButtonDefaults.shapes(), onClick = { confirmDiscard = false; onDismiss() }, modifier = Modifier.testTag("course_editor_discard")) {
                     Text("버리기", color = MaterialTheme.colorScheme.error)

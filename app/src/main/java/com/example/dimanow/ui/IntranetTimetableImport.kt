@@ -1,5 +1,7 @@
 package com.example.dimanow.ui
 
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -108,8 +110,9 @@ private val CLOCK = DateTimeFormatter.ofPattern("HH:mm")
 internal fun IntranetTimetablePreviewDialog(state: IntranetTimetableImport, existing: List<Course>) {
     val courses = state.preview ?: return
     AlertDialog(
+        icon = { DimaDialogIcon(Icons.Default.CloudDownload, DialogTone.INFO) },
         onDismissRequest = state::dismiss,
-        title = { Text("인트라넷 시간표") },
+        title = { Text("인트라넷 시간표를 가져올까요?") },
         text = {
             Column(
                 modifier = Modifier.verticalScroll(rememberScrollState()).testTag("intranet_timetable_preview"),

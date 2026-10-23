@@ -1,6 +1,18 @@
 package com.example.dimanow.lms
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.filled.ExpandMore
+import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.filled.TaskAlt
+import androidx.compose.material3.Surface
+import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.semantics.collapse
+import androidx.compose.ui.semantics.expand
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -61,7 +73,6 @@ import com.example.dimanow.ui.DimaSegmentedList
 import com.example.dimanow.ui.EmptyState
 import com.example.dimanow.ui.ErrorState
 import com.example.dimanow.ui.ScreenScaffold
-import com.example.dimanow.ui.SettingsExpander
 import com.example.dimanow.ui.dimaSegmentedListColors
 import com.example.dimanow.ui.motion.DimaMotion
 import java.time.Clock
@@ -202,19 +213,53 @@ private fun LmsFoldedSection(
     showCourseName: Boolean = true,
 ) {
     Column {
-        SettingsExpander(
-            title = title,
-            supporting = "${items.size}개",
-            expanded = expanded,
-            onToggle = onToggle,
-            modifier = Modifier.testTag(tag),
-        )
+        LmsFoldHeader(title = title, count = items.size, completed = completed, expanded = expanded, onToggle = onToggle, tag = tag)
         AnimatedVisibility(
             visible = expanded,
             enter = expandVertically(DimaMotion.spatialDefault()) + fadeIn(DimaMotion.effectsDefault()),
             exit = shrinkVertically(DimaMotion.spatialDefault()) + fadeOut(DimaMotion.effectsFast()),
         ) {
-            LmsItemList(items, now, onOpenItem, showCourseName, completed, Modifier.padding(top = 8.dp))
+            LmsItemList(items, now, onOpenItem, showCourseName, completed, Modifier.padding(top = 8.dp), muted = true)
+        }
+    }
+}
+
+/**
+ * The row that opens a fold (D-120): one line on the muted tone with a thin outline and smaller corners, so it reads
+ * as "more below" rather than as another card to act on; the icon says which fold (missed or done), the count sits
+ * beside the name, and the chevron turns with the expressive spring. Screen readers hear its expanded state.
+ */
+@Composable
+private fun LmsFoldHeader(title: String, count: Int, completed: Boolean, expanded: Boolean, onToggle: () -> Unit, tag: String) {
+    val rotation by animateFloatAsState(if (expanded) 180f else 0f, animationSpec = DimaMotion.spatialDefault(), label = "lms_fold_chevron")
+    Surface(
+        onClick = onToggle,
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(min = 48.dp)
+            .testTag(tag)
+            .semantics {
+                stateDescription = if (expanded) "펼쳐짐" else "접힘"
+                if (expanded) collapse { onToggle(); true } else expand { onToggle(); true }
+            },
+        shape = RoundedCornerShape(14.dp),
+        color = DimaTheme.colors.cardMuted,
+        contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(
+                if (completed) Icons.Default.TaskAlt else Icons.Default.History,
+                contentDescription = null,
+                modifier = Modifier.size(20.dp),
+            )
+            Text(title, style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
+            Text("${count}개", style = MaterialTheme.typography.labelLarge)
+            Icon(Icons.Default.ExpandMore, contentDescription = null, modifier = Modifier.size(20.dp).rotate(rotation))
         }
     }
 }
@@ -471,11 +516,12 @@ private fun LmsItemList(
     showCourseName: Boolean = true,
     completed: Boolean = false,
     modifier: Modifier = Modifier,
+    muted: Boolean = false,
 ) {
     DimaSegmentedList(modifier) {
         items.forEachIndexed { index, item ->
             key(item.kind, item.courseId, item.id) {
-                LmsItemRow(item, index, items.size, now, onOpenItem, showCourseName, completed)
+                LmsItemRow(item, index, items.size, now, onOpenItem, showCourseName, completed, muted)
             }
         }
     }
@@ -496,10 +542,13 @@ private fun LmsItemRow(
     onOpenItem: (LmsItem) -> Unit,
     showCourseName: Boolean,
     completed: Boolean,
+    muted: Boolean = false,
 ) {
     val due = if (completed) null else item.dueAt?.let { lmsDueLabel(it, now) }
     val changeColor = MaterialTheme.colorScheme.primary
-    val courseColor = MaterialTheme.colorScheme.onSurface
+    // D-119: folded rows (기한 지남, 완료한 학습) sit on a quieter tone with quieter text than what is still to do.
+    val textColor = if (muted) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface
+    val courseColor = textColor
     val meta = buildAnnotatedString {
         when (item.changeState) {
             LmsChangeState.NEW -> "새 항목"
@@ -519,7 +568,7 @@ private fun LmsItemRow(
         onClick = { onOpenItem(item) },
         shapes = ListItemDefaults.segmentedShapes(index = index, count = count),
         modifier = Modifier.semantics { onClick(label = "열기") { onOpenItem(item); true } },
-        leadingContent = { DimaIconBadge(lmsKindIcon(item.kind)) },
+        leadingContent = { DimaIconBadge(lmsKindIcon(item.kind), muted = muted) },
         trailingContent = due?.let { label ->
             {
                 Text(
@@ -543,12 +592,12 @@ private fun LmsItemRow(
                 }
             }
         },
-        colors = dimaSegmentedListColors(),
+        colors = if (muted) ListItemDefaults.segmentedColors(containerColor = DimaTheme.colors.cardMuted) else dimaSegmentedListColors(),
     ) {
         Text(
             item.title,
             style = MaterialTheme.typography.titleMedium,
-            color = MaterialTheme.colorScheme.onSurface,
+            color = textColor,
             maxLines = 2,
             overflow = TextOverflow.Ellipsis,
         )

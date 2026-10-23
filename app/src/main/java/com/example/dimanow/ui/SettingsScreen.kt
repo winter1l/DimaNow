@@ -1,5 +1,7 @@
 package com.example.dimanow.ui
 
+import androidx.compose.material.icons.filled.NotificationsActive
+import androidx.compose.material.icons.filled.PersonRemove
 import androidx.compose.material3.IconButtonDefaults
 import android.provider.Settings
 import com.example.dimanow.theme.DimaShapes
@@ -77,11 +79,6 @@ internal fun SettingsScreen(
     shuttleData: ShuttleData?,
     mealData: MealData?,
     onShowNowBarSetup: () -> Unit,
-    updateState: AppUpdateUiState,
-    onCheckUpdate: () -> Unit,
-    onDownloadUpdate: () -> Unit,
-    onContinueInstall: () -> Unit,
-    onCancelDownload: () -> Unit,
     lmsCredentialState: CredentialState,
     onDeleteLmsAccount: () -> Unit,
     onBack: () -> Unit,
@@ -185,17 +182,7 @@ internal fun SettingsScreen(
             }
         }
         item(key = "app_data") { AppDataCard() }
-        item(key = "app_info_header") { SettingsSectionHeader("앱 정보") }
-        item(key = "app_update") {
-            AppUpdateCard(
-                state = updateState,
-                onCheck = onCheckUpdate,
-                onDownload = onDownloadUpdate,
-                onContinueInstall = onContinueInstall,
-                onCancelDownload = onCancelDownload,
-            )
-        }
-        item(key = "about") { AboutCard() }
+        // D-119: 앱 정보 (업데이트, 이 앱에 대해, 링크) is its own page under 전체, below 설정.
         item(key = "diagnostics_toggle") {
             SettingsExpander(
                 title = "고급 및 진단",
@@ -226,9 +213,10 @@ internal fun SettingsScreen(
     }
     if (confirmDeleteLmsAccount) {
         AlertDialog(
+            icon = { DimaDialogIcon(Icons.Default.PersonRemove, DialogTone.DANGER) },
             onDismissRequest = { confirmDeleteLmsAccount = false },
             title = { Text(if (lmsCredentialState == CredentialState.SAVED) "저장된 계정을 삭제할까요?" else "로그아웃할까요?") },
-            text = { Text("저장된 계정, 로그인 상태와 이 기기의 수업 정보가 삭제돼요.") },
+            text = { Text("저장된 계정과 로그인 상태, 이 기기에 받아 둔 수업 정보를 지워요.") },
             confirmButton = {
                 // 되돌릴 수 없는 삭제는 error 색 글자로 구분한다 (D-094(6)); 대화상자 동작은 텍스트 버튼이다 (D-104)
                 TextButton(shapes = ButtonDefaults.shapes(), 
@@ -249,11 +237,12 @@ internal fun NowBarSetupDialog(
     onComplete: () -> Unit,
 ) {
     AlertDialog(
+        icon = { DimaDialogIcon(Icons.Default.NotificationsActive, DialogTone.INFO) },
         onDismissRequest = onComplete,
         title = { Text("나우바 설정") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text("'잠긴 상태에서 알림 내용 표시' 옵션을 항상 표시로 변경해주세요.")
+                Text("잠금화면에서도 안내가 보이게 '알림 내용 표시'를 항상 표시로 바꿔 주세요.")
                 OutlinedButton(shapes = ButtonDefaults.shapes(), onClick = onOpenLockScreenNotifications, modifier = Modifier.fillMaxWidth()) {
                     Text("잠금화면 알림 설정 열기")
                 }

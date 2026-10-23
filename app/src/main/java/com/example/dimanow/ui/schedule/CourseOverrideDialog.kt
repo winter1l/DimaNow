@@ -1,5 +1,7 @@
 package com.example.dimanow.ui.schedule
 
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.EditCalendar
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -70,6 +72,7 @@ internal fun CourseOverrideDialog(
     val valid = dateValid && (!changed || (timeValid && room.isNotBlank()))
 
     AlertDialog(
+        icon = { com.example.dimanow.ui.DimaDialogIcon(Icons.Default.EditCalendar, com.example.dimanow.ui.DialogTone.INFO) },
         onDismissRequest = onDismiss,
         title = { Text("수업 한 번만 변경") },
         text = {

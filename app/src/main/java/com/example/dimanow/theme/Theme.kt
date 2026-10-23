@@ -129,6 +129,8 @@ data class DimaExtendedColors(
     val card: Color,
     val cardInner: Color,
     val scrolledHeader: Color,
+    /** D-119: rows that are done or past (기한 지남, 완료한 학습), a quieter tone than [card] and close to the page. */
+    val cardMuted: Color,
 )
 
 private val LightExtendedColors = DimaExtendedColors(
@@ -137,6 +139,7 @@ private val LightExtendedColors = DimaExtendedColors(
     card = SurfaceContainerLowestLight,
     cardInner = SurfaceContainerHighLight,
     scrolledHeader = SurfaceContainerLight,
+    cardMuted = SurfaceContainerLight,
 )
 private val DarkExtendedColors = DimaExtendedColors(
     WarningDark, OnWarningDark, WarningContainerDark, OnWarningContainerDark,
@@ -144,6 +147,7 @@ private val DarkExtendedColors = DimaExtendedColors(
     card = SurfaceContainerHighDark,
     cardInner = SurfaceContainerHighestDark,
     scrolledHeader = SurfaceContainerDark,
+    cardMuted = SurfaceContainerLowDark,
 )
 
 private val LocalDimaExtendedColors = staticCompositionLocalOf { LightExtendedColors }

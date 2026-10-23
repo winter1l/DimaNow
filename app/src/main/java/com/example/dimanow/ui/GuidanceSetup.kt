@@ -208,9 +208,10 @@ internal fun GuidanceSetupChecklist(
     if (controller.backgroundExplanation) {
         val optionLabel = LocalContext.current.packageManager.backgroundPermissionOptionLabel
         AlertDialog(
+            icon = { DimaDialogIcon(Icons.Default.LocationOn, DialogTone.INFO) },
             onDismissRequest = { controller.backgroundExplanation = false },
-            title = { Text("앱을 닫아도 위치 확인") },
-            text = { Text("앱이 닫혀 있을 때도 예인관·본관·원룸촌·4402 정류장에 들어섰는지 확인해 셔틀 안내를 바꾸려면 위치 권한이 필요해요. 위치는 이 기기 안에서만 쓰고 저장하거나 보내지 않아요. 다음 화면에서 권한 → 위치 → '$optionLabel'을 선택해 주세요. 나중에 설정해도 앱을 사용할 수 있어요.") },
+            title = { Text("앱을 닫아도 셔틀 안내를 받으려면") },
+            text = { Text("예인관·본관·원룸촌·4402 정류장에 들어섰는지 알려면 위치를 '$optionLabel'으로 허용해야 해요. 다음 화면에서 권한 → 위치를 눌러 바꿔 주세요. 위치는 이 기기 안에서만 쓰고 저장하거나 보내지 않아요.") },
             confirmButton = {
                 TextButton(shapes = ButtonDefaults.shapes(), onClick = { controller.backgroundExplanation = false; controller.openAppSettings() }) { Text("설정 열기") }
             },

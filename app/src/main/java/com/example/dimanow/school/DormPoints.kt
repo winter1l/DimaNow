@@ -150,11 +150,22 @@ object SchoolReadCache {
 
     fun setEquipmentCatalog(groups: List<EquipmentGroup>) {
         mutableEquipmentCatalog.value = groups
+        // A new catalog makes earlier day counts stale; an open model reads its days again.
+        mutableEquipmentAvailability.value = emptyMap()
+    }
+
+    /** Each opened model's days, kept with the catalog so the model reopens filled after leaving the page. */
+    private val mutableEquipmentAvailability = MutableStateFlow<Map<Long, List<EquipmentDay>>>(emptyMap())
+    val equipmentAvailability: StateFlow<Map<Long, List<EquipmentDay>>> = mutableEquipmentAvailability.asStateFlow()
+
+    fun setEquipmentAvailability(modelNo: Long, days: List<EquipmentDay>) {
+        mutableEquipmentAvailability.value = mutableEquipmentAvailability.value + (modelNo to days)
     }
 
     fun clear() {
         mutableDormPoints.value = null
         mutableEquipmentCatalog.value = null
+        mutableEquipmentAvailability.value = emptyMap()
         dormPointsFile?.let { file -> io.launch { file.delete() } }
     }
 }

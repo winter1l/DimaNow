@@ -165,6 +165,8 @@ class DimaNowApplication : Application() {
         com.example.dimanow.calendar.ServiceCalendarStore.loadCached(this)
         // D-108: the last 상벌점 read stays on this device (no-backup storage) until refreshed or deleted.
         com.example.dimanow.school.SchoolReadCache.persistDormPointsIn(java.io.File(noBackupFilesDir, "school/dorm-points.json"))
+        // D-112: 점호 announcements read from KakaoTalk, kept two weeks on this device.
+        com.example.dimanow.dorm.RollCallStore.attach(this)
         appUpdateCoordinator.initialize()
         val lockStateFilter = IntentFilter().apply {
             addAction(Intent.ACTION_SCREEN_ON)

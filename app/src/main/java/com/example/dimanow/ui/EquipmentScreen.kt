@@ -82,7 +82,7 @@ internal fun EquipmentScreen(onBack: () -> Unit, modifier: Modifier = Modifier) 
     var applyError by remember { mutableStateOf<String?>(null) }
     var guideExpanded by rememberSaveable { mutableStateOf(false) }
     var expanded by rememberSaveable { mutableStateOf<Long?>(null) }
-    val availability = remember { mutableStateMapOf<Long, List<EquipmentDay>>() }
+    val availability by SchoolReadCache.equipmentAvailability.collectAsStateWithLifecycle()
     val availabilityErrors = remember { mutableStateMapOf<Long, String>() }
     var loadingModel by remember { mutableStateOf<Long?>(null) }
     val today = LocalDate.now()
@@ -95,10 +95,7 @@ internal fun EquipmentScreen(onBack: () -> Unit, modifier: Modifier = Modifier) 
         scope.launch {
             when (val result = service.read(SchoolService.DIMA_C, DIMA_C_EQUIPMENT_URL, DIMA_C_EQUIPMENT_CATALOG_SCRIPT, "장비 대여 현황")) {
                 is SchoolServiceResult.Success -> runCatching { parseEquipmentCatalog(result.json) }
-                    .onSuccess {
-                        SchoolReadCache.setEquipmentCatalog(it)
-                        availability.clear()
-                    }
+                    .onSuccess { SchoolReadCache.setEquipmentCatalog(it) }
                     .onFailure { error = "장비 목록을 읽지 못했어요." }
                 is SchoolServiceResult.Failure -> error = result.message
                 SchoolServiceResult.Cancelled -> Unit
@@ -115,7 +112,7 @@ internal fun EquipmentScreen(onBack: () -> Unit, modifier: Modifier = Modifier) 
         scope.launch {
             when (val result = service.read(SchoolService.DIMA_C, DIMA_C_EQUIPMENT_URL, dimaCModelAvailabilityScript(model.no), "장비 대여 현황")) {
                 is SchoolServiceResult.Success -> runCatching { parseEquipmentAvailability(result.json) }
-                    .onSuccess { availability[model.no] = it }
+                    .onSuccess { SchoolReadCache.setEquipmentAvailability(model.no, it) }
                     .onFailure { availabilityErrors[model.no] = "대여 현황을 읽지 못했어요." }
                 is SchoolServiceResult.Failure -> availabilityErrors[model.no] = result.message
                 SchoolServiceResult.Cancelled -> Unit
@@ -135,6 +132,13 @@ internal fun EquipmentScreen(onBack: () -> Unit, modifier: Modifier = Modifier) 
     }
 
     LaunchedEffect(Unit) { if (catalog == null) loadCatalog() }
+    // The open model is remembered across visits; read its days again if they are not cached any more
+    // (a new catalog, or the app process was restarted), instead of showing an empty panel.
+    LaunchedEffect(expanded, catalog, availability) {
+        val open = expanded ?: return@LaunchedEffect
+        if (open in availability || open in availabilityErrors || loadingModel != null) return@LaunchedEffect
+        catalog?.flatMap { it.models }?.firstOrNull { it.no == open }?.let(::loadModel)
+    }
 
     ScreenScaffold(
         title = "장비 대여",

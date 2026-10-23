@@ -17,9 +17,11 @@ class AppPageTest {
     }
 
     @Test
-    fun `bottom navigation contains five primary pages and settings is a separate destination`() {
-        // D-044: 기존 4탭 순서를 보존하기 위해 수업은 맨 뒤
-        assertEquals(listOf("홈", "시간표", "셔틀", "식단", "수업"), primaryAppPages.map { it.title })
-        assertFalse(AppPage.SETTINGS in primaryAppPages)
+    fun `the bottom bar ends with 전체 and the occasional pages open from it`() {
+        // D-110: the timetable, 기숙사, 장비 대여 and Settings moved under the Toss-style 전체 tab.
+        assertEquals(listOf("홈", "셔틀", "식단", "수업", "전체"), primaryAppPages.map { it.title })
+        val subPages = listOf(AppPage.TIMETABLE, AppPage.DORM, AppPage.EQUIPMENT, AppPage.SETTINGS)
+        assertTrue(subPages.all { it.isSubPage && it !in primaryAppPages })
+        assertTrue(primaryAppPages.none { it.isSubPage })
     }
 }

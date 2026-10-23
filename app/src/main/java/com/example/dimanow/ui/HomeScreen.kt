@@ -31,8 +31,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Campaign
-import androidx.compose.material.icons.filled.Language
-import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material.icons.filled.DirectionsBus
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Restaurant
@@ -648,34 +646,6 @@ internal fun DashboardScreen(
                                 }
                             }
                         }
-                    }
-                }
-            }
-        }
-
-        // 5. 학교 서비스 바로가기 — 수업은 하단 수업 탭과 수업 카드가 이미 열어 주므로 DIMA Portal만 둔다 (D-094(9))
-        item(key = "shortcuts") {
-            val openEquipment = LocalOpenEquipment.current
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                FilledTonalButton(
-                    shapes = ButtonDefaults.shapes(),
-                    onClick = { openUrl(context, "https://portal.dima.ac.kr/") },
-                    modifier = Modifier.weight(1f),
-                ) {
-                    Icon(Icons.Default.Language, contentDescription = null, modifier = Modifier.size(ButtonDefaults.IconSize))
-                    Spacer(Modifier.width(ButtonDefaults.IconSpacing))
-                    Text("DIMA 포털")
-                }
-                // D-107: DIMA C 장비 대여 현황은 앱 안의 화면으로 연다
-                if (openEquipment != null) {
-                    FilledTonalButton(
-                        shapes = ButtonDefaults.shapes(),
-                        onClick = openEquipment,
-                        modifier = Modifier.weight(1f).testTag("open_equipment"),
-                    ) {
-                        Icon(Icons.Default.Videocam, contentDescription = null, modifier = Modifier.size(ButtonDefaults.IconSize))
-                        Spacer(Modifier.width(ButtonDefaults.IconSpacing))
-                        Text("장비 대여")
                     }
                 }
             }

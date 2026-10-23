@@ -17,12 +17,15 @@ import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Apartment
 import androidx.compose.material.icons.filled.DirectionsBus
 import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Restaurant
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.School
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material.icons.outlined.DirectionsBus
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.Restaurant
@@ -96,27 +99,32 @@ import kotlinx.coroutines.flow.first
 
 /** [icon] marks the selected destination and [outlinedIcon] the others, as the M3 navigation bar does (D-102). */
 internal enum class AppPage(val title: String, val icon: ImageVector, val outlinedIcon: ImageVector = icon) {
-    // D-044: 기존 4탭(홈·시간표·셔틀·식단)의 손가락 기억을 보존하기 위해 수업은 맨 뒤에 둔다
     DASHBOARD("홈", Icons.Default.Home, Icons.Outlined.Home),
-    TIMETABLE("시간표", Icons.Default.Schedule, Icons.Outlined.Schedule),
     SHUTTLE("셔틀", Icons.Default.DirectionsBus, Icons.Outlined.DirectionsBus),
     MEAL("식단", Icons.Default.Restaurant, Icons.Outlined.Restaurant),
     COURSES("수업", Icons.Default.School, Icons.Outlined.School),
+    // D-110: Toss-style 전체 holds what students open now and then; its pages open over it with Back.
+    ALL("전체", Icons.Default.Menu),
+    TIMETABLE("시간표", Icons.Default.Schedule, Icons.Outlined.Schedule),
+    DORM("기숙사", Icons.Default.Apartment),
+    EQUIPMENT("장비 대여", Icons.Default.Videocam),
     SETTINGS("설정", Icons.Default.Settings),
-    // D-107: a transient page like Settings, opened from Home and the Courses tab
-    EQUIPMENT("장비 대여", Icons.Default.Settings),
     ;
 
     val usesMinuteTicker: Boolean
         get() = this == DASHBOARD || this == SHUTTLE || this == MEAL || this == COURSES
+
+    /** Pages opened from 전체 (or Home's timetable buttons): no navigation bar, a Back action instead. */
+    val isSubPage: Boolean
+        get() = this == TIMETABLE || this == DORM || this == EQUIPMENT || this == SETTINGS
 }
 
 internal val primaryAppPages = listOf(
     AppPage.DASHBOARD,
-    AppPage.TIMETABLE,
     AppPage.SHUTTLE,
     AppPage.MEAL,
     AppPage.COURSES,
+    AppPage.ALL,
 )
 
 @Composable
@@ -150,8 +158,8 @@ fun DimaNowApp(
 ) {
     // D-094(12): the current tab survives configuration changes and process death
     var page by rememberSaveable { mutableStateOf(AppPage.DASHBOARD) }
-    var settingsReturnPage by rememberSaveable { mutableStateOf(AppPage.DASHBOARD) }
-    var equipmentReturnPage by rememberSaveable { mutableStateOf(AppPage.DASHBOARD) }
+    // Where Back from a 전체 page goes: 전체 itself, or Home for the timetable opened from Home's buttons.
+    var subPageReturn by rememberSaveable { mutableStateOf(AppPage.ALL) }
     // After the first tab change the tab transition is the only motion; lists no longer rise in.
     var tabChanged by rememberSaveable { mutableStateOf(false) }
     val initialPage = remember { page }
@@ -175,19 +183,20 @@ fun DimaNowApp(
     val initialUpdateState = remember { AppUpdateUiState(currentVersion = "") }
     val updateState by (appUpdateCoordinator?.state ?: remember { kotlinx.coroutines.flow.flowOf(initialUpdateState) })
         .collectAsStateWithLifecycle(initialValue = initialUpdateState)
+    fun open(target: AppPage) {
+        if (target.isSubPage && !page.isSubPage) subPageReturn = page
+        page = target
+    }
     // nonce가 붙은 이벤트라 같은 위젯을 연달아 탭해도 매번 다시 이동한다 (#7)
     LaunchedEffect(targetPageEvent) {
         when (targetPageEvent?.first) {
-            "DASHBOARD" -> page = AppPage.DASHBOARD
-            "SHUTTLE" -> page = AppPage.SHUTTLE
-            "MEAL" -> page = AppPage.MEAL
-            // 아래 두 값은 현재 어떤 위젯도 보내지 않지만, 향후 위젯용으로 유지한다
-            "TIMETABLE" -> page = AppPage.TIMETABLE
-            "COURSES" -> page = AppPage.COURSES
-            "SETTINGS" -> {
-                settingsReturnPage = page
-                page = AppPage.SETTINGS
-            }
+            "DASHBOARD" -> open(AppPage.DASHBOARD)
+            "SHUTTLE" -> open(AppPage.SHUTTLE)
+            "MEAL" -> open(AppPage.MEAL)
+            // 아래 세 값은 현재 어떤 위젯도 보내지 않지만, 향후 위젯용으로 유지한다
+            "TIMETABLE" -> open(AppPage.TIMETABLE)
+            "COURSES" -> open(AppPage.COURSES)
+            "SETTINGS" -> open(AppPage.SETTINGS)
         }
     }
 
@@ -197,11 +206,7 @@ fun DimaNowApp(
     }
 
     BackHandler(enabled = page != AppPage.DASHBOARD) {
-        page = when (page) {
-            AppPage.SETTINGS -> settingsReturnPage
-            AppPage.EQUIPMENT -> equipmentReturnPage
-            else -> AppPage.DASHBOARD
-        }
+        page = if (page.isSubPage) subPageReturn else AppPage.DASHBOARD
     }
 
     // D-056: 최초 설치에는 앱 셸 대신 전체화면 온보딩이 권한을 순서대로 설명하고 요청한다.
@@ -216,7 +221,7 @@ fun DimaNowApp(
         return
     }
 
-    val showNavigation = page != AppPage.SETTINGS && page != AppPage.EQUIPMENT && !(page == AppPage.COURSES && lmsFullScreen)
+    val showNavigation = !page.isSubPage && !(page == AppPage.COURSES && lmsFullScreen)
     // D-104: compact windows keep the bottom bar; from the M3 medium width (tablets, unfolded foldables)
     // the same destinations move to a navigation rail at the start edge.
     val windowWidth = with(LocalDensity.current) { LocalWindowInfo.current.containerSize.width.toDp() }
@@ -254,21 +259,6 @@ fun DimaNowApp(
             }
         },
     ) { padding ->
-        // page가 바뀔 때만 람다를 재생성해 분 틱마다 모든 ScreenColumn이 무효화되지 않게 한다 (#15)
-        val openSettingsAction = remember(page) {
-            if (page == AppPage.SETTINGS) {
-                null
-            } else {
-                { settingsReturnPage = page; page = AppPage.SETTINGS }
-            }
-        }
-        val openEquipmentAction = remember(page) {
-            if (page == AppPage.EQUIPMENT || schoolServiceBridge == null) {
-                null
-            } else {
-                { equipmentReturnPage = page; page = AppPage.EQUIPMENT }
-            }
-        }
         // 하단 내비가 차지한 인셋을 소비해, 각 화면의 스캐폴드는 내비가 없을 때(설정)만
         // 제스처 바 인셋을 목록 아래 여백으로 더한다 (D-094)
         val pageModifier = Modifier.padding(padding).consumeWindowInsets(padding)
@@ -300,9 +290,8 @@ fun DimaNowApp(
                     },
                 ),
         ) {
+        // D-110: Settings opens from 전체, so no screen carries the settings gear any more.
         CompositionLocalProvider(
-            LocalOpenSettings provides openSettingsAction,
-            LocalOpenEquipment provides openEquipmentAction,
             com.example.dimanow.school.LocalSchoolServiceBridge provides schoolServiceBridge,
             LocalEntranceMotion provides entranceMotion,
             LocalRetainedFlowValues provides retainedFlowValues,
@@ -325,8 +314,8 @@ fun DimaNowApp(
                     noticeSource = noticeSource,
                     lmsSource = lmsSource,
                     lmsSessionController = lmsSessionController,
-                    onNavigateToPage = { page = it },
-                    onAddCourse = { addCourseRequest = System.currentTimeMillis(); page = AppPage.TIMETABLE },
+                    onNavigateToPage = ::open,
+                    onAddCourse = { addCourseRequest = System.currentTimeMillis(); open(AppPage.TIMETABLE) },
                     updateState = updateState,
                     appUpdateCoordinator = appUpdateCoordinator,
                     modifier = pageModifier,
@@ -337,7 +326,10 @@ fun DimaNowApp(
                     pageModifier,
                     addCourseRequest = addCourseRequest,
                     onAddCourseRequestHandled = { addCourseRequest = 0L },
+                    onBack = { page = subPageReturn },
                 )
+                AppPage.ALL -> AllScreen(onOpen = ::open, modifier = pageModifier)
+                AppPage.DORM -> DormScreen(onBack = { page = subPageReturn }, onOpenMeals = { page = AppPage.MEAL }, modifier = pageModifier)
                 AppPage.COURSES -> LmsRoute(
                     credentialStore = lmsCredentialStore,
                     sessionController = lmsSessionController,
@@ -375,11 +367,11 @@ fun DimaNowApp(
                     lmsCredentialStore = lmsCredentialStore,
                     lmsSessionController = lmsSessionController,
                     lmsSource = lmsSource,
-                    onBack = { page = settingsReturnPage },
+                    onBack = { page = subPageReturn },
                     modifier = pageModifier,
                 )
                 AppPage.EQUIPMENT -> EquipmentScreen(
-                    onBack = { page = equipmentReturnPage },
+                    onBack = { page = subPageReturn },
                     modifier = pageModifier,
                 )
                 }
@@ -475,12 +467,14 @@ private fun TimetableRoute(
     modifier: Modifier,
     addCourseRequest: Long,
     onAddCourseRequestHandled: () -> Unit,
+    onBack: () -> Unit,
 ) {
     val schedule by repository.schedule.collectRetainedAsState(initialValue = remember { emptyTermSchedule() })
     TimetableScreen(
         repository, schedule, modifier,
         addCourseRequest = addCourseRequest,
         onAddCourseRequestHandled = onAddCourseRequestHandled,
+        onBack = onBack,
     )
 }
 
@@ -599,9 +593,6 @@ private fun SettingsRoute(
 }
 
 internal val LocalOpenSettings = compositionLocalOf<(() -> Unit)?> { null }
-
-/** Opens 장비 대여 (D-107); null where the shell has no school-service bridge. */
-internal val LocalOpenEquipment = compositionLocalOf<(() -> Unit)?> { null }
 
 /** How many times the visible tab was selected again; [ScreenScaffold] scrolls to the top on each new value. */
 internal val LocalScrollToTopSignal = compositionLocalOf { 0 }

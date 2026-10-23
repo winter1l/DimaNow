@@ -271,6 +271,8 @@ private fun schoolServiceWebView(
     var stage = SchoolStage.CHECK
     var injected = false
     var visible = false
+    // Read from the WebView's network thread: while nothing is on screen, page decoration is not fetched.
+    val onScreen = java.util.concurrent.atomic.AtomicBoolean(request.opensPage)
     var extracting = false
     var redirectsAfterSignIn = 0
 
@@ -284,6 +286,7 @@ private fun schoolServiceWebView(
     fun reveal() {
         if (!visible) {
             visible = true
+            onScreen.set(true)
             showToStudent()
         }
     }
@@ -362,6 +365,8 @@ private fun schoolServiceWebView(
                     else -> finish(
                         SchoolServiceResult.Failure(
                             answer?.optString("message")?.takeIf { it.isNotBlank() && it.length <= 120 }
+                                // The page's own request failed ("Failed to fetch"): the site did not answer.
+                                ?.let { if (isNetworkFailure(it)) "${service.label}에 연결하지 못했어요. 잠시 후 다시 시도해 주세요." else it }
                                 ?: "${service.label}에서 정보를 읽지 못했어요.",
                         ),
                     )
@@ -387,6 +392,13 @@ private fun schoolServiceWebView(
             val scheme = webRequest.url.scheme?.lowercase()
             return if (scheme in setOf("http", "https") && !SchoolUrlPolicy.isAllowedNavigation(url)) {
                 WebResourceResponse("text/plain", "UTF-8", 403, "Blocked", mapOf("Cache-Control" to "no-store"), ByteArrayInputStream(ByteArray(0)))
+            } else if (!onScreen.get() && !webRequest.isForMainFrame && webRequest.url.host == service.host &&
+                isPageDecoration(webRequest.url.path)
+            ) {
+                // An invisible read needs the site's scripts and data, not its images, fonts or styles: fewer
+                // requests per read (2026-10-23: DIMA C twice refused the phone after repeated reads). Portal
+                // pages load whole, since a challenge on them may be shown to the student.
+                WebResourceResponse("text/plain", "UTF-8", 204, "No Content", mapOf("Cache-Control" to "no-store"), ByteArrayInputStream(ByteArray(0)))
             } else {
                 super.shouldInterceptRequest(view, webRequest)
             }
@@ -490,3 +502,13 @@ private fun schoolServiceWebView(
 private const val POLL_MILLIS = 300L
 private const val SCRIPT_TIMEOUT_MILLIS = 30_000L
 private const val SILENT_TIMEOUT_MILLIS = 60_000L
+
+private val DECORATION = Regex("""\.(png|jpe?g|gif|webp|svg|ico|bmp|woff2?|ttf|otf|eot|css|mp4|webm|mp3)$""", RegexOption.IGNORE_CASE)
+
+/** Images, fonts, styles and media, which a hidden read does not need. */
+internal fun isPageDecoration(path: String?): Boolean = path != null && DECORATION.containsMatchIn(path)
+
+/** A script error that means the site did not answer, as the WebView words it. */
+internal fun isNetworkFailure(message: String): Boolean =
+    message.contains("Failed to fetch", ignoreCase = true) || message.contains("NetworkError", ignoreCase = true) ||
+        message.contains("Load failed", ignoreCase = true)

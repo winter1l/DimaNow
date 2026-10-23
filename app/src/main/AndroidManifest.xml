@@ -44,6 +44,19 @@
                 android:name="android.support.FILE_PROVIDER_PATHS"
                 android:resource="@xml/update_file_paths" />
         </provider>
+        <!-- D-112: reads only KakaoTalk 점호 announcements, once the student allows notification access. -->
+        <service
+            android:name=".dorm.KakaoRollCallListener"
+            android:exported="true"
+            android:label="@string/kakao_roll_call_listener"
+            android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
+            <intent-filter>
+                <action android:name="android.service.notification.NotificationListenerService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.service.notification.default_filter_types"
+                android:value="conversations|alerting" />
+        </service>
         <receiver
             android:name=".location.CampusGeofenceReceiver"
             android:exported="false" />

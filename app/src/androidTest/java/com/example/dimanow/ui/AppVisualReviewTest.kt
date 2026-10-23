@@ -26,7 +26,10 @@ class AppVisualReviewTest {
         primaryAppPages.forEach { page ->
             compose.onNodeWithTag("nav_${page.name}").performClick().assertIsSelected()
             capture(page.name.lowercase())
-            if (page == AppPage.TIMETABLE) {
+            if (page == AppPage.ALL) {
+                // D-110: the timetable opens from 전체.
+                compose.onNodeWithTag("all_timetable").performClick()
+                capture("timetable")
                 // D-102: an empty timetable offers 수업 추가 in its empty state instead of the FAB.
                 compose.onNodeWithTag("add_course").performClick()
                 compose.onNodeWithText("수업명").performClick()
@@ -37,13 +40,18 @@ class AppVisualReviewTest {
                 // D-102: the full-screen editor closes with its X and asks before dropping the picked day.
                 compose.onNodeWithTag("course_editor_close").performClick()
                 compose.onNodeWithTag("course_editor_discard").performClick()
+                compose.onNodeWithTag("close_timetable").performClick()
+                compose.onNodeWithTag("all_dorm").performClick()
+                capture("dorm")
+                compose.onNodeWithTag("close_dorm").performClick()
+                compose.onNodeWithTag("nav_ALL").assertIsSelected()
             }
             if (page == AppPage.SHUTTLE) {
                 compose.onNodeWithText("4402").performClick()
                 capture("bus-4402")
             }
         }
-        compose.onNodeWithTag("open_settings").performClick()
+        compose.onNodeWithTag("all_settings").performClick()
         compose.onNodeWithTag("close_settings").assertExists()
         capture("settings")
         // Settings is a lazy list: bring the section into composition through the list itself.
@@ -52,7 +60,7 @@ class AppVisualReviewTest {
         capture("settings-diagnostics")
         // D-094: the back action is pinned in the top app bar, so it stays reachable after scrolling.
         compose.onNodeWithTag("close_settings").assertIsDisplayed().performClick()
-        compose.onNodeWithTag("nav_COURSES").assertIsSelected()
+        compose.onNodeWithTag("nav_ALL").assertIsSelected()
     }
 
     private fun capture(name: String, dialog: Boolean = false) {

@@ -174,4 +174,17 @@ class SchoolReadersTest {
         assertNull(decodeDormPointsRead("""{"version":2,"readAt":1}"""))
         assertNull(runCatching { decodeDormPointsRead("not json") }.getOrNull())
     }
+
+    @Test
+    fun `a hidden read skips page decoration and names a dropped connection plainly`() {
+        assertTrue(isPageDecoration("/resources/img/logo.PNG"))
+        assertTrue(isPageDecoration("/css/common.css"))
+        assertTrue(isPageDecoration("/fonts/NotoSansKR.woff2"))
+        assertFalse(isPageDecoration("/ajax/ST_MPRT01_SVC/ST_MPRT01_R10.do"))
+        assertFalse(isPageDecoration("/js/jquery.min.js"))
+        assertFalse(isPageDecoration(null))
+        assertTrue(isNetworkFailure("Failed to fetch"))
+        assertTrue(isNetworkFailure("TypeError: NetworkError when attempting to fetch resource."))
+        assertFalse(isNetworkFailure("인트라넷에서 시간표 표를 찾지 못했어요."))
+    }
 }

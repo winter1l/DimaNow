@@ -19,20 +19,22 @@ class AppBackNavigationTest {
     val composeRule = createAndroidComposeRule<MainActivity>()
 
     @Test
-    fun backFromAnyTabReturnsDirectlyHomeThenBackFromHomeFinishesTheActivity() {
+    fun backFromAPageUnderAllReturnsToAllThenHomeThenFinishesTheActivity() {
         prepareCompletedOnboarding()
 
         composeRule.onNodeWithTag("nav_SHUTTLE").performClick()
-        composeRule.onNodeWithTag("nav_MEAL").performClick()
+        composeRule.onNodeWithTag("nav_ALL").performClick()
         composeRule.waitForIdle()
-        composeRule.onNodeWithTag("open_settings").performClick()
-        composeRule.onNodeWithTag("nav_SETTINGS").assertDoesNotExist()
+        // D-110: Settings opens from 전체; no screen carries a settings gear.
+        composeRule.onNodeWithTag("open_settings").assertDoesNotExist()
+        composeRule.onNodeWithTag("all_settings").performClick()
+        composeRule.onNodeWithTag("nav_ALL").assertDoesNotExist()
         composeRule.onNodeWithTag("close_settings").assertExists()
 
         composeRule.activityRule.scenario.onActivity {
             it.onBackPressedDispatcher.onBackPressed()
         }
-        composeRule.onNodeWithTag("nav_MEAL").assertIsSelected()
+        composeRule.onNodeWithTag("nav_ALL").assertIsSelected()
 
         composeRule.activityRule.scenario.onActivity {
             it.onBackPressedDispatcher.onBackPressed()
@@ -52,7 +54,8 @@ class AppBackNavigationTest {
     fun backClosesTheCurrentDialogBeforeReturningTheTabHome() {
         prepareCompletedOnboarding()
 
-        composeRule.onNodeWithTag("nav_TIMETABLE").performClick()
+        composeRule.onNodeWithTag("nav_ALL").performClick()
+        composeRule.onNodeWithTag("all_timetable").performClick()
         // D-102: a fresh timetable offers 수업 추가 in its empty state; with courses it is the FAB.
         composeRule.onNodeWithTag("add_course").performClick()
         composeRule.onNodeWithText("수업명").assertExists()
@@ -60,7 +63,10 @@ class AppBackNavigationTest {
         systemBack()
 
         composeRule.onNodeWithText("수업명").assertDoesNotExist()
-        composeRule.onNodeWithTag("nav_TIMETABLE").assertIsSelected()
+        composeRule.onNodeWithTag("close_timetable").assertExists()
+
+        systemBack()
+        composeRule.onNodeWithTag("nav_ALL").assertIsSelected()
 
         systemBack()
         composeRule.onNodeWithTag("nav_DASHBOARD").assertIsSelected()

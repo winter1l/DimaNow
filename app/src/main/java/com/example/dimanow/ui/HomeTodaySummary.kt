@@ -22,6 +22,8 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import com.example.dimanow.ui.motion.pressScale
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -138,11 +140,16 @@ internal fun HomeSummaryCard(
     content: @Composable ColumnScope.() -> Unit,
 ) {
     val open = onClick
+    // D-121: the card gives slightly under the finger (the shared expressive press scale), so a whole-card tap is felt
+    // as one target; it shares the card's own interaction source and is off under reduced motion.
+    val interactionSource = remember { MutableInteractionSource() }
     ElevatedCard(
         onClick = open,
+        interactionSource = interactionSource,
         // Outer semantics override the card's own click action, so this only labels the same action.
         modifier = modifier
             .fillMaxWidth()
+            .pressScale(interactionSource)
             .semantics { labelClickAction(onClickLabel, open) },
         shape = DimaShapes.Card,
         colors = CardDefaults.elevatedCardColors(containerColor = DimaTheme.colors.card),

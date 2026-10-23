@@ -29,6 +29,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
@@ -69,6 +71,7 @@ internal fun <T> DimaConnectedChoice(
     enabled: Boolean = true,
     itemTag: (T) -> String? = { null },
 ) {
+    val haptics = LocalHapticFeedback.current
     Row(
         modifier = modifier.fillMaxWidth().selectableGroup(),
         horizontalArrangement = Arrangement.spacedBy(ButtonGroupDefaults.ConnectedSpaceBetween),
@@ -77,8 +80,12 @@ internal fun <T> DimaConnectedChoice(
             val checked = value == selected
             ToggleButton(
                 checked = checked,
-                // A connected single-choice group never ends with nothing selected.
-                onCheckedChange = { onSelect(value) },
+                // A connected single-choice group never ends with nothing selected. D-121: a segment tick confirms
+                // the change under the finger (the system touch-feedback setting still applies).
+                onCheckedChange = {
+                    if (!checked) haptics.performHapticFeedback(HapticFeedbackType.SegmentTick)
+                    onSelect(value)
+                },
                 enabled = enabled,
                 // D-114: unselected buttons sit one tone above the card or page instead of sinking below it.
                 colors = ToggleButtonDefaults.colors(containerColor = DimaTheme.colors.cardInner),

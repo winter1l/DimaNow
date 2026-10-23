@@ -5,7 +5,19 @@ import android.webkit.CookieManager
 import androidx.compose.animation.AnimatedContent
 import com.example.dimanow.theme.DimaTheme
 import com.example.dimanow.ui.motion.LocalEntranceMotion
-import com.example.dimanow.ui.motion.dimaFadeThrough
+import com.example.dimanow.ui.motion.DimaMotion
+import com.example.dimanow.ui.motion.LocalReducedMotion
+import com.example.dimanow.ui.motion.PageMotion
+import com.example.dimanow.ui.motion.PageSlideDistance
+import com.example.dimanow.ui.motion.dimaPageTransform
+import com.example.dimanow.ui.motion.pageMotionFor
+import com.example.dimanow.ui.motion.predictiveBackPreview
+import androidx.activity.BackEventCompat
+import androidx.compose.animation.core.Animatable
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.unit.LayoutDirection
+import kotlin.coroutines.cancellation.CancellationException
 import com.example.dimanow.ui.onboarding.OnboardingRoute
 import com.example.dimanow.ui.onboarding.shouldShowOnboarding
 import androidx.compose.foundation.layout.Box
@@ -41,7 +53,7 @@ import androidx.compose.material3.ShortNavigationBar
 import androidx.compose.material3.ShortNavigationBarItem
 import androidx.compose.material3.WideNavigationRail
 import androidx.compose.material3.WideNavigationRailItem
-import androidx.activity.compose.BackHandler
+import androidx.activity.compose.PredictiveBackHandler
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -122,6 +134,13 @@ internal enum class AppPage(val title: String, val icon: ImageVector, val outlin
     val isSubPage: Boolean
         get() = this == TIMETABLE || this == DORM || this == EQUIPMENT || this == SETTINGS || this == APP_INFO
 }
+
+/**
+ * The M3 transition pattern for a page change (D-121): opening a 전체 page is forward, Back to [backTarget] (where
+ * Back from a sub-page returns) is backward, and everything else is the top-level fade-through (D-103).
+ */
+internal fun pageMotion(from: AppPage, to: AppPage, backTarget: AppPage): PageMotion =
+    pageMotionFor(fromSubPage = from.isSubPage, toSubPage = to.isSubPage, toIsBackTarget = to == backTarget)
 
 internal val primaryAppPages = listOf(
     AppPage.DASHBOARD,
@@ -209,8 +228,26 @@ fun DimaNowApp(
         if (page != AppPage.SETTINGS) tabStateHolder.removeState(AppPage.SETTINGS.name)
     }
 
-    BackHandler(enabled = page != AppPage.DASHBOARD) {
-        page = if (page.isSubPage) subPageReturn else AppPage.DASHBOARD
+    // D-121: M3 predictive back. While the gesture is held the page being left shrinks and rounds
+    // (predictiveBackPreview); letting go goes back as before, cancelling springs the page back. Inner Back handlers
+    // (a 기숙사 topic page, the LMS detail) still take Back first. Under reduced motion there is no preview.
+    val reducedMotion = LocalReducedMotion.current
+    val backPreview = remember { Animatable(0f) }
+    var backFromLeftEdge by remember { mutableStateOf(true) }
+    PredictiveBackHandler(enabled = page != AppPage.DASHBOARD) { events ->
+        try {
+            events.collect { event ->
+                if (!reducedMotion) {
+                    backFromLeftEdge = event.swipeEdge == BackEventCompat.EDGE_LEFT
+                    backPreview.snapTo(event.progress)
+                }
+            }
+            page = if (page.isSubPage) subPageReturn else AppPage.DASHBOARD
+            scope.launch { backPreview.animateTo(0f, DimaMotion.spatialDefault()) }
+        } catch (cancelled: CancellationException) {
+            scope.launch { backPreview.animateTo(0f, DimaMotion.spatialFast()) }
+            throw cancelled
+        }
     }
 
     // D-056: 최초 설치에는 앱 셸 대신 전체화면 온보딩이 권한을 순서대로 설명하고 요청한다.
@@ -301,11 +338,24 @@ fun DimaNowApp(
             LocalEntranceMotion provides entranceMotion,
             LocalRetainedFlowValues provides retainedFlowValues,
         ) {
-            // One motion per tab change: an M3 fade-through (D-103); the lists do not also rise in.
+            // One motion per page change; the lists do not also rise in. Navigation-bar destinations use the M3
+            // fade-through (D-103); a page opened from 전체 slides in forward and back out backward (D-121).
+            val slidePx = with(LocalDensity.current) { PageSlideDistance.roundToPx() } *
+                (if (LocalLayoutDirection.current == LayoutDirection.Rtl) -1 else 1)
+            val backdrop = MaterialTheme.colorScheme.surfaceContainerHighest
             AnimatedContent(
                 targetState = page,
-                transitionSpec = { dimaFadeThrough() },
+                transitionSpec = {
+                    dimaPageTransform(pageMotion(initialState, targetState, subPageReturn), slidePx, reducedMotion)
+                },
                 label = "tab_transition",
+                modifier = Modifier
+                    // The shrinking page needs a backdrop one tone apart, or its edges vanish into the same page color.
+                    .drawBehind { if (backPreview.value > 0f) drawRect(backdrop) }
+                    .predictiveBackPreview(
+                        progress = { backPreview.value },
+                        fromLeftEdge = { backFromLeftEdge },
+                    ),
             ) { targetPage ->
               tabStateHolder.SaveableStateProvider(targetPage.name) {
                CompositionLocalProvider(LocalScrollToTopSignal provides (reselections[targetPage] ?: 0)) {

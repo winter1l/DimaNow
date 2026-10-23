@@ -10,7 +10,9 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
@@ -143,6 +145,7 @@ private fun <T> DimaDayCellSelector(
     supportingLabel: (T) -> String?,
 ) {
     if (items.isEmpty()) return
+    val haptics = LocalHapticFeedback.current
     val density = LocalDensity.current
     val textMeasurer = rememberTextMeasurer()
     val labelStyle = MaterialTheme.typography.labelLargeEmphasized
@@ -177,7 +180,11 @@ private fun <T> DimaDayCellSelector(
                         val description = listOfNotNull(koreanWeekdayLabel(day), date).joinToString(" ")
                         FilterChip(
                             selected = isSelected,
-                            onClick = { onSelect(item) },
+                            onClick = {
+                                // D-121: the same segment tick as the connected button group when the day changes
+                                if (!isSelected) haptics.performHapticFeedback(HapticFeedbackType.SegmentTick)
+                                onSelect(item)
+                            },
                             // Grows with the font scale; 52dp is only the resting minimum.
                             modifier = Modifier.weight(1f).heightIn(min = 52.dp)
                                 .then(itemTag(item)?.let { Modifier.testTag(it) } ?: Modifier)

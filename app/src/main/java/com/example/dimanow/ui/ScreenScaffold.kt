@@ -45,6 +45,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
@@ -292,6 +295,15 @@ private fun PullToRefresh(
         return
     }
     val state = rememberPullToRefreshState()
+    // D-121: one tick as the pull passes the refresh threshold, so the student feels "let go now" without looking.
+    // A refresh started from the bar's button also moves the indicator to the threshold; it stays silent.
+    val haptics = LocalHapticFeedback.current
+    val currentlyRefreshing by rememberUpdatedState(refreshing)
+    LaunchedEffect(state) {
+        snapshotFlow { state.distanceFraction >= 1f }.collect { armed ->
+            if (armed && !currentlyRefreshing) haptics.performHapticFeedback(HapticFeedbackType.GestureThresholdActivate)
+        }
+    }
     PullToRefreshBox(
         isRefreshing = refreshing,
         onRefresh = onRefresh,

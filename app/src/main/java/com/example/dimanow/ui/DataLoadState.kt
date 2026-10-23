@@ -31,6 +31,10 @@ import com.example.dimanow.meal.MealRefreshResult
 import com.example.dimanow.shuttle.ShuttleData
 import com.example.dimanow.shuttle.ShuttleRefreshResult
 import com.example.dimanow.ui.motion.AnimatedCountText
+import com.example.dimanow.ui.motion.DimaMotion
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.runtime.getValue
 import java.time.DayOfWeek
 import java.time.LocalDate
 import java.time.temporal.TemporalAdjusters
@@ -160,9 +164,23 @@ internal fun DimaLoadingIndicator(modifier: Modifier = Modifier, size: Dp = 48.d
 /** OpenType tabular figures: every digit takes the same width, so a ticking countdown keeps its size. */
 internal const val TABULAR_FIGURES = "tnum"
 
+/** Within this many minutes the nearest departure counts as imminent (D-121): about the walk to the stop. */
+internal const val IMMINENT_DEPARTURE_MINUTES = 5L
+
+/** True for the nearest departure once it is [IMMINENT_DEPARTURE_MINUTES] or less away (D-121). */
+internal fun isImminentDeparture(minutesLeft: Long, isNearest: Boolean): Boolean =
+    isNearest && minutesLeft <= IMMINENT_DEPARTURE_MINUTES
+
 /**
  * Next-departure capsule shared by Home, the campus shuttle and 4402 (D-094(1), (5)): the
  * countdown/service label on one line and the clock on its own line beneath.
+ *
+ * D-121 (one of the app's two hero moments): when the departure is [imminent] the capsule morphs from its 12dp tile
+ * into a full pill on the expressive spatial spring, breaking from the shape of the capsules beside it, as M3
+ * Expressive suggests for the one element that matters now. The label still says how soon in words, so the shape is
+ * never the only signal. The fill changes on the effects spring (a capsule turning into the last service), and the
+ * clock rolls like the countdown when the departure it shows changes. The morph is a state change, not a loop: it
+ * runs once when the departure becomes imminent and the pill then stays still.
  */
 @Composable
 internal fun DepartureCapsule(
@@ -172,10 +190,18 @@ internal fun DepartureCapsule(
     contentColor: Color,
     modifier: Modifier = Modifier,
     labelStyle: TextStyle = MaterialTheme.typography.labelMediumEmphasized,
+    imminent: Boolean = false,
 ) {
+    val pillFraction by animateFloatAsState(
+        targetValue = if (imminent) 1f else 0f,
+        animationSpec = DimaMotion.spatialDefault(),
+        label = "departure_capsule_shape",
+    )
+    val fill by animateColorAsState(containerColor, DimaMotion.effectsDefault(), label = "departure_capsule_fill")
+    val ink by animateColorAsState(contentColor, DimaMotion.effectsDefault(), label = "departure_capsule_ink")
     Surface(
-        shape = DimaShapes.Tile,
-        color = containerColor,
+        shape = if (pillFraction == 0f) DimaShapes.Tile else DimaShapes.tileToPill(pillFraction),
+        color = fill,
         modifier = modifier,
     ) {
         Column(
@@ -186,14 +212,13 @@ internal fun DepartureCapsule(
             AnimatedCountText(
                 text = label,
                 style = labelStyle.copy(fontFeatureSettings = TABULAR_FIGURES),
-                color = contentColor,
+                color = ink,
             )
-            Text(
+            AnimatedCountText(
                 text = clock,
                 style = MaterialTheme.typography.bodySmall.copy(fontFeatureSettings = TABULAR_FIGURES),
-                color = contentColor,
-                maxLines = 1,
-                softWrap = false,
+                color = ink,
+                singleLine = true,
             )
         }
     }

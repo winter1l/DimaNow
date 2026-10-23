@@ -213,6 +213,7 @@ private fun Bus4402StopCard(
                                 containerColor = container,
                                 contentColor = content,
                                 labelStyle = MaterialTheme.typography.titleSmallEmphasized,
+                                imminent = isImminentDeparture(minutesLeft, isNearest = index == 0),
                                 modifier = Modifier.testTag("bus4402_next_${stop.stopNumber}_$index"),
                             )
                         }

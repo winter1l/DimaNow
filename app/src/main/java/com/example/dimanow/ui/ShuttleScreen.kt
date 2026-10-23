@@ -396,6 +396,7 @@ private fun ShuttleRouteCard(
                                     containerColor = container,
                                     contentColor = content,
                                     labelStyle = MaterialTheme.typography.titleSmallEmphasized,
+                                    imminent = isImminentDeparture(countdown.remainingMinutes, isNearest = index == 0),
                                     modifier = Modifier.testTag("next_departure_$index"),
                                 )
                             }

@@ -251,6 +251,62 @@ class LmsHistoryScreenTest {
     }
 
     @Test
+    fun eachCourseShowsWhatIsLeftThenFoldedMissedDeadlines() {
+        val course = LmsCourse("studio", "스튜디오기초실습")
+        val left = LmsItem(
+            id = "left", courseId = "studio", courseName = "스튜디오기초실습",
+            kind = LmsItemKind.ASSIGNMENT, title = "다음 주 과제",
+            dueAt = Instant.parse("2026-09-08T14:59:00Z"),
+            detailUrl = "https://lms.dima.ac.kr/item/left",
+        )
+        val missed = left.copy(id = "missed", kind = LmsItemKind.DISCUSSION, title = "지난 토론", dueAt = Instant.parse("2026-08-20T14:59:00Z"))
+        composeRule.setContent {
+            DIMANowTheme {
+                LmsItemsScreen(
+                    snapshot = LmsSnapshot(courses = listOf(course), items = listOf(missed, left), syncState = LmsSyncState.READY),
+                    sessionState = LmsSessionState.ACTIVE, selectedCourse = null, selectedKind = null,
+                    onCourseChange = {}, onKindChange = {}, onRefresh = {}, onOpenItem = {},
+                    now = Instant.parse("2026-09-01T03:00:00Z"),
+                )
+            }
+        }
+
+        composeRule.onNodeWithTag("lms_mode_all").performClick()
+        composeRule.onNodeWithText("다음 주 과제").assertExists()
+        composeRule.onNodeWithText("지난 토론").assertDoesNotExist()
+        composeRule.onNodeWithTag("lms_overdue_toggle_studio").performClick()
+        composeRule.onNodeWithText("지난 토론").assertExists()
+        composeRule.onNodeWithText("12일 지남").assertExists()
+        composeRule.onAllNodesWithText("남은 학습이 없어요").assertCountEquals(0)
+    }
+
+    @Test
+    fun aCourseWithOnlyFoldedItemsSaysNothingIsLeft() {
+        val done = LmsItem(
+            id = "done", courseId = "light", courseName = "조명기초실습",
+            kind = LmsItemKind.MATERIAL, title = "빛의 특성",
+            detailUrl = "https://lms.dima.ac.kr/item/done",
+            completionState = LmsCompletionState.COMPLETE,
+        )
+        composeRule.setContent {
+            DIMANowTheme {
+                LmsItemsScreen(
+                    snapshot = LmsSnapshot(courses = listOf(LmsCourse("light", "조명기초실습")), items = listOf(done), syncState = LmsSyncState.READY),
+                    sessionState = LmsSessionState.ACTIVE, selectedCourse = null, selectedKind = null,
+                    onCourseChange = {}, onKindChange = {}, onRefresh = {}, onOpenItem = {},
+                    now = Instant.parse("2026-09-01T03:00:00Z"),
+                )
+            }
+        }
+
+        composeRule.onNodeWithTag("lms_mode_all").performClick()
+        composeRule.onNodeWithText("조명기초실습").assertExists()
+        composeRule.onNodeWithTag("lms_course_empty_light").assertExists()
+        composeRule.onNodeWithText("남은 학습이 없어요").assertExists()
+        composeRule.onNodeWithText("빛의 특성").assertDoesNotExist()
+    }
+
+    @Test
     fun todayIsDefaultAndShowsChangeAndAuthoritativeCompletionBadges() {
         composeRule.setContent {
             DIMANowTheme {
@@ -352,17 +408,17 @@ class LmsHistoryScreenTest {
 
         composeRule.onNodeWithTag("lms_mode_all").performClick()
 
-        // D-058: 과목별도 할 일과 똑같이 과목 묶음에는 미완료만 두고 완료는 아래로 접어 둔다.
+        // D-118: 과목마다 남은 항목을 먼저 두고, 완료한 학습은 그 과목 아래에 접어 둔다.
         // D-117: 과목 머리글이 과목을 말하므로 행에는 종류만 쓰고, 수강 상태는 섹션이 말한다.
-        composeRule.onNodeWithText("음향기초실습 · 1개").assertExists()
+        // The heading reads as one node: the course and how many items are left in it.
+        composeRule.onNode(hasText("음향기초실습") and hasText("1개")).assertExists()
         composeRule.onNodeWithText("사운드디자인 기초(2)").assertExists()
         composeRule.onNodeWithText("콘텐츠").assertExists()
         composeRule.onAllNodesWithText("미수강").assertCountEquals(0)
         composeRule.onNodeWithText("사운드디자인 기초(1)").assertDoesNotExist()
 
-        composeRule.onNodeWithTag("lms_completed_toggle").performClick()
+        composeRule.onNodeWithTag("lms_completed_toggle_audio").performClick()
         composeRule.onNodeWithText("사운드디자인 기초(1)").assertExists()
-        composeRule.onNodeWithText("콘텐츠 · 음향기초실습").assertExists()
 
         // D-058: 카드에서 읽음/안읽음 배지는 완전히 사라졌다. 읽지 않은 항목도 표시되지 않는다.
         composeRule.onAllNodesWithText("읽음").assertCountEquals(0)

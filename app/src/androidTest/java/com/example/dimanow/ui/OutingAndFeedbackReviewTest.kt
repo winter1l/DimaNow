@@ -32,7 +32,7 @@ class OutingAndFeedbackReviewTest {
                 OutingWarningDialog(OutingWarning.AfterRollCallDeadline("21:00 전까지"), now = LocalTime.of(21, 34), onOpen = { opened = true }, onDismiss = {})
             }
         }
-        compose.onNodeWithText("오늘은 신청 시간이 지났어요").assertExists()
+        compose.onNodeWithText("점호 신청 시간이 지났어요").assertExists()
         capture("outing-rollcall")
         compose.onNodeWithTag("dorm_outing_warning_open").performClick()
         compose.runOnIdle { assertEquals(true, opened) }

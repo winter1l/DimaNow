@@ -469,7 +469,7 @@ internal fun OutingWarningDialog(warning: OutingWarning, now: LocalTime, onOpen:
     val nowText = now.format(CLOCK)
     val (title, text, points) = when (warning) {
         is OutingWarning.AfterRollCallDeadline -> Triple(
-            "오늘은 신청 시간이 지났어요",
+            "점호 신청 시간이 지났어요",
             "점호가 있는 날은 ${warning.deadlineText} 신청해야 해요. 지금 신청하면 반영되지 않을 수 있어요.",
             listOf("신청 마감" to warning.deadlineText.substringBefore(' ').removeSuffix("까지"), "지금" to nowText),
         )

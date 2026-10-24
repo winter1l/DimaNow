@@ -169,7 +169,14 @@ fun LmsRoute(
                     autoLoginCoordinator.dismissSessionConflict()
                     manualConflictCredentials = null
                     loginBridge.approveSessionTakeoverOnce()
-                    scope.launch { if (manual != null) manualLogin(manual) else loginAndRefresh(force = true) }
+                    scope.launch {
+                        try {
+                            if (manual != null) manualLogin(manual) else loginAndRefresh(force = true)
+                        } finally {
+                            // An approval this login did not consume never reaches a later automatic login.
+                            loginBridge.clearSessionTakeoverApproval()
+                        }
+                    }
                 }) { Text("이 기기로 로그인") }
             },
             dismissButton = {

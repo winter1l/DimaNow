@@ -419,6 +419,10 @@ internal fun LmsAuthenticationWebView(
                                     view.evaluateJavascript(
                                         "Boolean(document.querySelector(\"a[href*='/lms/myLecture/doListView']\"))",
                                     ) { authenticated ->
+                                        // The answer belongs to this page only while the WebView is still on it.
+                                        // After the dashboard load has started, a late or repeated callback for
+                                        // the main page reads a document in transition and must be ignored.
+                                        if (Uri.parse(view.url.orEmpty()).path != MAIN_PATH) return@evaluateJavascript
                                         if (authenticated == "true") {
                                             advance(
                                                 view,
@@ -430,7 +434,7 @@ internal fun LmsAuthenticationWebView(
                                         } else if (flowState.stage == LmsLoginFlowStage.LOGIN_SUBMISSION) {
                                             advance(view, LmsLoginFlowEvent.CredentialsRejected)
                                         } else {
-                                            advance(view, LmsLoginFlowEvent.SessionTakeoverActionUnavailable)
+                                            advance(view, LmsLoginFlowEvent.LoginNotEstablished)
                                         }
                                     }
                                     return
@@ -461,10 +465,7 @@ internal fun LmsAuthenticationWebView(
                                                         if (flowState.stage == LmsLoginFlowStage.LOGIN_SUBMISSION) {
                                                             advance(view, LmsLoginFlowEvent.CredentialsRejected)
                                                         } else {
-                                                            advance(
-                                                                view,
-                                                                LmsLoginFlowEvent.SessionTakeoverActionUnavailable,
-                                                            )
+                                                            advance(view, LmsLoginFlowEvent.LoginNotEstablished)
                                                         }
                                                     }
                                                 },

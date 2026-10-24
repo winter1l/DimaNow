@@ -72,6 +72,14 @@ class LmsLoginBridge : LmsLoginDriver {
         takeoverApproval.set(true)
     }
 
+    /**
+     * Drops an approval the approved login did not use (for example when the session was already active again),
+     * so it can never carry over to a later automatic login (D-099: never take over without asking).
+     */
+    fun clearSessionTakeoverApproval() {
+        takeoverApproval.set(false)
+    }
+
     override suspend fun authenticate(credentials: SavedLmsCredentials): LmsLoginResult {
         val pending = LmsLoginRequest(credentials, CompletableDeferred(), allowSessionTakeover = takeoverApproval.getAndSet(false))
         check(mutableRequest.compareAndSet(null, pending)) { "LMS login is already in progress" }
@@ -130,6 +138,12 @@ internal sealed interface LmsLoginFlowEvent {
     /** Emitted only after the adapter verifies the live official 3045 page's own action. */
     data object SessionTakeoverActionVerified : LmsLoginFlowEvent
     data object SessionTakeoverActionUnavailable : LmsLoginFlowEvent
+    /**
+     * LMS sent the login back to its main page without a signed-in menu, or left it on a sign-in page, after the
+     * credentials step. Only after a takeover submission is that a failed takeover; otherwise it is an ordinary
+     * login that did not stick, and must not be reported as a takeover (which never happened).
+     */
+    data object LoginNotEstablished : LmsLoginFlowEvent
     data object InteractiveChallengeDetected : LmsLoginFlowEvent
     data object CredentialsRejected : LmsLoginFlowEvent
     data class CourseExtractionFinished(val hasCourses: Boolean) : LmsLoginFlowEvent
@@ -238,6 +252,17 @@ internal fun reduceLmsLoginFlow(
     }
     LmsLoginFlowEvent.SessionTakeoverActionUnavailable -> {
         val result = LmsLoginResult.SessionTakeoverFailed()
+        LmsLoginFlowTransition(
+            state.copy(stage = LmsLoginFlowStage.TERMINAL_ERROR, result = result),
+            LmsLoginFlowCommand.Complete(result),
+        )
+    }
+    LmsLoginFlowEvent.LoginNotEstablished -> {
+        val result = if (state.sessionTakeoverSubmissions > 0) {
+            LmsLoginResult.SessionTakeoverFailed()
+        } else {
+            LmsLoginResult.Failure(LmsUserMessages.LOGIN_NOT_ESTABLISHED)
+        }
         LmsLoginFlowTransition(
             state.copy(stage = LmsLoginFlowStage.TERMINAL_ERROR, result = result),
             LmsLoginFlowCommand.Complete(result),

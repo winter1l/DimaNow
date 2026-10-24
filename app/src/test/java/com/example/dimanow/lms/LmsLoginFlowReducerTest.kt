@@ -289,4 +289,29 @@ class LmsLoginFlowReducerTest {
         assertEquals(0, conflict.state.sessionTakeoverSubmissions)
         assertEquals(LmsLoginFlowCommand.Complete(LmsLoginResult.SessionConflict), conflict.command)
     }
+
+    @Test
+    fun anOrdinaryLoginThatDoesNotStickIsNotReportedAsAFailedTakeover() {
+        // The reported case: nobody else was signed in, LMS showed its signed-in main page, then the app was sent
+        // back without a session. Before, this read "다른 기기의 로그인을 넘겨받지 못했어요".
+        var transition = reduceLmsLoginFlow(LmsLoginFlowState.initial(), LmsLoginFlowEvent.CredentialsAvailable)
+        transition = reduceLmsLoginFlow(
+            transition.state,
+            LmsLoginFlowEvent.MainFrameFinished("https://lms.dima.ac.kr/main/MainView.dunet", authenticatedMain = true),
+        )
+        assertEquals(LmsLoginFlowStage.LMS_MAIN_CONFIRMATION, transition.state.stage)
+
+        transition = reduceLmsLoginFlow(transition.state, LmsLoginFlowEvent.LoginNotEstablished)
+
+        val expected = LmsLoginResult.Failure(LmsUserMessages.LOGIN_NOT_ESTABLISHED)
+        assertEquals(LmsLoginFlowStage.TERMINAL_ERROR, transition.state.stage)
+        assertEquals(LmsLoginFlowCommand.Complete(expected), transition.command)
+    }
+
+    @Test
+    fun aLoginThatDoesNotStickAfterATakeoverIsStillAFailedTakeover() {
+        val transition = reduceLmsLoginFlow(takeoverSubmissionState(), LmsLoginFlowEvent.LoginNotEstablished)
+
+        assertEquals(LmsLoginFlowCommand.Complete(LmsLoginResult.SessionTakeoverFailed()), transition.command)
+    }
 }

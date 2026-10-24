@@ -11,6 +11,8 @@ internal object LmsUserMessages {
     const val NETWORK = "학교 서버에 연결하지 못했어요. 인터넷 연결을 확인하고 다시 시도해 주세요"
     const val SIGN_IN_REQUIRED = "로그인이 필요해요. 다시 로그인해 주세요"
     const val COURSE_CATALOG_FAILED = "수업 목록을 확인하지 못했어요. 다시 시도해 주세요"
+    /** LMS opened as signed in, then sent the app back to its main or sign-in page (not a takeover). */
+    const val LOGIN_NOT_ESTABLISHED = "LMS 로그인을 마치지 못했어요. 다시 시도해 주세요"
     const val DETAIL_FAILED = "글을 불러오지 못했어요. 잠시 후 다시 시도해 주세요"
     const val ATTACHMENT_FAILED = "첨부파일을 받지 못했어요. 잠시 후 다시 시도해 주세요"
     const val ATTACHMENT_SAVE_FAILED = "첨부파일을 저장하지 못했어요. 저장 위치를 확인하고 다시 시도해 주세요"

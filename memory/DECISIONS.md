@@ -731,3 +731,10 @@ Confirmed: "홈 탭에 수업 시작 시작과 수업 시간 시작과 끝이 �
 3. A map is added to the plan only (Phase 3 candidate), not built.
 
 D-127 amendment (2026-10-26): the user added "셔틀 탭에도 똑같이 해줘". Item 2 now covers the 셔틀 tab and 4402 strips too: when the next departure is more than an hour away it is the only large cell, a secondaryContainer tile with its markers (or `다음 출발`) small above and its clock large, and the departure after it is an ordinary time cell (`nextDepartureLook`, `TimetableChipSpec.farAhead`).
+
+## D-128 — Phase 2 of the feature plan, with defaults chosen by the agent — 2026-10-26
+Confirmed: "이제 다음 2단계를 진행해줘." (phase 2 of the 2026-10-26 plan: Home editor, app shortcuts and a Quick Settings tile, notice keyword alerts, ICS export). The details below are the agent's defaults, stated to the user; they stand until the user changes them.
+1. Home editor: a `홈 편집` button at the end of Home opens a full-screen editor. The briefing card stays first and the update/what's-new cards stay on top; the other cards (수업, 학사 일정, 셔틀, 점호, 식단, 학교 공지) can be reordered with move-up/down buttons and hidden. A favourites row under the briefing holds shortcuts the student picks from 시간표, 외출·외박 신청, 모바일 열람증, 헤이영, 기숙사, 장비 대여, 설정; it starts with 시간표 and 모바일 열람증 (외출·외박 신청 too for 엔터관).
+2. App shortcuts (long-press the icon): 셔틀, 식단, 외출·외박 신청, 모바일 열람증. Quick Settings tile `다음 셔틀`: shows the next campus shuttle from the current location and opens the 셔틀 tab.
+3. Notice keyword alerts: off by default; keywords are kept on the device only; matching new 학교 공지 (published once a day) post one notification per notice. The first time the student opens the full notice list, a sheet suggests turning it on with sample keywords (장학, 기숙사, 수강신청, 휴강); `나중에` dismisses it for good.
+4. ICS export from the 시간표 page: the term's weekly classes (weekly repeats until the term ends, no-class days skipped) and/or the 학사 일정, shared through the share sheet as an `.ics` file; the app never writes to a calendar (D-125(6)).

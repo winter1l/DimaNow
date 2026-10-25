@@ -508,3 +508,6 @@ Observed on the user's SM-S918N with temporary request-logging builds (paths onl
 User-reported, same evening, after the final D-116 build (`dist/d116-optimize/`): signing out and signing in to DIMA C again works with the script rule (the sign-in hops were not observed by the agent).
 
 User-reported, 2026-10-24 early morning: a test report sent from the app with the D-120 build (`dist/d120-report/`) became a GitHub issue and "정상 작동하고있어" (the agent did not create or look at the issue).
+
+## 2026-10-26 — D-126 phase 1 (worktree build, release-signed, phone SM-S918N)
+Observed: the build installed over the release app; `dumpsys jobscheduler` lists `DeadlineDigestWorker` and the academic reminder with their first run at the next 08:30 KST. Tablet instrumented tests cover the Home 수업 card's far deadline line (`D-3 · 9/17 마감`), one countdown size per Home shuttle row at font scale 1.3, Settings and the report form. Not yet observed: a posted deadline digest, an outing reminder from a real 점호 notice, the what's-new card after an update, the 모바일 열람증/헤이영 shortcuts launching the apps.

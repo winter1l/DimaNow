@@ -701,3 +701,33 @@ Confirmed through mockups (shuttle-tab "전체 시간표" chips → whole-card r
 5. Hand-over motion on one non-bouncy spring (the expressive spatial spring's overshoot plus three competing animations caused the jump and stutter); colours on the effects spring.
 
 D-124 amendment (2026-10-25): the user clarified "셔틀 탭에서는 칩 디자인을 유지해. 내 뜻은 홈 탭에서만 좌우측으로 구분하라는거얐어". Item 3 is narrowed: the shuttle and 4402 strips keep the approved stacked cell (clock and markers small on top, countdown large beneath); only Home's capsules put the countdown large on the left and the clock small on the right. The rest of D-124 stands.
+
+## D-125 — Directions for the next features — 2026-10-25
+Confirmed: after the feature brainstorm the user answered each candidate and asked "확인하고 계획을 세워줘". These set direction only; designs and scheduling come with each implementation request. Checks behind them are in `feature-plan-20261025.md`; the open choices are in Q-034.
+1. LMS deadline reminders bundle a day's items into one notification ("과제가 하루에 여러개일 수 있으니, 알림 하나로 '오늘은 *이 *개 있어요' 이런식이 좋지 않을까"), not one notification per item.
+2. Home's 수업 card also shows far or open-ended deadlines ("마감일이 멀더라도 (보통 그냥 과제 제출이 아닌 그냥 영상 보기나 자료 받아야하는거면 마감일을 무한정으로 하는 경우도 있어서) 홈탭에 보이게 하는식이 좋지 않을까?").
+3. The 점호 outing reminder fires only when the app has read an actual KakaoTalk 점호 notice, and tapping it opens the outing application page ("카톡 알림을 확인한 경우에만 하는게 확실하고 좋을 것 같아. 알림을 누르면 바로 신청 페이지로 가고").
+4. Notice keyword alerts are an option, suggested once in a popup at first ("옵션으로 두고, 초기에는 팝업으로 추천하는 것도 좋을 듯").
+5. Besides app shortcuts and a Quick Settings tile, Home becomes editable: card order and favourites ("앱 홈화면을 수정할 수 있게 하는 것도 좋지 않을까? 순서랑 즐겨찾는 기능 같은거라든지").
+6. Calendar: ICS export only; the app never adds events to a calendar by itself ("굳. 자동으로 캘린더에 넣진 않는게 좋을 것 같아").
+7. Approved to build: one font size per Home shuttle row ("해봐"), the 2027 academic calendar self-import (Q-026, "굳"), and large screens, launch performance and a what's-new sheet ("굳").
+
+D-125 amendment (2026-10-26): 8. No 4402 real-time arrivals: the user checked that buses keep the timetable ("다음 정류장(33243)으로 보는게 더 정확할 것 같아. 실제로는 시간표대로 잘 운영하고 있거든", then "시간 잘 지키는데 굳이?"); Kakao's 33243 expected times confirm it (official + 2 min). The official timetable and the 33243 `+1` estimate stay (D-061). 9. A shortcut to the library app's 모바일 열람증, used at the library gate, is wanted ("바로가기 버튼정도는 앱에 있으면 좋을 듯?"); the library sign-in is the portal account ("포털 계정과 동일").
+
+## D-126 — Phase 1 of the feature plan, with the recommended defaults — 2026-10-26
+Confirmed: the user answered "1단계를 추천 기본값대로 시작해줘" to the 2026-10-26 plan (`feature-plan-20261025.md`, "Proposed plan (2026-10-26)").
+1. Home shuttle rows use one countdown font size per row (D-125(7)).
+2. Home 수업 card shows the 3 nearest open deadlines whatever their distance; far ones quietly as `D-n · M/d 마감`; dated 자료 only when LMS reports it incomplete (D-125(2)).
+3. A daily bundled deadline notification at 08:30 KST from the last loaded LMS list, own channel, can be turned off (D-125(1)).
+4. 점호 outing reminder: only after a KakaoTalk notice that 점호 is held that day, only for 엔터관 (home_base YEIN), one hour before the application deadline (21:00 when the notice gives none), cancelled by a cancelling notice; tapping opens the outing page (D-125(3)). 점호 notices count only from group chats and only when not phrased as a question; this narrows D-112(2) and D-122(9)'s "any chat".
+5. Q-032 (a), (b), (c), (e), (h) are fixed; (f) waits for a Worker deploy approval.
+6. 전체 → 바로가기 gains 모바일 열람증 (opens the library app `kr.ac.dima.lib`) and 헤이영 (`com.shinhan.heyoung`), each with a Play Store fallback.
+7. What's-new: after an update a dismissible Home card opens a sheet of the version's changes (no launch-time interruption, D-102).
+
+## D-127 — Home class chip counts down; a far next bus is one quiet tile — 2026-10-26
+Confirmed: "홈 탭에 수업 시작 시작과 수업 시간 시작과 끝이 똑같은 정보를 보여주고 있어, 칩에는 몇분 남았는지 표시해줘. 셔틀도 첫차가 1시간 이상 남았다면, 첫차 칩 하나만 두번째 네모 색과 모양을 사용해줘. 나머지는 시간만 보이고. 그리고 지도 추가도 좋을 것 같아서 이건 일단 계획으로만 추가해줘."
+1. Home hero chip before today's class always shows the time left (`시작까지 45분`, `시작까지 2시간 5분`); narrows D-094(14) on Home only (widgets, notifications and other labels keep the start clock beyond an hour). `수업 중` stays during class.
+2. Home shuttle row: when the next departure is more than an hour away (read as any such departure, typically 첫차), it is one tile in the second capsule's colour and shape with its clock large and its markers small (no `다음 출발`), and the later departure shows only its time on a quiet tile. The shuttle tab's strip is unchanged.
+3. A map is added to the plan only (Phase 3 candidate), not built.
+
+D-127 amendment (2026-10-26): the user added "셔틀 탭에도 똑같이 해줘". Item 2 now covers the 셔틀 tab and 4402 strips too: when the next departure is more than an hour away it is the only large cell, a secondaryContainer tile with its markers (or `다음 출발`) small above and its clock large, and the departure after it is an ordinary time cell (`nextDepartureLook`, `TimetableChipSpec.farAhead`).

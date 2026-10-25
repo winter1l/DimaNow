@@ -37,6 +37,7 @@ Purpose: durable project context that survives session and context changes.
 | `launch-readiness-20261017.md` | Read-only public-launch readiness review: blockers, decisions needed, external requirements and proposed order | Append dated evidence |
 | `ux-guide-pass-20261022.md` | D-102 UX pass from Apple HIG, Material 3 and the Toss guide: sources, changes, kept decisions and emulator evidence | Append dated evidence |
 | `m3e-review-20261022.md` | Read-only M3 Expressive conformance review of colors, shape, type, motion and components after D-103 | Append dated evidence |
+| `feature-plan-20261025.md` | D-125 feature directions: library, 전자출결, grades and 4402 checks, Q-032 recheck and the phased plan | Append dated evidence |
 | `checkpoints/` | Append-only archive of superseded checkpoints | Add a timestamped copy before replacing `CHECKPOINT.md` |
 
 ## Operating principles

@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import com.example.dimanow.theme.DimaShapes
+import com.example.dimanow.theme.DimaTheme
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -32,10 +33,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.Layout
+import androidx.compose.ui.text.TextMeasurer
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.takeOrElse
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.dimanow.meal.MealRefreshResult
 import com.example.dimanow.shuttle.ShuttleData
@@ -188,9 +193,11 @@ internal fun Density.departureLargeHeight(typography: Typography): Dp = maxOf(
 )
 
 /**
- * The large departure content shared by Home's capsules and the shuttle and 4402 strips (D-124): the countdown in
- * large type on the left; the clock, with any markers (첫차, 막차, 운동장, 예정) beneath it, small on the right.
- * Tabular figures keep ticking digits the same width (D-102); the countdown rolls (D-121).
+ * The content of Home's departure capsules (D-124): the countdown in large type on the left, taking the room the
+ * clock leaves; the clock, with any markers (첫차, 막차, 운동장, 예정) beneath it, small on the right. The shuttle and
+ * 4402 strips stack their cells instead (`DepartureCell`). The countdown is drawn at [countdownSize] (titleLargeEmphasized's
+ * size when unspecified) so a Home row can give all its countdowns one size (D-126(1)); its line height stays, so the
+ * capsule's height does not change. Tabular figures keep ticking digits the same width (D-102); the countdown rolls (D-121).
  */
 @Composable
 internal fun DepartureLargeContent(
@@ -199,21 +206,16 @@ internal fun DepartureLargeContent(
     markers: List<String>,
     ink: Color,
     modifier: Modifier = Modifier,
-    fillWidth: Boolean = false,
+    countdownSize: TextUnit = TextUnit.Unspecified,
 ) {
     val large = MaterialTheme.typography.titleLargeEmphasized
     Row(modifier = modifier, horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
         AnimatedCountText(
             text = countdown,
-            style = large.copy(fontFeatureSettings = TABULAR_FIGURES),
+            style = large.copy(fontSize = countdownSize.takeOrElse { large.fontSize }, fontFeatureSettings = TABULAR_FIGURES),
             color = ink,
             singleLine = true,
-            // In a fixed-width cell (Home, D-124) the countdown takes the room the clock leaves and steps down in size
-            // instead of overflowing on a narrow phone or at a large font scale.
-            autoSize = if (fillWidth) {
-                androidx.compose.foundation.text.TextAutoSize.StepBased(minFontSize = 12.sp, maxFontSize = large.fontSize, stepSize = 1.sp)
-            } else null,
-            modifier = if (fillWidth) Modifier.weight(1f) else Modifier,
+            modifier = Modifier.weight(1f),
         )
         Column {
             Text(
@@ -240,7 +242,7 @@ internal fun DepartureLargeContent(
  * Home's next-departure capsule (D-124, matching the shuttle tab's strip): [DepartureLargeContent] on the strip's
  * colours — the nearest departure in primary and fully round, the others secondary tiles, last service in the
  * warning roles. Supersedes D-121's imminent-only pill: the nearest one is always round and nothing changes at five
- * minutes. The fill changes on the effects spring.
+ * minutes. The fill changes on the effects spring. [countdownSize] comes from [rememberHomeCountdownSize].
  */
 @Composable
 internal fun DepartureCapsule(
@@ -251,16 +253,112 @@ internal fun DepartureCapsule(
     contentColor: Color,
     modifier: Modifier = Modifier,
     isNext: Boolean = false,
+    countdownSize: TextUnit = TextUnit.Unspecified,
 ) {
     val fill by animateColorAsState(containerColor, DimaMotion.effectsDefault(), label = "departure_capsule_fill")
     val ink by animateColorAsState(contentColor, DimaMotion.effectsDefault(), label = "departure_capsule_ink")
     val height = with(LocalDensity.current) { departureLargeHeight(MaterialTheme.typography) } + 16.dp
     Surface(shape = if (isNext) CircleShape else DimaShapes.Tile, color = fill, modifier = modifier) {
-        Box(Modifier.heightIn(min = height).padding(horizontal = if (isNext) 16.dp else 12.dp), contentAlignment = Alignment.CenterStart) {
-            DepartureLargeContent(countdown = countdown, clock = clock, markers = markers, ink = ink, modifier = Modifier.fillMaxWidth(), fillWidth = true)
+        Box(Modifier.heightIn(min = height).padding(horizontal = capsulePadding(isNext)), contentAlignment = Alignment.CenterStart) {
+            DepartureLargeContent(
+                countdown = countdown,
+                clock = clock,
+                markers = markers,
+                ink = ink,
+                modifier = Modifier.fillMaxWidth(),
+                countdownSize = countdownSize,
+            )
         }
     }
 }
+
+private fun capsulePadding(isNext: Boolean): Dp = if (isNext) 16.dp else 12.dp
+
+/** What one of Home's departure capsules shows (D-124), known before layout so its row can size the countdowns. */
+internal data class HomeDeparture(
+    val countdown: String,
+    val clock: String,
+    val markers: List<String>,
+    val isNext: Boolean,
+    val isLastService: Boolean,
+    /** D-127: a later departure while the next one is more than an hour off shows only its time. */
+    val timeOnly: Boolean = false,
+)
+
+/** A later Home departure shown by its time alone (D-127), at the capsules' height on the quiet inner tile. */
+@Composable
+internal fun DepartureTimeTile(clock: String, modifier: Modifier = Modifier) {
+    val height = with(LocalDensity.current) { departureLargeHeight(MaterialTheme.typography) } + 16.dp
+    Surface(shape = DimaShapes.Tile, color = DimaTheme.colors.cardInner, modifier = modifier) {
+        Box(Modifier.heightIn(min = height).padding(horizontal = 12.dp), contentAlignment = Alignment.CenterStart) {
+            Text(
+                text = clock,
+                style = MaterialTheme.typography.titleMedium.copy(fontFeatureSettings = TABULAR_FIGURES),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                softWrap = false,
+            )
+        }
+    }
+}
+
+/**
+ * D-126(1): the one countdown size of a Home destination row [rowWidth] wide, with the destination tag [tag] and
+ * [departures] sharing the rest of the row equally (see [homeCountdownSize]).
+ */
+@Composable
+internal fun rememberHomeCountdownSize(rowWidth: Dp, tag: String, departures: List<HomeDeparture>): TextUnit {
+    val measurer = rememberTextMeasurer()
+    val typography = MaterialTheme.typography
+    val density = LocalDensity.current
+    return remember(rowWidth, tag, departures, measurer, typography, density) {
+        homeCountdownSize(rowWidth, tag, departures, measurer, typography, density)
+    }
+}
+
+/**
+ * The largest size, from titleLargeEmphasized's down to 12sp in 1sp steps, at which every countdown of a Home row fits
+ * its capsule. Each capsule's room is known before layout, as `measuredCellWidth` knows the strip's cells: the row
+ * less the tag (labelLarge plus 8dp each side) and the 8dp gaps, shared equally, less the capsule's side padding, the
+ * 8dp gap and its clock column, measured in the styles [DepartureLargeContent] draws. Sizing the row at once, instead
+ * of letting each text auto-size against its own width, keeps both capsules, and the old and new text while one
+ * rolls, at one size.
+ */
+internal fun homeCountdownSize(
+    rowWidth: Dp,
+    tag: String,
+    departures: List<HomeDeparture>,
+    measurer: TextMeasurer,
+    typography: Typography,
+    density: Density,
+): TextUnit {
+    val large = typography.titleLargeEmphasized
+    if (departures.isEmpty() || !large.fontSize.isSp) return large.fontSize
+    fun widthOf(text: String, style: TextStyle) =
+        measurer.measure(text, style, maxLines = 1, softWrap = false, density = density).size.width
+    val rooms = with(density) {
+        val gap = 8.dp.toPx()
+        val tagWidth = widthOf(tag, typography.labelLarge) + 16.dp.toPx()
+        val share = (rowWidth.toPx() - tagWidth - gap - gap * (departures.size - 1)) / departures.size
+        departures.map { departure ->
+            val clockColumn = maxOf(
+                widthOf(departure.clock, typography.labelLarge.copy(fontFeatureSettings = TABULAR_FIGURES)),
+                if (departure.markers.isEmpty()) 0 else widthOf(departure.markers.joinToString(" · "), typography.labelSmall),
+            )
+            // One dp less so rounding in the weighted row never clips a countdown that was measured to fit.
+            share - 2 * capsulePadding(departure.isNext).toPx() - gap - clockColumn - 1.dp.toPx()
+        }
+    }
+    fun fits(size: Float) = departures.indices.all { index ->
+        widthOf(departures[index].countdown, large.copy(fontSize = size.sp, fontFeatureSettings = TABULAR_FIGURES)) <= rooms[index]
+    }
+    var size = large.fontSize.value
+    while (size > MIN_COUNTDOWN_SP && !fits(size)) size = maxOf(size - 1f, MIN_COUNTDOWN_SP)
+    return size.sp
+}
+
+/** The smallest a Home countdown gets; below it the line clips rather than becoming unreadable. */
+private const val MIN_COUNTDOWN_SP = 12f
 
 /**
  * Lays capsules out side by side with equal widths only when the widest capsule still fits its

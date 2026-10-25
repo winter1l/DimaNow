@@ -90,7 +90,43 @@ internal data class TimetableChipSpec(
     val isPast: Boolean,
     /** `5분 후`, `다음 출발`… for today's next two departures (D-069); null for every other time. */
     val countdown: String? = null,
+    /**
+     * D-127: the next departure is more than an hour off, so its large cell is a quiet tile with the clock large
+     * (in [countdown]) and its markers, or `다음 출발`, small above; the departures after it show only their time.
+     */
+    val farAhead: Boolean = false,
 )
+
+/** The small line above a large cell's big one: the clock and markers, or for a far next departure its markers. */
+internal fun largeCellTopLine(chip: TimetableChipSpec): String =
+    if (chip.farAhead) chip.markers.joinToString(" · ").ifEmpty { "다음 출발" }
+    else (listOf(chip.clock) + chip.markers).joinToString(" · ")
+
+/**
+ * D-127: how a strip shows today's next two departures. Within an hour both count down; when the next one is
+ * further off it alone is large, a quiet tile with its clock, and the one after it is an ordinary time.
+ */
+internal data class NextDepartureLook(val countdown: String?, val tone: TimetableChipTone, val farAhead: Boolean)
+
+internal fun nextDepartureLook(
+    isFirst: Boolean,
+    isLast: Boolean,
+    isPast: Boolean,
+    isNext: Boolean,
+    isSecond: Boolean,
+    clock: String,
+    minutesLeft: Long?,
+    nextMinutesLeft: Long?,
+): NextDepartureLook {
+    val far = (nextMinutesLeft ?: 0L) > 60
+    return when {
+        far && isNext -> NextDepartureLook(clock, timetableChipTone(isFirst, isLast, isPast, isNext = false, isSecond = true), farAhead = true)
+        far -> NextDepartureLook(null, timetableChipTone(isFirst, isLast, isPast, isNext = false, isSecond = false), farAhead = false)
+        (isNext || isSecond) && minutesLeft != null ->
+            NextDepartureLook(departureCountdownLabel(minutesLeft, emptyList()), timetableChipTone(isFirst, isLast, isPast, isNext, isSecond), false)
+        else -> NextDepartureLook(null, timetableChipTone(isFirst, isLast, isPast, isNext, isSecond), false)
+    }
+}
 
 internal fun timetableChipTone(
     isFirst: Boolean,
@@ -368,7 +404,7 @@ private fun DepartureCell(chip: TimetableChipSpec, onCardInner: Boolean, width: 
                     // beneath (D-124). Home's capsules put them side by side instead.
                     CellKind.LARGE -> Column(Modifier.padding(horizontal = if (isNext) 20.dp else 14.dp)) {
                         Text(
-                            text = (listOf(chip.clock) + chip.markers).joinToString(" · "),
+                            text = largeCellTopLine(chip),
                             style = MaterialTheme.typography.labelMediumEmphasized.copy(fontFeatureSettings = TABULAR_FIGURES),
                             color = ink,
                             maxLines = 1,
@@ -435,7 +471,7 @@ private fun measuredCellWidth(chip: TimetableChipSpec, measurer: TextMeasurer, t
     fun widthOf(text: String, style: TextStyle) = measurer.measure(text, style.copy(fontFeatureSettings = TABULAR_FIGURES), maxLines = 1, softWrap = false).size.width
     val content = when (cellKind(chip)) {
         CellKind.LARGE -> maxOf(
-            widthOf((listOf(chip.clock) + chip.markers).joinToString(" · "), typography.labelMediumEmphasized),
+            widthOf(largeCellTopLine(chip), typography.labelMediumEmphasized),
             widthOf(chip.countdown.orEmpty(), typography.titleLargeEmphasized),
         )
         CellKind.SMALL -> maxOf(

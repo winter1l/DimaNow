@@ -16,6 +16,32 @@ internal fun openUrl(context: Context, url: String) {
     }
 }
 
+/**
+ * Opens another installed app (D-126(6)), or its Play Store page when it is missing. The package must be listed in
+ * the manifest's `<queries>`, or Android 11+ reports it as not installed.
+ */
+internal fun openApp(context: Context, packageName: String) {
+    context.packageManager.getLaunchIntentForPackage(packageName)?.let { launch ->
+        try {
+            context.startActivity(launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            return
+        } catch (_: android.content.ActivityNotFoundException) {
+        }
+    }
+    val store = Intent(Intent.ACTION_VIEW, Uri.parse("market://details?id=$packageName")).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+    try {
+        context.startActivity(store)
+    } catch (_: android.content.ActivityNotFoundException) {
+        openUrl(context, "https://play.google.com/store/apps/details?id=$packageName")
+    }
+}
+
+/** The library app (학술정보원) whose 모바일 열람증 opens the library gate; its card screen cannot be opened directly. */
+internal const val LIBRARY_APP_PACKAGE = "kr.ac.dima.lib"
+
+/** 헤이영 캠퍼스, where 전자출결 works. */
+internal const val HEYOUNG_APP_PACKAGE = "com.shinhan.heyoung"
+
 internal fun openDeveloperOptions(context: Context) {
     openFirstAvailableSettings(
         context,

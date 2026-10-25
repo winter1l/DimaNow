@@ -39,6 +39,38 @@ class SchoolReadersTest {
     }
 
     @Test
+    fun `a period row that does not line up with the days is refused rather than shifted`() {
+        // As an unexpanded `rowspan` would read: 2교시 lacks Monday's cell, so 화요일's course would land on Monday.
+        val json = """
+            {"days":["월","화","수"],
+             "periods":[
+               {"period":"1교시","cells":[["영상기초","덕성관101","김교수"],[],[]]},
+               {"period":"2교시","cells":[["음향실습","기예관202","이교수"],[]]}
+             ]}
+        """.trimIndent()
+        assertTrue(runCatching { parseIntranetTimetable(json) }.isFailure)
+        // A row without cells at all is refused too; rows that are not periods (점심) are still skipped.
+        assertTrue(runCatching { parseIntranetTimetable("""{"days":["월"],"periods":[{"period":"1교시"}]}""") }.isFailure)
+        assertEquals(1, parseIntranetTimetable("""{"days":["월"],"periods":[{"period":"점심","cells":[]},{"period":"1교시","cells":[["연기","엔터관301","박교수"]]}]}""").size)
+    }
+
+    @Test
+    fun `a spanning cell expanded by the page script merges into one block`() {
+        // The script copies a `rowspan=3` cell into each period it covers.
+        val course = """["영상기초","덕성관101","김교수"]"""
+        val json = """
+            {"days":["월","화"],
+             "periods":[
+               {"period":"1교시","cells":[$course,[]]},
+               {"period":"2교시","cells":[$course,["음향실습","기예관202","이교수"]]},
+               {"period":"3교시","cells":[$course,[]]}
+             ]}
+        """.trimIndent()
+        val courses = parseIntranetTimetable(json)
+        assertEquals(listOf(DayOfWeek.MONDAY to (1 to 3), DayOfWeek.TUESDAY to (2 to 2)), courses.map { it.weekday to (it.firstPeriod to it.lastPeriod) })
+    }
+
+    @Test
     fun `a room's building decides the shuttle side`() {
         listOf("덕성관101", "기예관201", "덕성관305-1", "지성관 301", "대학본부201", "체육관").forEach {
             assertEquals(it, CampusZoneId.MAIN, campusZoneForRoom(it))

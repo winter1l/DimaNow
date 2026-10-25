@@ -11,8 +11,12 @@ import com.example.dimanow.domain.CampusZoneId
 import com.example.dimanow.location.LocationMode
 import com.example.dimanow.location.TransitStopProximityState
 import java.time.Instant
+import com.example.dimanow.DimaNowApplication
+import com.example.dimanow.update.AppUpdatePhase
 import com.example.dimanow.update.AppUpdateRelease
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertTrue
 import org.junit.Assert.assertEquals
@@ -147,9 +151,16 @@ class AppPreferencesUpgradeTest {
         assertEquals(LiveClassOrder.CLASSROOM_FIRST, preferences.liveDisplayOptions.first().classOrder)
     }
 
+    /**
+     * The app process under test runs its own launch update check against the same DataStore (Q-032 (h)): it can
+     * clear the prepared APK, or record the real release and check time, between this test's writes and its read.
+     * That check runs once per process, so a write-and-read round it spoiled is repeated after it has finished; a
+     * real persistence bug fails every round.
+     */
     @Test
     fun updateCheckDismissalAndPreparedApkMetadataPersistTogether() = runTest {
-        val preferences = AppPreferences(ApplicationProvider.getApplicationContext())
+        val application = ApplicationProvider.getApplicationContext<DimaNowApplication>()
+        val preferences = AppPreferences(application)
         val release = AppUpdateRelease(
             "1.2",
             "https://github.com/winter1l/DimaNow/releases/tag/v1.2",
@@ -158,14 +169,31 @@ class AppPreferencesUpgradeTest {
             "a".repeat(64),
         )
 
-        preferences.recordAppUpdateCheck(1_788_134_400_000, release)
-        preferences.dismissAppUpdateVersion("1.2")
-        preferences.recordPreparedAppUpdate("/cache/updates/v1.2.apk", "1.2")
-
-        val saved = preferences.appUpdatePreferences.first()
+        var saved: AppUpdatePreferences? = null
+        for (round in 1..UPDATE_ROUNDS) {
+            preferences.recordAppUpdateCheck(1_788_134_400_000, release)
+            preferences.dismissAppUpdateVersion("1.2")
+            preferences.recordPreparedAppUpdate("/cache/updates/v1.2.apk", "1.2")
+            saved = preferences.appUpdatePreferences.first()
+            if (saved.lastCheckedEpochMillis == 1_788_134_400_000 && saved.cachedRelease == release &&
+                saved.preparedPath == "/cache/updates/v1.2.apk"
+            ) {
+                break
+            }
+            // Wait out the launch check on real time; its writes land before it leaves CHECKING.
+            withContext(Dispatchers.Default) {
+                application.appUpdateCoordinator.state.first { it.phase != AppUpdatePhase.CHECKING }
+            }
+        }
+        saved!!
         assertEquals(1_788_134_400_000, saved.lastCheckedEpochMillis)
         assertEquals(release, saved.cachedRelease)
         assertEquals("1.2", saved.dismissedVersion)
         assertEquals("/cache/updates/v1.2.apk", saved.preparedPath)
+    }
+
+    private companion object {
+        /** One round the launch check's preamble spoils, one its network answer spoils, and a clean one. */
+        const val UPDATE_ROUNDS = 3
     }
 }

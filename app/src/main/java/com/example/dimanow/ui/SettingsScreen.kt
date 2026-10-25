@@ -74,6 +74,10 @@ internal fun SettingsScreen(
     onNotificationModeChange: (GuidanceKind, NotificationGuidanceMode) -> Unit,
     academicReminders: Boolean = true,
     onAcademicRemindersChange: (Boolean) -> Unit = {},
+    deadlineDigest: Boolean = true,
+    onDeadlineDigestChange: (Boolean) -> Unit = {},
+    outingReminders: Boolean = true,
+    onOutingRemindersChange: (Boolean) -> Unit = {},
     homeBase: HomeBase,
     onHomeBaseChange: (HomeBase) -> Unit,
     shuttleData: ShuttleData?,
@@ -152,6 +156,10 @@ internal fun SettingsScreen(
                 onModeChange = onNotificationModeChange,
                 academicReminders = academicReminders,
                 onAcademicRemindersChange = onAcademicRemindersChange,
+                deadlineDigest = deadlineDigest,
+                onDeadlineDigestChange = onDeadlineDigestChange,
+                outingReminders = outingReminders,
+                onOutingRemindersChange = onOutingRemindersChange,
             )
         }
         item(key = "live_display") {

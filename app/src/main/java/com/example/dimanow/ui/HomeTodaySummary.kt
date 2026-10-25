@@ -104,11 +104,15 @@ internal fun HomeTodaySummary(
             }
         }
         overview.items.forEach { item ->
+            val dueAt = requireNotNull(item.dueAt)
+            // D-126(2): a far deadline (often a video or a download open for weeks) still shows, in a quieter line.
+            val near = homeTaskIsNear(dueAt, now.toInstant())
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text(item.title, style = MaterialTheme.typography.titleSmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
                 Text(
-                    homeTaskDeadlineLabel(requireNotNull(item.dueAt), now.toInstant()),
+                    homeTaskDeadlineLabel(dueAt, now.toInstant()),
                     style = MaterialTheme.typography.labelMedium,
+                    color = if (near) androidx.compose.ui.graphics.Color.Unspecified else secondaryColor,
                 )
             }
         }
@@ -253,27 +257,53 @@ internal fun HomeCompactPrompt(
 internal data class HomeTaskCourse(val courseName: String, val totalCount: Int)
 internal data class HomeTaskOverview(val courses: List<HomeTaskCourse>, val items: List<LmsItem>)
 
-/** Count every upcoming task; only show titles due within the next two Korean calendar days. */
+/**
+ * Count every upcoming task and show the three nearest, however far away (D-126(2)): videos and downloads are
+ * often open for weeks, and a card that hid them looked empty while the Courses tab still listed work.
+ */
 internal fun upcomingHomeTasks(items: List<LmsItem>, now: Instant): HomeTaskOverview {
-    val upcoming = items
-        .filter { it.kind in HOME_TASK_KINDS && it.completionState != LmsCompletionState.COMPLETE && it.dueAt?.isBefore(now) == false }
-        .sortedWith(compareBy<LmsItem> { it.dueAt }.thenBy { it.courseId }.thenBy { it.id })
+    val upcoming = openHomeTasks(items, now)
     val courses = upcoming.groupBy { it.courseId.ifBlank { it.courseName } }
         .values.map { HomeTaskCourse(it.first().courseName, it.size) }
-    val lastVisibleDate = now.atZone(HOME_TASK_ZONE).toLocalDate().plusDays(2)
-    val urgentItems = upcoming.filter { !requireNotNull(it.dueAt).atZone(HOME_TASK_ZONE).toLocalDate().isAfter(lastVisibleDate) }
-    return HomeTaskOverview(courses, urgentItems.take(3))
+    return HomeTaskOverview(courses, upcoming.take(3))
 }
+
+/** Open tasks due today in Korea, nearest first: the morning deadline notification's list (D-126(3)). */
+internal fun todayHomeTasks(items: List<LmsItem>, now: Instant): List<LmsItem> {
+    val today = now.atZone(HOME_TASK_ZONE).toLocalDate()
+    return openHomeTasks(items, now).filter { requireNotNull(it.dueAt).atZone(HOME_TASK_ZONE).toLocalDate() == today }
+}
+
+/**
+ * Unfinished work with a deadline still ahead. A 자료 counts only when LMS reports it as not yet opened, so a
+ * download the student already has does not stay on Home until it closes.
+ */
+private fun openHomeTasks(items: List<LmsItem>, now: Instant): List<LmsItem> = items
+    .filter { item ->
+        val countsAsTask = when (item.kind) {
+            in HOME_TASK_KINDS -> item.completionState != LmsCompletionState.COMPLETE
+            LmsItemKind.MATERIAL -> item.completionState == LmsCompletionState.INCOMPLETE
+            else -> false
+        }
+        countsAsTask && item.dueAt?.isBefore(now) == false
+    }
+    .sortedWith(compareBy<LmsItem> { it.dueAt }.thenBy { it.courseId }.thenBy { it.id })
+
+/** Due within the next two Korean calendar days: shown at full strength with the exact time. */
+internal fun homeTaskIsNear(dueAt: Instant, now: Instant): Boolean =
+    !dueAt.atZone(HOME_TASK_ZONE).toLocalDate().isAfter(now.atZone(HOME_TASK_ZONE).toLocalDate().plusDays(2))
 
 internal fun homeTaskDeadlineLabel(dueAt: Instant, now: Instant): String {
     val due = dueAt.atZone(HOME_TASK_ZONE)
     val days = ChronoUnit.DAYS.between(now.atZone(HOME_TASK_ZONE).toLocalDate(), due.toLocalDate())
     val countdown = if (days == 0L) "D-day" else "D-$days"
-    return "$countdown · ${due.format(HOME_TASK_CHECKED_AT)} 마감"
+    val format = if (homeTaskIsNear(dueAt, now)) HOME_TASK_CHECKED_AT else HOME_TASK_FAR_DATE
+    return "$countdown · ${due.format(format)} 마감"
 }
 
 private val HOME_TASK_ZONE = ZoneId.of("Asia/Seoul")
 private val HOME_TASK_CHECKED_AT = DateTimeFormatter.ofPattern("M/d HH:mm")
+private val HOME_TASK_FAR_DATE = DateTimeFormatter.ofPattern("M/d")
 private val HOME_TASK_KINDS = setOf(
     LmsItemKind.ASSIGNMENT, LmsItemKind.CONTENT, LmsItemKind.QUESTION,
     LmsItemKind.DISCUSSION, LmsItemKind.TEAM_PROJECT, LmsItemKind.QUIZ, LmsItemKind.EXAM,

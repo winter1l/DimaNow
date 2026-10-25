@@ -1,5 +1,7 @@
 package com.example.dimanow.ui
 
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.ui.Modifier
@@ -344,10 +346,82 @@ class GuidanceCardTest {
         if (labelMustFitOneLine) assertEquals(1, label.lineCount())
     }
 
-    private fun SemanticsNodeInteraction.lineCount(): Int {
+    private fun SemanticsNodeInteraction.lineCount(): Int = textLayout().lineCount
+
+    private fun SemanticsNodeInteraction.textLayout(): TextLayoutResult {
         val results = mutableListOf<TextLayoutResult>()
         fetchSemanticsNode().config[SemanticsActions.GetTextLayoutResult].action?.invoke(results)
-        return results.single().lineCount
+        return results.single()
+    }
+
+    @Test
+    fun dashboardRowDrawsBothCountdownsAtOneSizeAtFontScale1_3() {
+        // D-126(1): "5분 후" in the round next capsule and "다음 출발" in the tile beside it need different room, but
+        // one row shows them at one size, never each shrunk to its own capsule.
+        val departures = listOf(
+            ShuttleDeparture("B", "university-headquarters", "TO_YEIN", DayOfWeek.MONDAY, LocalTime.of(19, 24), CampusZoneId.MAIN, CampusZoneId.YEIN),
+            ShuttleDeparture("B", "university-headquarters", "TO_YEIN", DayOfWeek.MONDAY, LocalTime.of(20, 40), CampusZoneId.MAIN, CampusZoneId.YEIN),
+        )
+        composeRule.setContent {
+            val density = LocalDensity.current
+            CompositionLocalProvider(LocalDensity provides Density(density.density, 1.3f)) {
+                DIMANowTheme(darkTheme = false) {
+                    Box(Modifier.width(360.dp)) {
+                        DashboardScreen(
+                            schedule = SampleSchedule.create(),
+                            zone = CampusZoneId.MAIN,
+                            shuttle = ShuttleData(departures, Instant.parse("2026-08-26T12:00:10Z"), null, null, "https://www.dima.ac.kr/?p=97", null),
+                            meal = MealData(emptyList(), null, null, null, "https://www.dima.ac.kr/?p=1", null, null),
+                            now = ZonedDateTime.of(2026, 8, 31, 19, 19, 0, 0, ZoneId.of("Asia/Seoul")),
+                        )
+                    }
+                }
+            }
+        }
+
+        composeRule.onNodeWithTag("home_list").performScrollToNode(hasTestTag("dashboard_shuttle_card"))
+        val near = composeRule.onNode(
+            hasText("5분 후") and hasAnyAncestor(hasTestTag("home_departure_YEIN_0")),
+            useUnmergedTree = true,
+        ).textLayout()
+        val later = composeRule.onNode(
+            hasText("다음 출발") and hasAnyAncestor(hasTestTag("home_departure_YEIN_1")),
+            useUnmergedTree = true,
+        ).textLayout()
+        assertEquals(near.layoutInput.style.fontSize, later.layoutInput.style.fontSize)
+        assertTrue(
+            "the countdown never grows past titleLargeEmphasized",
+            near.layoutInput.style.fontSize.value <= 22f,
+        )
+    }
+
+    @Test
+    fun dashboardShowsAFarFirstBusAsOneQuietTileAndTheNextAsItsTimeOnly() {
+        // D-127: 06:00 with 첫차 at 07:30 — no "다음 출발" twice; the first bus is a tile, the next only its time.
+        val departures = listOf(
+            ShuttleDeparture("B", "university-headquarters", "TO_YEIN", DayOfWeek.MONDAY, LocalTime.of(7, 30), CampusZoneId.MAIN, CampusZoneId.YEIN),
+            ShuttleDeparture("B", "university-headquarters", "TO_YEIN", DayOfWeek.MONDAY, LocalTime.of(8, 10), CampusZoneId.MAIN, CampusZoneId.YEIN),
+        )
+        composeRule.setContent {
+            DIMANowTheme(darkTheme = false) {
+                DashboardScreen(
+                    schedule = SampleSchedule.create(),
+                    zone = CampusZoneId.MAIN,
+                    shuttle = ShuttleData(departures, Instant.parse("2026-08-26T12:00:10Z"), null, null, "https://www.dima.ac.kr/?p=97", null),
+                    meal = MealData(emptyList(), null, null, null, "https://www.dima.ac.kr/?p=1", null, null),
+                    now = ZonedDateTime.of(2026, 8, 31, 6, 0, 0, 0, ZoneId.of("Asia/Seoul")),
+                )
+            }
+        }
+
+        composeRule.onNodeWithTag("home_list").performScrollToNode(hasTestTag("dashboard_shuttle_card"))
+        composeRule.onNode(hasText("07:30") and hasAnyAncestor(hasTestTag("home_departure_YEIN_0")), useUnmergedTree = true).assertExists()
+        composeRule.onNode(hasText("첫차") and hasAnyAncestor(hasTestTag("home_departure_YEIN_0")), useUnmergedTree = true).assertExists()
+        composeRule.onNode(hasText("08:10") and hasAnyAncestor(hasTestTag("home_departure_YEIN_1")), useUnmergedTree = true).assertExists()
+        composeRule.onAllNodes(
+            hasText("다음 출발") and (hasAnyAncestor(hasTestTag("home_departure_YEIN_0")) or hasAnyAncestor(hasTestTag("home_departure_YEIN_1"))),
+            useUnmergedTree = true,
+        ).assertCountEquals(0)
     }
 
     @Test
@@ -483,8 +557,10 @@ class GuidanceCardTest {
                 modifier = Modifier.verticalScroll(rememberScrollState()),
             )
         }
-        // D-069: beyond one hour the large line names the next departure; the clock and markers sit above.
-        assertClockAboveCountdown("bus4402_next_34710_0", "다음 출발", "05:00 · 첫차")
+        // D-127: beyond one hour the next departure alone is large, its clock big under its markers, and the one after
+        // it is an ordinary time (no second large cell).
+        assertClockAboveCountdown("bus4402_next_34710_0", "05:00", "첫차")
+        composeRule.onNodeWithTag("bus4402_next_34710_1").assertDoesNotExist()
         composeRule.runOnIdle { now.value = now.value.withHour(4).withMinute(0) }
         assertClockAboveCountdown("bus4402_next_34710_0", "60분 후", "05:00 · 첫차")
         composeRule.runOnIdle { now.value = now.value.withHour(21).withMinute(55) }

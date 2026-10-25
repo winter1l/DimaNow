@@ -65,6 +65,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.runtime.mutableLongStateOf
@@ -218,6 +220,20 @@ fun DimaNowApp(
             "TIMETABLE" -> open(AppPage.TIMETABLE)
             "COURSES" -> open(AppPage.COURSES)
             "SETTINGS" -> open(AppPage.SETTINGS)
+            // D-126(4): the outing reminder opens 외출·외박 신청 over the 기숙사 page
+            "OUTING" -> {
+                open(AppPage.DORM)
+                val bridge = schoolServiceBridge
+                if (bridge == null) {
+                    openUrl(appContext, com.example.dimanow.school.INTRANET_DORM_OUTING_URL)
+                } else {
+                    bridge.open(
+                        com.example.dimanow.school.SchoolService.INTRANET,
+                        com.example.dimanow.school.INTRANET_DORM_OUTING_URL,
+                        "외출·외박 신청",
+                    )
+                }
+            }
         }
     }
 
@@ -493,6 +509,33 @@ private fun DashboardRoute(
     val rollCallNotices by com.example.dimanow.dorm.RollCallStore.notices.collectAsStateWithLifecycle()
     val rollCall = todayRollCall(now.toLocalDate(), rollCallNotices, serviceCalendar)
         .takeIf { showsHomeRollCall(homeBase == HomeBase.YEIN, it) }
+    // D-126(7): after an update Home offers what changed, once; the stored value starts as "seen" to avoid a flash.
+    val whatsNewSeen by preferences.whatsNewSeenVersionCode
+        .collectAsStateWithLifecycle(initialValue = com.example.dimanow.BuildConfig.VERSION_CODE)
+    val whatsNewScope = rememberCoroutineScope()
+    val updateCard: (@Composable () -> Unit)? = if (appUpdateCoordinator != null && updateState.showsHomeNotice()) {
+        {
+            HomeUpdateNotice(
+                state = updateState,
+                onInstall = appUpdateCoordinator::downloadAndInstall,
+                onLater = appUpdateCoordinator::dismissPrompt,
+                onCancel = appUpdateCoordinator::cancelDownload,
+                onContinueInstall = appUpdateCoordinator::continueInstall,
+            )
+        }
+    } else null
+    val whatsNewCard: (@Composable () -> Unit)? =
+        if (showsWhatsNew(whatsNewSeen, com.example.dimanow.BuildConfig.VERSION_CODE, onboardingCompleted = true)) {
+            {
+                HomeWhatsNewNotice(
+                    versionName = com.example.dimanow.BuildConfig.VERSION_NAME,
+                    onDismiss = {
+                        whatsNewScope.launch { preferences.setWhatsNewSeenVersionCode(com.example.dimanow.BuildConfig.VERSION_CODE) }
+                    },
+                )
+            }
+        } else null
+    val topCards = listOfNotNull(updateCard, whatsNewCard)
 
     DashboardScreen(
         schedule = schedule,
@@ -507,17 +550,9 @@ private fun DashboardRoute(
         notices = notices,
         onNavigateToPage = onNavigateToPage,
         onAddCourse = onAddCourse,
-        updateNotice = if (appUpdateCoordinator != null && updateState.showsHomeNotice()) {
-            {
-                HomeUpdateNotice(
-                    state = updateState,
-                    onInstall = appUpdateCoordinator::downloadAndInstall,
-                    onLater = appUpdateCoordinator::dismissPrompt,
-                    onCancel = appUpdateCoordinator::cancelDownload,
-                    onContinueInstall = appUpdateCoordinator::continueInstall,
-                )
-            }
-        } else null,
+        updateNotice = if (topCards.isEmpty()) null else {
+            { Column(verticalArrangement = Arrangement.spacedBy(16.dp)) { topCards.forEach { card -> card() } } }
+        },
         modifier = modifier,
         now = now,
         rollCall = rollCall,
@@ -602,6 +637,9 @@ private fun SettingsRoute(
     )
     val homeBase by preferences.homeBase.collectAsStateWithLifecycle(initialValue = HomeBase.YEIN)
     val academicReminders by preferences.academicReminders.collectAsStateWithLifecycle(initialValue = true)
+    val deadlineDigest by preferences.deadlineDigest.collectAsStateWithLifecycle(initialValue = true)
+    val outingReminders by preferences.outingReminders.collectAsStateWithLifecycle(initialValue = true)
+    val appContextForReminders = LocalContext.current.applicationContext
     // D-094: null until the cache emits, so the diagnostics card shows loading rather than "기록 없음"
     val shuttle by shuttleSource.data.collectLoadedAsState()
     val meal by mealSource.data.collectLoadedAsState()
@@ -626,6 +664,15 @@ private fun SettingsRoute(
         },
         academicReminders = academicReminders,
         onAcademicRemindersChange = { scope.launch { preferences.setAcademicReminders(it) } },
+        deadlineDigest = deadlineDigest,
+        onDeadlineDigestChange = { scope.launch { preferences.setDeadlineDigest(it) } },
+        outingReminders = outingReminders,
+        onOutingRemindersChange = {
+            scope.launch {
+                preferences.setOutingReminders(it)
+                if (!it) com.example.dimanow.dorm.OutingReminder.cancel(appContextForReminders)
+            }
+        },
         homeBase = homeBase,
         onHomeBaseChange = { scope.launch { preferences.setHomeBase(it) } },
         shuttleData = shuttle,

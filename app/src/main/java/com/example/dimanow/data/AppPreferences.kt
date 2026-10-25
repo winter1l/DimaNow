@@ -147,6 +147,26 @@ class AppPreferences(private val context: Context) {
         preferences[ACADEMIC_REMINDER_LAST_DAY]
     }
 
+    /** 오늘 마감인 LMS 과제를 아침에 한 번 묶어 알린다 (D-126(3)). 설정에서 끄기 전까지 켜져 있다. */
+    val deadlineDigest: Flow<Boolean> = read { preferences ->
+        preferences[DEADLINE_DIGEST] ?: true
+    }
+
+    /** 마감 묶음 알림을 마지막으로 확인한 날(epoch day). */
+    val deadlineDigestLastDay: Flow<Long?> = read { preferences ->
+        preferences[DEADLINE_DIGEST_LAST_DAY]
+    }
+
+    /** 점호가 있다는 카톡 공지를 읽은 날, 외출·외박 신청 마감 전에 알린다 (D-126(4)). */
+    val outingReminders: Flow<Boolean> = read { preferences ->
+        preferences[OUTING_REMINDERS] ?: true
+    }
+
+    /** '새로워진 점' 카드를 닫은 마지막 버전 코드 (D-126(7)). 없으면 아직 한 번도 보지 않았다. */
+    val whatsNewSeenVersionCode: Flow<Int?> = read { preferences ->
+        preferences[WHATS_NEW_SEEN_VERSION_CODE]
+    }
+
     /** 최초 실행 권한 온보딩을 끝냈는지. 끝내기 전에는 앱 셸 대신 온보딩이 표시된다 (D-056). */
     val onboardingCompleted: Flow<Boolean> = read { preferences ->
         preferences[ONBOARDING_COMPLETED] ?: false
@@ -272,6 +292,22 @@ class AppPreferences(private val context: Context) {
         context.settingsDataStore.edit { it[ACADEMIC_REMINDER_LAST_DAY] = epochDay }
     }
 
+    suspend fun setDeadlineDigest(enabled: Boolean) {
+        context.settingsDataStore.edit { it[DEADLINE_DIGEST] = enabled }
+    }
+
+    suspend fun setDeadlineDigestLastDay(epochDay: Long) {
+        context.settingsDataStore.edit { it[DEADLINE_DIGEST_LAST_DAY] = epochDay }
+    }
+
+    suspend fun setOutingReminders(enabled: Boolean) {
+        context.settingsDataStore.edit { it[OUTING_REMINDERS] = enabled }
+    }
+
+    suspend fun setWhatsNewSeenVersionCode(versionCode: Int) {
+        context.settingsDataStore.edit { it[WHATS_NEW_SEEN_VERSION_CODE] = versionCode }
+    }
+
     suspend fun saveOnboardingDraft(draft: OnboardingDraft) {
         context.settingsDataStore.edit {
             it[ONBOARDING_STAGE] = draft.stage.name
@@ -286,6 +322,8 @@ class AppPreferences(private val context: Context) {
             it[HOME_BASE_SELECTION_CONFIRMED] = true
             it[ONBOARDING_COMPLETED] = true
             it[NOW_BAR_SETUP_COMPLETED] = true
+            // A fresh install has nothing "new" to show (D-126(7)).
+            it[WHATS_NEW_SEEN_VERSION_CODE] = com.example.dimanow.BuildConfig.VERSION_CODE
             it.remove(ONBOARDING_STAGE)
             it.remove(ONBOARDING_DRAFT_HOME_BASE)
         }
@@ -351,6 +389,10 @@ class AppPreferences(private val context: Context) {
         val NOW_BAR_SETUP_COMPLETED = booleanPreferencesKey("now_bar_setup_completed")
         val ACADEMIC_REMINDERS = booleanPreferencesKey("academic_reminders")
         val ACADEMIC_REMINDER_LAST_DAY = longPreferencesKey("academic_reminder_last_day")
+        val DEADLINE_DIGEST = booleanPreferencesKey("deadline_digest")
+        val DEADLINE_DIGEST_LAST_DAY = longPreferencesKey("deadline_digest_last_day")
+        val OUTING_REMINDERS = booleanPreferencesKey("outing_reminders")
+        val WHATS_NEW_SEEN_VERSION_CODE = intPreferencesKey("whats_new_seen_version_code")
         val ONBOARDING_COMPLETED = booleanPreferencesKey("onboarding_completed")
         val ONBOARDING_STAGE = stringPreferencesKey("onboarding_stage")
         val ONBOARDING_DRAFT_HOME_BASE = stringPreferencesKey("onboarding_draft_home_base")

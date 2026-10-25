@@ -48,10 +48,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -80,12 +79,13 @@ import com.example.dimanow.feedback.FEEDBACK_MAX_SCREENSHOTS
 import com.example.dimanow.feedback.FEEDBACK_MIN_CHARS
 import com.example.dimanow.feedback.FeedbackApi
 import com.example.dimanow.feedback.FeedbackCategory
+import com.example.dimanow.feedback.FeedbackOutbox
+import com.example.dimanow.feedback.FeedbackReports
 import com.example.dimanow.feedback.FeedbackResult
 import com.example.dimanow.feedback.FeedbackScreenshot
 import com.example.dimanow.feedback.collectFeedbackLog
 import com.example.dimanow.feedback.prepareFeedbackScreenshot
 import com.example.dimanow.theme.DimaTheme
-import kotlinx.coroutines.launch
 
 /** What the form sends (D-119, D-120); the log and screenshots only ever go with an 오류 report. */
 internal data class FeedbackDraft(
@@ -109,8 +109,11 @@ internal fun FeedbackDialog(
     send: suspend (FeedbackDraft) -> FeedbackResult = rememberFeedbackSender(),
     loadLog: suspend () -> String = { collectFeedbackLog() },
 ) {
-    val context = LocalContext.current
-    val scope = rememberCoroutineScope()
+    val appContext = LocalContext.current.applicationContext
+    // A fresh form starts a new report; after an activity recreation the saved id re-attaches to the send, its
+    // result and the screenshots, which live in FeedbackReports rather than in this composition (Q-032 (a)).
+    val savedReport = rememberSaveable { FeedbackReports.open(null) }
+    val report = remember(savedReport) { FeedbackReports.open(savedReport) }
     var category by rememberSaveable { mutableStateOf(FeedbackCategory.BUG) }
     var message by rememberSaveable { mutableStateOf("") }
     var touched by rememberSaveable { mutableStateOf(false) }
@@ -118,43 +121,35 @@ internal fun FeedbackDialog(
     var includeLog by rememberSaveable { mutableStateOf(true) }
     var showLog by rememberSaveable { mutableStateOf(false) }
     var log by remember { mutableStateOf<String?>(null) }
-    val screenshots = remember { mutableStateListOf<FeedbackScreenshot>() }
-    var screenshotError by remember { mutableStateOf<String?>(null) }
-    var sending by remember { mutableStateOf(false) }
-    var result by remember { mutableStateOf<FeedbackResult?>(null) }
+    val screenshots by FeedbackReports.screenshots.collectAsState()
+    val skippedUnreadable by FeedbackReports.skippedUnreadable.collectAsState()
+    val screenshotError = "읽을 수 없는 사진은 빼고 붙였어요.".takeIf { skippedUnreadable }
+    val state by FeedbackReports.state.collectAsState()
+    val sending = state == FeedbackOutbox.State.Sending
+    val result = (state as? FeedbackOutbox.State.Done)?.result
     var confirmDiscard by remember { mutableStateOf(false) }
     val bug = category == FeedbackCategory.BUG
     val length = message.trim().codePointCount(0, message.trim().length)
     val valid = length in FEEDBACK_MIN_CHARS..FEEDBACK_MAX_CHARS
     val posted = result as? FeedbackResult.Posted
     val edited = message.isNotBlank() || screenshots.isNotEmpty()
-    val close = { if (edited && posted == null && !sending) confirmDiscard = true else onDismiss() }
+    val dismiss = { FeedbackReports.close(report); onDismiss() }
+    val close = { if (edited && posted == null && !sending) confirmDiscard = true else dismiss() }
     LaunchedEffect(bug) { if (bug && log == null) log = loadLog() }
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.PickMultipleVisualMedia(FEEDBACK_MAX_SCREENSHOTS)) { uris ->
-        scope.launch {
-            screenshotError = null
-            uris.take(FEEDBACK_MAX_SCREENSHOTS - screenshots.size).forEach { uri ->
-                prepareFeedbackScreenshot(context, uri)?.let(screenshots::add) ?: run { screenshotError = "읽을 수 없는 사진은 빼고 붙였어요." }
-            }
-        }
+        FeedbackReports.addScreenshots(report, uris) { uri -> prepareFeedbackScreenshot(appContext, uri) }
     }
     val submit = {
         touched = true
         if (valid && !sending) {
-            sending = true
-            result = null
-            scope.launch {
-                result = send(
-                    FeedbackDraft(
-                        category = category,
-                        message = message,
-                        includeVersions = includeVersions,
-                        log = log.takeIf { bug && includeLog },
-                        screenshots = if (bug) screenshots.toList() else emptyList(),
-                    ),
-                )
-                sending = false
-            }
+            val draft = FeedbackDraft(
+                category = category,
+                message = message,
+                includeVersions = includeVersions,
+                log = log.takeIf { bug && includeLog },
+                screenshots = if (bug) screenshots else emptyList(),
+            )
+            FeedbackReports.send(report) { send(draft) }
         }
     }
 
@@ -201,7 +196,7 @@ internal fun FeedbackDialog(
                 verticalArrangement = Arrangement.spacedBy(20.dp),
             ) {
                 if (posted != null) {
-                    FeedbackPosted(posted, onClose = onDismiss)
+                    FeedbackPosted(posted, onClose = dismiss)
                     return@Column
                 }
                 Text(
@@ -244,7 +239,7 @@ internal fun FeedbackDialog(
                         error = screenshotError,
                         enabled = !sending,
                         onAdd = { picker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) },
-                        onRemove = { screenshots.remove(it) },
+                        onRemove = { FeedbackReports.removeScreenshot(report, it) },
                     )
                     FeedbackSwitch(
                         title = "앱 로그 함께 보내기",
@@ -316,7 +311,7 @@ internal fun FeedbackDialog(
             title = "쓴 제보를 버릴까요?",
             text = { Text("닫으면 쓴 내용과 붙인 스크린샷이 사라져요.") },
             confirmLabel = "버리기",
-            onConfirm = { confirmDiscard = false; onDismiss() },
+            onConfirm = { confirmDiscard = false; dismiss() },
             dismissLabel = "계속 쓰기",
         )
     }

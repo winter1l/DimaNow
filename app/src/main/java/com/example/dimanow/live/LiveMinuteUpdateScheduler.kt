@@ -28,7 +28,8 @@ internal class LiveMinuteUpdateScheduler(private val context: Context) {
         job = scope.launch {
             while (isActive) {
                 delay(60_000 - System.currentTimeMillis() % 60_000)
-                if (MinuteRefreshGate.claim()) {
+                MinuteRefreshGate.claim()?.let { minuteStart ->
+                    MinuteRefreshGate.awaitStart(minuteStart)
                     (context.applicationContext as DimaNowApplication).guidanceRuntimeCoordinator.requestRefresh()
                 }
             }
@@ -83,8 +84,9 @@ class LiveMinuteUpdateReceiver : BroadcastReceiver() {
             try {
                 // Leave a retry if cold-start initialization exceeds the broadcast time budget.
                 LiveMinuteUpdateScheduler.scheduleWake(context)
-                if (MinuteRefreshGate.claim()) {
+                MinuteRefreshGate.claim()?.let { minuteStart ->
                     withTimeout(8_000) {
+                        MinuteRefreshGate.awaitStart(minuteStart)
                         val app = context.applicationContext as DimaNowApplication
                         app.guidanceOrchestrator.refresh(app.guidanceRuntimeCoordinator.awaitSnapshot())
                     }
@@ -99,14 +101,30 @@ class LiveMinuteUpdateReceiver : BroadcastReceiver() {
 /**
  * The in-process ticker and the exact alarm both fire at a minute boundary, so each minute was refreshed twice
  * (Q-031). Whichever comes first claims the minute and the other skips it. A tick up to two seconds early counts
- * for the coming minute, since the ticker's monotonic delay and the wall clock can disagree slightly.
+ * for the coming minute, since the ticker's monotonic delay and the wall clock can disagree slightly; its refresh
+ * then waits for the boundary ([awaitStart]), or it would render the old minute and leave it on screen (Q-032 (e)).
  */
 internal object MinuteRefreshGate {
     private val lastClaimed = AtomicLong(Long.MIN_VALUE)
 
-    fun claim(nowMillis: Long = System.currentTimeMillis()): Boolean {
+    /** Claims the minute of [nowMillis] (or the coming one) and returns its start, or null when it was already claimed. */
+    fun claim(nowMillis: Long = System.currentTimeMillis()): Long? {
         val minute = (nowMillis + EARLY_TOLERANCE_MILLIS) / 60_000
-        return lastClaimed.getAndSet(minute) != minute
+        return if (lastClaimed.getAndSet(minute) != minute) minute * 60_000 else null
+    }
+
+    /**
+     * Returns once the wall clock has reached [minuteStart]; at once for a tick on or after it. The wait is bounded
+     * by the early tolerance, so a clock set back meanwhile cannot hold the refresh.
+     */
+    suspend fun awaitStart(minuteStart: Long, wallClock: () -> Long = System::currentTimeMillis) {
+        var budget = EARLY_TOLERANCE_MILLIS + 1_000
+        while (budget > 0) {
+            val wait = (minuteStart - wallClock()).coerceAtMost(budget)
+            if (wait <= 0) return
+            delay(wait)
+            budget -= wait
+        }
     }
 
     private const val EARLY_TOLERANCE_MILLIS = 2_000L

@@ -38,6 +38,8 @@ object RefreshScheduler {
             workManager.cancelUniqueWork("meal-expiry-policy")
             workManager.cancelUniqueWork("notice-daily-launch-check")
             workManager.cancelUniqueWork("notice-daily-policy")
+            // Q-032 (c): the drifting 24-hour periodic reminder, replaced by an 08:30 one-time chain.
+            workManager.cancelUniqueWork("academic-reminder-daily")
             preferences.setBackgroundWorkPolicyVersion(CURRENT_POLICY_VERSION)
         }
 
@@ -55,9 +57,10 @@ object RefreshScheduler {
         workManager.enqueueUniquePeriodicWork("campus-static-sync-periodic", ExistingPeriodicWorkPolicy.UPDATE, periodic)
         StudentMealSync.schedule(context, (context.applicationContext as DimaNowApplication).mealSource)
         AcademicReminderScheduler.schedule(context)
+        DeadlineDigestScheduler.schedule(context)
     }
 
-    private const val CURRENT_POLICY_VERSION = 2
+    private const val CURRENT_POLICY_VERSION = 3
 }
 
 class CampusSyncWorker(context: Context, parameters: WorkerParameters) : CoroutineWorker(context, parameters) {

@@ -366,17 +366,21 @@ private fun ShuttleRouteCard(
                 else -> null
             },
         )
-        val countdown = if (isNext || isSecond) {
-            upcomingCountdowns.firstOrNull { it.departure.time == time }?.let { departureCountdownLabel(it.remainingMinutes, emptyList()) }
-        } else null
+        val look = nextDepartureLook(
+            isFirst = item.isFirst, isLast = item.isLast, isPast = isPast, isNext = isNext, isSecond = isSecond,
+            clock = time.format(TIME),
+            minutesLeft = upcomingCountdowns.firstOrNull { it.departure.time == time }?.remainingMinutes,
+            nextMinutesLeft = upcomingCountdowns.firstOrNull()?.remainingMinutes,
+        )
         TimetableChipSpec(
             key = time.toSecondOfDay(),
             clock = time.format(TIME),
             markers = markers,
-            description = timetableChipDescription(time.format(TIME), isPast, isNext, markers, countdown),
-            tone = timetableChipTone(item.isFirst, item.isLast, isPast, isNext, isSecond),
+            description = timetableChipDescription(time.format(TIME), isPast, isNext, markers, look.countdown.takeUnless { look.farAhead }),
+            tone = look.tone,
             isPast = isPast,
-            countdown = countdown,
+            countdown = look.countdown,
+            farAhead = look.farAhead,
         )
     }
     // D-124: once today's last departure has left, the strip ends with tomorrow's first one for this route.

@@ -36,6 +36,10 @@ fun NotificationGuidanceSettings(
     modifier: Modifier = Modifier,
     academicReminders: Boolean = true,
     onAcademicRemindersChange: (Boolean) -> Unit = {},
+    deadlineDigest: Boolean = true,
+    onDeadlineDigestChange: (Boolean) -> Unit = {},
+    outingReminders: Boolean = true,
+    onOutingRemindersChange: (Boolean) -> Unit = {},
 ) {
     ElevatedCard(
         modifier = modifier.fillMaxWidth(),
@@ -53,22 +57,45 @@ fun NotificationGuidanceSettings(
             GuidanceModeRow("교내 셔틀", GuidanceKind.CAMPUS_SHUTTLE, policy.campusShuttle, onModeChange)
             GuidanceModeRow("4402 강남행", GuidanceKind.BUS_4402, policy.bus4402, onModeChange)
             // D-107: 학사 일정은 실시간 안내가 아니라 아침 한 번의 일반 알림이라 나우바 선택지가 없다
-            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Text("학사 일정", style = MaterialTheme.typography.labelLarge)
-                SettingsChoice(
-                    options = listOf(true to "일반 알림", false to "끔"),
-                    selected = academicReminders,
-                    onSelect = onAcademicRemindersChange,
-                    itemTag = { "notification_academic_${if (it) "ON" else "OFF"}" },
-                )
-                Text(
-                    "수강신청 정정·수업평가·시험 같은 기간이 시작하거나 끝나는 날 아침에 알려 줘요.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
+            ReminderRow(
+                title = "학사 일정",
+                enabled = academicReminders,
+                onChange = onAcademicRemindersChange,
+                tag = "notification_academic",
+                description = "수강신청 정정·수업평가·시험 같은 기간이 시작하거나 끝나는 날 아침에 알려 줘요.",
+            )
+            // D-126(3): 오늘 마감을 아침 8시 30분에 한 번 모아 알린다
+            ReminderRow(
+                title = "과제 마감",
+                enabled = deadlineDigest,
+                onChange = onDeadlineDigestChange,
+                tag = "notification_deadline",
+                description = "오늘 마감인 과제·퀴즈를 아침 8시 30분에 한 번 모아 알려 줘요. 수업 탭에서 마지막으로 불러온 목록 기준이에요.",
+            )
+            // D-126(4): 카톡 점호 공지를 읽은 날에만, 엔터관 방향일 때 외출·외박 신청 마감 전에 알린다
+            ReminderRow(
+                title = "외출·외박 신청",
+                enabled = outingReminders,
+                onChange = onOutingRemindersChange,
+                tag = "notification_outing",
+                description = "점호가 있다는 카톡 공지를 읽은 날, 신청 마감 1시간 전에 알려 줘요. 귀가 방향이 엔터관일 때만 울려요.",
+            )
             KakaoRollCallSetting()
         }
+    }
+}
+
+@Composable
+private fun ReminderRow(title: String, enabled: Boolean, onChange: (Boolean) -> Unit, tag: String, description: String) {
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text(title, style = MaterialTheme.typography.labelLarge)
+        SettingsChoice(
+            options = listOf(true to "일반 알림", false to "끔"),
+            selected = enabled,
+            onSelect = onChange,
+            itemTag = { "${tag}_${if (it) "ON" else "OFF"}" },
+        )
+        Text(description, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 

@@ -17,6 +17,8 @@ const val INTRANET_TIMETABLE_URL = "https://intranet.dima.ac.kr/su/timeTable_Stn
 /**
  * Reads the period × weekday table: the header row names the days, each later row starts with `N교시` and
  * holds one cell per day whose lines are course, room and professor. Nothing else on the page is read.
+ * Row and column spans are laid out into a full grid first, a spanning cell's text copied into every slot it covers,
+ * so a `rowspan` course reads as the same course in each of its periods and later days keep their columns (Q-032).
  */
 const val INTRANET_TIMETABLE_SCRIPT = """
     var table=Array.from(document.querySelectorAll('table')).find(function(t){
@@ -29,13 +31,24 @@ const val INTRANET_TIMETABLE_SCRIPT = """
       return {state:'error',message:'인트라넷에서 시간표 표를 찾지 못했어요.'};
     }
     var rows=Array.from(table.rows);
-    var days=Array.from(rows[0].cells).slice(1).map(function(c){return c.innerText.trim();});
-    var periods=rows.slice(1).map(function(r){
-      var cells=Array.from(r.cells);
+    var grid=rows.map(function(){return [];});
+    rows.forEach(function(r,y){
+      var x=0;
+      Array.from(r.cells).forEach(function(c){
+        while(grid[y][x]!==undefined)x++;
+        var h=Math.min(c.rowSpan>0?c.rowSpan:rows.length-y,rows.length-y),w=Math.max(1,c.colSpan||1);
+        for(var dy=0;dy<h;dy++)for(var dx=0;dx<w;dx++)grid[y+dy][x+dx]=c.innerText;
+        x+=w;
+      });
+    });
+    var texts=function(row){var out=[];for(var i=0;i<row.length;i++)out.push(row[i]||'');return out;};
+    var days=texts(grid[0]).slice(1).map(function(s){return s.trim();});
+    var periods=grid.slice(1).map(function(row){
+      var cells=texts(row);
       return {
-        period:((cells[0]&&cells[0].innerText)||'').trim(),
-        cells:cells.slice(1).map(function(c){
-          return c.innerText.split('\n').map(function(s){return s.trim();}).filter(Boolean);
+        period:(cells[0]||'').trim(),
+        cells:cells.slice(1).map(function(s){
+          return s.split('\n').map(function(s){return s.trim();}).filter(Boolean);
         })
       };
     });
@@ -94,7 +107,10 @@ private val WEEKDAYS = mapOf(
     "목" to DayOfWeek.THURSDAY, "금" to DayOfWeek.FRIDAY, "토" to DayOfWeek.SATURDAY, "일" to DayOfWeek.SUNDAY,
 )
 
-/** Turns the page script's `data` into course blocks, ordered by weekday then start. */
+/**
+ * Turns the page script's `data` into course blocks, ordered by weekday then start. Throws when a period row does
+ * not have one cell per day: a layout the script did not understand would otherwise import courses on shifted days.
+ */
 fun parseIntranetTimetable(json: String): List<ImportedCourse> {
     val root = Json.parseToJsonElement(json).jsonObject
     val days = root["days"]?.jsonArray.orEmpty().map { day -> WEEKDAYS[day.jsonPrimitive.content.trim().take(1)] }
@@ -104,7 +120,9 @@ fun parseIntranetTimetable(json: String): List<ImportedCourse> {
         val row = element as? JsonObject ?: return@forEach
         val period = row["period"]?.jsonPrimitive?.content?.let { PERIOD.find(it)?.groupValues?.get(1)?.toIntOrNull() }
             ?: return@forEach
-        (row["cells"] as? JsonArray).orEmpty().forEachIndexed { index, cell ->
+        val cells = (row["cells"] as? JsonArray).orEmpty()
+        require(cells.size == days.size) { "${period}교시 has ${cells.size} cells for ${days.size} days" }
+        cells.forEachIndexed { index, cell ->
             val day = days.getOrNull(index) ?: return@forEachIndexed
             val lines = (cell as? JsonArray).orEmpty().map { it.jsonPrimitive.content.trim() }.filter { it.isNotEmpty() }
             if (lines.isEmpty()) return@forEachIndexed

@@ -201,8 +201,8 @@ internal fun DashboardScreen(
                                     label = "home_hero_course",
                                 ) { course ->
                                     val isOngoing = !nowTime.isBefore(course.start)
-                                    // D-069 style: minutes only within an hour, otherwise the start clock (D-094(14))
-                                    val startLabel = classStartLabel(now, now.toLocalDate().atTime(course.start).atZone(now.zone))
+                                    // D-127: the chip counts down even hours ahead; the clocks beside it already say when
+                                    val startLabel = classCountdownLabel(now, now.toLocalDate().atTime(course.start).atZone(now.zone))
                                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                                         Row(
                                             verticalAlignment = Alignment.CenterVertically,
@@ -419,7 +419,9 @@ internal fun DashboardScreen(
                             modifier = Modifier.testTag("dashboard_outside"),
                         )
                     }
-                    destinations.isNotEmpty() -> {
+                    // D-126(1): 한 목적지 줄의 남은 시간은 모두 한 크기다. 그 크기는 줄 폭에서 미리 세므로 폭을 먼저 받는다.
+                    destinations.isNotEmpty() -> androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxWidth()) {
+                        val rowWidth = maxWidth
                         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                             destinations.forEach { destZone ->
                                 val destName = DisplayVocabulary.originName(destZone)
@@ -431,9 +433,55 @@ internal fun DashboardScreen(
                                     departures = shuttleDepartures,
                                 )
                                 val upcoming = shuttleBoard.rows.firstOrNull { it.destinationZone == destZone }?.departures.orEmpty()
+                                // D-127: with the next bus (often 첫차) more than an hour off, a countdown says nothing; that
+                                // departure becomes one quiet tile with its clock large, and the ones after it show only the time.
+                                val farAhead = (upcoming.firstOrNull()?.remainingMinutes ?: 0L) > 60
+                                val capsules = upcoming.mapIndexed { index, countdown ->
+                                    val time = countdown.departure.time
+                                    val serviceDeparture = annotated.firstOrNull { it.departure.time == time }
+                                    val isLastService = serviceDeparture?.isLast == true
+                                    val serviceLabel = when {
+                                        serviceDeparture?.isFirst == true && isLastService -> "첫차·막차"
+                                        serviceDeparture?.isFirst == true -> "첫차"
+                                        isLastService -> "막차"
+                                        else -> null
+                                    }
+                                    val boardingStopLabel = when {
+                                        serviceDeparture?.isBoardingStopTransition == true -> "운동장 전환"
+                                        serviceDeparture?.isStadiumStop == true -> "운동장"
+                                        else -> null
+                                    }
+                                    val markers = listOfNotNull(serviceLabel, boardingStopLabel)
+                                    when {
+                                        !farAhead -> HomeDeparture(
+                                            countdown = departureCountdownLabel(countdown.remainingMinutes, emptyList()),
+                                            clock = time.format(TIME),
+                                            markers = markers,
+                                            isNext = index == 0,
+                                            isLastService = isLastService,
+                                        )
+                                        index == 0 -> HomeDeparture(
+                                            countdown = time.format(TIME),
+                                            clock = markers.joinToString(" · ").ifEmpty { "다음 출발" },
+                                            markers = emptyList(),
+                                            isNext = false,
+                                            isLastService = isLastService,
+                                        )
+                                        else -> HomeDeparture(
+                                            countdown = "",
+                                            clock = time.format(TIME),
+                                            markers = emptyList(),
+                                            isNext = false,
+                                            isLastService = isLastService,
+                                            timeOnly = true,
+                                        )
+                                    }
+                                }
+                                val destinationTag = "${destName}행"
+                                val countdownSize = rememberHomeCountdownSize(rowWidth, destinationTag, capsules)
 
                                 // D-124: 목적지 태그 오른쪽에 다음 출발 칸을 같은 줄로 붙여 세로 공간을 아낀다. 칸은 줄 폭을
-                                // 똑같이 나누고, 남은 시간 글자는 칸에 맞춰 줄어든다(줄바꿈 없음).
+                                // 똑같이 나누고, 남은 시간 글자는 줄의 모든 칸에 맞는 한 크기로 줄어든다(줄바꿈 없음, D-126(1)).
                                 Row(
                                     modifier = Modifier.fillMaxWidth(),
                                     horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -445,7 +493,7 @@ internal fun DashboardScreen(
                                         color = MaterialTheme.colorScheme.primaryContainer,
                                     ) {
                                         Text(
-                                            text = "${destName}행",
+                                            text = destinationTag,
                                             style = MaterialTheme.typography.labelLarge,
                                             color = MaterialTheme.colorScheme.onPrimaryContainer,
                                             maxLines = 1,
@@ -454,34 +502,26 @@ internal fun DashboardScreen(
                                         )
                                     }
 
-                                    if (upcoming.isNotEmpty()) {
+                                    if (capsules.isNotEmpty()) {
                                         Row(Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                            upcoming.forEachIndexed { index, countdown ->
-                                                val time = countdown.departure.time
-                                                val minutesLeft = countdown.remainingMinutes
-                                                val isFirst = index == 0
-                                                val serviceDeparture = annotated.firstOrNull { it.departure.time == time }
-                                                val isLastService = serviceDeparture?.isLast == true
-                                                val serviceLabel = when {
-                                                    serviceDeparture?.isFirst == true && isLastService -> "첫차·막차"
-                                                    serviceDeparture?.isFirst == true -> "첫차"
-                                                    isLastService -> "막차"
-                                                    else -> null
-                                                }
-                                                val boardingStopLabel = when {
-                                                    serviceDeparture?.isBoardingStopTransition == true -> "운동장 전환"
-                                                    serviceDeparture?.isStadiumStop == true -> "운동장"
-                                                    else -> null
+                                            capsules.forEachIndexed { index, departure ->
+                                                if (departure.timeOnly) {
+                                                    DepartureTimeTile(
+                                                        clock = departure.clock,
+                                                        modifier = Modifier.weight(1f).testTag("home_departure_${destZone.name}_$index"),
+                                                    )
+                                                    return@forEachIndexed
                                                 }
                                                 // D-124: the same cell as the shuttle tab's strip — countdown large, clock and markers small
-                                                val (container, content) = shuttleCapsuleColors(isNearest = isFirst, isLastService = isLastService)
+                                                val (container, content) = shuttleCapsuleColors(isNearest = departure.isNext, isLastService = departure.isLastService)
                                                 DepartureCapsule(
-                                                    countdown = departureCountdownLabel(minutesLeft, emptyList()),
-                                                    clock = time.format(TIME),
-                                                    markers = listOfNotNull(serviceLabel, boardingStopLabel),
+                                                    countdown = departure.countdown,
+                                                    clock = departure.clock,
+                                                    markers = departure.markers,
                                                     containerColor = container,
                                                     contentColor = content,
-                                                    isNext = isFirst,
+                                                    isNext = departure.isNext,
+                                                    countdownSize = countdownSize,
                                                     modifier = Modifier.weight(1f).testTag("home_departure_${destZone.name}_$index"),
                                                 )
                                             }

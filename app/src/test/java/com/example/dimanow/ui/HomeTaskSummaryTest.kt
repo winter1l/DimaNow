@@ -41,31 +41,47 @@ class HomeTaskSummaryTest {
             task("complete", "A", 1).copy(completionState = LmsCompletionState.COMPLETE),
             task("undated", "A", 1).copy(dueAt = null),
             task("notice", "A", 1).copy(kind = LmsItemKind.NOTICE),
-            task("material", "A", 1).copy(kind = LmsItemKind.MATERIAL),
+            task("material", "A", 1).copy(kind = LmsItemKind.MATERIAL, completionState = LmsCompletionState.NOT_TRACKED),
             task("unknown", "A", 0).copy(completionState = LmsCompletionState.UNKNOWN),
             task("distant", "A", 30 * 86400),
         )
         val overview = upcomingHomeTasks(items, now)
-        assertEquals(listOf("unknown"), overview.items.map { it.id })
+        assertEquals(listOf("unknown", "distant"), overview.items.map { it.id })
         assertEquals(2, overview.courses.single().totalCount)
     }
 
     @Test
-    fun titleVisibilityIncludesTheWholeSecondKoreanCalendarDayButNotTheThird() {
+    fun aMaterialCountsOnlyWhileLmsReportsItUnopened() {
         val overview = upcomingHomeTasks(listOf(
-            task("D-3", "later", 1).copy(dueAt = Instant.parse("2026-09-16T15:00:00Z")),
-            task("D-2", "soon", 1).copy(dueAt = Instant.parse("2026-09-16T14:59:59Z")),
+            task("unopened", "A", 10).copy(kind = LmsItemKind.MATERIAL),
+            task("untracked", "A", 20).copy(kind = LmsItemKind.MATERIAL, completionState = LmsCompletionState.NOT_TRACKED),
+            task("opened", "A", 30).copy(kind = LmsItemKind.MATERIAL, completionState = LmsCompletionState.COMPLETE),
         ), now)
-        assertEquals(listOf("D-2"), overview.items.map { it.id })
-        assertEquals(listOf("soon", "later"), overview.courses.map { it.courseName })
-        assertEquals(listOf(1, 1), overview.courses.map { it.totalCount })
+        assertEquals(listOf("unopened"), overview.items.map { it.id })
     }
 
     @Test
-    fun distantOnlyCoursesKeepTheirCountsWithoutAnyTitles() {
+    fun nearnessIncludesTheWholeSecondKoreanCalendarDayButNotTheThird() {
+        assertEquals(true, homeTaskIsNear(Instant.parse("2026-09-16T14:59:59Z"), now))
+        assertEquals(false, homeTaskIsNear(Instant.parse("2026-09-16T15:00:00Z"), now))
+    }
+
+    @Test
+    fun distantOnlyCoursesStillShowTheirNearestTitle() {
         val overview = upcomingHomeTasks(listOf(task("distant", "A", 30 * 86400)), now)
         assertEquals(1, overview.courses.single().totalCount)
-        assertEquals(emptyList<LmsItem>(), overview.items)
+        assertEquals(listOf("distant"), overview.items.map { it.id })
+    }
+
+    @Test
+    fun todayListKeepsOnlyOpenTasksDueOnTheKoreanDate() {
+        val today = todayHomeTasks(listOf(
+            task("tonight", "A", 9 * 60).copy(kind = LmsItemKind.QUIZ),
+            task("tomorrow", "A", 11 * 60),
+            task("done", "A", 60).copy(completionState = LmsCompletionState.COMPLETE),
+            task("gone", "A", -60),
+        ), now)
+        assertEquals(listOf("tonight"), today.map { it.id })
     }
 
     @Test
@@ -82,7 +98,7 @@ class HomeTaskSummaryTest {
     fun dDayUsesKoreanCalendarBoundaryRatherThanRemainingFullDays() {
         assertEquals("D-day · 9/14 23:59 마감", homeTaskDeadlineLabel(Instant.parse("2026-09-14T14:59:00Z"), now))
         assertEquals("D-1 · 9/15 00:00 마감", homeTaskDeadlineLabel(Instant.parse("2026-09-14T15:00:00Z"), now))
-        assertEquals("D-8 · 9/22 00:00 마감", homeTaskDeadlineLabel(Instant.parse("2026-09-21T15:00:00Z"), now))
+        assertEquals("D-8 · 9/22 마감", homeTaskDeadlineLabel(Instant.parse("2026-09-21T15:00:00Z"), now))
     }
 
     private fun task(id: String, course: String, seconds: Long) = LmsItem(

@@ -29,7 +29,7 @@ import java.time.ZonedDateTime
 import org.junit.Rule
 import org.junit.Test
 
-/** D-094(14): the Home hero counts minutes only within an hour; the no-menu message appears once. */
+/** D-127 (narrowing D-094(14) on Home): the hero chip always counts down; the no-menu message appears once. */
 class HomeHeroCountdownTest {
     @get:Rule val compose = createComposeRule()
 
@@ -47,7 +47,7 @@ class HomeHeroCountdownTest {
     private val noMenu = MealData(emptyList(), null, null, null, "https://example.invalid", null, null)
 
     @Test
-    fun heroShowsTheStartClockBeyondAnHourAndCountsDownWithinIt() {
+    fun heroCountsDownInHoursAndMinutesBeforeTheClass() {
         val now = mutableStateOf(ZonedDateTime.of(today, LocalTime.of(1, 28), seoul))
         compose.setContent {
             DIMANowTheme(darkTheme = false) {
@@ -58,19 +58,18 @@ class HomeHeroCountdownTest {
             }
         }
 
-        // 692 minutes away: the start clock, never "시작까지 692분".
-        compose.onNodeWithText("13:00 시작").assertExists()
-        compose.onAllNodesWithText("시작까지", substring = true).assertCountEquals(0)
+        // D-127: 692 minutes away, the chip still counts down (the line beside it gives 13:00 ~ 14:50).
+        compose.onNodeWithText("시작까지 11시간 32분").assertExists()
+        compose.onAllNodesWithText("13:00 시작").assertCountEquals(0)
         capture("home-hero-start-clock")
 
         compose.runOnIdle { now.value = ZonedDateTime.of(today, LocalTime.of(11, 59), seoul) }
         compose.waitForIdle()
-        compose.onNodeWithText("13:00 시작").assertExists()
+        compose.onNodeWithText("시작까지 1시간 1분").assertExists()
 
         compose.runOnIdle { now.value = ZonedDateTime.of(today, LocalTime.of(12, 0), seoul) }
         compose.waitForIdle()
-        compose.onNodeWithText("시작까지 60분").assertExists()
-        compose.onAllNodesWithText("13:00 시작").assertCountEquals(0)
+        compose.onNodeWithText("시작까지 1시간").assertExists()
 
         compose.runOnIdle { now.value = ZonedDateTime.of(today, LocalTime.of(12, 48), seoul) }
         compose.waitForIdle()

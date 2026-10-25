@@ -38,6 +38,8 @@ object RollCallNoticeParser {
 
     fun parse(text: String, receivedAt: ZonedDateTime): RollCallNotice? {
         if ("점호" !in text) return null
+        // D-126(4): "오늘 점호 없어?" asks; an announcement never does.
+        if ('?' in text || '？' in text) return null
         val body = text.replace(Regex("""\s+"""), " ")
         val cancelled = CANCELLED.containsMatchIn(body)
         val held = !cancelled && HELD.containsMatchIn(body)

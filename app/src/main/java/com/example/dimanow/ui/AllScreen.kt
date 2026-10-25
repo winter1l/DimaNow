@@ -9,6 +9,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.filled.Apartment
+import androidx.compose.material.icons.filled.Badge
+import androidx.compose.material.icons.filled.EventAvailable
 import androidx.compose.material.icons.filled.BugReport
 import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Schedule
@@ -90,11 +92,28 @@ internal fun AllScreen(
         item(key = "links_header") { SettingsSectionHeader("바로가기") }
         item(key = "links") {
             DimaSegmentedList {
+                // D-126(6): the library gate takes the library app's 모바일 열람증; 전자출결 works only in 헤이영.
+                AllRow(
+                    icon = Icons.Default.Badge,
+                    title = "모바일 열람증",
+                    supporting = "도서관 앱을 열어요. 열람증 탭을 눌러 게이트에 대요.",
+                    index = 0, count = 3, tag = "all_library_card",
+                    external = true, externalLabel = "도서관 앱 열기",
+                    onClick = { openApp(context, LIBRARY_APP_PACKAGE) },
+                )
+                AllRow(
+                    icon = Icons.Default.EventAvailable,
+                    title = "헤이영 전자출결",
+                    supporting = "헤이영 앱을 열어요.",
+                    index = 1, count = 3, tag = "all_heyoung",
+                    external = true, externalLabel = "헤이영 열기",
+                    onClick = { openApp(context, HEYOUNG_APP_PACKAGE) },
+                )
                 AllRow(
                     icon = Icons.Default.Language,
                     title = "DIMA 포털",
                     supporting = "브라우저에서 열어요.",
-                    index = 0, count = 1, tag = "all_portal",
+                    index = 2, count = 3, tag = "all_portal",
                     external = true,
                     onClick = { openUrl(context, "https://portal.dima.ac.kr/") },
                 )
@@ -137,12 +156,13 @@ private fun AllRow(
     tag: String,
     onClick: () -> Unit,
     external: Boolean = false,
+    externalLabel: String = "브라우저에서 열기",
 ) {
     SegmentedListItem(
         onClick = onClick,
         shapes = ListItemDefaults.segmentedShapes(index = index, count = count),
         // The row says where it goes, which SegmentedListItem has no parameter for.
-        modifier = Modifier.testTag(tag).semantics { onClick(label = if (external) "브라우저에서 열기" else "열기") { onClick(); true } },
+        modifier = Modifier.testTag(tag).semantics { onClick(label = if (external) externalLabel else "열기") { onClick(); true } },
         leadingContent = { DimaIconBadge(icon) },
         trailingContent = {
             Icon(

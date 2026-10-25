@@ -179,6 +179,11 @@ private fun Bus4402StopCard(
             }
 
             // D-124: one strip carries the next two departures (large, with their countdown) and the whole day.
+            fun minutesUntil(time: java.time.LocalTime): Long {
+                val target = now.toLocalDate().atTime(time).atZone(now.zone)
+                return (Duration.between(now, target).toMillis().coerceAtLeast(0) + 59_999L) / 60_000L
+            }
+            val nextMinutesLeft = departures.getOrNull(firstUpcomingIndex)?.let { minutesUntil(it.time) }
             val chips = departures.mapIndexed { index, departure ->
                 val isPast = departure.time.isBefore(nowTime)
                 val isNext = index == firstUpcomingIndex
@@ -186,19 +191,21 @@ private fun Bus4402StopCard(
                 val isFirst = index == 0
                 val isLast = index == departures.lastIndex
                 val markers = serviceMarkers(isFirst, isLast) + listOfNotNull("예정".takeIf { departure.estimated })
-                val countdown = if (isNext || isSecond) {
-                    val target = now.toLocalDate().atTime(departure.time).atZone(now.zone)
-                    val minutesLeft = (Duration.between(now, target).toMillis().coerceAtLeast(0) + 59_999L) / 60_000L
-                    departureCountdownLabel(minutesLeft, emptyList())
-                } else null
+                val look = nextDepartureLook(
+                    isFirst = isFirst, isLast = isLast, isPast = isPast, isNext = isNext, isSecond = isSecond,
+                    clock = departure.time.format(TIME),
+                    minutesLeft = if (isNext || isSecond) minutesUntil(departure.time) else null,
+                    nextMinutesLeft = nextMinutesLeft,
+                )
                 TimetableChipSpec(
                     key = departure.time.toSecondOfDay(),
                     clock = departure.time.format(TIME),
                     markers = markers,
-                    description = timetableChipDescription(departure.time.format(TIME), isPast, isNext, markers, countdown),
-                    tone = timetableChipTone(isFirst = isFirst, isLast = isLast, isPast = isPast, isNext = isNext, isSecond = isSecond),
+                    description = timetableChipDescription(departure.time.format(TIME), isPast, isNext, markers, look.countdown.takeUnless { look.farAhead }),
+                    tone = look.tone,
                     isPast = isPast,
-                    countdown = countdown,
+                    countdown = look.countdown,
+                    farAhead = look.farAhead,
                 )
             }
             DepartureStrip(

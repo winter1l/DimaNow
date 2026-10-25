@@ -19,6 +19,7 @@ import java.time.LocalTime
 import org.junit.Assert.assertEquals
 import org.junit.Rule
 import org.junit.Test
+import androidx.compose.ui.test.performScrollTo
 
 /** D-119: the outing warnings and the in-app report form, captured for review under `files/d119-review`. */
 class OutingAndFeedbackReviewTest {
@@ -63,7 +64,8 @@ class OutingAndFeedbackReviewTest {
             }
         }
         compose.onNodeWithTag("feedback_message").performTextInput("시간표 가져오기에서 화면이 멈춰요")
-        compose.onNodeWithTag("feedback_log_preview").performClick()
+        // The form scrolls; on a landscape tablet the log button starts below the fold.
+        compose.onNodeWithTag("feedback_log_preview").performScrollTo().performClick()
         compose.onNodeWithText("10-24 00:44:49.123 W/DimaNow( 4120): <토큰>").assertExists()
         capture("feedback-form")
         compose.onNodeWithTag("feedback_send").performClick()

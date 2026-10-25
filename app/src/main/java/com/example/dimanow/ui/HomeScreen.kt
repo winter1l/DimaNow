@@ -102,6 +102,15 @@ internal fun DashboardScreen(
     serviceCalendar: ServiceCalendar = ServiceCalendarStore.current,
     /** Today's 점호 when Home should show it (엔터관 residents on a 점호 day, D-122); null hides the card. */
     rollCall: com.example.dimanow.dorm.RollCallStatus? = null,
+    /** D-128(1): saved card order and hidden cards (keys of [HomeCard]); empty means the default order. */
+    cardOrder: List<String> = emptyList(),
+    hiddenCards: Set<String> = emptySet(),
+    favorites: List<HomeShortcut> = emptyList(),
+    onOpenShortcut: (HomeShortcut) -> Unit = {},
+    /** Opens the Home editor; null hides the `홈 편집` button (previews and tests). */
+    onEditHome: (() -> Unit)? = null,
+    /** D-128(3): the student opened 학교 공지 from Home (offers keyword alerts once). */
+    onNoticeOpened: () -> Unit = {},
 ) {
     val context = LocalContext.current
     val nowTime = now.toLocalTime()
@@ -327,231 +336,243 @@ internal fun DashboardScreen(
             }
         }
 
-        // 수업 카드: 카드 전체가 수업 탭을 연다. 로그인 전에는 한 줄 안내로 줄어든다 (D-094(9))
-        item(key = "learning") {
-            HomeTodaySummary(
-                snapshot = lmsSnapshot, now = now,
-                onOpenCourses = { onNavigateToPage(AppPage.COURSES) },
-                sessionState = lmsSessionState,
-            )
+        // D-128(1): the student's favourites, right under the briefing
+        if (favorites.isNotEmpty()) item(key = "favorites") { HomeFavoritesRow(favorites, onOpenShortcut) }
+
+        // D-128(1): each movable card is kept by its key and drawn in the student's order; hidden ones are skipped.
+        val homeCards = mutableMapOf<String, androidx.compose.foundation.lazy.LazyListScope.() -> Unit>()
+
+        homeCards["learning"] = {
+            // 수업 카드: 카드 전체가 수업 탭을 연다. 로그인 전에는 한 줄 안내로 줄어든다 (D-094(9))
+            item(key = "learning") {
+                HomeTodaySummary(
+                    snapshot = lmsSnapshot, now = now,
+                    onOpenCourses = { onNavigateToPage(AppPage.COURSES) },
+                    sessionState = lmsSessionState,
+                )
+            }
         }
 
-        // D-107: 지금 진행 중이거나 2주 안에 시작하는 학사 일정(시험 주간 포함). 없으면 카드도 없다
-        val academicAgenda = serviceCalendar.academicAgenda(now.toLocalDate()).take(4)
-        if (academicAgenda.isNotEmpty()) item(key = "academic") {
-            HomeAcademicAgendaCard(academicAgenda, now.toLocalDate())
+        homeCards["academic"] = {
+            // D-107: 지금 진행 중이거나 2주 안에 시작하는 학사 일정(시험 주간 포함). 없으면 카드도 없다
+            val academicAgenda = serviceCalendar.academicAgenda(now.toLocalDate()).take(4)
+            if (academicAgenda.isNotEmpty()) item(key = "academic") {
+                HomeAcademicAgendaCard(academicAgenda, now.toLocalDate())
+            }
         }
 
-        // 2. 실시간 셔틀 카드 — 카드 전체가 셔틀 탭을 연다 (D-094(9))
-        item(key = "shuttle") {
-            val shuttleSuspension = remember(now.toLocalDate()) { guidanceEngine.campusShuttleSuspensionOn(now.toLocalDate()) }
-            val shuttleHeader: @Composable (Boolean) -> Unit = { openable ->
-                // D-102: 지금 위치는 그 위치가 바꾸는 이 카드에서 '○○ 출발'로 알린다
-                HomeCardHeader(icon = Icons.Default.DirectionsBus, title = "셔틀", showChevron = openable) {
-                    if (zone != CampusZoneId.OUTSIDE) {
-                        Surface(shape = DimaShapes.Badge, color = MaterialTheme.colorScheme.secondaryContainer) {
+        homeCards["shuttle"] = {
+            // 2. 실시간 셔틀 카드 — 카드 전체가 셔틀 탭을 연다 (D-094(9))
+            item(key = "shuttle") {
+                val shuttleSuspension = remember(now.toLocalDate()) { guidanceEngine.campusShuttleSuspensionOn(now.toLocalDate()) }
+                val shuttleHeader: @Composable (Boolean) -> Unit = { openable ->
+                    // D-102: 지금 위치는 그 위치가 바꾸는 이 카드에서 '○○ 출발'로 알린다
+                    HomeCardHeader(icon = Icons.Default.DirectionsBus, title = "셔틀", showChevron = openable) {
+                        if (zone != CampusZoneId.OUTSIDE) {
+                            Surface(shape = DimaShapes.Badge, color = MaterialTheme.colorScheme.secondaryContainer) {
+                                Text(
+                                    text = "$originName 출발",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = MaterialTheme.colorScheme.onSecondaryContainer,
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp).testTag("dashboard_shuttle_origin"),
+                                )
+                            }
+                        }
+                    }
+                }
+                // D-102: 위치 권한이 없어 '캠퍼스 밖'으로 보일 때는 설정으로 보내지 않고 여기서 바로 묻는다.
+                // M3 카드는 전체가 한 번 누르는 대상이거나 자기 버튼을 가진 그릇 중 하나이므로, 이때 카드는 누를 수 없다.
+                if (zone == CampusZoneId.OUTSIDE && !locationAccess.granted && !shuttleDepartures.isEmpty() && shuttleSuspension == null) {
+                    HomeContainerCard(modifier = Modifier.testTag("dashboard_shuttle_card")) {
+                        shuttleHeader(false)
+                        Text(
+                            "위치를 허용하면 있는 곳의 셔틀을 바로 보여 줘요. 위치는 기기 안에서만 써요.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.testTag("dashboard_location_needed"),
+                        )
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            FilledTonalButton(shapes = ButtonDefaults.shapes(), 
+                                onClick = locationAccess.request,
+                                modifier = Modifier.testTag("dashboard_allow_location"),
+                            ) { Text("위치 허용하기") }
+                            TextButton(shapes = ButtonDefaults.shapes(), onClick = { onNavigateToPage(AppPage.SHUTTLE) }) { Text("전체 시간표") }
+                        }
+                    }
+                } else HomeSummaryCard(
+                    onClick = { onNavigateToPage(AppPage.SHUTTLE) },
+                    onClickLabel = "셔틀 전체 시간표 보기",
+                    modifier = Modifier.testTag("dashboard_shuttle_card"),
+                ) {
+                    shuttleHeader(true)
+
+                    val todayZoneDepartures = shuttleDepartures.filter { it.serviceDay == now.dayOfWeek && it.originZone == zone }
+                    val destinations = todayZoneDepartures.mapNotNull { it.destinationZone }.distinct().sortedBy { it.ordinal }
+
+                    when {
+                        // D-094: 첫 캐시 값이 오기 전에는 '데이터 없음' 대신 불러오는 중으로 보여준다
+                        shuttle == null -> {
+                            LoadingLine("셔틀 시간표를 불러오고 있어요", Modifier.testTag("dashboard_shuttle_loading"))
+                        }
+                        shuttleDepartures.isEmpty() -> {
+                            if (shuttle.error != null) {
+                                ErrorState(homeShuttleUnavailableMessage(shuttle), contained = false)
+                            } else {
+                                EmptyState(homeShuttleUnavailableMessage(shuttle), contained = false)
+                            }
+                        }
+                        // D-099: 공휴일·운행 중지일에는 평일 시간표 대신 미운행을 알린다
+                        shuttleSuspension != null -> {
                             Text(
-                                text = "$originName 출발",
-                                style = MaterialTheme.typography.labelMedium,
-                                color = MaterialTheme.colorScheme.onSecondaryContainer,
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp).testTag("dashboard_shuttle_origin"),
+                                "오늘은 셔틀이 운행하지 않아요 · $shuttleSuspension",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.testTag("dashboard_shuttle_suspended"),
                             )
                         }
-                    }
-                }
-            }
-            // D-102: 위치 권한이 없어 '캠퍼스 밖'으로 보일 때는 설정으로 보내지 않고 여기서 바로 묻는다.
-            // M3 카드는 전체가 한 번 누르는 대상이거나 자기 버튼을 가진 그릇 중 하나이므로, 이때 카드는 누를 수 없다.
-            if (zone == CampusZoneId.OUTSIDE && !locationAccess.granted && !shuttleDepartures.isEmpty() && shuttleSuspension == null) {
-                HomeContainerCard(modifier = Modifier.testTag("dashboard_shuttle_card")) {
-                    shuttleHeader(false)
-                    Text(
-                        "위치를 허용하면 있는 곳의 셔틀을 바로 보여 줘요. 위치는 기기 안에서만 써요.",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.testTag("dashboard_location_needed"),
-                    )
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        FilledTonalButton(shapes = ButtonDefaults.shapes(), 
-                            onClick = locationAccess.request,
-                            modifier = Modifier.testTag("dashboard_allow_location"),
-                        ) { Text("위치 허용하기") }
-                        TextButton(shapes = ButtonDefaults.shapes(), onClick = { onNavigateToPage(AppPage.SHUTTLE) }) { Text("전체 시간표") }
-                    }
-                }
-            } else HomeSummaryCard(
-                onClick = { onNavigateToPage(AppPage.SHUTTLE) },
-                onClickLabel = "셔틀 전체 시간표 보기",
-                modifier = Modifier.testTag("dashboard_shuttle_card"),
-            ) {
-                shuttleHeader(true)
-
-                val todayZoneDepartures = shuttleDepartures.filter { it.serviceDay == now.dayOfWeek && it.originZone == zone }
-                val destinations = todayZoneDepartures.mapNotNull { it.destinationZone }.distinct().sortedBy { it.ordinal }
-
-                when {
-                    // D-094: 첫 캐시 값이 오기 전에는 '데이터 없음' 대신 불러오는 중으로 보여준다
-                    shuttle == null -> {
-                        LoadingLine("셔틀 시간표를 불러오고 있어요", Modifier.testTag("dashboard_shuttle_loading"))
-                    }
-                    shuttleDepartures.isEmpty() -> {
-                        if (shuttle.error != null) {
-                            ErrorState(homeShuttleUnavailableMessage(shuttle), contained = false)
-                        } else {
-                            EmptyState(homeShuttleUnavailableMessage(shuttle), contained = false)
+                        zone == CampusZoneId.OUTSIDE -> {
+                            // 위치를 쓸 수 있는데 캠퍼스 밖이면, 무엇이 언제 나타나는지만 알려 준다 (D-102)
+                            Text(
+                                "캠퍼스에 오면 바로 보여 줘요",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.testTag("dashboard_outside"),
+                            )
                         }
-                    }
-                    // D-099: 공휴일·운행 중지일에는 평일 시간표 대신 미운행을 알린다
-                    shuttleSuspension != null -> {
-                        Text(
-                            "오늘은 셔틀이 운행하지 않아요 · $shuttleSuspension",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.testTag("dashboard_shuttle_suspended"),
-                        )
-                    }
-                    zone == CampusZoneId.OUTSIDE -> {
-                        // 위치를 쓸 수 있는데 캠퍼스 밖이면, 무엇이 언제 나타나는지만 알려 준다 (D-102)
-                        Text(
-                            "캠퍼스에 오면 바로 보여 줘요",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.testTag("dashboard_outside"),
-                        )
-                    }
-                    // D-126(1): 한 목적지 줄의 남은 시간은 모두 한 크기다. 그 크기는 줄 폭에서 미리 세므로 폭을 먼저 받는다.
-                    destinations.isNotEmpty() -> androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxWidth()) {
-                        val rowWidth = maxWidth
-                        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                            destinations.forEach { destZone ->
-                                val destName = DisplayVocabulary.originName(destZone)
-                                // 목적지 루프 안에서 엔진을 새로 만들지 않고 위에서 remember한 것을 쓴다
-                                val annotated = guidanceEngine.annotatedServiceDepartures(
-                                    serviceDay = now.dayOfWeek,
-                                    originZone = zone,
-                                    destinationZone = destZone,
-                                    departures = shuttleDepartures,
-                                )
-                                val upcoming = shuttleBoard.rows.firstOrNull { it.destinationZone == destZone }?.departures.orEmpty()
-                                // D-127: with the next bus (often 첫차) more than an hour off, a countdown says nothing; that
-                                // departure becomes one quiet tile with its clock large, and the ones after it show only the time.
-                                val farAhead = (upcoming.firstOrNull()?.remainingMinutes ?: 0L) > 60
-                                val capsules = upcoming.mapIndexed { index, countdown ->
-                                    val time = countdown.departure.time
-                                    val serviceDeparture = annotated.firstOrNull { it.departure.time == time }
-                                    val isLastService = serviceDeparture?.isLast == true
-                                    val serviceLabel = when {
-                                        serviceDeparture?.isFirst == true && isLastService -> "첫차·막차"
-                                        serviceDeparture?.isFirst == true -> "첫차"
-                                        isLastService -> "막차"
-                                        else -> null
+                        // D-126(1): 한 목적지 줄의 남은 시간은 모두 한 크기다. 그 크기는 줄 폭에서 미리 세므로 폭을 먼저 받는다.
+                        destinations.isNotEmpty() -> androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxWidth()) {
+                            val rowWidth = maxWidth
+                            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                                destinations.forEach { destZone ->
+                                    val destName = DisplayVocabulary.originName(destZone)
+                                    // 목적지 루프 안에서 엔진을 새로 만들지 않고 위에서 remember한 것을 쓴다
+                                    val annotated = guidanceEngine.annotatedServiceDepartures(
+                                        serviceDay = now.dayOfWeek,
+                                        originZone = zone,
+                                        destinationZone = destZone,
+                                        departures = shuttleDepartures,
+                                    )
+                                    val upcoming = shuttleBoard.rows.firstOrNull { it.destinationZone == destZone }?.departures.orEmpty()
+                                    // D-127: with the next bus (often 첫차) more than an hour off, a countdown says nothing; that
+                                    // departure becomes one quiet tile with its clock large, and the ones after it show only the time.
+                                    val farAhead = (upcoming.firstOrNull()?.remainingMinutes ?: 0L) > 60
+                                    val capsules = upcoming.mapIndexed { index, countdown ->
+                                        val time = countdown.departure.time
+                                        val serviceDeparture = annotated.firstOrNull { it.departure.time == time }
+                                        val isLastService = serviceDeparture?.isLast == true
+                                        val serviceLabel = when {
+                                            serviceDeparture?.isFirst == true && isLastService -> "첫차·막차"
+                                            serviceDeparture?.isFirst == true -> "첫차"
+                                            isLastService -> "막차"
+                                            else -> null
+                                        }
+                                        val boardingStopLabel = when {
+                                            serviceDeparture?.isBoardingStopTransition == true -> "운동장 전환"
+                                            serviceDeparture?.isStadiumStop == true -> "운동장"
+                                            else -> null
+                                        }
+                                        val markers = listOfNotNull(serviceLabel, boardingStopLabel)
+                                        when {
+                                            !farAhead -> HomeDeparture(
+                                                countdown = departureCountdownLabel(countdown.remainingMinutes, emptyList()),
+                                                clock = time.format(TIME),
+                                                markers = markers,
+                                                isNext = index == 0,
+                                                isLastService = isLastService,
+                                            )
+                                            index == 0 -> HomeDeparture(
+                                                countdown = time.format(TIME),
+                                                clock = markers.joinToString(" · ").ifEmpty { "다음 출발" },
+                                                markers = emptyList(),
+                                                isNext = false,
+                                                isLastService = isLastService,
+                                            )
+                                            else -> HomeDeparture(
+                                                countdown = "",
+                                                clock = time.format(TIME),
+                                                markers = emptyList(),
+                                                isNext = false,
+                                                isLastService = isLastService,
+                                                timeOnly = true,
+                                            )
+                                        }
                                     }
-                                    val boardingStopLabel = when {
-                                        serviceDeparture?.isBoardingStopTransition == true -> "운동장 전환"
-                                        serviceDeparture?.isStadiumStop == true -> "운동장"
-                                        else -> null
-                                    }
-                                    val markers = listOfNotNull(serviceLabel, boardingStopLabel)
-                                    when {
-                                        !farAhead -> HomeDeparture(
-                                            countdown = departureCountdownLabel(countdown.remainingMinutes, emptyList()),
-                                            clock = time.format(TIME),
-                                            markers = markers,
-                                            isNext = index == 0,
-                                            isLastService = isLastService,
-                                        )
-                                        index == 0 -> HomeDeparture(
-                                            countdown = time.format(TIME),
-                                            clock = markers.joinToString(" · ").ifEmpty { "다음 출발" },
-                                            markers = emptyList(),
-                                            isNext = false,
-                                            isLastService = isLastService,
-                                        )
-                                        else -> HomeDeparture(
-                                            countdown = "",
-                                            clock = time.format(TIME),
-                                            markers = emptyList(),
-                                            isNext = false,
-                                            isLastService = isLastService,
-                                            timeOnly = true,
-                                        )
-                                    }
-                                }
-                                val destinationTag = "${destName}행"
-                                val countdownSize = rememberHomeCountdownSize(rowWidth, destinationTag, capsules)
+                                    val destinationTag = "${destName}행"
+                                    val countdownSize = rememberHomeCountdownSize(rowWidth, destinationTag, capsules)
 
-                                // D-124: 목적지 태그 오른쪽에 다음 출발 칸을 같은 줄로 붙여 세로 공간을 아낀다. 칸은 줄 폭을
-                                // 똑같이 나누고, 남은 시간 글자는 줄의 모든 칸에 맞는 한 크기로 줄어든다(줄바꿈 없음, D-126(1)).
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                ) {
-                                    // 항상 크게 표시되는 목적지 태그
-                                    Surface(
-                                        shape = DimaShapes.Badge,
-                                        color = MaterialTheme.colorScheme.primaryContainer,
+                                    // D-124: 목적지 태그 오른쪽에 다음 출발 칸을 같은 줄로 붙여 세로 공간을 아낀다. 칸은 줄 폭을
+                                    // 똑같이 나누고, 남은 시간 글자는 줄의 모든 칸에 맞는 한 크기로 줄어든다(줄바꿈 없음, D-126(1)).
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
                                     ) {
-                                        Text(
-                                            text = destinationTag,
-                                            style = MaterialTheme.typography.labelLarge,
-                                            color = MaterialTheme.colorScheme.onPrimaryContainer,
-                                            maxLines = 1,
-                                            softWrap = false,
-                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                                        )
-                                    }
+                                        // 항상 크게 표시되는 목적지 태그
+                                        Surface(
+                                            shape = DimaShapes.Badge,
+                                            color = MaterialTheme.colorScheme.primaryContainer,
+                                        ) {
+                                            Text(
+                                                text = destinationTag,
+                                                style = MaterialTheme.typography.labelLarge,
+                                                color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                                maxLines = 1,
+                                                softWrap = false,
+                                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                            )
+                                        }
 
-                                    if (capsules.isNotEmpty()) {
-                                        Row(Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                            capsules.forEachIndexed { index, departure ->
-                                                if (departure.timeOnly) {
-                                                    DepartureTimeTile(
+                                        if (capsules.isNotEmpty()) {
+                                            Row(Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                                capsules.forEachIndexed { index, departure ->
+                                                    if (departure.timeOnly) {
+                                                        DepartureTimeTile(
+                                                            clock = departure.clock,
+                                                            modifier = Modifier.weight(1f).testTag("home_departure_${destZone.name}_$index"),
+                                                        )
+                                                        return@forEachIndexed
+                                                    }
+                                                    // D-124: the same cell as the shuttle tab's strip — countdown large, clock and markers small
+                                                    val (container, content) = shuttleCapsuleColors(isNearest = departure.isNext, isLastService = departure.isLastService)
+                                                    DepartureCapsule(
+                                                        countdown = departure.countdown,
                                                         clock = departure.clock,
+                                                        markers = departure.markers,
+                                                        containerColor = container,
+                                                        contentColor = content,
+                                                        isNext = departure.isNext,
+                                                        countdownSize = countdownSize,
                                                         modifier = Modifier.weight(1f).testTag("home_departure_${destZone.name}_$index"),
                                                     )
-                                                    return@forEachIndexed
                                                 }
-                                                // D-124: the same cell as the shuttle tab's strip — countdown large, clock and markers small
-                                                val (container, content) = shuttleCapsuleColors(isNearest = departure.isNext, isLastService = departure.isLastService)
-                                                DepartureCapsule(
-                                                    countdown = departure.countdown,
-                                                    clock = departure.clock,
-                                                    markers = departure.markers,
-                                                    containerColor = container,
-                                                    contentColor = content,
-                                                    isNext = departure.isNext,
-                                                    countdownSize = countdownSize,
-                                                    modifier = Modifier.weight(1f).testTag("home_departure_${destZone.name}_$index"),
-                                                )
                                             }
-                                        }
-                                    } else {
-                                        // 운행 종료 상태 (첫차 및 막차 시각 함께 표시)
-                                        val firstDepartureTime = annotated.firstOrNull()?.departure?.time
-                                        val lastDepartureTime = annotated.lastOrNull()?.departure?.time
-                                        Surface(
-                                            shape = DimaShapes.Tile,
-                                            color = DimaTheme.colors.cardInner,
-                                            modifier = Modifier.weight(1f),
-                                        ) {
-                                            FlowRow(
-                                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-                                                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                                verticalArrangement = Arrangement.spacedBy(2.dp),
-                                                itemVerticalAlignment = Alignment.CenterVertically,
+                                        } else {
+                                            // 운행 종료 상태 (첫차 및 막차 시각 함께 표시)
+                                            val firstDepartureTime = annotated.firstOrNull()?.departure?.time
+                                            val lastDepartureTime = annotated.lastOrNull()?.departure?.time
+                                            Surface(
+                                                shape = DimaShapes.Tile,
+                                                color = DimaTheme.colors.cardInner,
+                                                modifier = Modifier.weight(1f),
                                             ) {
-                                                Text(
-                                                    text = "오늘 운행이 끝났어요",
-                                                    style = MaterialTheme.typography.titleSmall,
-                                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                                )
-                                                if (firstDepartureTime != null && lastDepartureTime != null) {
+                                                FlowRow(
+                                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                                    verticalArrangement = Arrangement.spacedBy(2.dp),
+                                                    itemVerticalAlignment = Alignment.CenterVertically,
+                                                ) {
                                                     Text(
-                                                        text = "첫차 ${firstDepartureTime.format(TIME)} · 막차 ${lastDepartureTime.format(TIME)}",
-                                                        style = MaterialTheme.typography.bodySmall,
+                                                        text = "오늘 운행이 끝났어요",
+                                                        style = MaterialTheme.typography.titleSmall,
                                                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                                                     )
+                                                    if (firstDepartureTime != null && lastDepartureTime != null) {
+                                                        Text(
+                                                            text = "첫차 ${firstDepartureTime.format(TIME)} · 막차 ${lastDepartureTime.format(TIME)}",
+                                                            style = MaterialTheme.typography.bodySmall,
+                                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                        )
+                                                    }
                                                 }
                                             }
                                         }
@@ -559,163 +580,175 @@ internal fun DashboardScreen(
                                 }
                             }
                         }
-                    }
-                    else -> {
-                        Text("오늘은 운행하지 않아요", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        else -> {
+                            Text("오늘은 운행하지 않아요", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
                     }
                 }
             }
         }
 
-        // 3. 현재 구역의 오늘 식단 카드 — 카드 전체가 식단 탭을 연다 (D-094(9))
         // D-122: 엔터관으로 돌아가는 학생에게는 점호 날 점호 안내와 외출·외박 신청을 홈에서 바로 준다
-        rollCall?.let { status ->
-            item(key = "roll_call") {
-                HomeRollCallCard(rollCall = status, time = nowTime, onOpenDorm = { onNavigateToPage(AppPage.DORM) })
-            }
-        }
-
-        item(key = "meal") {
-            HomeSummaryCard(
-                onClick = { onNavigateToPage(AppPage.MEAL) },
-                onClickLabel = "식단 보기",
-                modifier = Modifier
-                    .testTag("dashboard_meal_card")
-                    .semantics {
-                        stateDescription = when {
-                            mealLoading -> "불러오는 중"
-                            homeMealOpen -> "운영 중"
-                            else -> "운영 시간 아님"
-                        }
-                    },
-            ) {
-                HomeCardHeader(icon = Icons.Default.Restaurant, title = if (useDormitoryMeal) "기숙사" else "학생식당") {
-                    // 식단이 없는 날은 본문이 한 번만 알린다: 머리의 상태 배지에 같은 말을 되풀이하지 않는다 (D-094(14))
-                    if (!useDormitoryMeal && mealStatusNow != null &&
-                        mealStatusNow.state != MealServiceState.NO_MENU && mealStatusNow.label.isNotBlank()
-                    ) {
-                        Surface(
-                            shape = DimaShapes.Badge,
-                            color = if (homeMealOpen) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant,
-                            contentColor = if (homeMealOpen) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
-                        ) {
-                            Text(
-                                text = mealStatusNow.label,
-                                style = MaterialTheme.typography.labelSmall,
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                            )
-                        }
-                    }
-                }
-
-                when {
-                    mealLoading -> {
-                        LoadingLine("식단을 불러오고 있어요", Modifier.testTag("dashboard_meal_loading"))
-                    }
-                    useDormitoryMeal && homeDormitoryMeal != null -> {
-                        if (homeDormitoryMeal.date != now.toLocalDate()) {
-                            Text(
-                                text = "${homeDormitoryMeal.date.monthValue}월 ${homeDormitoryMeal.date.dayOfMonth}일 · 다음 식단",
-                                style = MaterialTheme.typography.labelLarge,
-                                color = MaterialTheme.colorScheme.primary,
-                            )
-                        }
-                        groupDormitorySections(homeDormitoryMeal.sections).forEachIndexed { index, block ->
-                            if (index > 0) HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-                            val status = mealServiceStatus(homeDormitoryMeal.date, block.hours, now)
-                            DormitoryMealPeriodContent(block, status)
-                        }
-                    }
-                    useDormitoryMeal -> {
-                        EmptyState("예정된 식단이 없어요", contained = false)
-                    }
-                    todayMeal != null && todayMeal.menuLines.isNotEmpty() -> {
-                        Text(
-                            text = todayMeal.menuLines.joinToString(" · "),
-                            style = MaterialTheme.typography.bodyMedium,
-                        )
-                    }
-                    now.dayOfWeek.value >= 6 -> {
-                        EmptyState("주말에는 학생식당을 쉬어요", contained = false)
-                    }
-                    else -> {
-                        EmptyState("오늘 등록된 식단이 없어요", contained = false)
-                    }
+        homeCards["roll_call"] = {
+            rollCall?.let { status ->
+                item(key = "roll_call") {
+                    HomeRollCallCard(rollCall = status, time = nowTime, onOpenDorm = { onNavigateToPage(AppPage.DORM) })
                 }
             }
         }
 
-        // 4. 학교 공지 카드 (최근 3건, 행 탭 시 해당 공지로 이동)
-        item(key = "notices") {
-            ElevatedCard(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .testTag("dashboard_notices_card"),
-                shape = DimaShapes.Card,
-                colors = CardDefaults.elevatedCardColors(containerColor = DimaTheme.colors.card),
-            ) {
-                // D-122: 머리의 전체보기 버튼(48dp)과 공지 행(48dp)이 이미 위아래 여백을 가지므로, 카드 여백은 위아래를
-                // 줄여 다른 홈 카드와 같은 간격으로 보이게 한다
-                Column(
-                    Modifier.padding(start = 16.dp, end = 12.dp, top = 8.dp, bottom = 8.dp),
-                    verticalArrangement = Arrangement.spacedBy(4.dp),
+        homeCards["meal"] = {
+            // 3. 현재 구역의 오늘 식단 카드 — 카드 전체가 식단 탭을 연다 (D-094(9))
+            item(key = "meal") {
+                HomeSummaryCard(
+                    onClick = { onNavigateToPage(AppPage.MEAL) },
+                    onClickLabel = "식단 보기",
+                    modifier = Modifier
+                        .testTag("dashboard_meal_card")
+                        .semantics {
+                            stateDescription = when {
+                                mealLoading -> "불러오는 중"
+                                homeMealOpen -> "운영 중"
+                                else -> "운영 시간 아님"
+                            }
+                        },
                 ) {
-                    // 공지 카드는 행마다 다른 곳을 열므로 카드 자체는 누를 수 없고, 머리의 전체보기만 버튼이다 (D-094(9))
-                    HomeCardHeader(icon = Icons.Default.Campaign, title = "학교 공지", showChevron = false) {
-                        TextButton(shapes = ButtonDefaults.shapes(), 
-                            onClick = { openUrl(context, notices?.sourceUrl ?: OFFICIAL_NOTICE_SOURCE_URL) },
-                            modifier = Modifier.semantics { contentDescription = "학교 공지 전체보기" },
+                    HomeCardHeader(icon = Icons.Default.Restaurant, title = if (useDormitoryMeal) "기숙사" else "학생식당") {
+                        // 식단이 없는 날은 본문이 한 번만 알린다: 머리의 상태 배지에 같은 말을 되풀이하지 않는다 (D-094(14))
+                        if (!useDormitoryMeal && mealStatusNow != null &&
+                            mealStatusNow.state != MealServiceState.NO_MENU && mealStatusNow.label.isNotBlank()
                         ) {
-                            Text("전체보기")
+                            Surface(
+                                shape = DimaShapes.Badge,
+                                color = if (homeMealOpen) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant,
+                                contentColor = if (homeMealOpen) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
+                            ) {
+                                Text(
+                                    text = mealStatusNow.label,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                )
+                            }
                         }
                     }
 
-                    val latestNotices = notices?.notices.orEmpty().take(3)
-                    if (notices == null) {
-                        LoadingLine("공지를 불러오고 있어요", Modifier.testTag("dashboard_notices_loading"))
-                    } else if (latestNotices.isEmpty()) {
-                        when {
-                            // 홈에는 새로고침이 없으므로 다음 행동은 전체보기(학교 누리집)로 안내한다
-                            notices.error != null -> ErrorState(
-                                message = "공지를 불러오지 못했어요",
-                                supporting = "잠시 후 다시 확인하거나 전체보기에서 학교 누리집을 열어 주세요",
-                                contained = false,
-                                modifier = Modifier.testTag("dashboard_notices_error"),
-                            )
-                            notices.lastSuccess == null -> LoadingLine("인터넷에 연결되면 공지를 받아요")
-                            else -> EmptyState("등록된 공지가 없어요", contained = false)
+                    when {
+                        mealLoading -> {
+                            LoadingLine("식단을 불러오고 있어요", Modifier.testTag("dashboard_meal_loading"))
                         }
-                    } else {
-                        Column {
-                            latestNotices.forEach { notice ->
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .heightIn(min = 48.dp)
-                                        .clip(DimaShapes.Small)
-                                        .clickable(onClickLabel = "공지 열기", role = Role.Button) { openUrl(context, notice.url) }
-                                        .padding(end = 4.dp, top = 8.dp, bottom = 8.dp)
-                                        .testTag("dashboard_notice_${notice.id}"),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                ) {
-                                    Text(
-                                        text = notice.title,
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        maxLines = 1,
-                                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
-                                        modifier = Modifier.weight(1f),
-                                    )
-                                    Surface(
-                                        shape = DimaShapes.Badge,
-                                        color = DimaTheme.colors.cardInner,
+                        useDormitoryMeal && homeDormitoryMeal != null -> {
+                            if (homeDormitoryMeal.date != now.toLocalDate()) {
+                                Text(
+                                    text = "${homeDormitoryMeal.date.monthValue}월 ${homeDormitoryMeal.date.dayOfMonth}일 · 다음 식단",
+                                    style = MaterialTheme.typography.labelLarge,
+                                    color = MaterialTheme.colorScheme.primary,
+                                )
+                            }
+                            groupDormitorySections(homeDormitoryMeal.sections).forEachIndexed { index, block ->
+                                if (index > 0) HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                                val status = mealServiceStatus(homeDormitoryMeal.date, block.hours, now)
+                                DormitoryMealPeriodContent(block, status)
+                            }
+                        }
+                        useDormitoryMeal -> {
+                            EmptyState("예정된 식단이 없어요", contained = false)
+                        }
+                        todayMeal != null && todayMeal.menuLines.isNotEmpty() -> {
+                            Text(
+                                text = todayMeal.menuLines.joinToString(" · "),
+                                style = MaterialTheme.typography.bodyMedium,
+                            )
+                        }
+                        now.dayOfWeek.value >= 6 -> {
+                            EmptyState("주말에는 학생식당을 쉬어요", contained = false)
+                        }
+                        else -> {
+                            EmptyState("오늘 등록된 식단이 없어요", contained = false)
+                        }
+                    }
+                }
+            }
+        }
+
+        homeCards["notices"] = {
+            // 4. 학교 공지 카드 (최근 3건, 행 탭 시 해당 공지로 이동)
+            item(key = "notices") {
+                ElevatedCard(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("dashboard_notices_card"),
+                    shape = DimaShapes.Card,
+                    colors = CardDefaults.elevatedCardColors(containerColor = DimaTheme.colors.card),
+                ) {
+                    // D-122: 머리의 전체보기 버튼(48dp)과 공지 행(48dp)이 이미 위아래 여백을 가지므로, 카드 여백은 위아래를
+                    // 줄여 다른 홈 카드와 같은 간격으로 보이게 한다
+                    Column(
+                        Modifier.padding(start = 16.dp, end = 12.dp, top = 8.dp, bottom = 8.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp),
+                    ) {
+                        // 공지 카드는 행마다 다른 곳을 열므로 카드 자체는 누를 수 없고, 머리의 전체보기만 버튼이다 (D-094(9))
+                        HomeCardHeader(icon = Icons.Default.Campaign, title = "학교 공지", showChevron = false) {
+                            TextButton(shapes = ButtonDefaults.shapes(), 
+                                onClick = {
+                                    onNoticeOpened()
+                                    openUrl(context, notices?.sourceUrl ?: OFFICIAL_NOTICE_SOURCE_URL)
+                                },
+                                modifier = Modifier.semantics { contentDescription = "학교 공지 전체보기" },
+                            ) {
+                                Text("전체보기")
+                            }
+                        }
+
+                        val latestNotices = notices?.notices.orEmpty().take(3)
+                        if (notices == null) {
+                            LoadingLine("공지를 불러오고 있어요", Modifier.testTag("dashboard_notices_loading"))
+                        } else if (latestNotices.isEmpty()) {
+                            when {
+                                // 홈에는 새로고침이 없으므로 다음 행동은 전체보기(학교 누리집)로 안내한다
+                                notices.error != null -> ErrorState(
+                                    message = "공지를 불러오지 못했어요",
+                                    supporting = "잠시 후 다시 확인하거나 전체보기에서 학교 누리집을 열어 주세요",
+                                    contained = false,
+                                    modifier = Modifier.testTag("dashboard_notices_error"),
+                                )
+                                notices.lastSuccess == null -> LoadingLine("인터넷에 연결되면 공지를 받아요")
+                                else -> EmptyState("등록된 공지가 없어요", contained = false)
+                            }
+                        } else {
+                            Column {
+                                latestNotices.forEach { notice ->
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .heightIn(min = 48.dp)
+                                            .clip(DimaShapes.Small)
+                                            .clickable(onClickLabel = "공지 열기", role = Role.Button) {
+                                                onNoticeOpened()
+                                                openUrl(context, notice.url)
+                                            }
+                                            .padding(end = 4.dp, top = 8.dp, bottom = 8.dp)
+                                            .testTag("dashboard_notice_${notice.id}"),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
                                     ) {
                                         Text(
-                                            text = "${notice.date.monthValue}.${notice.date.dayOfMonth}",
-                                            style = MaterialTheme.typography.labelSmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                            text = notice.title,
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            maxLines = 1,
+                                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                                            modifier = Modifier.weight(1f),
                                         )
+                                        Surface(
+                                            shape = DimaShapes.Badge,
+                                            color = DimaTheme.colors.cardInner,
+                                        ) {
+                                            Text(
+                                                text = "${notice.date.monthValue}.${notice.date.dayOfMonth}",
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                            )
+                                        }
                                     }
                                 }
                             }
@@ -724,6 +757,9 @@ internal fun DashboardScreen(
                 }
             }
         }
+
+        homeCardOrder(cardOrder, hiddenCards).forEach { card -> homeCards[card.key]?.invoke(this) }
+        onEditHome?.let { edit -> item(key = "home_edit") { HomeEditButton(edit) } }
     }
 }
 

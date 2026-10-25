@@ -79,6 +79,11 @@ import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
+import androidx.compose.material.icons.filled.Share
+import androidx.compose.runtime.collectAsState
+import androidx.compose.ui.platform.LocalContext
+import com.example.dimanow.calendar.IcsExport
+import com.example.dimanow.calendar.ServiceCalendarStore
 import com.example.dimanow.data.CampusDataRepository
 import com.example.dimanow.domain.Course
 import com.example.dimanow.domain.GuidancePause
@@ -125,12 +130,20 @@ internal fun TimetableScreen(
     var pendingDelete by remember { mutableStateOf<Course?>(null) }
     var changingOnce by remember { mutableStateOf<Course?>(null) }
     var changeError by remember { mutableStateOf<String?>(null) }
+    // D-128(4): 시간표와 학사 일정을 .ics 파일로 공유한다 (캘린더에 직접 쓰지 않음, D-125(6))
+    val context = LocalContext.current
+    var showExport by remember { mutableStateOf(false) }
+    val serviceCalendar by ServiceCalendarStore.calendar.collectAsState()
+    val academicEvents = remember(serviceCalendar, today) { IcsExport.upcomingAcademicEvents(serviceCalendar, today) }
+    val exportableCourseCount = remember(schedule) { IcsExport.exportableCourses(schedule).size }
+    val canExport = exportableCourseCount > 0 || academicEvents.isNotEmpty()
 
     BackHandler(
         enabled = addMenuExpanded || changingOnce != null || showEditor || showTermEditor || showPauseChoice ||
-            pausePickerMode != null || pendingDelete != null,
+            pausePickerMode != null || pendingDelete != null || showExport,
     ) {
         when {
+            showExport -> showExport = false
             addMenuExpanded -> addMenuExpanded = false
             changingOnce != null -> changingOnce = null
             pendingDelete != null -> pendingDelete = null
@@ -179,6 +192,16 @@ internal fun TimetableScreen(
                     Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "뒤로")
                 }
             }
+        },
+        // D-128(4): 내보낼 수업도 학사 일정도 없으면 버튼을 두지 않는다
+        topAction = if (canExport) {
+            {
+                IconButton(shapes = IconButtonDefaults.shapes(), onClick = { showExport = true }, modifier = Modifier.testTag("export_calendar")) {
+                    Icon(Icons.Default.Share, contentDescription = "캘린더로 내보내기")
+                }
+            }
+        } else {
+            null
         },
         listState = listState,
         itemSpacing = DimaLayout.sectionGap,
@@ -489,6 +512,24 @@ internal fun TimetableScreen(
                 headline = { KoreanDateRangePickerHeadline(state.selectedStartDateMillis, state.selectedEndDateMillis) },
             )
         }
+    }
+    if (showExport) {
+        CalendarExportDialog(
+            courseCount = exportableCourseCount,
+            academicEventCount = academicEvents.size,
+            onDismiss = { showExport = false },
+            onExport = { includeTimetable, includeAcademic ->
+                showExport = false
+                val ics = IcsExport.build(
+                    schedule = schedule.takeIf { includeTimetable },
+                    academicEvents = if (includeAcademic) academicEvents else emptyList(),
+                    now = Instant.now(),
+                )
+                scope.launch {
+                    if (!shareIcsFile(context, ics)) snackbarHostState.showSnackbar("캘린더 파일을 공유하지 못했어요. 잠시 후 다시 시도해 주세요")
+                }
+            },
+        )
     }
     pendingDelete?.let { course ->
         CourseDeleteConfirmationDialog(

@@ -40,6 +40,10 @@ fun NotificationGuidanceSettings(
     onDeadlineDigestChange: (Boolean) -> Unit = {},
     outingReminders: Boolean = true,
     onOutingRemindersChange: (Boolean) -> Unit = {},
+    noticeKeywordAlerts: Boolean = false,
+    noticeKeywords: List<String> = emptyList(),
+    onNoticeKeywordAlertsChange: (Boolean) -> Unit = {},
+    onNoticeKeywordsChange: (List<String>) -> Unit = {},
 ) {
     ElevatedCard(
         modifier = modifier.fillMaxWidth(),
@@ -80,6 +84,7 @@ fun NotificationGuidanceSettings(
                 tag = "notification_outing",
                 description = "점호가 있다는 카톡 공지를 읽은 날, 신청 마감 1시간 전에 알려 줘요. 귀가 방향이 엔터관일 때만 울려요.",
             )
+            NoticeKeywordSetting(noticeKeywordAlerts, noticeKeywords, onNoticeKeywordAlertsChange, onNoticeKeywordsChange)
             KakaoRollCallSetting()
         }
     }

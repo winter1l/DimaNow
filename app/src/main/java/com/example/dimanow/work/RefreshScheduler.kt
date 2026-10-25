@@ -72,6 +72,9 @@ class CampusSyncWorker(context: Context, parameters: WorkerParameters) : Corouti
             app.mealSource.refreshDormitory()
         }
         val notice = app.noticeSource.refresh()
+        if (notice is NoticeRefreshResult.Success) {
+            com.example.dimanow.notice.NoticeKeywordAlerts.afterSync(applicationContext, app.preferences, app.noticeSource.data.first().notices)
+        }
         if (shuttle is ShuttleRefreshResult.Success) ShuttleWidgetProvider.updateAll(applicationContext)
         if (meal is MealRefreshResult.Success) MealWidgetProvider.updateAll(applicationContext)
         if (shuttle is ShuttleRefreshResult.Success || meal is MealRefreshResult.Success) {

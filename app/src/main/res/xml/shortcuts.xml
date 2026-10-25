@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- D-128(2): static launcher shortcuts. Each opens MainActivity with the TARGET_PAGE extra that DimaNowApp routes.
+     targetPackage is the applicationId as a literal: resource XML gets no ${applicationId} substitution, and every
+     build type (debug, release, optimized) shares io.github.winter1l.dimanow with no suffix. AppShortcutsTest checks
+     it against BuildConfig.APPLICATION_ID, so adding a suffix fails the unit tests instead of breaking shortcuts. -->
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <shortcut
+        android:enabled="true"
+        android:icon="@drawable/ic_shortcut_shuttle"
+        android:shortcutId="shuttle"
+        android:shortcutLongLabel="@string/shortcut_shuttle_long"
+        android:shortcutShortLabel="@string/shortcut_shuttle_short">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetClass="com.example.dimanow.MainActivity"
+            android:targetPackage="io.github.winter1l.dimanow">
+            <extra
+                android:name="TARGET_PAGE"
+                android:value="SHUTTLE" />
+        </intent>
+    </shortcut>
+    <shortcut
+        android:enabled="true"
+        android:icon="@drawable/ic_shortcut_meal"
+        android:shortcutId="meal"
+        android:shortcutLongLabel="@string/shortcut_meal_long"
+        android:shortcutShortLabel="@string/shortcut_meal_short">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetClass="com.example.dimanow.MainActivity"
+            android:targetPackage="io.github.winter1l.dimanow">
+            <extra
+                android:name="TARGET_PAGE"
+                android:value="MEAL" />
+        </intent>
+    </shortcut>
+    <shortcut
+        android:enabled="true"
+        android:icon="@drawable/ic_shortcut_outing"
+        android:shortcutId="outing"
+        android:shortcutLongLabel="@string/shortcut_outing_long"
+        android:shortcutShortLabel="@string/shortcut_outing_short">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetClass="com.example.dimanow.MainActivity"
+            android:targetPackage="io.github.winter1l.dimanow">
+            <extra
+                android:name="TARGET_PAGE"
+                android:value="OUTING" />
+        </intent>
+    </shortcut>
+    <shortcut
+        android:enabled="true"
+        android:icon="@drawable/ic_shortcut_library_card"
+        android:shortcutId="library_card"
+        android:shortcutLongLabel="@string/shortcut_library_card_long"
+        android:shortcutShortLabel="@string/shortcut_library_card_short">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetClass="com.example.dimanow.MainActivity"
+            android:targetPackage="io.github.winter1l.dimanow">
+            <extra
+                android:name="TARGET_PAGE"
+                android:value="LIBRARY_CARD" />
+        </intent>
+    </shortcut>
+</shortcuts>

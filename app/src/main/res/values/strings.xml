@@ -5,4 +5,14 @@
     <string name="shuttle_widget_description">현재 구역에서 출발하는 셔틀 두 편의 남은 시간</string>
     <string name="meal_widget_description">오늘의 본관 학생식당 메뉴와 운영시간</string>
     <string name="campus_summary_widget_description">다음 수업, 실시간 셔틀, 오늘의 식단을 한눈에 보는 캠퍼스 올인원 요약</string>
+    <!-- D-128(2): launcher app shortcuts (short labels at most 10 characters) and the Quick Settings tile -->
+    <string name="shortcut_shuttle_short">셔틀</string>
+    <string name="shortcut_shuttle_long">셔틀 시간 보기</string>
+    <string name="shortcut_meal_short">식단</string>
+    <string name="shortcut_meal_long">오늘 식단 보기</string>
+    <string name="shortcut_outing_short">외출·외박 신청</string>
+    <string name="shortcut_outing_long">기숙사 외출·외박 신청</string>
+    <string name="shortcut_library_card_short">모바일 열람증</string>
+    <string name="shortcut_library_card_long">도서관 앱 모바일 열람증</string>
+    <string name="shuttle_tile_label">다음 셔틀</string>
 </resources>

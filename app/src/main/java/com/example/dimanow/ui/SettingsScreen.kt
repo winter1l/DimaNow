@@ -78,6 +78,10 @@ internal fun SettingsScreen(
     onDeadlineDigestChange: (Boolean) -> Unit = {},
     outingReminders: Boolean = true,
     onOutingRemindersChange: (Boolean) -> Unit = {},
+    noticeKeywordAlerts: Boolean = false,
+    noticeKeywords: List<String> = emptyList(),
+    onNoticeKeywordAlertsChange: (Boolean) -> Unit = {},
+    onNoticeKeywordsChange: (List<String>) -> Unit = {},
     homeBase: HomeBase,
     onHomeBaseChange: (HomeBase) -> Unit,
     shuttleData: ShuttleData?,
@@ -160,6 +164,10 @@ internal fun SettingsScreen(
                 onDeadlineDigestChange = onDeadlineDigestChange,
                 outingReminders = outingReminders,
                 onOutingRemindersChange = onOutingRemindersChange,
+                noticeKeywordAlerts = noticeKeywordAlerts,
+                noticeKeywords = noticeKeywords,
+                onNoticeKeywordAlertsChange = onNoticeKeywordAlertsChange,
+                onNoticeKeywordsChange = onNoticeKeywordsChange,
             )
         }
         item(key = "live_display") {

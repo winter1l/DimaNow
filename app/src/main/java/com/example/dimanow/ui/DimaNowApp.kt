@@ -220,6 +220,9 @@ fun DimaNowApp(
             "TIMETABLE" -> open(AppPage.TIMETABLE)
             "COURSES" -> open(AppPage.COURSES)
             "SETTINGS" -> open(AppPage.SETTINGS)
+            // D-128: app shortcuts and the keyword alert open these too
+            "DORM" -> open(AppPage.DORM)
+            "LIBRARY_CARD" -> openApp(appContext, LIBRARY_APP_PACKAGE)
             // D-126(4): the outing reminder opens 외출·외박 신청 over the 기숙사 page
             "OUTING" -> {
                 open(AppPage.DORM)
@@ -507,8 +510,24 @@ private fun DashboardRoute(
     // D-122: 엔터관 방향(예인관) 학생에게 점호 날 점호 카드를 보여 준다
     val homeBase by preferences.homeBase.collectRetainedAsState(initialValue = HomeBase.COMMUTE)
     val rollCallNotices by com.example.dimanow.dorm.RollCallStore.notices.collectAsStateWithLifecycle()
-    val rollCall = todayRollCall(now.toLocalDate(), rollCallNotices, serviceCalendar)
-        .takeIf { showsHomeRollCall(homeBase == HomeBase.YEIN, it) }
+    val todayRollCallStatus = todayRollCall(now.toLocalDate(), rollCallNotices, serviceCalendar)
+    val rollCall = todayRollCallStatus.takeIf { showsHomeRollCall(homeBase == HomeBase.YEIN, it) }
+    // D-128(1): the student's card order, hidden cards and favourites row
+    val cardOrder by preferences.homeCardOrder.collectRetainedAsState(initialValue = emptyList())
+    val hiddenCards by preferences.homeHiddenCards.collectRetainedAsState(initialValue = emptySet())
+    val savedFavorites by preferences.homeFavorites.collectRetainedAsState(initialValue = null)
+    val favorites = homeFavorites(savedFavorites, homeBase)
+    var editingHome by rememberSaveable { mutableStateOf(false) }
+    val homeContext = LocalContext.current
+    val outingLauncher = rememberOutingLauncher(todayRollCallStatus)
+    // D-128(3): keyword alerts are offered once, when the student comes back from 학교 공지 opened on Home
+    val noticeKeywordSuggested by preferences.noticeKeywordSuggested.collectAsStateWithLifecycle(initialValue = true)
+    var noticeOpenedFromHome by rememberSaveable { mutableStateOf(false) }
+    var showNoticeSuggestion by rememberSaveable { mutableStateOf(false) }
+    androidx.lifecycle.compose.LifecycleEventEffect(androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
+        if (noticeOpenedFromHome && !noticeKeywordSuggested) showNoticeSuggestion = true
+        noticeOpenedFromHome = false
+    }
     // D-126(7): after an update Home offers what changed, once; the stored value starts as "seen" to avoid a flash.
     val whatsNewSeen by preferences.whatsNewSeenVersionCode
         .collectAsStateWithLifecycle(initialValue = com.example.dimanow.BuildConfig.VERSION_CODE)
@@ -556,7 +575,54 @@ private fun DashboardRoute(
         modifier = modifier,
         now = now,
         rollCall = rollCall,
+        cardOrder = cardOrder,
+        hiddenCards = hiddenCards,
+        favorites = favorites,
+        onOpenShortcut = { shortcut ->
+            when (shortcut) {
+                HomeShortcut.TIMETABLE -> onNavigateToPage(AppPage.TIMETABLE)
+                HomeShortcut.DORM -> onNavigateToPage(AppPage.DORM)
+                HomeShortcut.EQUIPMENT -> onNavigateToPage(AppPage.EQUIPMENT)
+                HomeShortcut.SETTINGS -> onNavigateToPage(AppPage.SETTINGS)
+                HomeShortcut.OUTING -> outingLauncher.request()
+                HomeShortcut.LIBRARY_CARD -> openApp(homeContext, LIBRARY_APP_PACKAGE)
+                HomeShortcut.HEYOUNG -> openApp(homeContext, HEYOUNG_APP_PACKAGE)
+            }
+        },
+        onEditHome = { editingHome = true },
+        onNoticeOpened = { if (!noticeKeywordSuggested) noticeOpenedFromHome = true },
     )
+    outingLauncher.error?.let { message ->
+        LaunchedEffect(message) { android.widget.Toast.makeText(homeContext, message, android.widget.Toast.LENGTH_SHORT).show() }
+    }
+    if (editingHome) {
+        HomeEditorDialog(
+            order = homeCardOrder(cardOrder, emptySet()),
+            hidden = hiddenCards,
+            favorites = favorites,
+            onSave = { order, hidden, picked ->
+                whatsNewScope.launch { preferences.setHomeLayout(order.map { it.key }, hidden, picked.map { it.key }) }
+                editingHome = false
+            },
+            onDismiss = { editingHome = false },
+        )
+    }
+    if (showNoticeSuggestion) {
+        NoticeKeywordSuggestionSheet(
+            onEnable = { keywords ->
+                whatsNewScope.launch {
+                    preferences.setNoticeKeywords(keywords)
+                    preferences.setNoticeKeywordAlerts(true)
+                    preferences.setNoticeKeywordSuggested()
+                }
+                showNoticeSuggestion = false
+            },
+            onLater = {
+                whatsNewScope.launch { preferences.setNoticeKeywordSuggested() }
+                showNoticeSuggestion = false
+            },
+        )
+    }
 }
 
 @Composable
@@ -640,6 +706,8 @@ private fun SettingsRoute(
     val deadlineDigest by preferences.deadlineDigest.collectAsStateWithLifecycle(initialValue = true)
     val outingReminders by preferences.outingReminders.collectAsStateWithLifecycle(initialValue = true)
     val appContextForReminders = LocalContext.current.applicationContext
+    val noticeKeywordAlerts by preferences.noticeKeywordAlerts.collectAsStateWithLifecycle(initialValue = false)
+    val noticeKeywords by preferences.noticeKeywords.collectAsStateWithLifecycle(initialValue = emptyList())
     // D-094: null until the cache emits, so the diagnostics card shows loading rather than "기록 없음"
     val shuttle by shuttleSource.data.collectLoadedAsState()
     val meal by mealSource.data.collectLoadedAsState()
@@ -666,6 +734,15 @@ private fun SettingsRoute(
         onAcademicRemindersChange = { scope.launch { preferences.setAcademicReminders(it) } },
         deadlineDigest = deadlineDigest,
         onDeadlineDigestChange = { scope.launch { preferences.setDeadlineDigest(it) } },
+        noticeKeywordAlerts = noticeKeywordAlerts,
+        noticeKeywords = noticeKeywords,
+        onNoticeKeywordAlertsChange = {
+            scope.launch {
+                preferences.setNoticeKeywordAlerts(it)
+                preferences.setNoticeKeywordSuggested()
+            }
+        },
+        onNoticeKeywordsChange = { scope.launch { preferences.setNoticeKeywords(it) } },
         outingReminders = outingReminders,
         onOutingRemindersChange = {
             scope.launch {

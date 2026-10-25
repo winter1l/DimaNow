@@ -11,6 +11,9 @@ class TimetableChipsTest {
         assertEquals("18:55, 운동장 전환", timetableChipDescription("18:55", isPast = false, isNext = false, markers = listOf("운동장 전환")))
         assertEquals("21:50, 막차", timetableChipDescription("21:50", isPast = false, isNext = false, markers = serviceMarkers(isFirst = false, isLast = true)))
         assertEquals("다음 출발 08:51, 예정", timetableChipDescription("08:51", isPast = false, isNext = true, markers = listOf("예정")))
+        // D-124: the large cells say their countdown before the markers.
+        assertEquals("다음 출발 19:35, 5분 후, 운동장 전환", timetableChipDescription("19:35", isPast = false, isNext = true, markers = listOf("운동장 전환"), countdown = "5분 후"))
+        assertEquals("20:00, 30분 후, 막차", timetableChipDescription("20:00", isPast = false, isNext = false, markers = listOf("막차"), countdown = "30분 후"))
     }
 
     @Test

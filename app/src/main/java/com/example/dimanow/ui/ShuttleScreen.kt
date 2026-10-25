@@ -23,6 +23,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -75,6 +76,16 @@ fun ShuttleScreen(
     var daySelection by rememberSaveable { mutableStateOf(todayEpochDay to now.dayOfWeek) }
     val selectedDay = if (daySelection.first == todayEpochDay) daySelection.second else now.dayOfWeek
     var shuttleView by rememberSaveable { mutableStateOf(ShuttleView.CAMPUS) }
+    // D-124: a refresh or reselecting the 셔틀 tab brings every route strip back to its next departure.
+    var stripReset by remember { mutableIntStateOf(0) }
+    val reselection = LocalScrollToTopSignal.current
+    var seenReselection by remember { mutableIntStateOf(reselection) }
+    LaunchedEffect(reselection) {
+        if (reselection != seenReselection) {
+            seenReselection = reselection
+            stripReset++
+        }
+    }
 
     LaunchedEffect(refreshMessage) {
         refreshMessage?.let {
@@ -87,6 +98,7 @@ fun ShuttleScreen(
         if (refreshing) return
         refreshing = true
         refreshMessage = null
+        stripReset++
         scope.launch {
             try {
                 // D-094: 스낵바는 사용자가 직접 당긴 새로고침의 결과만 쉬운 말로 알린다
@@ -160,7 +172,7 @@ fun ShuttleScreen(
     ) {
         if (shuttleView == ShuttleView.BUS_4402) {
             item(key = "bus_4402") {
-                Bus4402ScheduleContent(now = now, nearbyStopNumber = nearbyTransitStopNumber)
+                Bus4402ScheduleContent(now = now, nearbyStopNumber = nearbyTransitStopNumber, resetSignal = stripReset)
             }
         } else {
             when {
@@ -236,6 +248,7 @@ fun ShuttleScreen(
                                         isCurrentLocation = isCurrentLocation,
                                         now = now,
                                         guidanceEngine = guidanceEngine,
+                                        resetSignal = stripReset,
                                     )
                                 }
                             }
@@ -302,6 +315,7 @@ private fun ShuttleRouteCard(
     isCurrentLocation: Boolean,
     now: ZonedDateTime,
     guidanceEngine: GuidanceEngine,
+    resetSignal: Int = 0,
 ) {
     val nowTime = now.toLocalTime()
     val destination = destinationZone?.let(DisplayVocabulary::originName)
@@ -338,6 +352,46 @@ private fun ShuttleRouteCard(
     }
     val upcomingTimes = upcomingCountdowns.map { it.departure.time }
 
+    val nextTime = upcomingTimes.getOrNull(0)
+    val secondTime = upcomingTimes.getOrNull(1)
+    val chips = annotatedDepartures.map { item ->
+        val time = item.departure.time
+        val isPast = isToday && time.isBefore(nowTime)
+        val isNext = isToday && nextTime == time
+        val isSecond = isToday && secondTime == time
+        val markers = serviceMarkers(item.isFirst, item.isLast) + listOfNotNull(
+            when {
+                item.isBoardingStopTransition -> "운동장 전환"
+                item.isStadiumStop -> "운동장"
+                else -> null
+            },
+        )
+        val countdown = if (isNext || isSecond) {
+            upcomingCountdowns.firstOrNull { it.departure.time == time }?.let { departureCountdownLabel(it.remainingMinutes, emptyList()) }
+        } else null
+        TimetableChipSpec(
+            key = time.toSecondOfDay(),
+            clock = time.format(TIME),
+            markers = markers,
+            description = timetableChipDescription(time.format(TIME), isPast, isNext, markers, countdown),
+            tone = timetableChipTone(item.isFirst, item.isLast, isPast, isNext, isSecond),
+            isPast = isPast,
+            countdown = countdown,
+        )
+    }
+    // D-124: once today's last departure has left, the strip ends with tomorrow's first one for this route.
+    val endedNote = if (isToday && chips.isNotEmpty() && chips.all { it.isPast }) {
+        val tomorrow = now.toLocalDate().plusDays(1)
+        when {
+            guidanceEngine.campusShuttleSuspensionOn(tomorrow) != null -> "내일은 운행하지 않아요"
+            else -> shuttleDepartures
+                .filter { it.serviceDay == tomorrow.dayOfWeek && it.originZone == originZone && it.destinationZone == destinationZone }
+                .minOfOrNull { it.time }
+                ?.let { "내일 첫차 ${it.format(TIME)}" }
+                ?: ""
+        }
+    } else null
+
     ElevatedCard(
         modifier = Modifier
             .fillMaxWidth()
@@ -348,136 +402,38 @@ private fun ShuttleRouteCard(
             containerColor = if (isCurrentLocation) DimaTheme.colors.cardInner else DimaTheme.colors.card,
         ),
     ) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Column(Modifier.padding(vertical = 16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Row(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
                     text = destination?.let { "${it}행" } ?: "기타 목적지",
-                    style = MaterialTheme.typography.titleMedium,
+                    style = MaterialTheme.typography.titleMediumEmphasized,
                     color = if (isCurrentLocation) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
                 )
                 if (sortedTimes.isNotEmpty()) {
-                    Surface(shape = DimaShapes.Badge, color = DimaTheme.colors.cardInner) {
-                        Text(
-                            text = "첫차 ${sortedTimes.first().format(TIME)} · 막차 ${sortedTimes.last().format(TIME)}",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                        )
-                    }
+                    // D-124: the count and the day's span; first and last are named in the strip itself.
+                    Text(
+                        text = "${sortedTimes.size}회 · ${sortedTimes.first().format(TIME)}–${sortedTimes.last().format(TIME)}",
+                        style = MaterialTheme.typography.labelMedium.copy(fontFeatureSettings = TABULAR_FIGURES),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.testTag("shuttle_route_span"),
+                    )
                 }
             }
-
-            // 실시간 다가오는 셔틀 2개 남은 시간 뱃지 (오늘 요일일 때만)
-            if (isToday) {
-                if (upcomingTimes.isNotEmpty()) {
-                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Text(
-                            text = "출발 시각",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.primary,
-                        )
-                        // 4402와 같은 캡슐: 남은 시간·표식 한 줄, 그 아래 출발 시각 한 줄 (D-094(5))
-                        DepartureCapsuleRow(spacing = 8.dp) {
-                            upcomingCountdowns.forEachIndexed { index, countdown ->
-                                val time = countdown.departure.time
-                                val serviceDeparture = annotatedDepartures.firstOrNull { it.departure.time == time }
-                                val isLastService = serviceDeparture?.isLast == true
-                                val boardingStopLabel = when {
-                                    serviceDeparture?.isBoardingStopTransition == true -> "운동장 전환"
-                                    serviceDeparture?.isStadiumStop == true -> "운동장"
-                                    else -> null
-                                }
-                                val (container, content) = shuttleCapsuleColors(isNearest = index == 0, isLastService = isLastService)
-                                DepartureCapsule(
-                                    label = departureCountdownLabel(
-                                        countdown.remainingMinutes,
-                                        serviceMarkers(serviceDeparture?.isFirst == true, isLastService) + listOfNotNull(boardingStopLabel),
-                                    ),
-                                    clock = time.format(TIME),
-                                    containerColor = container,
-                                    contentColor = content,
-                                    labelStyle = MaterialTheme.typography.titleSmallEmphasized,
-                                    imminent = isImminentDeparture(countdown.remainingMinutes, isNearest = index == 0),
-                                    modifier = Modifier.testTag("next_departure_$index"),
-                                )
-                            }
-                        }
-                    }
-                } else {
-                    Surface(
-                        shape = DimaShapes.Tile,
-                        color = DimaTheme.colors.cardInner,
-                        modifier = Modifier.fillMaxWidth(),
-                    ) {
-                        Text(
-                            text = "오늘 운행이 끝났어요",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                        )
-                    }
-                }
-            }
-
-            // 전체 시간표 칩 (지나간 시간은 딤 처리)
-            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text(
-                    text = "전체 시간표 · ${sortedTimes.size}회",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                FlowTimeChips(
-                    departures = annotatedDepartures,
-                    isToday = isToday,
-                    nowTime = nowTime,
-                    upcomingTimes = upcomingTimes,
-                    contextKey = "$activeDay|$originZone|$destinationZone|${sortedTimes.hashCode()}",
-                )
-            }
+            // D-124: one strip carries the next two departures (large, with their countdown) and the whole day.
+            DepartureStrip(
+                chips = chips,
+                stateKey = "$activeDay|$originZone|$destinationZone|${sortedTimes.hashCode()}",
+                resetSignal = resetSignal,
+                onCardInner = isCurrentLocation,
+                endedNote = endedNote,
+                largeCellTag = { "next_departure_$it" },
+            )
         }
     }
-}
-
-@Composable
-private fun FlowTimeChips(
-    departures: List<AnnotatedServiceDeparture>,
-    isToday: Boolean,
-    nowTime: LocalTime,
-    upcomingTimes: List<LocalTime>,
-    contextKey: String,
-) {
-    val times = departures.map { it.departure.time }
-    val initialIndex = when {
-        times.isEmpty() || !isToday -> 0
-        else -> times.indexOfFirst { !it.isBefore(nowTime) }.takeIf { it >= 0 } ?: times.lastIndex
-    }
-    val chips = departures.map { item ->
-        val time = item.departure.time
-        val isPast = isToday && time.isBefore(nowTime)
-        val isNext = isToday && upcomingTimes.getOrNull(0) == time
-        val isSecond = isToday && upcomingTimes.getOrNull(1) == time
-        val boardingStopLabel = when {
-            item.isBoardingStopTransition -> "운동장 전환"
-            item.isStadiumStop -> "운동장"
-            else -> null
-        }
-        TimetableChipSpec(
-            key = time.toSecondOfDay(),
-            text = item.displayText,
-            description = timetableChipDescription(
-                clock = time.format(TIME),
-                isPast = isPast,
-                isNext = isNext,
-                markers = serviceMarkers(item.isFirst, item.isLast) + listOfNotNull(boardingStopLabel),
-            ),
-            tone = timetableChipTone(item.isFirst, item.isLast, isPast, isNext, isSecond),
-        )
-    }
-    TimetableChipRow(chips = chips, initialIndex = initialIndex, stateKey = contextKey)
 }
 
 private val TIME = DateTimeFormatter.ofPattern("HH:mm")

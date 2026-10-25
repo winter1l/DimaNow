@@ -352,6 +352,7 @@ fun AnimatedCountText(
     modifier: Modifier = Modifier,
     fontWeight: FontWeight? = null,
     singleLine: Boolean = false,
+    autoSize: androidx.compose.foundation.text.TextAutoSize? = null,
 ) {
     AnimatedContent(
         targetState = text,
@@ -370,7 +371,7 @@ fun AnimatedCountText(
         modifier = modifier,
     ) { value ->
         if (singleLine) {
-            Text(text = value, style = style, color = color, fontWeight = fontWeight, maxLines = 1, softWrap = false)
+            Text(text = value, style = style, color = color, fontWeight = fontWeight, maxLines = 1, softWrap = false, autoSize = autoSize)
         } else {
             Text(text = value, style = style, color = color, fontWeight = fontWeight)
         }

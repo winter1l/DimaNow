@@ -1,5 +1,6 @@
 package com.example.dimanow.ui
 
+import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertHeightIsAtLeast
@@ -18,6 +19,7 @@ import org.junit.Assert.assertEquals
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.runtime.getValue
@@ -71,11 +73,11 @@ class DataSourceScreenTest {
             }
         }
 
-        // D-093: 다음 출발 캡슐은 남은 시간(60분 이내)과 출발 시각을 나눠 보여준다
+        // D-093/D-124: the next two cells show the clock (with markers) on top and the countdown (60분 이내) beneath
         assertInDeparture(0, "30분 후")
         assertInDeparture(0, "10:00")
-        assertInDeparture(1, "다음 출발 · 막차")
-        assertInDeparture(1, "11:00")
+        assertInDeparture(1, "다음 출발")
+        assertInDeparture(1, "11:00 · 막차")
         composeRule.onNodeWithText("90분 후", substring = true).assertDoesNotExist()
     }
 
@@ -92,8 +94,9 @@ class DataSourceScreenTest {
             }
         }
 
-        assertInDeparture(0, "30분 후 · 막차")
-        assertInDeparture(0, "09:00")
+        assertInDeparture(0, "30분 후")
+        assertInDeparture(0, "09:00 · 막차")
+        composeRule.onNodeWithContentDescription("다음 출발 09:00, 30분 후, 막차").assertExists()
     }
 
     @Test
@@ -292,12 +295,14 @@ class DataSourceScreenTest {
         composeRule.onNodeWithText("원룸촌행").assertExists()
         composeRule.onNodeWithText("본관 → 엔터관").assertDoesNotExist()
         composeRule.onNodeWithText("본관 → 원룸촌").assertDoesNotExist()
-        composeRule.onNodeWithText("첫차 08:10 · 막차 09:10").assertExists()
-        // D-093: 전체 시간표는 펼치기 없이 가로 칩 목록으로 항상 보인다
-        composeRule.onNodeWithText("08:40").assertExists()
-        composeRule.onNodeWithText("09:10 (막차)").assertExists()
-        timetableRowContaining("09:10 (막차)").performScrollToNode(hasText("08:10 (첫차)"))
-        composeRule.onNodeWithText("08:10 (첫차)").assertExists()
+        composeRule.onNodeWithText("08:10–09:10", substring = true).assertExists()
+        // D-093/D-124: 하루 전체가 펼치기 없이 한 줄 띠로 항상 보이고, 운행이 끝나면 띠 끝에 그 사실을 둔다
+        composeRule.onAllNodesWithText("오늘 운행이 끝났어요").onFirst().assertExists()
+        composeRule.onNodeWithContentDescription("지난 시간 09:10, 막차").assertExists()
+        composeRule.onNode(
+            hasScrollToNodeAction() and !hasTestTag("shuttle_list") and hasAnyDescendant(hasContentDescription("지난 시간 09:10, 막차")),
+        ).performScrollToNode(hasContentDescription("지난 시간 08:10, 첫차"))
+        composeRule.onNodeWithContentDescription("지난 시간 08:10, 첫차").assertExists()
     }
 
     @Test
@@ -319,12 +324,10 @@ class DataSourceScreenTest {
 
         // D-020/D-090: 그룹 제목은 본관, 운동장 탑승은 캡슐과 시간표 칩에 표시한다
         composeRule.onNodeWithText("본관").assertExists()
-        assertInDeparture(0, "5분 후 · 운동장 전환")
-        assertInDeparture(0, "19:35")
-        assertInDeparture(1, "30분 후 · 막차 · 운동장")
-        assertInDeparture(1, "20:00")
-        composeRule.onNodeWithText("19:35 · 운동장 전환").assertExists()
-        composeRule.onNodeWithText("20:00 (막차) · 운동장").assertExists()
+        assertInDeparture(0, "5분 후")
+        assertInDeparture(0, "19:35 · 운동장 전환")
+        assertInDeparture(1, "30분 후")
+        assertInDeparture(1, "20:00 · 막차 · 운동장")
     }
 
     @Test
@@ -349,12 +352,11 @@ class DataSourceScreenTest {
         // D-094(10): past, next, stadium-switch and last-departure meaning is spoken, and every chip is at least 32dp.
         composeRule.onNodeWithContentDescription("지난 시간 19:20", substring = true)
             .assertExists().assertHeightIsAtLeast(32.dp)
-        composeRule.onNodeWithContentDescription("다음 출발 19:35, 운동장 전환")
-            .assertExists().assertHeightIsAtLeast(32.dp)
-        composeRule.onNodeWithContentDescription("20:00, 막차, 운동장")
-            .assertExists().assertHeightIsAtLeast(32.dp)
-        // The visible chip text is unchanged.
-        composeRule.onNodeWithText("19:35 · 운동장 전환").assertExists()
+        composeRule.onNodeWithContentDescription("다음 출발 19:35, 5분 후, 운동장 전환")
+            .assertExists().assertHeightIsAtLeast(48.dp)
+        composeRule.onNodeWithContentDescription("20:00, 30분 후, 막차, 운동장")
+            .assertExists().assertHeightIsAtLeast(48.dp)
+        assertInDeparture(0, "19:35 · 운동장 전환")
     }
 
     @Test
@@ -548,8 +550,9 @@ class DataSourceScreenTest {
         }
     }
 
+    /** The large cells merge their lines for screen readers (D-124), so the lines are read from the unmerged tree. */
     private fun assertInDeparture(index: Int, text: String) {
-        composeRule.onNode(hasText(text) and hasAnyAncestor(hasTestTag("next_departure_$index"))).assertExists()
+        composeRule.onNode(hasText(text) and hasAnyAncestor(hasTestTag("next_departure_$index")), useUnmergedTree = true).assertExists()
     }
 
     private fun timetableRowContaining(text: String) =

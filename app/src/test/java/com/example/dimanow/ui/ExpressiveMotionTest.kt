@@ -57,14 +57,6 @@ class ExpressiveMotionTest {
     }
 
     @Test
-    fun `only the nearest departure within five minutes is imminent`() {
-        assertTrue(isImminentDeparture(5, isNearest = true))
-        assertTrue(isImminentDeparture(0, isNearest = true))
-        assertFalse(isImminentDeparture(6, isNearest = true))
-        assertFalse(isImminentDeparture(3, isNearest = false))
-    }
-
-    @Test
     fun `the capsule grows from its tile corners to a full pill and never past it`() {
         val size = Size(300f, 60f)
         assertEquals(12f, cornerRadius(DimaShapes.tileToPill(0f), size), 1e-3f)

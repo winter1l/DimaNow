@@ -432,11 +432,12 @@ internal fun DashboardScreen(
                                 )
                                 val upcoming = shuttleBoard.rows.firstOrNull { it.destinationZone == destZone }?.departures.orEmpty()
 
-                                // D-094: 목적지 태그를 캡슐 위 한 줄에 두어 캡슐이 카드 폭을 온전히 쓰게 한다.
-                                // 캡슐 안에서는 남은 시간·표식 한 줄과 출발 시각 한 줄을 나눠 글자 단위 줄바꿈을 막는다.
-                                Column(
+                                // D-124: 목적지 태그 오른쪽에 다음 출발 칸을 같은 줄로 붙여 세로 공간을 아낀다. 칸은 줄 폭을
+                                // 똑같이 나누고, 남은 시간 글자는 칸에 맞춰 줄어든다(줄바꿈 없음).
+                                Row(
                                     modifier = Modifier.fillMaxWidth(),
-                                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
                                 ) {
                                     // 항상 크게 표시되는 목적지 태그
                                     Surface(
@@ -454,7 +455,7 @@ internal fun DashboardScreen(
                                     }
 
                                     if (upcoming.isNotEmpty()) {
-                                        DepartureCapsuleRow {
+                                        Row(Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                             upcoming.forEachIndexed { index, countdown ->
                                                 val time = countdown.departure.time
                                                 val minutesLeft = countdown.remainingMinutes
@@ -472,23 +473,16 @@ internal fun DashboardScreen(
                                                     serviceDeparture?.isStadiumStop == true -> "운동장"
                                                     else -> null
                                                 }
+                                                // D-124: the same cell as the shuttle tab's strip — countdown large, clock and markers small
+                                                val (container, content) = shuttleCapsuleColors(isNearest = isFirst, isLastService = isLastService)
                                                 DepartureCapsule(
-                                                    label = buildString {
-                                                        append(when {
-                                                            minutesLeft > 60 -> "다음 출발"
-                                                            minutesLeft <= 0 -> "곧 출발"
-                                                            else -> "${minutesLeft}분 후"
-                                                        })
-                                                        serviceLabel?.let { append(" · $it") }
-                                                        boardingStopLabel?.let { append(" · $it") }
-                                                    },
+                                                    countdown = departureCountdownLabel(minutesLeft, emptyList()),
                                                     clock = time.format(TIME),
-                                                    // D-083/D-104: 셔틀 탭과 같은 색 규칙 — 가장 가까운 출발은 primary, 그다음은 secondary 계열,
-                                                    // 막차는 경고색. 라이트 모드의 primaryContainer와 secondaryContainer는 같은 톤이라 구분되지 않는다.
-                                                    containerColor = shuttleCapsuleColors(isNearest = isFirst, isLastService = isLastService).first,
-                                                    contentColor = shuttleCapsuleColors(isNearest = isFirst, isLastService = isLastService).second,
-                                                    imminent = isImminentDeparture(minutesLeft, isNearest = isFirst),
-                                                    modifier = Modifier.testTag("home_departure_${destZone.name}_$index"),
+                                                    markers = listOfNotNull(serviceLabel, boardingStopLabel),
+                                                    containerColor = container,
+                                                    contentColor = content,
+                                                    isNext = isFirst,
+                                                    modifier = Modifier.weight(1f).testTag("home_departure_${destZone.name}_$index"),
                                                 )
                                             }
                                         }
@@ -499,7 +493,7 @@ internal fun DashboardScreen(
                                         Surface(
                                             shape = DimaShapes.Tile,
                                             color = DimaTheme.colors.cardInner,
-                                            modifier = Modifier.fillMaxWidth(),
+                                            modifier = Modifier.weight(1f),
                                         ) {
                                             FlowRow(
                                                 modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),

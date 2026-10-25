@@ -106,10 +106,13 @@ class GuidanceCardTest {
         }
 
         composeRule.onNodeWithText("엔터관행").assertIsDisplayed()
-        composeRule.onNodeWithText("30분 후 · 막차").assertIsDisplayed()
+        // D-124: countdown large, clock and markers small beside it
+        composeRule.onNodeWithText("30분 후").assertIsDisplayed()
+        composeRule.onNodeWithText("막차").assertIsDisplayed()
         composeRule.onNodeWithText("19:20").assertIsDisplayed()
         composeRule.onNodeWithText("원룸촌행").assertIsDisplayed()
-        composeRule.onNodeWithText("5분 후 · 첫차·막차").assertIsDisplayed()
+        composeRule.onNodeWithText("5분 후").assertIsDisplayed()
+        composeRule.onNodeWithText("첫차·막차").assertIsDisplayed()
     }
 
     @Test
@@ -189,7 +192,8 @@ class GuidanceCardTest {
         }
 
         composeRule.onNodeWithText("본관행").assertIsDisplayed()
-        composeRule.onNodeWithText("30분 후 · 첫차·막차").assertIsDisplayed()
+        composeRule.onNodeWithText("30분 후").assertIsDisplayed()
+        composeRule.onNodeWithText("첫차·막차").assertIsDisplayed()
         composeRule.onNodeWithText("08:30").assertIsDisplayed()
         composeRule.onNodeWithText("셔틀 데이터를 새로고침해 주세요").assertDoesNotExist()
     }
@@ -219,8 +223,11 @@ class GuidanceCardTest {
         }
 
         // D-019: the first stadium departure is the stop transition; later stadium slots name the stadium.
-        composeRule.onNodeWithText("5분 후 · 운동장 전환").assertExists()
-        composeRule.onNodeWithText("30분 후 · 막차 · 운동장").assertExists()
+        // D-124: countdown large, the markers small beside it with the clock.
+        composeRule.onNodeWithText("5분 후", useUnmergedTree = true).assertExists()
+        composeRule.onNodeWithText("운동장 전환", useUnmergedTree = true).assertExists()
+        composeRule.onNodeWithText("30분 후", useUnmergedTree = true).assertExists()
+        composeRule.onNodeWithText("막차 · 운동장", useUnmergedTree = true).assertExists()
     }
 
     @Test
@@ -314,16 +321,24 @@ class GuidanceCardTest {
         clock.assertExists()
         assertEquals(1, clock.lineCount())
         val label = composeRule.onNode(
-            hasText("31분 후 · 막차 · 운동장") and hasAnyAncestor(hasTestTag("home_departure_YEIN_1")),
+            hasText("31분 후") and hasAnyAncestor(hasTestTag("home_departure_YEIN_1")),
             useUnmergedTree = true,
         )
         label.assertExists()
+        composeRule.onNode(
+            hasText("막차 · 운동장") and hasAnyAncestor(hasTestTag("home_departure_YEIN_1")),
+            useUnmergedTree = true,
+        ).assertExists()
         composeRule.onNode(
             hasText("19:35") and hasAnyAncestor(hasTestTag("home_departure_YEIN_0")),
             useUnmergedTree = true,
         ).let { assertEquals(1, it.lineCount()) }
         composeRule.onNode(
-            hasText("16분 후 · 운동장 전환") and hasAnyAncestor(hasTestTag("home_departure_YEIN_0")),
+            hasText("16분 후") and hasAnyAncestor(hasTestTag("home_departure_YEIN_0")),
+            useUnmergedTree = true,
+        ).assertExists()
+        composeRule.onNode(
+            hasText("운동장 전환") and hasAnyAncestor(hasTestTag("home_departure_YEIN_0")),
             useUnmergedTree = true,
         ).assertExists()
         if (labelMustFitOneLine) assertEquals(1, label.lineCount())
@@ -438,24 +453,24 @@ class GuidanceCardTest {
         composeRule.onNodeWithText("원룸촌 앞").assertExists()
         // D-094(5): countdown-then-clock capsules like the campus shuttle; the downstream stop's
         // time stays marked 예정 (D-061/D-068).
-        assertCountdownAboveClock("bus4402_next_34710_0", "8분 후", "08:50")
-        assertCountdownAboveClock("bus4402_next_34710_1", "48분 후", "09:30")
-        assertCountdownAboveClock("bus4402_next_33243_0", "9분 후", "08:51 · 예정")
+        assertClockAboveCountdown("bus4402_next_34710_0", "8분 후", "08:50")
+        assertClockAboveCountdown("bus4402_next_34710_1", "48분 후", "09:30")
+        assertClockAboveCountdown("bus4402_next_33243_0", "9분 후", "08:51 · 예정")
         composeRule.onNodeWithText("08:50 · 8분 후").assertDoesNotExist()
         composeRule.onNodeWithText("08:51 · 9분 후 · 예정").assertDoesNotExist()
         // The stop note is always visible instead of behind a "정류장 정보" button.
         composeRule.onNodeWithText("정류장 33243 · 공식 기점 +1분 예정").assertExists()
         composeRule.onNodeWithText("정류장 정보").assertDoesNotExist()
-        composeRule.onNodeWithText("첫차 05:01 · 막차 22:01 · 예정").assertExists()
-        // Both stops keep all 32 weekday departures in the horizontal chip list (D-086).
-        composeRule.onAllNodesWithText("전체 시간표 · 32회").assertCountEquals(2)
-        composeRule.onNodeWithContentDescription("다음 출발 08:50").assertHeightIsAtLeast(32.dp)
+        composeRule.onNodeWithText("32회 · 05:01–22:01 · 예정").assertExists()
+        // Both stops keep all 32 weekday departures in one strip (D-086, D-124).
+        composeRule.onNodeWithText("32회 · 05:00–22:00").assertExists()
+        composeRule.onNodeWithContentDescription("다음 출발 08:50, 8분 후").assertHeightIsAtLeast(48.dp)
         composeRule.onNodeWithContentDescription("지난 시간 08:10").assertExists()
-        composeRule.onNodeWithContentDescription("다음 출발 08:51, 예정").assertExists()
+        composeRule.onNodeWithContentDescription("다음 출발 08:51, 9분 후, 예정").assertExists()
         composeRule.onNodeWithTag("bus4402_times_34710").performScrollToNode(hasContentDescription("22:00, 막차"))
-        composeRule.onNodeWithText("22:00 (막차)").assertExists()
+        composeRule.onNodeWithContentDescription("22:00, 막차").assertExists()
         composeRule.onNodeWithTag("bus4402_times_33243").performScrollToNode(hasContentDescription("22:01, 막차, 예정"))
-        composeRule.onNodeWithText("22:01 (막차) · 예정").assertExists()
+        composeRule.onNodeWithContentDescription("22:01, 막차, 예정").assertExists()
     }
 
     @Test
@@ -468,26 +483,28 @@ class GuidanceCardTest {
                 modifier = Modifier.verticalScroll(rememberScrollState()),
             )
         }
-        // D-069: beyond one hour the capsule names the next departure and shows its clock.
-        assertCountdownAboveClock("bus4402_next_34710_0", "다음 출발 · 첫차", "05:00")
+        // D-069: beyond one hour the large line names the next departure; the clock and markers sit above.
+        assertClockAboveCountdown("bus4402_next_34710_0", "다음 출발", "05:00 · 첫차")
         composeRule.runOnIdle { now.value = now.value.withHour(4).withMinute(0) }
-        assertCountdownAboveClock("bus4402_next_34710_0", "60분 후 · 첫차", "05:00")
+        assertClockAboveCountdown("bus4402_next_34710_0", "60분 후", "05:00 · 첫차")
         composeRule.runOnIdle { now.value = now.value.withHour(21).withMinute(55) }
-        assertCountdownAboveClock("bus4402_next_34710_0", "5분 후 · 막차", "22:00")
+        assertClockAboveCountdown("bus4402_next_34710_0", "5분 후", "22:00 · 막차")
         composeRule.runOnIdle { now.value = now.value.withHour(22).withMinute(30) }
         composeRule.onAllNodesWithText("오늘 운행이 끝났어요").assertCountEquals(2)
     }
 
-    private fun assertCountdownAboveClock(tag: String, countdown: String, clock: String) {
+    /** D-124: on the shuttle tab the small clock line (with markers) sits above the large countdown, each on one line. */
+    private fun assertClockAboveCountdown(tag: String, countdown: String, clock: String) {
         val label = composeRule.onNode(hasText(countdown) and hasAnyAncestor(hasTestTag(tag)), useUnmergedTree = true)
         val time = composeRule.onNode(hasText(clock) and hasAnyAncestor(hasTestTag(tag)), useUnmergedTree = true)
         label.assertExists()
         time.assertExists()
         assertTrue(
-            "$tag: the countdown line sits above the clock line",
-            label.fetchSemanticsNode().boundsInRoot.bottom <= time.fetchSemanticsNode().boundsInRoot.top,
+            "$tag: the clock line sits above the countdown line",
+            time.fetchSemanticsNode().boundsInRoot.bottom <= label.fetchSemanticsNode().boundsInRoot.top,
         )
         assertEquals(1, time.lineCount())
+        assertEquals(1, label.lineCount())
     }
 
     @Test

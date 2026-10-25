@@ -228,10 +228,10 @@ fun MealScreen(
         }
     }
 
-    // 주간 5일 중 보고 있는 하루. 날짜가 바뀌면 오늘로 다시 맞춘다 (D-057)
-    val weekStart = today.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY))
+    // 주간 5일 중 보고 있는 하루. 날짜가 바뀌면 오늘로 다시 맞춘다 (D-057).
+    // 토·일요일에는 다음 주 월요일부터 보여 준다 (D-123)
+    val (weekStart, defaultDay) = mealScreenWeek(today)
     // 선택은 고른 날(오늘)과 함께 저장해 탭 전환에도 유지하고, 날짜가 바뀐 뒤에는 새 기본값을 쓴다 (D-094(12))
-    val defaultDay = if (today.dayOfWeek.value in 1..5) today else weekStart
     var daySelection by rememberSaveable { mutableStateOf(today to defaultDay) }
     val selectedDay = if (daySelection.first == today) daySelection.second else defaultDay
     val listState = rememberLazyListState()
@@ -799,3 +799,12 @@ private fun DormitoryReportDialog(onDismiss: () -> Unit, onReport: (com.example.
 
 /** Where the camera writes a 기숙사 식단 photo before it is read into memory. */
 private fun dormMealCaptureFile(context: android.content.Context): File = File(context.cacheDir, "dorm-meals/capture.jpg")
+
+/**
+ * The week the 식단 tab shows and the day it opens on (D-123): on weekdays this week and today; on Saturday and
+ * Sunday the coming week from its Monday, as the dormitory week already does (`dormitoryMealWeekStart`).
+ */
+internal fun mealScreenWeek(today: LocalDate): Pair<LocalDate, LocalDate> {
+    val weekStart = com.example.dimanow.meal.dormitoryMealWeekStart(today)
+    return weekStart to if (today.dayOfWeek.value in 1..5) today else weekStart
+}

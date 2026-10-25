@@ -1,5 +1,15 @@
 package com.example.dimanow.ui
 
+import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.Box
+import androidx.compose.ui.unit.Density
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.material3.Typography
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.FiniteAnimationSpec
 import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.foundation.layout.Arrangement
@@ -164,72 +174,90 @@ internal fun DimaLoadingIndicator(modifier: Modifier = Modifier, size: Dp = 48.d
 /** OpenType tabular figures: every digit takes the same width, so a ticking countdown keeps its size. */
 internal const val TABULAR_FIGURES = "tnum"
 
-/** Within this many minutes the nearest departure counts as imminent (D-121): about the walk to the stop. */
-internal const val IMMINENT_DEPARTURE_MINUTES = 5L
+/**
+ * The non-bouncy spring of departure hand-overs (D-124): when a departure leaves, the strip's scroll, the cells'
+ * widths and the round shape move together on it. The expressive spatial spring's overshoot made them jump.
+ */
+internal fun <T> departureMotion(): FiniteAnimationSpec<T> =
+    spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessMediumLow)
 
-/** True for the nearest departure once it is [IMMINENT_DEPARTURE_MINUTES] or less away (D-121). */
-internal fun isImminentDeparture(minutesLeft: Long, isNearest: Boolean): Boolean =
-    isNearest && minutesLeft <= IMMINENT_DEPARTURE_MINUTES
+/** The height of [DepartureLargeContent] at the current font scale, so strips and capsules keep one height. */
+internal fun Density.departureLargeHeight(typography: Typography): Dp = maxOf(
+    typography.titleLargeEmphasized.lineHeight.toDp(),
+    typography.labelLarge.lineHeight.toDp() + typography.labelSmall.lineHeight.toDp(),
+)
 
 /**
- * Next-departure capsule shared by Home, the campus shuttle and 4402 (D-094(1), (5)): the
- * countdown/service label on one line and the clock on its own line beneath.
- *
- * D-121 (one of the app's two hero moments): when the departure is [imminent] the capsule morphs from its 12dp tile
- * into a full pill on the expressive spatial spring, breaking from the shape of the capsules beside it, as M3
- * Expressive suggests for the one element that matters now. The label still says how soon in words, so the shape is
- * never the only signal. The fill changes on the effects spring (a capsule turning into the last service), and the
- * clock rolls like the countdown when the departure it shows changes. The morph is a state change, not a loop: it
- * runs once when the departure becomes imminent and the pill then stays still.
+ * The large departure content shared by Home's capsules and the shuttle and 4402 strips (D-124): the countdown in
+ * large type on the left; the clock, with any markers (첫차, 막차, 운동장, 예정) beneath it, small on the right.
+ * Tabular figures keep ticking digits the same width (D-102); the countdown rolls (D-121).
+ */
+@Composable
+internal fun DepartureLargeContent(
+    countdown: String,
+    clock: String,
+    markers: List<String>,
+    ink: Color,
+    modifier: Modifier = Modifier,
+    fillWidth: Boolean = false,
+) {
+    val large = MaterialTheme.typography.titleLargeEmphasized
+    Row(modifier = modifier, horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+        AnimatedCountText(
+            text = countdown,
+            style = large.copy(fontFeatureSettings = TABULAR_FIGURES),
+            color = ink,
+            singleLine = true,
+            // In a fixed-width cell (Home, D-124) the countdown takes the room the clock leaves and steps down in size
+            // instead of overflowing on a narrow phone or at a large font scale.
+            autoSize = if (fillWidth) {
+                androidx.compose.foundation.text.TextAutoSize.StepBased(minFontSize = 12.sp, maxFontSize = large.fontSize, stepSize = 1.sp)
+            } else null,
+            modifier = if (fillWidth) Modifier.weight(1f) else Modifier,
+        )
+        Column {
+            Text(
+                text = clock,
+                style = MaterialTheme.typography.labelLarge.copy(fontFeatureSettings = TABULAR_FIGURES),
+                color = ink,
+                maxLines = 1,
+                softWrap = false,
+            )
+            if (markers.isNotEmpty()) {
+                Text(
+                    text = markers.joinToString(" · "),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = ink,
+                    maxLines = 1,
+                    softWrap = false,
+                )
+            }
+        }
+    }
+}
+
+/**
+ * Home's next-departure capsule (D-124, matching the shuttle tab's strip): [DepartureLargeContent] on the strip's
+ * colours — the nearest departure in primary and fully round, the others secondary tiles, last service in the
+ * warning roles. Supersedes D-121's imminent-only pill: the nearest one is always round and nothing changes at five
+ * minutes. The fill changes on the effects spring.
  */
 @Composable
 internal fun DepartureCapsule(
-    label: String,
+    countdown: String,
     clock: String,
+    markers: List<String>,
     containerColor: Color,
     contentColor: Color,
     modifier: Modifier = Modifier,
-    labelStyle: TextStyle = MaterialTheme.typography.labelMediumEmphasized,
-    imminent: Boolean = false,
+    isNext: Boolean = false,
 ) {
-    val pillFraction by animateFloatAsState(
-        targetValue = if (imminent) 1f else 0f,
-        animationSpec = DimaMotion.spatialDefault(),
-        label = "departure_capsule_shape",
-    )
-    // D-122: an imminent departure also turns to the strong tertiary accent as it becomes a pill, so the change of
-    // shape reads as "hurry" at a glance (the colour eases on the effects spring alongside the shape).
-    val fill by animateColorAsState(
-        if (imminent) MaterialTheme.colorScheme.tertiary else containerColor,
-        DimaMotion.effectsDefault(),
-        label = "departure_capsule_fill",
-    )
-    val ink by animateColorAsState(
-        if (imminent) MaterialTheme.colorScheme.onTertiary else contentColor,
-        DimaMotion.effectsDefault(),
-        label = "departure_capsule_ink",
-    )
-    Surface(
-        shape = if (pillFraction == 0f) DimaShapes.Tile else DimaShapes.tileToPill(pillFraction),
-        color = fill,
-        modifier = modifier,
-    ) {
-        Column(
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(2.dp),
-        ) {
-            // D-102: 분마다 바뀌는 숫자는 고정폭 숫자(tnum)로 그려 글자 폭이 흔들리지 않게 한다 (M3 타이포그래피)
-            AnimatedCountText(
-                text = label,
-                style = labelStyle.copy(fontFeatureSettings = TABULAR_FIGURES),
-                color = ink,
-            )
-            AnimatedCountText(
-                text = clock,
-                style = MaterialTheme.typography.bodySmall.copy(fontFeatureSettings = TABULAR_FIGURES),
-                color = ink,
-                singleLine = true,
-            )
+    val fill by animateColorAsState(containerColor, DimaMotion.effectsDefault(), label = "departure_capsule_fill")
+    val ink by animateColorAsState(contentColor, DimaMotion.effectsDefault(), label = "departure_capsule_ink")
+    val height = with(LocalDensity.current) { departureLargeHeight(MaterialTheme.typography) } + 16.dp
+    Surface(shape = if (isNext) CircleShape else DimaShapes.Tile, color = fill, modifier = modifier) {
+        Box(Modifier.heightIn(min = height).padding(horizontal = if (isNext) 16.dp else 12.dp), contentAlignment = Alignment.CenterStart) {
+            DepartureLargeContent(countdown = countdown, clock = clock, markers = markers, ink = ink, modifier = Modifier.fillMaxWidth(), fillWidth = true)
         }
     }
 }

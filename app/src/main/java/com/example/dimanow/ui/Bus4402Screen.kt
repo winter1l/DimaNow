@@ -48,6 +48,7 @@ internal fun Bus4402ScheduleContent(
     now: ZonedDateTime,
     nearbyStopNumber: String?,
     modifier: Modifier = Modifier,
+    resetSignal: Int = 0,
 ) {
     val context = LocalContext.current
     val schedule = Bus4402Schedule.official
@@ -73,6 +74,7 @@ internal fun Bus4402ScheduleContent(
                 now = now,
                 isNearby = nearbyStopNumber == stop.stopNumber,
                 timetableKey = "${now.toLocalDate()}|$serviceType|${stop.stopNumber}",
+                resetSignal = resetSignal,
             )
         }
 
@@ -116,6 +118,7 @@ private fun Bus4402StopCard(
     now: ZonedDateTime,
     isNearby: Boolean,
     timetableKey: String,
+    resetSignal: Int = 0,
 ) {
     val nowTime = now.toLocalTime()
     val firstUpcomingIndex = departures.indexOfFirst { !it.time.isBefore(nowTime) }
@@ -133,9 +136,9 @@ private fun Bus4402StopCard(
             containerColor = if (isNearby) DimaTheme.colors.cardInner else DimaTheme.colors.card,
         ),
     ) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            // 교내 셔틀 노선 카드와 같은 머리: 이름 + 현재 정류장 배지, 그 아래 첫차·막차와 정류장 정보
-            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Column(Modifier.padding(vertical = 16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            // 교내 셔틀 노선 카드와 같은 머리: 이름 + 현재 정류장 배지, 그 아래 횟수·시간대와 정류장 정보
+            Column(Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -165,106 +168,48 @@ private fun Bus4402StopCard(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 if (departures.isNotEmpty()) {
-                    Surface(shape = DimaShapes.Badge, color = DimaTheme.colors.cardInner) {
-                        Text(
-                            text = "첫차 ${departures.first().time.format(TIME)} · 막차 ${departures.last().time.format(TIME)}" +
-                                if (estimated) " · 예정" else "",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                        )
-                    }
-                }
-            }
-
-            if (upcoming.isEmpty()) {
-                Surface(
-                    shape = DimaShapes.Tile,
-                    color = DimaTheme.colors.cardInner,
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
+                    // D-124: the count and the day's span, as on the campus shuttle cards.
                     Text(
-                        text = "오늘 운행이 끝났어요",
-                        style = MaterialTheme.typography.bodySmall,
+                        text = "${departures.size}회 · ${departures.first().time.format(TIME)}–${departures.last().time.format(TIME)}" +
+                            if (estimated) " · 예정" else "",
+                        style = MaterialTheme.typography.labelMedium.copy(fontFeatureSettings = TABULAR_FIGURES),
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
                     )
-                }
-            } else {
-                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text(
-                        text = "출발 시각",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.primary,
-                    )
-                    DepartureCapsuleRow(spacing = 8.dp) {
-                        upcoming.forEachIndexed { index, departure ->
-                            val departureIndex = firstUpcomingIndex + index
-                            val target = now.toLocalDate().atTime(departure.time).atZone(now.zone)
-                            val minutesLeft = (Duration.between(now, target).toMillis().coerceAtLeast(0) + 59_999L) / 60_000L
-                            val isLastService = departureIndex == departures.lastIndex
-                            val (container, content) = shuttleCapsuleColors(isNearest = index == 0, isLastService = isLastService)
-                            DepartureCapsule(
-                                label = departureCountdownLabel(
-                                    minutesLeft,
-                                    serviceMarkers(departureIndex == 0, isLastService),
-                                ),
-                                clock = departure.time.format(TIME) + if (departure.estimated) " · 예정" else "",
-                                containerColor = container,
-                                contentColor = content,
-                                labelStyle = MaterialTheme.typography.titleSmallEmphasized,
-                                imminent = isImminentDeparture(minutesLeft, isNearest = index == 0),
-                                modifier = Modifier.testTag("bus4402_next_${stop.stopNumber}_$index"),
-                            )
-                        }
-                    }
                 }
             }
 
-            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text(
-                    text = "전체 시간표 · ${departures.size}회",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                val chips = departures.mapIndexed { index, departure ->
-                    val isPast = departure.time.isBefore(nowTime)
-                    val isNext = index == firstUpcomingIndex
-                    val isFirst = index == 0
-                    val isLast = index == departures.lastIndex
-                    TimetableChipSpec(
-                        key = departure.time.toSecondOfDay(),
-                        text = buildString {
-                            append(departure.time.format(TIME))
-                            when {
-                                isFirst && isLast -> append(" (첫차·막차)")
-                                isFirst -> append(" (첫차)")
-                                isLast -> append(" (막차)")
-                            }
-                            if (departure.estimated) append(" · 예정")
-                        },
-                        description = timetableChipDescription(
-                            clock = departure.time.format(TIME),
-                            isPast = isPast,
-                            isNext = isNext,
-                            markers = serviceMarkers(isFirst, isLast) + listOfNotNull("예정".takeIf { departure.estimated }),
-                        ),
-                        tone = timetableChipTone(
-                            isFirst = isFirst,
-                            isLast = isLast,
-                            isPast = isPast,
-                            isNext = isNext,
-                            isSecond = firstUpcomingIndex >= 0 && index == firstUpcomingIndex + 1,
-                        ),
-                    )
-                }
-                TimetableChipRow(
-                    chips = chips,
-                    initialIndex = if (firstUpcomingIndex >= 0) firstUpcomingIndex else departures.lastIndex,
-                    stateKey = timetableKey,
-                    modifier = Modifier.testTag("bus4402_times_${stop.stopNumber}"),
+            // D-124: one strip carries the next two departures (large, with their countdown) and the whole day.
+            val chips = departures.mapIndexed { index, departure ->
+                val isPast = departure.time.isBefore(nowTime)
+                val isNext = index == firstUpcomingIndex
+                val isSecond = firstUpcomingIndex >= 0 && index == firstUpcomingIndex + 1
+                val isFirst = index == 0
+                val isLast = index == departures.lastIndex
+                val markers = serviceMarkers(isFirst, isLast) + listOfNotNull("예정".takeIf { departure.estimated })
+                val countdown = if (isNext || isSecond) {
+                    val target = now.toLocalDate().atTime(departure.time).atZone(now.zone)
+                    val minutesLeft = (Duration.between(now, target).toMillis().coerceAtLeast(0) + 59_999L) / 60_000L
+                    departureCountdownLabel(minutesLeft, emptyList())
+                } else null
+                TimetableChipSpec(
+                    key = departure.time.toSecondOfDay(),
+                    clock = departure.time.format(TIME),
+                    markers = markers,
+                    description = timetableChipDescription(departure.time.format(TIME), isPast, isNext, markers, countdown),
+                    tone = timetableChipTone(isFirst = isFirst, isLast = isLast, isPast = isPast, isNext = isNext, isSecond = isSecond),
+                    isPast = isPast,
+                    countdown = countdown,
                 )
             }
+            DepartureStrip(
+                chips = chips,
+                stateKey = timetableKey,
+                resetSignal = resetSignal,
+                onCardInner = isNearby,
+                endedNote = if (departures.isNotEmpty() && upcoming.isEmpty()) "" else null,
+                largeCellTag = { "bus4402_next_${stop.stopNumber}_$it" },
+                modifier = Modifier.testTag("bus4402_times_${stop.stopNumber}"),
+            )
         }
     }
 }

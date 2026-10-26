@@ -179,3 +179,18 @@ Resolved 2026-10-23: Q-028 — the user confirmed that DIMA C에서 신청하기
 - Q-037 (open, 2026-10-26): the student meal pipeline's last state is NEEDS_REVIEW with "식단 원격 응답 401" (2026-10-19 11:07 KST, from the Instagram endpoints in `MealRemoteHttpClient`), after that week had published. Unknown whether Instagram now refuses anonymous reads (which would block this week's menu) or it was a one-off; watch the 2026-10-26 Monday runs.
 
 Resolved 2026-10-26: Q-037 — the `meal` dataset published normally at 11:07 KST on 2026-10-26, so the 2026-10-19 Instagram 401 was a one-off.
+
+Resolved 2026-10-26: Q-025 — the 수업 tab is two-pane at 840dp and wider (D-131(4)); not yet seen on the tablet with a signed-in LMS.
+Resolved 2026-10-26: Q-032 (g) — launch sync skipped within 30 min of a full success, per-row lazy items for LMS sections and the equipment catalog, ScreenScaffold gutters without `BoxWithConstraints` (D-131(4)).
+- Q-026 update (2026-10-26): the self-import job (D-131(2)) reads `?p=78&nyear=<next year>`; the 2027 view exists but has no 개강 yet. The curated 2026 file differs from the page on 2학기 등록 (page 08-17) and lacks 2학기 수강신청 (page 08-18~21); not changed, for the owner to decide.
+- Q-036 duplicates Q-022 (same widget layout failures on the tablet).
+- Q-038 (open, 2026-10-26, D-131(1)): the 도서관 reader is built from the page's header texts without a real loan row (the student had none); first real loans, the `/sso/main.aspx` forward and whether `/MyLibrary` lists only this year are unverified. `성적 보기` opens the intranet front page; the grade page's own URL is still unknown.
+
+- Q-039 (open, 2026-10-26, D-132(4)): whether the LMS records a 자료/공지 as viewed when the app requests `doViewBoardItem` (the site's own `fnGoContent` also runs page script and passes `'S'`), and whether 공지/자료 appear on its 완료/미완료 lists at all. Check: open a 미완료 공지 in the app, pull to refresh, and see whether it stays in 완료한 학습 there and on the LMS website.
+- Q-040 (open, 2026-10-26, D-132(5)): whether PAYCO's payment barcode (`payco://open/offline/main`) pays with the 식권 at the 예인관 restaurant, or the 식권 home must be opened first; PAYCO's strings include `meal_ticket_payment_with_barcode`. Check at the counter.
+- Q-041 (open, 2026-10-26, D-132(2)(3)): campus map data. OSM and Kakao both label a footprint next to 지성관 as 학생회관 (shown as part of 지성관; unconfirmed). Building numbers 4, 6, 7, 9, 11, 12 are unknown. Floors and facilities come from DIMA MAP 2021 and may be stale. OSM has shuttle-stop nodes (대운동장, 대학본부, 원룸촌 셔틀버스) that could place the shuttle boarding stops; unverified.
+- Q-038 update (2026-10-26, D-132(1)): 이용 시간 no longer needs the signed-in read; loans, `/sso/main.aspx` and `/MyLibrary` remain unverified, and the grade page URL is still unknown.
+
+- Q-039 update (2026-10-26, D-133): settled for 자료 with files — the LMS counts a file download, not the view (PRODUCT-TRUTH). Still open: whether a 자료 without files or a 공지 is ever counted by viewing, whether every file of a multi-file 자료 must be downloaded, and the live check that opening 「미식회 영상」 in the app takes it off the LMS to-do list.
+Resolved 2026-10-26: Q-040 — the barcode PAYCO opens from `payco://open/offline/main` is its ordinary payment barcode, not the 식권 (the student's report); the 식권 barcode sits behind 기업복지 → 사용하기, which apps cannot open directly (D-133(2)).
+- Q-042 (open, 2026-10-26): whether PAYCO has a link straight to the 식권 barcode. Its scheme router's paths did not show up as code strings (only API paths such as `/paycocoupon/bizCouponDetail.json`); a decompiler or PAYCO's own documentation could settle it.

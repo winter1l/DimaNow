@@ -745,3 +745,9 @@ Confirmed: "시간표 화면에 학사 일정도 같이 보이게 해. 그리고
 2. Switching 교내 셔틀/4402, 본관 학생식당/기숙사 and 할 일/과목별 slides the list in from the chosen side (18% of the width) with a fade, on the non-bouncy spring; reduced motion skips it (`ScreenScaffold.pageIndex`).
 3. The strips' `지금` button becomes the M3 Expressive `MaterialShapes.Arrow` alone (48dp, primary, no label), turned to point at the next departure; TalkBack hears `지금 다음 차로 이동`.
 4. The student cafeteria line says `이번 주 식단이 아직 올라오지 않았어요` when the data server has no new week (WAITING) or could not read the post (NEEDS_REVIEW); only the app's own failed download shows the error with retry.
+
+## D-130 — Shuttle countdowns past an hour; the whole equipment catalog; CI trusts the Plugin Portal marker POMs — 2026-10-26
+Confirmed: "셔틀의 시간이 1시간 이상남아도 남은 분을 표시해줘. 첫차만 다음 출발 표시를 유지하고. 또한 장비대여 품목이 전부 있는것 같지 않아보여, 전부 다 보이게해줘." and "12시쯤에 처음 올린 기숙사 식단이 왜 정상 업로드가 되지 않았는지 확인해줘."
+1. Departure countdowns show the minutes however many (`75분 후`), on Home, the 셔틀 tab and 4402; supersedes D-069's `다음 출발` beyond an hour. Only when the next departure is the day's 첫차 more than an hour off does D-127's single quiet tile remain (narrows D-127(2)).
+2. 장비 대여 lists every group the site lists in use (not only `일반대여`), every model in use including ones with no rentable unit (`지금 빌릴 수 있는 장비가 없어요`), and every page of each group (up to 20 pages of 100; stops on a short or repeated page).
+3. `gradle/verification-metadata.xml` also trusts the Gradle Plugin Portal's own marker POMs for the Kotlin jvm, compose and serialization plugins 2.3.20 (`also-trust`), which differ from Maven Central's; the 2026-10-26 12:14 KST dorm-meal publish failed on that mismatch. Takes effect once on main.

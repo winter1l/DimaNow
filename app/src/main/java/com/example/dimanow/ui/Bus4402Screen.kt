@@ -196,6 +196,7 @@ private fun Bus4402StopCard(
                     clock = departure.time.format(TIME),
                     minutesLeft = if (isNext || isSecond) minutesUntil(departure.time) else null,
                     nextMinutesLeft = nextMinutesLeft,
+                    nextIsFirst = firstUpcomingIndex == 0,
                 )
                 TimetableChipSpec(
                     key = departure.time.toSecondOfDay(),

@@ -28,23 +28,35 @@ private const val FETCH_HELPERS = """
     function dimaSignedOut(value){return value&&value.__text!==undefined;}
 """
 
-/** General-rental groups and their models with at least one rentable unit. */
+/**
+ * Every rental group the site lists and every model in use, all pages of each (D-130). It used to keep only
+ * `일반대여` groups, only models with a rentable unit and only the first page, so some equipment never showed.
+ */
 const val DIMA_C_EQUIPMENT_CATALOG_SCRIPT = FETCH_HELPERS + """
     var groups=await dimaJson('/ajax/ST_MPRT01_SVC/ST_MPRT01_R10.do');
     if(dimaSignedOut(groups)){
       return /로그인|세션/.test(groups.__text)?{state:'signin'}:{state:'error',message:'DIMA C 응답을 읽지 못했어요.'};
     }
     var out=[];
-    var list=(groups.list||[]).filter(function(g){return g.USE_YN==='Y'&&/일반대여/.test(g.DP_GRP_NM||'');});
+    var list=(groups.list||[]).filter(function(g){return g.USE_YN==='Y';});
+    var size=100;
     for(var i=0;i<list.length;i++){
       var g=list[i];
-      // One group at a time with a short pause, as a person clicking through the groups would.
-      if(i>0)await new Promise(function(resolve){setTimeout(resolve,300);});
-      var models=await dimaJson('/ajax/ST_MPRT01_SVC/ST_MPRT01_R11.do?pageNo=1&MENU_CD=03120101&recordCountPerPage=100&DP_GRP_NO='+encodeURIComponent(g.DP_GRP_NO));
-      if(dimaSignedOut(models))return {state:'signin'};
+      var seen={};
+      var models=[];
+      // Page by page until a short or repeated page; one request at a time with a short pause, as a person would.
+      for(var page=1;page<=20;page++){
+        if(i>0||page>1)await new Promise(function(resolve){setTimeout(resolve,300);});
+        var answer=await dimaJson('/ajax/ST_MPRT01_SVC/ST_MPRT01_R11.do?pageNo='+page+'&MENU_CD=03120101&recordCountPerPage='+size+'&DP_GRP_NO='+encodeURIComponent(g.DP_GRP_NO));
+        if(dimaSignedOut(answer))return {state:'signin'};
+        var rows=answer.list||[];
+        var fresh=rows.filter(function(m){return !seen[m.MODEL_NO];});
+        fresh.forEach(function(m){seen[m.MODEL_NO]=true;models.push(m);});
+        if(rows.length<size||fresh.length===0)break;
+      }
       out.push({
         name:g.DP_GRP_NM,
-        models:(models.list||[]).filter(function(m){return m.MODEL_USE_YN==='Y'&&(m.ITEM_CNT_ENABLE||0)>0;})
+        models:models.filter(function(m){return m.MODEL_USE_YN==='Y';})
           .map(function(m){return {no:m.MODEL_NO,name:(m.MODEL_NM||'').trim(),units:m.ITEM_CNT_ENABLE||0};})
       });
     }

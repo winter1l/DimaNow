@@ -60,7 +60,7 @@ class DataSourceScreenTest {
     @get:Rule val composeRule = createComposeRule()
 
     @Test
-    fun nearestDeparturesKeepClockTimeAndOnlyCountDownWithinSixtyMinutes() {
+    fun nearestDeparturesKeepClockTimeAndCountDownPastAnHour() {
         val now = ZonedDateTime.of(2026, 8, 31, 9, 30, 0, 0, ZoneId.of("Asia/Seoul"))
         val departures = listOf(
             departure("A", "main", LocalTime.of(8, 0), CampusZoneId.MAIN, CampusZoneId.YEIN, now.dayOfWeek),
@@ -73,12 +73,12 @@ class DataSourceScreenTest {
             }
         }
 
-        // D-093/D-124: the next two cells show the clock (with markers) on top and the countdown (60분 이내) beneath
+        // D-093/D-124: the next two cells show the clock (with markers) on top and the countdown beneath; D-130 counts
+        // past an hour too (only a far 첫차 is drawn as a single tile)
         assertInDeparture(0, "30분 후")
         assertInDeparture(0, "10:00")
-        assertInDeparture(1, "다음 출발")
+        assertInDeparture(1, "90분 후")
         assertInDeparture(1, "11:00 · 막차")
-        composeRule.onNodeWithText("90분 후", substring = true).assertDoesNotExist()
     }
 
     @Test

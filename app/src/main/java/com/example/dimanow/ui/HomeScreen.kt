@@ -453,9 +453,12 @@ internal fun DashboardScreen(
                                         departures = shuttleDepartures,
                                     )
                                     val upcoming = shuttleBoard.rows.firstOrNull { it.destinationZone == destZone }?.departures.orEmpty()
-                                    // D-127: with the next bus (often 첫차) more than an hour off, a countdown says nothing; that
-                                    // departure becomes one quiet tile with its clock large, and the ones after it show only the time.
-                                    val farAhead = (upcoming.firstOrNull()?.remainingMinutes ?: 0L) > 60
+                                    // D-127/D-130: only a 첫차 more than an hour off becomes one quiet tile with its clock large
+                                    // (the ones after it show only the time); any other departure counts down in minutes.
+                                    val nextIsFirst = upcoming.firstOrNull()?.let { next ->
+                                        annotated.firstOrNull { it.departure.time == next.departure.time }?.isFirst
+                                    } == true
+                                    val farAhead = nextIsFirst && (upcoming.firstOrNull()?.remainingMinutes ?: 0L) > 60
                                     val capsules = upcoming.mapIndexed { index, countdown ->
                                         val time = countdown.departure.time
                                         val serviceDeparture = annotated.firstOrNull { it.departure.time == time }

@@ -414,7 +414,10 @@ private fun EquipmentModelRow(
         trailingContent = {
             ExpandChevron(open, Modifier.size(24.dp), label = "equipment_model_chevron")
         },
-        supportingContent = { Text(listOfNotNull("대여용 ${model.units}대", summary).joinToString(" · ")) },
+        // D-130: a model with no rentable unit stays listed, so the catalog matches the site.
+        supportingContent = {
+            Text(if (model.units == 0) "지금 빌릴 수 있는 장비가 없어요" else listOfNotNull("대여용 ${model.units}대", summary).joinToString(" · "))
+        },
         colors = dimaSegmentedListColors(),
     ) {
         Text(model.name)

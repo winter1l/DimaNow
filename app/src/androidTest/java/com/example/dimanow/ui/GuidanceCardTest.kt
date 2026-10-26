@@ -356,7 +356,7 @@ class GuidanceCardTest {
 
     @Test
     fun dashboardRowDrawsBothCountdownsAtOneSizeAtFontScale1_3() {
-        // D-126(1): "5분 후" in the round next capsule and "다음 출발" in the tile beside it need different room, but
+        // D-126(1): "5분 후" in the round next capsule and "81분 후" in the tile beside it need different room, but
         // one row shows them at one size, never each shrunk to its own capsule.
         val departures = listOf(
             ShuttleDeparture("B", "university-headquarters", "TO_YEIN", DayOfWeek.MONDAY, LocalTime.of(19, 24), CampusZoneId.MAIN, CampusZoneId.YEIN),
@@ -385,7 +385,7 @@ class GuidanceCardTest {
             useUnmergedTree = true,
         ).textLayout()
         val later = composeRule.onNode(
-            hasText("다음 출발") and hasAnyAncestor(hasTestTag("home_departure_YEIN_1")),
+            hasText("81분 후") and hasAnyAncestor(hasTestTag("home_departure_YEIN_1")),
             useUnmergedTree = true,
         ).textLayout()
         assertEquals(near.layoutInput.style.fontSize, later.layoutInput.style.fontSize)

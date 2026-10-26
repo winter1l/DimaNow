@@ -372,6 +372,7 @@ private fun ShuttleRouteCard(
             clock = time.format(TIME),
             minutesLeft = upcomingCountdowns.firstOrNull { it.departure.time == time }?.remainingMinutes,
             nextMinutesLeft = upcomingCountdowns.firstOrNull()?.remainingMinutes,
+            nextIsFirst = annotatedDepartures.firstOrNull { it.departure.time == nextTime }?.isFirst == true,
         )
         TimetableChipSpec(
             key = time.toSecondOfDay(),

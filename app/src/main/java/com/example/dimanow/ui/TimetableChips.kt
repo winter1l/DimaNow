@@ -106,8 +106,9 @@ internal fun largeCellTopLine(chip: TimetableChipSpec): String =
     else (listOf(chip.clock) + chip.markers).joinToString(" · ")
 
 /**
- * D-127: how a strip shows today's next two departures. Within an hour both count down; when the next one is
- * further off it alone is large, a quiet tile with its clock, and the one after it is an ordinary time.
+ * D-127, narrowed by D-130: how a strip shows today's next two departures. Both count down in minutes, except
+ * when the next one is the day's 첫차 more than an hour off: then it alone is large, a quiet tile with its clock,
+ * and the one after it is an ordinary time.
  */
 internal data class NextDepartureLook(val countdown: String?, val tone: TimetableChipTone, val farAhead: Boolean)
 
@@ -120,8 +121,9 @@ internal fun nextDepartureLook(
     clock: String,
     minutesLeft: Long?,
     nextMinutesLeft: Long?,
+    nextIsFirst: Boolean,
 ): NextDepartureLook {
-    val far = (nextMinutesLeft ?: 0L) > 60
+    val far = nextIsFirst && (nextMinutesLeft ?: 0L) > 60
     return when {
         far && isNext -> NextDepartureLook(clock, timetableChipTone(isFirst, isLast, isPast, isNext = false, isSecond = true), farAhead = true)
         far -> NextDepartureLook(null, timetableChipTone(isFirst, isLast, isPast, isNext = false, isSecond = false), farAhead = false)
@@ -175,13 +177,12 @@ internal fun serviceMarkers(isFirst: Boolean, isLast: Boolean): List<String> = l
 )
 
 /**
- * Countdown-then-marker line of a next-departure capsule (D-069): minutes only within one hour,
- * otherwise `다음 출발` and the clock line beneath carries the time.
+ * Countdown-then-marker line of a next-departure capsule: the minutes left, however many (D-130, superseding
+ * D-069's `다음 출발` beyond an hour); a far 첫차 is shown by [nextDepartureLook] instead.
  */
 internal fun departureCountdownLabel(minutesLeft: Long, markers: List<String>): String = buildString {
     append(
         when {
-            minutesLeft > 60 -> "다음 출발"
             minutesLeft <= 0 -> "곧 출발"
             else -> "${minutesLeft}분 후"
         },

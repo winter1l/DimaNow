@@ -84,7 +84,7 @@ fun LmsRoute(
      * detail pane beside the list instead of taking the whole screen, and Back clears the selection.
      */
     twoPane: Boolean = lmsTwoPaneWindow(),
-    authenticationContent: @Composable (LmsLoginRequest, (List<LmsCourse>) -> Unit) -> Unit = { request, authenticated ->
+    authenticationContent: @Composable (LmsLoginRequest, (List<LmsCourse>, LmsLoginResult) -> Unit) -> Unit = { request, authenticated ->
         LmsAuthenticationWebView(request, { loginBridge.complete(request, it) }, authenticated, loginBridge::cancel, silent = request.credentials.automaticLogin)
     },
 ) {
@@ -92,9 +92,9 @@ fun LmsRoute(
     val sessionState by sessionController.state.collectAsStateWithLifecycle()
     val credentialState by credentialStore.state.collectAsStateWithLifecycle()
     val loginError by autoLoginCoordinator.errorMessage.collectAsStateWithLifecycle()
-    val savedLoginConflict by autoLoginCoordinator.sessionConflict.collectAsStateWithLifecycle()
-    // Credentials of a not-saved manual login that hit a session held elsewhere; kept only until the user decides.
-    var manualConflictCredentials by remember { mutableStateOf<SavedLmsCredentials?>(null) }
+    // D-135: the LMS ended this device's session within two hours of its last use, so another device most likely
+    // signed in; the list waits for the student's 이 기기로 로그인 instead of signing that device out.
+    val signedInElsewhere by autoLoginCoordinator.signedInElsewhere.collectAsStateWithLifecycle()
     val snapshot by source.snapshot.collectAsStateWithLifecycle(initialValue = LmsSnapshot())
     val loginRequest by loginBridge.request.collectAsStateWithLifecycle()
     val renderedPageRequest by (
@@ -125,29 +125,36 @@ fun LmsRoute(
         sessionController.transition(LmsSessionState.AUTHENTICATING)
         val result = loginBridge.authenticate(credentials)
         val next = when (result) {
-            LmsLoginResult.Success -> LmsSessionState.ACTIVE
+            LmsLoginResult.Success, LmsLoginResult.SuccessEndingElsewhere -> LmsSessionState.ACTIVE
             LmsLoginResult.CredentialsRejected -> LmsSessionState.CREDENTIALS_NEED_REVIEW
             LmsLoginResult.InteractiveAuthenticationRequired -> LmsSessionState.INTERACTIVE_AUTH_REQUIRED
             else -> LmsSessionState.ERROR
         }
         sessionController.transition(next)
-        when {
-            next == LmsSessionState.ACTIVE -> source.refresh(force = true)
-            result == LmsLoginResult.SessionConflict -> manualConflictCredentials = credentials
-            else -> result.failureMessage()?.let { snackbar.showSnackbar(it) }
+        if (next == LmsSessionState.ACTIVE) {
+            autoLoginCoordinator.allowSignInHere()
+            source.refresh(force = true)
+            if (result == LmsLoginResult.SuccessEndingElsewhere) snackbar.showSnackbar(LmsUserMessages.SIGNED_OUT_ELSEWHERE)
+        } else {
+            result.failureMessage()?.let { snackbar.showSnackbar(it) }
         }
     }
 
     /** Returns true when the list was read from the LMS (or its fresh cache) in the end. */
-    suspend fun loginAndRefresh(force: Boolean, credentialsChanged: Boolean = false): Boolean {
+    suspend fun loginAndRefresh(force: Boolean, credentialsChanged: Boolean = false, signInHere: Boolean = false): Boolean {
         // Explicit retries bypass login cooldowns; the coordinator retains an active session
         // unless the user has just supplied new credentials.
-        val state = autoLoginCoordinator.ensureActive(force = force, credentialsChanged = credentialsChanged)
+        val state = autoLoginCoordinator.ensureActive(force = force, credentialsChanged = credentialsChanged, signInHere = signInHere)
         if (state != LmsSessionState.ACTIVE) return false
         val final = when (val result = source.refresh(force = force)) {
             LmsRefreshResult.SessionExpired -> {
                 autoLoginCoordinator.markExpired()
-                if (autoLoginCoordinator.ensureActive(force = true) == LmsSessionState.ACTIVE) source.refresh(force = true) else result
+                // The student's 이 기기로 로그인 still signs in when the read finds the session ended (D-135).
+                if (autoLoginCoordinator.ensureActive(force = true, signInHere = signInHere) == LmsSessionState.ACTIVE) {
+                    source.refresh(force = true)
+                } else {
+                    result
+                }
             }
             LmsRefreshResult.CourseCatalogRequired -> {
                 sessionController.transition(LmsSessionState.EXPIRED)
@@ -162,6 +169,7 @@ fun LmsRoute(
             else -> result
         }
         if (final is LmsRefreshResult.Failure) snackbar.showSnackbar(LmsUserMessages.REFRESH_FAILED)
+        if (final == LmsRefreshResult.Success) autoLoginCoordinator.noteActivity()
         return final == LmsRefreshResult.Success || final == LmsRefreshResult.Cached
     }
 
@@ -169,52 +177,35 @@ fun LmsRoute(
     LaunchedEffect(Unit) {
         if (credentialState == CredentialState.SAVED) {
             when (source.refresh(force = false)) {
-                LmsRefreshResult.SessionExpired -> loginAndRefresh(force = false)
+                LmsRefreshResult.SessionExpired -> {
+                    autoLoginCoordinator.markExpired()
+                    loginAndRefresh(force = false)
+                }
                 LmsRefreshResult.CourseCatalogRequired -> loginAndRefresh(force = false)
                 is LmsRefreshResult.Failure -> Unit
-                else -> sessionController.transition(LmsSessionState.ACTIVE)
+                // A fresh cache says nothing about the session; while it was most likely taken elsewhere (D-135) the
+                // card keeps waiting for 이 기기로 로그인.
+                LmsRefreshResult.Cached -> if (!autoLoginCoordinator.signedInElsewhere.value) {
+                    sessionController.transition(LmsSessionState.ACTIVE)
+                }
+                else -> {
+                    autoLoginCoordinator.noteActivity()
+                    sessionController.transition(LmsSessionState.ACTIVE)
+                }
             }
         }
     }
 
-    if (savedLoginConflict || manualConflictCredentials != null) {
-        // D-099: moving the single LMS session here logs the other device out, so the user decides.
-        AlertDialog(
-            icon = { com.example.dimanow.ui.DimaDialogIcon(Icons.Default.Devices, com.example.dimanow.ui.DialogTone.WARNING) },
-            onDismissRequest = { autoLoginCoordinator.dismissSessionConflict(); manualConflictCredentials = null },
-            title = { Text("다른 기기에서 LMS를 쓰고 있어요") },
-            text = {
-                Text(
-                    "LMS는 한 곳에서만 로그인할 수 있어요. 이 기기로 로그인하면 다른 기기의 로그인이 끊기고, " +
-                        "풀고 있던 시험이나 과제가 저장되지 않을 수 있어요.",
-                )
-            },
-            confirmButton = {
-                TextButton(shapes = ButtonDefaults.shapes(), onClick = {
-                    val manual = manualConflictCredentials
-                    autoLoginCoordinator.dismissSessionConflict()
-                    manualConflictCredentials = null
-                    loginBridge.approveSessionTakeoverOnce()
-                    scope.launch {
-                        try {
-                            if (manual != null) manualLogin(manual) else loginAndRefresh(force = true)
-                        } finally {
-                            // An approval this login did not consume never reaches a later automatic login.
-                            loginBridge.clearSessionTakeoverApproval()
-                        }
-                    }
-                }) { Text("이 기기로 로그인") }
-            },
-            dismissButton = {
-                TextButton(shapes = ButtonDefaults.shapes(), onClick = { autoLoginCoordinator.dismissSessionConflict(); manualConflictCredentials = null }) { Text("나중에") }
-            },
-        )
+    // D-135: a sign-in that ended the one elsewhere says so.
+    LaunchedEffect(autoLoginCoordinator) {
+        autoLoginCoordinator.notices.collect { snackbar.showSnackbar(it) }
     }
 
     fun openItem(item: LmsItem) {
         scope.launch {
             suspend fun present(result: LmsDetailLoadResult): Boolean = when (result) {
                 is LmsDetailLoadResult.Fresh -> {
+                    autoLoginCoordinator.noteActivity()
                     selectedDetail = LmsPresentedDetail(
                         result.detail,
                         cached = false,
@@ -255,6 +246,8 @@ fun LmsRoute(
                             if (retried == LmsDetailLoadResult.SessionExpired) LmsUserMessages.SIGN_IN_REQUIRED else LmsUserMessages.DETAIL_FAILED,
                         )
                     }
+                } else if (autoLoginCoordinator.signedInElsewhere.value) {
+                    snackbar.showSnackbar(LmsUserMessages.SIGNED_IN_ELSEWHERE_HINT)
                 }
             }
         }
@@ -286,7 +279,13 @@ fun LmsRoute(
                     officialCoursePage = null
                     scope.launch {
                         autoLoginCoordinator.markExpired()
-                        snackbar.showSnackbar(LmsUserMessages.SIGN_IN_REQUIRED)
+                        snackbar.showSnackbar(
+                            if (autoLoginCoordinator.signedInElsewhere.value) {
+                                LmsUserMessages.SIGNED_IN_ELSEWHERE_HINT
+                            } else {
+                                LmsUserMessages.SIGN_IN_REQUIRED
+                            },
+                        )
                     }
                 },
                 onMessage = { scope.launch { snackbar.showSnackbar(it) } },
@@ -325,6 +324,8 @@ fun LmsRoute(
                     snapshot = if (silentLogin) snapshot.copy(syncState = LmsSyncState.SYNCING, errorMessage = null) else snapshot,
                     sessionState = sessionState,
                     loginErrorMessage = loginError.takeUnless { sessionState == LmsSessionState.ACTIVE || silentLogin },
+                    signedInElsewhere = signedInElsewhere && sessionState != LmsSessionState.ACTIVE,
+                    onSignInHere = { scope.launch { loginAndRefresh(force = true, signInHere = true) } },
                     selectedCourse = selectedCourse,
                     selectedKind = selectedKind,
                     onCourseChange = { selectedCourse = it },
@@ -333,7 +334,11 @@ fun LmsRoute(
                         scope.launch {
                             // 셔틀·식단처럼 직접 당긴 새로고침은 바뀐 것이 없을 때도 알린다
                             val before = source.snapshot.first().items
-                            if (loginAndRefresh(force = true)) snackbar.showSnackbar(lmsRefreshMessage(before, source.snapshot.first().items))
+                            if (loginAndRefresh(force = true)) {
+                                snackbar.showSnackbar(lmsRefreshMessage(before, source.snapshot.first().items))
+                            } else if (autoLoginCoordinator.signedInElsewhere.value) {
+                                snackbar.showSnackbar(LmsUserMessages.SIGNED_IN_ELSEWHERE_HINT)
+                            }
                         }
                     },
                     onOpenItem = ::openItem,
@@ -370,11 +375,11 @@ fun LmsRoute(
         }
         loginRequest?.let { request ->
             key(request) {
-                authenticationContent(request) { courses ->
+                authenticationContent(request) { courses, result ->
                     scope.launch {
                         if (!request.result.isCompleted) {
                             runCatching { source.storeRenderedCourses(courses) }
-                                .onSuccess { loginBridge.complete(request, LmsLoginResult.Success) }
+                                .onSuccess { loginBridge.complete(request, result) }
                                 .onFailure { loginBridge.complete(request, LmsLoginResult.Failure("수업 목록을 저장하지 못했어요. 다시 시도해 주세요")) }
                         }
                     }

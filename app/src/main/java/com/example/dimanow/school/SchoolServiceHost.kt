@@ -50,8 +50,12 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.compose.material.icons.filled.Devices
 import com.example.dimanow.lms.LmsCredentialStore
 import com.example.dimanow.lms.LmsLoginScreen
+import com.example.dimanow.lms.PortalSignInGate
+import com.example.dimanow.ui.DialogTone
+import com.example.dimanow.ui.DimaAlertDialog
 import com.example.dimanow.lms.SavedLmsCredentials
 import com.example.dimanow.lms.lmsCredentialSubmissionScript
 import com.example.dimanow.ui.DimaLoadingIndicator
@@ -75,7 +79,7 @@ fun SchoolServiceHost(bridge: SchoolServiceBridge, credentialStore: LmsCredentia
     val request by bridge.request.collectAsStateWithLifecycle()
     val current = request ?: return
     key(current) {
-        SchoolServiceSession(current, credentialStore) { result -> bridge.complete(current, result) }
+        SchoolServiceSession(current, credentialStore, bridge.portalGate) { result -> bridge.complete(current, result) }
     }
 }
 
@@ -96,10 +100,13 @@ private enum class SchoolSurface { HIDDEN, OPENING, PORTAL, PAGE }
 private fun SchoolServiceSession(
     request: SchoolServiceRequest,
     credentialStore: LmsCredentialStore,
+    portalGate: PortalSignInGate?,
     onResult: (SchoolServiceResult) -> Unit,
 ) {
     val scope = rememberCoroutineScope()
     val slot = remember { SchoolCredentialSlot() }
+    // D-135: the sign-in waiting for the student's answer while another device most likely holds the portal sign-in.
+    var confirmSignIn by remember { mutableStateOf<(() -> Unit)?>(null) }
     var credentialsLoaded by remember { mutableStateOf(false) }
     var surface by remember { mutableStateOf(if (request.opensPage) SchoolSurface.OPENING else SchoolSurface.HIDDEN) }
     var askCredentials by remember { mutableStateOf(false) }
@@ -174,7 +181,9 @@ private fun SchoolServiceSession(
                             context = context,
                             request = request,
                             slot = slot,
+                            portalGate = portalGate,
                             onResult = onResult,
+                            confirmSignIn = { signIn -> confirmSignIn = signIn },
                             askForCredentials = { rejected ->
                                 credentialsRejected = rejected
                                 askCredentials = true
@@ -212,6 +221,30 @@ private fun SchoolServiceSession(
                 }
             }
         }
+        confirmSignIn?.let { signIn ->
+            fun cancel() {
+                confirmSignIn = null
+                slot.submitWhenReady = null
+                onResult(SchoolServiceResult.Cancelled)
+            }
+            DimaAlertDialog(
+                onDismissRequest = ::cancel,
+                icon = Icons.Default.Devices,
+                tone = DialogTone.WARNING,
+                title = "다른 곳에서 학교 계정을 쓰는 것 같아요",
+                text = {
+                    Text("로그인하면 그곳의 로그인이 끊겨서, 풀고 있던 시험이나 과제가 저장되지 않을 수 있어요.")
+                },
+                confirmLabel = "로그인",
+                onConfirm = {
+                    confirmSignIn = null
+                    signIn()
+                },
+                dismissLabel = "취소",
+                confirmTag = "school_sign_in_here",
+                dismissTag = "school_sign_in_cancel",
+            )
+        }
         if (askCredentials) {
             // The same form as the Courses tab: the account goes only to the official portal page, and saving it
             // (opt-in) also signs the Courses tab in next time.
@@ -240,7 +273,9 @@ private fun schoolServiceWebView(
     context: android.content.Context,
     request: SchoolServiceRequest,
     slot: SchoolCredentialSlot,
+    portalGate: PortalSignInGate?,
     onResult: (SchoolServiceResult) -> Unit,
+    confirmSignIn: (signIn: () -> Unit) -> Unit,
     askForCredentials: (rejected: Boolean) -> Unit,
     showToStudent: () -> Unit,
     showPage: () -> Unit,
@@ -269,6 +304,11 @@ private fun schoolServiceWebView(
     val onScreen = java.util.concurrent.atomic.AtomicBoolean(request.opensPage)
     var extracting = false
     var redirectsAfterSignIn = 0
+    // D-135: a 3045 answer already signed the other place out, so one more sign-in goes through without asking.
+    var conflictRetried = false
+    var signInApproved = false
+    // The account went to the portal on this visit; reaching the page then means the portal sign-in is the app's.
+    var accountSent = false
 
     fun finish(result: SchoolServiceResult) {
         if (stage == SchoolStage.DONE) return
@@ -288,6 +328,7 @@ private fun schoolServiceWebView(
     fun submit(view: WebView, credentials: SavedLmsCredentials) {
         slot.submitWhenReady = null
         injected = true
+        accountSent = true
         view.evaluateJavascript(lmsCredentialSubmissionScript(credentials.username, credentials.password, portal = true)) { result ->
             // A challenge or an unexpected form: the official page takes over.
             if (result != "\"submitted\"") reveal()
@@ -296,11 +337,29 @@ private fun schoolServiceWebView(
 
     fun submitOrAsk(view: WebView) {
         val credentials = slot.credentials
-        if (credentials != null) {
-            submit(view, credentials)
-        } else {
-            slot.submitWhenReady = { slot.credentials?.let { submit(view, it) } }
-            askForCredentials(false)
+        val step = schoolSignInStep(
+            hasSavedAccount = credentials != null,
+            signedInElsewhere = portalGate?.signedInElsewhere?.value == true,
+            approved = signInApproved,
+            automatic = request.automatic,
+        )
+        when (step) {
+            SchoolSignInStep.SUBMIT -> submit(view, requireNotNull(credentials))
+            SchoolSignInStep.ASK_ACCOUNT -> {
+                slot.submitWhenReady = { slot.credentials?.let { submit(view, it) } }
+                askForCredentials(false)
+            }
+            SchoolSignInStep.STOP -> finish(SchoolServiceResult.Failure(SCHOOL_SIGNED_IN_ELSEWHERE_MESSAGE))
+            SchoolSignInStep.CONFIRM -> {
+                val signIn = {
+                    signInApproved = true
+                    portalGate?.allowSignInHere()
+                    submit(view, requireNotNull(credentials))
+                }
+                // Held while the student answers, so the silent timeout waits as it does for the sign-in form.
+                slot.submitWhenReady = signIn
+                confirmSignIn(signIn)
+            }
         }
     }
 
@@ -425,8 +484,21 @@ private fun schoolServiceWebView(
             }
             if (stage == SchoolStage.DONE) return
             if (SchoolUrlPolicy.isSessionConflict(url)) {
-                // The official page explains the duplicate login and offers its own way on; the student decides.
-                reveal()
+                if (!conflictRetried) {
+                    // D-135: the portal ended the sign-in held elsewhere as it answered 3045. Its page stays blank
+                    // (its script does not run), so the account is sent once more.
+                    conflictRetried = true
+                    signInApproved = true
+                    portalGate?.signedInThroughPortal()
+                    android.widget.Toast.makeText(
+                        view.context,
+                        "로그인하면서 다른 곳의 학교 계정 로그인이 끊겼어요",
+                        android.widget.Toast.LENGTH_LONG,
+                    ).show()
+                    startSignIn(view)
+                } else {
+                    finish(SchoolServiceResult.Failure("다른 곳에서 다시 로그인해서 ${service.label}에 로그인하지 못했어요. 잠시 후 다시 시도해 주세요."))
+                }
                 return
             }
             val uri = Uri.parse(url)
@@ -437,6 +509,11 @@ private fun schoolServiceWebView(
                         return
                     }
                     if (uri.path.orEmpty().equals(targetPath, ignoreCase = true)) {
+                        // D-135: the 수업 tab then signs in as its own, without waiting on a sign-in this one ended.
+                        if (accountSent) {
+                            accountSent = false
+                            portalGate?.signedInThroughPortal()
+                        }
                         if (request.opensPage) showPage(view) else extract(view)
                     } else if (stage == SchoolStage.CHECK) {
                         // Not signed in: the site sent us to its error or entry page instead of the target.

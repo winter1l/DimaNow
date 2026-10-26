@@ -1,5 +1,6 @@
 package com.example.dimanow.school
 
+import com.example.dimanow.lms.PortalSignInGate
 import java.net.URI
 import java.util.UUID
 import kotlinx.coroutines.CompletableDeferred
@@ -148,6 +149,11 @@ class SchoolServiceRequest internal constructor(
     internal val result: CompletableDeferred<SchoolServiceResult>,
     /** False keeps the site's own menu and header (D-131(3): finding the grade page needs the intranet menu). */
     val fitsPage: Boolean = true,
+    /**
+     * D-135: a read the app starts by itself (on opening a screen). It never signs in while the portal sign-in is most
+     * likely held elsewhere; a read the student starts asks first instead.
+     */
+    val automatic: Boolean = false,
 ) {
     /** The page itself is shown instead of read. */
     val opensPage: Boolean get() = script == null
@@ -166,12 +172,20 @@ internal fun withObjectParticle(word: String): String {
 val LocalSchoolServiceBridge = androidx.compose.runtime.staticCompositionLocalOf<SchoolServiceBridge?> { null }
 
 /** Hands one school-site read at a time to the WebView host in the app shell (D-107). */
-class SchoolServiceBridge {
+class SchoolServiceBridge(
+    /** D-135: the 수업 tab's knowledge of a sign-in elsewhere, shared because the portal account is the same. */
+    val portalGate: PortalSignInGate? = null,
+) {
     private val mutableRequest = MutableStateFlow<SchoolServiceRequest?>(null)
     val request: StateFlow<SchoolServiceRequest?> = mutableRequest.asStateFlow()
 
-    suspend fun read(service: SchoolService, targetUrl: String, script: String, purpose: String): SchoolServiceResult =
-        start(service, targetUrl, script, purpose)
+    suspend fun read(
+        service: SchoolService,
+        targetUrl: String,
+        script: String,
+        purpose: String,
+        automatic: Boolean = false,
+    ): SchoolServiceResult = start(service, targetUrl, script, purpose, automatic = automatic)
 
     /**
      * Shows [targetUrl] signed in, full screen, for the student to use on the school's own page; the app enters
@@ -187,9 +201,10 @@ class SchoolServiceBridge {
         script: String?,
         purpose: String,
         fitsPage: Boolean = true,
+        automatic: Boolean = false,
     ): SchoolServiceResult {
         require(SchoolUrlPolicy.isAllowedHttps(targetUrl) && java.net.URI.create(targetUrl).host == service.host)
-        val pending = SchoolServiceRequest(service, targetUrl, script, purpose, CompletableDeferred(), fitsPage)
+        val pending = SchoolServiceRequest(service, targetUrl, script, purpose, CompletableDeferred(), fitsPage, automatic)
         if (!mutableRequest.compareAndSet(null, pending)) {
             return SchoolServiceResult.Failure("다른 학교 정보를 불러오는 중이에요. 잠시 후 다시 시도해 주세요.")
         }
@@ -221,3 +236,31 @@ internal fun schoolScriptLauncher(request: SchoolServiceRequest): String = """
 """.trimIndent()
 
 internal fun schoolScriptPoll(request: SchoolServiceRequest): String = "window['${request.resultSlot}']"
+
+/** What the school-site host does on the portal's sign-in page (D-107, D-135). */
+internal enum class SchoolSignInStep {
+    /** Send the saved account. */
+    SUBMIT,
+    /** No saved account: show the sign-in form. */
+    ASK_ACCOUNT,
+    /** Another device most likely holds the sign-in: ask before signing it out. */
+    CONFIRM,
+    /** Same, for a read the app started by itself: do not sign in at all. */
+    STOP,
+}
+
+internal fun schoolSignInStep(
+    hasSavedAccount: Boolean,
+    signedInElsewhere: Boolean,
+    approved: Boolean,
+    automatic: Boolean,
+): SchoolSignInStep = when {
+    !hasSavedAccount -> SchoolSignInStep.ASK_ACCOUNT
+    !signedInElsewhere || approved -> SchoolSignInStep.SUBMIT
+    automatic -> SchoolSignInStep.STOP
+    else -> SchoolSignInStep.CONFIRM
+}
+
+/** D-135: an automatic read stopped before signing in, as the 수업 tab saw a sign-in elsewhere. */
+internal const val SCHOOL_SIGNED_IN_ELSEWHERE_MESSAGE =
+    "다른 곳에서 학교 계정으로 로그인한 것 같아 자동으로 로그인하지 않았어요. 새로고침하면 로그인할지 물어봐요."

@@ -177,7 +177,9 @@ internal fun LmsLoginScreen(
                             LmsNoticeLine("DIMA Now는 학교가 만든 앱이 아니에요.")
                             LmsNoticeLine("학번과 비밀번호는 학교 공식 로그인 화면(portal·lms.dima.ac.kr)에만 입력되고, 개발자나 다른 서버로 보내지 않아요.")
                             LmsNoticeLine("학교 통합 로그인 중 한 구간(sso.dima.ac.kr:8080)은 학교가 암호화하지 않은 연결을 써서, 공용 Wi-Fi에서는 로그인 정보가 노출될 수 있어요.")
-                            LmsNoticeLine("학교 LMS는 한 곳에서만 로그인돼요. 다른 기기에서 로그인 중이면 그 로그인을 끊기 전에 먼저 물어봐요.")
+                            // D-135: the portal ends the other sign-in as soon as this one is sent, so the app
+                            // asks only when another device has just taken the sign-in over.
+                            LmsNoticeLine("학교 계정은 한 곳에서만 로그인돼요. 앱이 로그인하면 PC 등 다른 곳의 로그인이 끊겨요. 다른 곳에서 방금 로그인한 것 같으면 먼저 물어봐요.")
                         }
                     }
                     Button(shapes = ButtonDefaults.shapes(), 
@@ -245,7 +247,8 @@ private fun LmsAuthenticationFrame(
 internal fun LmsAuthenticationWebView(
     request: LmsLoginRequest,
     onComplete: (LmsLoginResult) -> Unit,
-    onAuthenticated: (List<LmsCourse>) -> Unit,
+    /** The courses read after signing in, and how the sign-in went ([LmsLoginResult.signedIn]). */
+    onAuthenticated: (List<LmsCourse>, LmsLoginResult) -> Unit,
     onCancel: () -> Unit,
     modifier: Modifier = Modifier,
     silent: Boolean = false,
@@ -273,8 +276,11 @@ internal fun LmsAuthenticationWebView(
                         settings.mixedContentMode = android.webkit.WebSettings.MIXED_CONTENT_NEVER_ALLOW
                         WebView.startSafeBrowsing(context, null)
                         var injected = false
+                        // Each credential submission's own number: a 10 s check from an earlier one must not judge
+                        // the sign-in sent again after a 3045 answer (D-135).
+                        var submission = 0
                         var catalogRequested = false
-                        var flowState = LmsLoginFlowState.initial(request.allowSessionTakeover)
+                        var flowState = LmsLoginFlowState.initial()
                         var finished = false
 
                         fun finish(result: LmsLoginResult) {
@@ -294,35 +300,12 @@ internal fun LmsAuthenticationWebView(
                             when (val command = transition.command) {
                                 LmsLoginFlowCommand.None -> Unit
                                 LmsLoginFlowCommand.SubmitCredentials -> webView.loadUrl(LOGIN_URL)
-                                LmsLoginFlowCommand.InspectSessionTakeoverAction -> {
-                                    webView.evaluateJavascript(VERIFY_LMS_SESSION_TAKEOVER_ACTION_SCRIPT) { raw ->
-                                        when (parseLmsSessionTakeoverScriptResult(raw)) {
-                                            LmsSessionTakeoverScriptResult.VERIFIED ->
-                                                advance(webView, LmsLoginFlowEvent.SessionTakeoverActionVerified)
-                                            LmsSessionTakeoverScriptResult.INTERACTIVE ->
-                                                advance(webView, LmsLoginFlowEvent.InteractiveChallengeDetected)
-                                            else -> advance(
-                                                webView,
-                                                LmsLoginFlowEvent.SessionTakeoverActionUnavailable,
-                                            )
-                                        }
-                                    }
-                                }
-                                LmsLoginFlowCommand.SubmitVerifiedSessionTakeover -> {
-                                    // The official 3045 recovery returns to the portal login form. Allow exactly
-                                    // one credential resubmission after the live page action is re-verified.
+                                LmsLoginFlowCommand.RetryCredentials -> {
+                                    // D-135: the 3045 answer already ended the sign-in elsewhere. The official login
+                                    // address takes the account once more; the 3045 page's own form re-encodes its
+                                    // query and its script does not run, so it is not used.
                                     injected = false
-                                    webView.evaluateJavascript(SUBMIT_LMS_SESSION_TAKEOVER_ACTION_SCRIPT) { raw ->
-                                        when (parseLmsSessionTakeoverScriptResult(raw)) {
-                                            LmsSessionTakeoverScriptResult.SUBMITTED -> Unit
-                                            LmsSessionTakeoverScriptResult.INTERACTIVE ->
-                                                advance(webView, LmsLoginFlowEvent.InteractiveChallengeDetected)
-                                            else -> advance(
-                                                webView,
-                                                LmsLoginFlowEvent.SessionTakeoverActionUnavailable,
-                                            )
-                                        }
-                                    }
+                                    webView.loadUrl(LOGIN_URL)
                                 }
                                 LmsLoginFlowCommand.LoadDashboard -> webView.loadUrl(LMS_DASHBOARD_URL)
                                 LmsLoginFlowCommand.ExtractCourses -> {
@@ -338,10 +321,10 @@ internal fun LmsAuthenticationWebView(
                                     }
                                 }
                                 is LmsLoginFlowCommand.Complete -> {
-                                    if (command.result == LmsLoginResult.Success && extractedCourses != null) {
+                                    if (command.result.signedIn && extractedCourses != null) {
                                         finished = true
                                         CookieManager.getInstance().flush()
-                                        onAuthenticated(extractedCourses)
+                                        onAuthenticated(extractedCourses, command.result)
                                     } else {
                                         finish(command.result)
                                     }
@@ -362,8 +345,8 @@ internal fun LmsAuthenticationWebView(
                                     return true
                                 }
                                 if (isExactOfficialLmsSessionConflictUrl(url)) {
-                                    result.cancel()
-                                    advance(view, LmsLoginFlowEvent.InteractiveChallengeDetected)
+                                    // A notice on the 3045 page changes nothing: the page's load drives the retry.
+                                    result.confirm()
                                     return true
                                 }
                                 return super.onJsAlert(view, url, message, result)
@@ -444,6 +427,7 @@ internal fun LmsAuthenticationWebView(
                                     return
                                 } else if (isOfficialLmsCredentialPage(url) && !injected) {
                                     injected = true
+                                    val mine = ++submission
                                     val portal = Uri.parse(url).host == PORTAL_HOST
                                     view.evaluateJavascript(
                                         lmsCredentialSubmissionScript(
@@ -456,6 +440,7 @@ internal fun LmsAuthenticationWebView(
                                             view.postDelayed(
                                                 {
                                                     if (
+                                                        mine == submission &&
                                                         !request.result.isCompleted &&
                                                         shouldReviewStoredLmsCredentials(
                                                             view.url.orEmpty(),
@@ -610,85 +595,6 @@ private val EXTRACT_RENDERED_COURSES_SCRIPT = """
           var professor=text.match(/교수(?:명)?\s*[:：]\s*([^\n·|]+)/);
           return {id:match[1],classNo:match[2],name:(nameNode.textContent||'').trim(),professor:professor?professor[1].trim():null};
         }).filter(Boolean);
-    })()
-""".trimIndent()
-private val LMS_SESSION_TAKEOVER_CANDIDATE_FUNCTION = """
-    function findVerifiedTakeoverAction(){
-      var query=new URLSearchParams(location.search);
-      var queryNames=Array.from(query.keys());
-      var exactQuery=query.getAll('errorCode').length===1&&query.get('errorCode')==='3045'&&
-        query.getAll('errorMsg').length<=1&&queryNames.every(function(name){
-          return name==='errorCode'||name==='errorMsg';
-        });
-      if(location.protocol!=='https:'||location.hostname!=='portal.dima.ac.kr'||
-         location.pathname!=='/sso/error.aspx'||!exactQuery){
-        return {state:'unavailable'};
-      }
-      if(document.querySelector("input[type='password'],input[name*='otp' i],input[id*='otp' i],"+
-          "input[name*='captcha' i],input[id*='captcha' i],iframe[src*='captcha' i]")){
-        return {state:'interactive'};
-      }
-      function parseExactConflictUrl(raw){
-        try{
-          var url=new URL(raw,location.href);
-          var names=Array.from(url.searchParams.keys());
-          var validQuery=url.searchParams.getAll('errorCode').length===1&&
-            url.searchParams.get('errorCode')==='3045'&&
-            url.searchParams.getAll('errorMsg').length<=1&&
-            names.every(function(name){return name==='errorCode'||name==='errorMsg';});
-          return url.protocol==='https:'&&url.hostname==='portal.dima.ac.kr'&&
-            (url.port===''||url.port==='443')&&url.pathname==='/sso/error.aspx'&&
-            !url.hash&&validQuery?url:null;
-        }catch(e){return null;}
-      }
-      var forms=Array.from(document.forms);
-      var form=forms.length===1?forms[0]:null;
-      var controls=form?Array.from(form.elements):[];
-      var actionUrl=form?parseExactConflictUrl(form.getAttribute('action')||location.href):null;
-      var hiddenOnly=Boolean(form)&&form.method.toLowerCase()==='post'&&controls.length>0&&
-        controls.every(function(control){return control.tagName==='INPUT'&&control.type==='hidden';})&&
-        controls.some(function(control){return control.name==='__VIEWSTATE';})&&
-        actionUrl!==null&&actionUrl.search===location.search;
-      var hasInteractiveControl=Boolean(document.querySelector(
-        "button,input:not([type='hidden']),select,textarea,a[href],a[onclick],[onclick],"+
-        "[role='button'],[tabindex]:not([tabindex='-1']),"+
-        "[contenteditable]:not([contenteditable='false'])"
-      ));
-      var redirectUrls=Array.from(document.scripts).map(function(script){
-        var match=(script.textContent||'').match(
-          /top\.location\.href\s*=\s*['"](https:\/\/portal\.dima\.ac\.kr\/?)['"]/
-        );
-        if(!match)return null;
-        try{
-          var target=new URL(match[1]);
-          return target.protocol==='https:'&&target.hostname==='portal.dima.ac.kr'&&
-            target.pathname==='/'&&!target.search&&!target.hash?target.href:null;
-        }catch(e){return null;}
-      }).filter(Boolean);
-      if(hiddenOnly&&!hasInteractiveControl&&redirectUrls.length===1){
-        return {state:'verified',redirectUrl:redirectUrls[0]};
-      }
-      return {state:'unavailable'};
-    }
-""".trimIndent()
-
-internal val VERIFY_LMS_SESSION_TAKEOVER_ACTION_SCRIPT = """
-    (function(){
-      $LMS_SESSION_TAKEOVER_CANDIDATE_FUNCTION
-      return findVerifiedTakeoverAction().state;
-    })()
-""".trimIndent()
-
-internal val SUBMIT_LMS_SESSION_TAKEOVER_ACTION_SCRIPT = """
-    (function(){
-      $LMS_SESSION_TAKEOVER_CANDIDATE_FUNCTION
-      var result=findVerifiedTakeoverAction();
-      if(result.state!=='verified')return result.state;
-      if(!result.redirectUrl)return 'unavailable';
-      setTimeout(function(){
-        location.replace(result.redirectUrl);
-      },0);
-      return 'submitted';
     })()
 """.trimIndent()
 private const val PORTAL_HOST = "portal.dima.ac.kr"

@@ -93,13 +93,14 @@ internal fun LibraryScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
     var openError by remember { mutableStateOf<String?>(null) }
     val today = LocalDate.now(MinuteTicker.CAMPUS_ZONE)
 
-    fun load() {
+    // D-135: the read on opening the page is the app's own, so it never signs another device out.
+    fun readLoans(automatic: Boolean) {
         val service = bridge ?: return
         if (loading) return
         loading = true
         error = null
         scope.launch {
-            when (val result = service.read(SchoolService.LIBRARY, LIBRARY_LOANS_URL, LIBRARY_LOANS_SCRIPT, "대출 현황")) {
+            when (val result = service.read(SchoolService.LIBRARY, LIBRARY_LOANS_URL, LIBRARY_LOANS_SCRIPT, "대출 현황", automatic)) {
                 is SchoolServiceResult.Success -> runCatching { parseLibraryStatus(result.json) }
                     .onSuccess { SchoolReadCache.setLibrary(SchoolReadCache.LibraryRead(it, Instant.now())) }
                     .onFailure { error = "도서관의 대출 목록을 읽지 못했어요. 대출·연기에서 바로 확인할 수 있어요." }
@@ -109,6 +110,8 @@ internal fun LibraryScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
             loading = false
         }
     }
+
+    fun load() = readLoans(automatic = false)
 
     // The library's pages open signed in inside the app (D-108's school pages); in the browser they would ask again.
     fun openOnLibrary(url: String, title: String, readAfter: Boolean) {
@@ -136,7 +139,7 @@ internal fun LibraryScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
 
     LaunchedEffect(Unit) {
         loadPublic(force = false)
-        if (libraryAutoReadDue(SchoolReadCache.library.value?.readAt, Instant.now())) load()
+        if (libraryAutoReadDue(SchoolReadCache.library.value?.readAt, Instant.now())) readLoans(automatic = true)
     }
 
     ScreenScaffold(

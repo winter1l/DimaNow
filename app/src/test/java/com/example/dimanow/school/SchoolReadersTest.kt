@@ -170,6 +170,17 @@ class SchoolReadersTest {
     }
 
     @Test
+    fun `a sign-in elsewhere stops the app's own reads and makes a started read ask first`() {
+        // D-135: the portal signs the other device out as soon as the account is sent.
+        assertEquals(SchoolSignInStep.SUBMIT, schoolSignInStep(hasSavedAccount = true, signedInElsewhere = false, approved = false, automatic = true))
+        assertEquals(SchoolSignInStep.STOP, schoolSignInStep(hasSavedAccount = true, signedInElsewhere = true, approved = false, automatic = true))
+        assertEquals(SchoolSignInStep.CONFIRM, schoolSignInStep(hasSavedAccount = true, signedInElsewhere = true, approved = false, automatic = false))
+        assertEquals(SchoolSignInStep.SUBMIT, schoolSignInStep(hasSavedAccount = true, signedInElsewhere = true, approved = true, automatic = false))
+        // Typing the account on the form is the student's own sign-in.
+        assertEquals(SchoolSignInStep.ASK_ACCOUNT, schoolSignInStep(hasSavedAccount = false, signedInElsewhere = true, approved = false, automatic = true))
+    }
+
+    @Test
     fun `the intranet sign-in goes through its own SSO entry, not straight to the front page`() {
         val entry = SchoolService.INTRANET.portalEntry
         assertTrue(SchoolUrlPolicy.isPortalCredentialPage(entry))

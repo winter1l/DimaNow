@@ -112,18 +112,4 @@ class LmsWebLoginCompletionPolicyTest {
         assertFalse(shouldConfirmOfficialLmsLoginDialog("https://lms.dima.ac.kr/lms/myLecture/doListView.dunet"))
         assertFalse(shouldConfirmOfficialLmsLoginDialog("https://example.com/login"))
     }
-
-    @Test
-    fun takeoverConfirmationRequiresTheExact3045PageAndAnExplicitSessionMessage() {
-        val conflict = "https://portal.dima.ac.kr/sso/error.aspx?errorCode=3045"
-
-        assertTrue(shouldConfirmOfficialLmsSessionTakeoverDialog(conflict, "기존 로그인 세션을 종료하시겠습니까?"))
-        assertFalse(shouldConfirmOfficialLmsSessionTakeoverDialog(conflict, "비밀번호를 다시 입력하세요"))
-        assertFalse(
-            shouldConfirmOfficialLmsSessionTakeoverDialog(
-                "https://portal.dima.ac.kr/sso/error.aspx?errorCode=3044",
-                "기존 로그인 세션을 종료하시겠습니까?",
-            ),
-        )
-    }
 }

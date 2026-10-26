@@ -92,13 +92,14 @@ internal fun EquipmentScreen(onBack: () -> Unit, modifier: Modifier = Modifier) 
     var loadingModel by remember { mutableStateOf<Long?>(null) }
     val today = LocalDate.now()
 
-    fun loadCatalog() {
+    // D-135: the read on opening the page is the app's own, so it never signs another device out.
+    fun readCatalog(automatic: Boolean) {
         val service = bridge ?: return
         if (loading) return
         loading = true
         error = null
         scope.launch {
-            val result = service.read(SchoolService.DIMA_C, DIMA_C_EQUIPMENT_URL, DIMA_C_EQUIPMENT_CATALOG_SCRIPT, "장비 대여 현황")
+            val result = service.read(SchoolService.DIMA_C, DIMA_C_EQUIPMENT_URL, DIMA_C_EQUIPMENT_CATALOG_SCRIPT, "장비 대여 현황", automatic)
             when (result) {
                 is SchoolServiceResult.Success -> runCatching { parseEquipmentCatalog(result.json) }
                     .onSuccess { SchoolReadCache.setEquipmentCatalog(it) }
@@ -112,6 +113,8 @@ internal fun EquipmentScreen(onBack: () -> Unit, modifier: Modifier = Modifier) 
             loading = false
         }
     }
+
+    fun loadCatalog() = readCatalog(automatic = false)
 
     fun loadModel(model: EquipmentModel) {
         val service = bridge ?: return
@@ -142,7 +145,7 @@ internal fun EquipmentScreen(onBack: () -> Unit, modifier: Modifier = Modifier) 
 
     LaunchedEffect(Unit) {
         val failedAt = SchoolReadCache.equipmentCatalogFailure.value?.at
-        if (catalog == null && equipmentCatalogAutoReadAllowed(failedAt, Instant.now())) loadCatalog()
+        if (catalog == null && equipmentCatalogAutoReadAllowed(failedAt, Instant.now())) readCatalog(automatic = true)
     }
     // The open model is remembered across visits; read its days again if they are not cached any more
     // (a new catalog, or the app process was restarted), instead of showing an empty panel.

@@ -119,14 +119,21 @@ class DimaNowApplication : Application() {
     }
     val lmsCredentialStore: AndroidLmsCredentialStore by lazy { AndroidLmsCredentialStore(this) }
     /** D-107: one intranet/DIMA C read at a time, served by the WebView host in the app shell. */
-    val schoolServiceBridge: com.example.dimanow.school.SchoolServiceBridge by lazy { com.example.dimanow.school.SchoolServiceBridge() }
+    val schoolServiceBridge: com.example.dimanow.school.SchoolServiceBridge by lazy {
+        com.example.dimanow.school.SchoolServiceBridge(lmsAutoLoginCoordinator)
+    }
     val lmsSessionController: MutableLmsSessionController by lazy { MutableLmsSessionController() }
     val lmsLoginBridge: LmsLoginBridge by lazy { LmsLoginBridge() }
     val lmsRenderedPageBridge: com.example.dimanow.lms.LmsRenderedPageBridge by lazy {
         com.example.dimanow.lms.LmsRenderedPageBridge()
     }
     val lmsAutoLoginCoordinator: LmsAutoLoginCoordinator by lazy {
-        LmsAutoLoginCoordinator(lmsCredentialStore, lmsSessionController, lmsLoginBridge)
+        LmsAutoLoginCoordinator(
+            lmsCredentialStore,
+            lmsSessionController,
+            lmsLoginBridge,
+            sessionRecord = com.example.dimanow.lms.AndroidLmsSessionRecord(this),
+        )
     }
     val lmsSource: RoomLmsSource by lazy {
         RoomLmsSource(

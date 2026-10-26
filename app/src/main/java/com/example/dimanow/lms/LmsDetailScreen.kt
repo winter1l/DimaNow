@@ -211,13 +211,14 @@ internal fun LmsDetailScreen(
                                     activeDownloadCache = cache
                                     var result = source.downloadAttachment(attachment, cache)
                                     if (result == LmsAttachmentDownloadResult.SessionExpired) {
-                                        sessionController.transition(LmsSessionState.EXPIRED)
+                                        autoLoginCoordinator.markExpired()
                                         if (autoLoginCoordinator.ensureActive(force = true) == LmsSessionState.ACTIVE) {
                                             result = source.downloadAttachment(attachment, cache)
                                         }
                                     }
                                     when (result) {
                                         is LmsAttachmentDownloadResult.Success -> {
+                                            autoLoginCoordinator.noteActivity()
                                             if (result.bytesWritten <= 0L || cache.length() != result.bytesWritten) {
                                                 cache.delete()
                                                 activeDownloadCache = null
@@ -232,7 +233,13 @@ internal fun LmsDetailScreen(
                                             cache.delete()
                                             activeDownloadCache = null
                                             downloadingAttachment = null
-                                            onMessage(LmsUserMessages.SIGN_IN_REQUIRED)
+                                            onMessage(
+                                                if (autoLoginCoordinator.signedInElsewhere.value) {
+                                                    LmsUserMessages.SIGNED_IN_ELSEWHERE_HINT
+                                                } else {
+                                                    LmsUserMessages.SIGN_IN_REQUIRED
+                                                },
+                                            )
                                         }
                                         is LmsAttachmentDownloadResult.Failure -> {
                                             cache.delete()

@@ -284,6 +284,13 @@ internal fun LmsItemsScreen(
     modifier: Modifier = Modifier,
     loginErrorMessage: String? = null,
     /**
+     * D-135: the LMS ended this device's session within two hours of its last use, so another device most likely signed
+     * in. The list then shows a card whose 이 기기로 로그인 ([onSignInHere]) is the only thing that signs in, since it
+     * signs that device out; the card stays until then.
+     */
+    signedInElsewhere: Boolean = false,
+    onSignInHere: () -> Unit = {},
+    /**
      * D-131 (Q-025): true while the list sits beside the detail pane on a wide window. Every row then says whether it
      * is the one open there ([selection]); on phones the detail takes the whole screen and rows carry no such state.
      */
@@ -354,8 +361,13 @@ internal fun LmsItemsScreen(
         val rows = LmsLazyRows()
         fun selectedOf(item: LmsItem): Boolean? = if (selectable) selection?.entryKey() == item.entryKey() else null
 
-        // 캐시된 목록 위에서 갱신이 실패하면 스낵바가 사라진 뒤에도 상태를 알 수 있게 배너로 남긴다 (D-056)
-        if (hasError && !visibleEmpty) {
+        if (signedInElsewhere) {
+            val top = rows.gap(LMS_BLOCK_GAP)
+            item(key = rows.key("lms_signed_in_elsewhere")) {
+                LmsSignedInElsewhereCard(snapshot.lastSuccessAt, onSignInHere, Modifier.padding(top = top))
+            }
+        } else if (hasError && !visibleEmpty) {
+            // 캐시된 목록 위에서 갱신이 실패하면 스낵바가 사라진 뒤에도 상태를 알 수 있게 배너로 남긴다 (D-056)
             val top = rows.gap(LMS_BLOCK_GAP)
             item(key = rows.key("lms_refresh_error")) {
                 LmsRefreshErrorBanner(
@@ -397,6 +409,8 @@ internal fun LmsItemsScreen(
                     }
                 }
             }
+            // D-135: the card above says why nothing new is read and offers 이 기기로 로그인.
+            visibleEmpty && signedInElsewhere -> Unit
             visibleEmpty && hasError -> {
                 val top = rows.gap(LMS_BLOCK_GAP)
                 item(key = rows.key("lms_error")) {
@@ -533,6 +547,25 @@ internal fun LmsItemsScreen(
             }
         }
     }
+}
+
+/**
+ * D-135: the session ended within the LMS's two hours of this device's last use, so another device most likely holds
+ * it. Not an error: the saved list stays, and signing in here is the student's choice. The app cannot tell when the
+ * other place is done (closing a site does not sign it out), so the card asks the student to tap once it is.
+ */
+@Composable
+private fun LmsSignedInElsewhereCard(lastSuccessAt: Instant?, onSignInHere: () -> Unit, modifier: Modifier = Modifier) {
+    EmptyState(
+        message = "다른 곳에서 LMS에 로그인한 것 같아요",
+        supporting = "그곳에서 다 썼다면 이 기기로 로그인을 눌러 주세요. 쓰는 중에 누르면 그곳의 로그인이 끊겨서, " +
+            "풀고 있던 시험이나 과제가 저장되지 않을 수 있어요. " +
+            (lastSuccessAt?.let { "저장된 목록은 ${LMS_DETAIL_TIME.format(it.atZone(SEOUL))}에 받은 거예요." } ?: "저장된 목록을 보여 드려요."),
+        actionLabel = "이 기기로 로그인",
+        onAction = onSignInHere,
+        actionTag = "lms_sign_in_here",
+        modifier = modifier.testTag("lms_signed_in_elsewhere"),
+    )
 }
 
 /** 캐시된 목록 위에 남는 갱신 실패 배너. 마지막 성공 시각을 함께 알려준다 (D-056), 공용 ErrorState (D-094(14)). */

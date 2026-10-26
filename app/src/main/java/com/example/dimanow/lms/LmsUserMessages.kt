@@ -17,6 +17,10 @@ internal object LmsUserMessages {
     const val ATTACHMENT_FAILED = "첨부파일을 받지 못했어요. 잠시 후 다시 시도해 주세요"
     const val ATTACHMENT_SAVE_FAILED = "첨부파일을 저장하지 못했어요. 저장 위치를 확인하고 다시 시도해 주세요"
     const val UNSAFE_PAGE_BLOCKED = "안전하지 않은 페이지라서 열지 않았어요"
+    /** D-135: the portal had answered 3045, so the sign-in elsewhere ended as this one went through. */
+    const val SIGNED_OUT_ELSEWHERE = "이 기기로 로그인해서 다른 곳의 LMS 로그인은 끊겼어요"
+    /** D-135: a refresh or an opened item while the app waits for 「이 기기로 로그인」. */
+    const val SIGNED_IN_ELSEWHERE_HINT = "다른 곳에서 LMS에 로그인한 것 같아요. 이 기기로 로그인을 누르면 다시 불러와요"
 }
 
 /**

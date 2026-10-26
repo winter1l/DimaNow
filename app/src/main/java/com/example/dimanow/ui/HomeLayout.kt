@@ -21,6 +21,7 @@ import androidx.compose.material.icons.filled.EventAvailable
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Luggage
+import androidx.compose.material.icons.filled.QrCode2
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Tune
@@ -69,6 +70,8 @@ internal enum class HomeShortcut(val key: String, val label: String, val icon: I
     TIMETABLE("timetable", "시간표", Icons.Default.Schedule),
     OUTING("outing", "외출·외박 신청", Icons.Default.Luggage),
     LIBRARY_CARD("library_card", "모바일 열람증", Icons.Default.Badge),
+    // D-132/D-133: PAYCO's 식권 home, whose 사용하기 shows the 예인관 식권 barcode
+    MEAL_TICKET("meal_ticket", "PAYCO 식권", Icons.Default.QrCode2),
     HEYOUNG("heyoung", "헤이영 출결", Icons.Default.EventAvailable),
     DORM("dorm", "기숙사", Icons.Default.Apartment),
     EQUIPMENT("equipment", "장비 대여", Icons.Default.Videocam),

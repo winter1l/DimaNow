@@ -8,9 +8,10 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
 /**
- * School sites the app reads with the student's own sign-in (D-107): the intranet (timetable, dorm points) and
- * DIMA C (equipment). Both are reached through the school portal, like LMS: the portal sends the student on to
- * the site's own SSO entry, which takes the portal's ticket through `sso.dima.ac.kr:8080`.
+ * School sites the app reads with the student's own sign-in (D-107): the intranet (timetable, dorm points),
+ * DIMA C (equipment) and the library (loans, D-131). All are reached through the school portal, like LMS: the
+ * portal sends the student on to the site's own SSO entry, which takes the portal's ticket through
+ * `sso.dima.ac.kr:8080`.
  */
 enum class SchoolService(
     val host: String,
@@ -41,6 +42,19 @@ enum class SchoolService(
         label = "DIMA C",
         portalEntry = "https://portal.dima.ac.kr/?r=https://udimac.dima.ac.kr/sso/index.jsp",
         hiddenReadSkipsPageScripts = true,
+    ),
+    /**
+     * The library (D-131): Livetek "Sponge", server-rendered ASP.NET with a session cookie. Observed 2026-10-25: its
+     * 로그인 link is the portal with `r=` the library's own `/sso/main.aspx`, the same pattern as the intranet, so
+     * the host waits on that page while it moves on. A library page that answers signed out (its login page or a
+     * page without the `대출중 N건` header) counts as needing the sign-in; `/Account/LogonDacl` is for external
+     * users and is never used.
+     */
+    LIBRARY(
+        host = "lib.dima.ac.kr",
+        label = "도서관",
+        portalEntry = "https://portal.dima.ac.kr/?r=https://lib.dima.ac.kr/sso/main.aspx",
+        selfForwardingSsoPath = "/sso/main.aspx",
     ),
 }
 
@@ -73,8 +87,9 @@ private const val INTRANET_PAGE_FOCUS_SCRIPT = """
 """
 
 /**
- * Where the school-service WebView may go (D-107): HTTPS on the portal and the two service hosts, plus the
- * portal's plain-HTTP ticket hop on `sso.dima.ac.kr:8080` under `/sso/` (as D-073 allows for LMS sign-in).
+ * Where the school-service WebView may go (D-107): HTTPS on the portal and every [SchoolService] host (the
+ * intranet, DIMA C and, since D-131, the library `lib.dima.ac.kr`), plus the portal's plain-HTTP ticket hop on
+ * `sso.dima.ac.kr:8080` under `/sso/` (as D-073 allows for LMS sign-in).
  */
 object SchoolUrlPolicy {
     const val PORTAL_HOST = "portal.dima.ac.kr"
@@ -131,6 +146,8 @@ class SchoolServiceRequest internal constructor(
     /** What is read or opened, for the sign-in screen: `시간표`, `상벌점`, `장비 대여 현황`, `외출·외박 신청`. */
     val purpose: String,
     internal val result: CompletableDeferred<SchoolServiceResult>,
+    /** False keeps the site's own menu and header (D-131(3): finding the grade page needs the intranet menu). */
+    val fitsPage: Boolean = true,
 ) {
     /** The page itself is shown instead of read. */
     val opensPage: Boolean get() = script == null
@@ -161,12 +178,18 @@ class SchoolServiceBridge {
      * nothing there. Returns [SchoolServiceResult.Cancelled] once the student closes it, or a failure when the
      * page could not be opened.
      */
-    suspend fun open(service: SchoolService, targetUrl: String, title: String): SchoolServiceResult =
-        start(service, targetUrl, null, title)
+    suspend fun open(service: SchoolService, targetUrl: String, title: String, fitsPage: Boolean = true): SchoolServiceResult =
+        start(service, targetUrl, null, title, fitsPage)
 
-    private suspend fun start(service: SchoolService, targetUrl: String, script: String?, purpose: String): SchoolServiceResult {
+    private suspend fun start(
+        service: SchoolService,
+        targetUrl: String,
+        script: String?,
+        purpose: String,
+        fitsPage: Boolean = true,
+    ): SchoolServiceResult {
         require(SchoolUrlPolicy.isAllowedHttps(targetUrl) && java.net.URI.create(targetUrl).host == service.host)
-        val pending = SchoolServiceRequest(service, targetUrl, script, purpose, CompletableDeferred())
+        val pending = SchoolServiceRequest(service, targetUrl, script, purpose, CompletableDeferred(), fitsPage)
         if (!mutableRequest.compareAndSet(null, pending)) {
             return SchoolServiceResult.Failure("다른 학교 정보를 불러오는 중이에요. 잠시 후 다시 시도해 주세요.")
         }

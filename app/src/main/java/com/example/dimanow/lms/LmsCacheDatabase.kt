@@ -93,6 +93,9 @@ interface LmsCacheDao {
     @Query("UPDATE lms_items SET isRead = 1, changeState = 'NONE' WHERE `key` = :key")
     suspend fun markItemOpened(key: String)
 
+    @Query("UPDATE lms_items SET completionState = :completionState WHERE `key` = :key")
+    suspend fun setCompletionState(key: String, completionState: String)
+
     @Query("SELECT * FROM lms_details WHERE itemKey = :key")
     suspend fun getDetail(key: String): LmsDetailEntity?
 
@@ -154,12 +157,22 @@ interface LmsCacheDao {
         insertAttachments(attachments)
     }
 
+    /**
+     * Stores a freshly loaded detail and marks its item opened in one step. [completionAfterView] is what that view
+     * counts for on the LMS ([completionRecordedByView], D-132): a 자료/공지 becomes complete with the same write, so
+     * the list never shows it opened but still to do; null leaves the item's completion alone.
+     */
     @Transaction
-    suspend fun replaceDetailAndOpen(detail: LmsDetailEntity, attachments: List<LmsAttachmentEntity>) {
+    suspend fun replaceDetailAndOpen(
+        detail: LmsDetailEntity,
+        attachments: List<LmsAttachmentEntity>,
+        completionAfterView: String?,
+    ) {
         insertDetail(detail)
         clearAttachments(detail.itemKey)
         insertAttachments(attachments)
         markItemOpened(detail.itemKey)
+        completionAfterView?.let { setCompletionState(detail.itemKey, it) }
     }
 
     @Transaction

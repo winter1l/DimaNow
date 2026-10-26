@@ -11,6 +11,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.addJsonObject
@@ -109,7 +110,8 @@ private fun parseDormDate(value: String): LocalDate? {
 /**
  * What the school screens read (D-107). The last 상벌점 read is also kept in the app's no-backup storage, so the
  * card shows it after a restart until the student refreshes it (D-108); equipment availability lives in memory
- * only. Deleting the school account or all app data removes both.
+ * only. The last 도서관 read lives in memory, and only its titles and due dates are also saved beside the 상벌점,
+ * for the morning digest (D-131). Deleting the school account or all app data removes all of them.
  */
 object SchoolReadCache {
     /** The last 상벌점 read and when it was made; [summary] is null when the list was empty. */
@@ -118,16 +120,23 @@ object SchoolReadCache {
     // The load, writes and the delete run in launch order on one IO lane, so 계정 삭제 cannot be undone by a write or
     // the startup load that was still pending (a cleared generation is never loaded or written again).
     @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
-    private val io = CoroutineScope(SupervisorJob() + Dispatchers.IO.limitedParallelism(1))
+    private val lane = Dispatchers.IO.limitedParallelism(1)
+    private val io = CoroutineScope(SupervisorJob() + lane)
     @Volatile private var generation = 0
     private var dormPointsFile: File? = null
+    // Set at startup and read by the morning digest's worker thread.
+    @Volatile private var libraryDueFile: File? = null
 
     private val mutableDormPoints = MutableStateFlow<DormPointsRead?>(null)
     val dormPoints: StateFlow<DormPointsRead?> = mutableDormPoints.asStateFlow()
 
-    /** Keeps 상벌점 reads in [file] and shows the saved one as soon as it is loaded. */
+    /**
+     * Keeps 상벌점 reads in [file] and shows the saved one as soon as it is loaded. The library's due list (D-131) is
+     * kept beside it in the same no-backup folder, so this one call at startup places both.
+     */
     fun persistDormPointsIn(file: File) {
         dormPointsFile = file
+        libraryDueFile = File(file.parentFile, LIBRARY_DUE_FILE_NAME)
         val loading = generation
         io.launch {
             val saved = runCatching { decodeDormPointsRead(file.readText()) }.getOrNull() ?: return@launch
@@ -141,15 +150,35 @@ object SchoolReadCache {
         val writing = generation
         io.launch {
             if (generation != writing) return@launch
-            runCatching {
-                file.parentFile?.mkdirs()
-                val partial = File(file.parentFile, file.name + ".tmp")
-                partial.writeText(encodeDormPointsRead(read))
-                if (!partial.renameTo(file)) {
-                    file.writeText(partial.readText())
-                    partial.delete()
-                }
-            }
+            runCatching { writeReplacing(file, encodeDormPointsRead(read)) }
+        }
+    }
+
+    /** The last 도서관 read (D-131): the loans and opening hours and when they were read. */
+    data class LibraryRead(val status: LibraryStatus, val readAt: Instant)
+
+    private val mutableLibrary = MutableStateFlow<LibraryRead?>(null)
+    val library: StateFlow<LibraryRead?> = mutableLibrary.asStateFlow()
+
+    /** Shows [read] and saves its titles and due dates, nothing else, for the morning digest. */
+    fun setLibrary(read: LibraryRead) {
+        mutableLibrary.value = read
+        val file = libraryDueFile ?: return
+        val writing = generation
+        io.launch {
+            if (generation != writing) return@launch
+            runCatching { writeReplacing(file, encodeLibraryDue(read.status.dueList(read.readAt))) }
+        }
+    }
+
+    /**
+     * The saved due list for the morning digest (D-131), or null when none was saved. It is read on the IO lane, so
+     * a write or a delete started before it has finished first.
+     */
+    suspend fun savedLibraryDue(): LibraryDueList? {
+        val file = libraryDueFile ?: return null
+        return withContext(lane) {
+            runCatching { if (file.exists()) decodeLibraryDue(file.readText()) else null }.getOrNull()
         }
     }
 
@@ -186,7 +215,20 @@ object SchoolReadCache {
         mutableEquipmentCatalog.value = null
         mutableEquipmentAvailability.value = emptyMap()
         mutableEquipmentCatalogFailure.value = null
+        mutableLibrary.value = null
         dormPointsFile?.let { file -> io.launch { file.delete() } }
+        libraryDueFile?.let { file -> io.launch { file.delete() } }
+    }
+
+    /** Writes [text] to a temporary file beside [file] and moves it into place, so a crash never leaves half a file. */
+    private fun writeReplacing(file: File, text: String) {
+        file.parentFile?.mkdirs()
+        val partial = File(file.parentFile, file.name + ".tmp")
+        partial.writeText(text)
+        if (!partial.renameTo(file)) {
+            file.writeText(partial.readText())
+            partial.delete()
+        }
     }
 }
 

@@ -1,5 +1,7 @@
 package com.example.dimanow.ui
 
+import androidx.compose.material3.Button
+import androidx.compose.material.icons.filled.QrCode2
 import androidx.compose.material.icons.filled.Forum
 import android.content.ClipData
 import android.content.ClipboardManager
@@ -211,7 +213,7 @@ internal fun DormScreen(onBack: () -> Unit, onOpenMeals: () -> Unit, modifier: M
                     DimaSegmentedList {
                         SegmentedListItem(
                             onClick = ::requestOuting,
-                            shapes = ListItemDefaults.segmentedShapes(index = 0, count = 1),
+                            shapes = ListItemDefaults.segmentedShapes(index = 0, count = 2),
                             modifier = Modifier.testTag("dorm_outing_open").semantics { onClick(label = "열기") { requestOuting(); true } },
                             leadingContent = { DimaIconBadge(Icons.Default.Luggage) },
                             trailingContent = {
@@ -226,6 +228,22 @@ internal fun DormScreen(onBack: () -> Unit, onOpenMeals: () -> Unit, modifier: M
                             colors = dimaSegmentedListColors(),
                         ) {
                             Text("외출·외박 신청")
+                        }
+                        // D-132: the meal ticket, as the PAYCO 식권 shortcut on the student's home screen opens it.
+                        SegmentedListItem(
+                            onClick = { openPaycoMealTicket(context) },
+                            shapes = ListItemDefaults.segmentedShapes(index = 1, count = 2),
+                            modifier = Modifier.testTag("dorm_meal_ticket").semantics {
+                                onClick(label = "PAYCO 열기") { openPaycoMealTicket(context); true }
+                            },
+                            leadingContent = { DimaIconBadge(Icons.Default.QrCode2) },
+                            trailingContent = {
+                                Icon(Icons.AutoMirrored.Filled.OpenInNew, contentDescription = null, modifier = Modifier.size(20.dp))
+                            },
+                            supportingContent = { Text("사용하기를 누르면 식권 바코드가 나와요.") },
+                            colors = dimaSegmentedListColors(),
+                        ) {
+                            Text("PAYCO 식권")
                         }
                     }
                 }
@@ -360,6 +378,12 @@ internal fun DormScreen(onBack: () -> Unit, onOpenMeals: () -> Unit, modifier: M
                 item(key = "meal") {
                     GuideCard {
                         DormGuide.mealTickets.forEach { GuideLine(text = it) }
+                        // D-132/D-133: PAYCO's 식권 home; its 사용하기 shows the barcode.
+                        Button(
+                            shapes = ButtonDefaults.shapes(),
+                            onClick = { openPaycoMealTicket(context) },
+                            modifier = Modifier.heightIn(min = 48.dp).testTag("dorm_meal_ticket_home"),
+                        ) { Text("PAYCO 식권 열기") }
                         FilledTonalButton(
                             shapes = ButtonDefaults.shapes(),
                             onClick = onOpenMeals,

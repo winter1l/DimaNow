@@ -49,6 +49,15 @@ private class RejectedLmsAttachmentException(
 interface LmsSource {
     val snapshot: Flow<LmsSnapshot>
     suspend fun refresh(force: Boolean = false): LmsRefreshResult
+
+    /**
+     * Opens [item]'s official page in the signed-in LMS session and returns its native detail. Every tap on a 수업
+     * row comes here (할 일 and 과목별, phones and the two-pane). A fresh load of a 자료/공지 also asks for each of its
+     * files without keeping them, since a download is what the LMS counts (D-133), and records it complete once they
+     * all came back ([completionAfterOpening]); without files the view alone does (D-132). A cached or failed load
+     * records nothing, as the LMS may not have seen it. The next sync that reads the LMS's lists settles it
+     * ([reconcileLmsCompletion]).
+     */
     suspend fun loadDetail(item: LmsItem): LmsDetailLoadResult
     suspend fun downloadAttachment(
         attachment: LmsAttachment,
@@ -80,6 +89,14 @@ interface LmsHttpTransport {
         maxBytes: Long,
         onProgress: (Long, Long?) -> Unit,
     ): LmsAttachmentDownloadResult
+
+    /**
+     * D-133: asks for [request]'s file as the site's download link does and stops after its first bytes, so the LMS
+     * counts the download while nothing is saved and almost nothing is transferred. A transport that cannot do this
+     * reports a failure, which leaves the item as it was.
+     */
+    suspend fun touchAttachment(request: LmsAttachmentRequest): LmsAttachmentTouchResult =
+        LmsAttachmentTouchResult.Failure("첨부파일을 요청할 수 없어요")
 }
 
 class UrlConnectionLmsTransport(
@@ -257,6 +274,41 @@ class UrlConnectionLmsTransport(
         }
     }
 
+    override suspend fun touchAttachment(request: LmsAttachmentRequest): LmsAttachmentTouchResult =
+        withContext(Dispatchers.IO) {
+            try {
+                require(!request.refererUrl.isNullOrBlank()) { "첨부파일 요청 정보가 부족해요" }
+                requireOfficialAttachmentUrl(request.url)
+                requireOfficialAttachmentUrl(requireNotNull(request.refererUrl))
+                val requestUrl = if (request.method == LmsHttpMethod.GET) {
+                    appendQueryFields(request.url, request.fields)
+                } else {
+                    request.url
+                }
+                val (response, prefix) = execute(
+                    initialUrl = requestUrl,
+                    maxBytes = Long.MAX_VALUE,
+                    refererUrl = request.refererUrl,
+                    requireAttachmentHost = true,
+                    requestMethod = request.method,
+                    formFields = request.fields,
+                ) { connection, total ->
+                    // Only enough to tell a file from an error or sign-in page; the rest is never read.
+                    connection.inputStream.use { it.readPrefix(TOUCH_SNIFF_BYTES) } to total
+                }
+                markupRejection(response, prefix)?.let { throw it }
+                LmsAttachmentTouchResult.Accepted
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Throwable) {
+                if (error is RejectedLmsAttachmentException && error.sessionExpired) {
+                    LmsAttachmentTouchResult.SessionExpired
+                } else {
+                    LmsAttachmentTouchResult.Failure(error.message ?: "첨부파일을 요청하지 못했어요")
+                }
+            }
+        }
+
     private suspend fun downloadToFile(
         url: String,
         destination: File,
@@ -295,25 +347,7 @@ class UrlConnectionLmsTransport(
                 }
                 ByteArray(0) to total
             }.first
-            val prefix = part.readPrefix(HTML_SNIFF_BYTES)
-            val prefixText = normalizeMarkupPrefix(prefix)
-            val scriptRedirectsToLogin = isLoginRedirectScript(prefixText)
-            val declaredMarkup = response.contentType
-                ?.substringBefore(';')
-                ?.trim()
-                ?.lowercase() in setOf("text/html", "application/xhtml+xml")
-            val isHtml = declaredMarkup ||
-                HTML_DOCUMENT_START_REGEX.containsMatchIn(prefixText) ||
-                scriptRedirectsToLogin
-            if (isHtml) {
-                val sessionExpired = isOfficialLmsCredentialPage(response.finalUrl) ||
-                    scriptRedirectsToLogin ||
-                    containsLoginForm(prefixText)
-                throw RejectedLmsAttachmentException(
-                    sessionExpired = sessionExpired,
-                    message = if (sessionExpired) "로그인이 만료됐어요" else "첨부파일 대신 오류 페이지가 왔어요",
-                )
-            }
+            markupRejection(response, part.inputStream().use { it.readPrefix(HTML_SNIFF_BYTES) })?.let { throw it }
             check(part.renameTo(destination)) { "첨부파일을 저장하지 못했어요" }
             response
         } catch (error: Throwable) {
@@ -421,15 +455,36 @@ class UrlConnectionLmsTransport(
         ?.value
         ?.firstOrNull()
 
-    private fun File.readPrefix(limit: Int): ByteArray = inputStream().use { input ->
+    /** An error or sign-in page where a file should be, as the exception to throw; null when it is a file. */
+    private fun markupRejection(response: LmsHttpResponse, prefix: ByteArray): RejectedLmsAttachmentException? {
+        val prefixText = normalizeMarkupPrefix(prefix)
+        val scriptRedirectsToLogin = isLoginRedirectScript(prefixText)
+        val declaredMarkup = response.contentType
+            ?.substringBefore(';')
+            ?.trim()
+            ?.lowercase() in setOf("text/html", "application/xhtml+xml")
+        val isHtml = declaredMarkup ||
+            HTML_DOCUMENT_START_REGEX.containsMatchIn(prefixText) ||
+            scriptRedirectsToLogin
+        if (!isHtml) return null
+        val sessionExpired = isOfficialLmsCredentialPage(response.finalUrl) ||
+            scriptRedirectsToLogin ||
+            containsLoginForm(prefixText)
+        return RejectedLmsAttachmentException(
+            sessionExpired = sessionExpired,
+            message = if (sessionExpired) "로그인이 만료됐어요" else "첨부파일 대신 오류 페이지가 왔어요",
+        )
+    }
+
+    private fun java.io.InputStream.readPrefix(limit: Int): ByteArray {
         val output = java.io.ByteArrayOutputStream()
         val buffer = ByteArray(minOf(DEFAULT_BUFFER_SIZE, limit))
         while (output.size() < limit) {
-            val read = input.read(buffer, 0, minOf(buffer.size, limit - output.size()))
+            val read = read(buffer, 0, minOf(buffer.size, limit - output.size()))
             if (read < 0) break
             output.write(buffer, 0, read)
         }
-        output.toByteArray()
+        return output.toByteArray()
     }
 
     private fun normalizeMarkupPrefix(bytes: ByteArray): String {
@@ -494,6 +549,7 @@ class UrlConnectionLmsTransport(
     private companion object {
         const val MAX_REDIRECTS = 5
         const val HTML_SNIFF_BYTES = 64 * 1024
+        const val TOUCH_SNIFF_BYTES = 8 * 1024
         const val LMS_HOST = "lms.dima.ac.kr"
         const val LMS_DASHBOARD_REFERER =
             "https://lms.dima.ac.kr/lms/myLecture/doListView.dunet?mnid=201008840728"
@@ -615,12 +671,13 @@ class RoomLmsSource(
                         item.copy(
                             courseName = coursesById[item.courseId]?.name ?: item.courseName,
                             isRead = previousItem?.isRead ?: item.isRead,
-                            completionState = statusByKey[itemKey(item)]
-                                ?: if (hasCompleteStatusSet) {
-                                    LmsCompletionState.NOT_TRACKED
-                                } else {
-                                    previousItem?.completionState ?: LmsCompletionState.UNKNOWN
-                                },
+                            // D-132: the LMS's lists replace a 자료/공지 marked complete on view, when they answer.
+                            completionState = reconcileLmsCompletion(
+                                kind = item.kind,
+                                reported = statusByKey[itemKey(item)],
+                                readBothLists = hasCompleteStatusSet,
+                                stored = previousItem?.completionState,
+                            ),
                             changeState = when {
                                 previousItem == null && prior?.lastSuccessAtMillis != null -> LmsChangeState.NEW
                                 previousItem == null -> LmsChangeState.NONE
@@ -714,6 +771,15 @@ class RoomLmsSource(
             val oldSignature = cachedAttachments.map { attachmentSignature(it) }.sorted()
             val newSignature = loadedDetail.attachments.map { attachmentSignature(it) }.sorted()
             val attachmentsChanged = cachedEntity != null && oldSignature != newSignature
+            // D-132: the official view page has just loaded in the signed-in session (directly or through the hidden
+            // session engine), the same page a click on the site opens. D-133: a 자료/공지 with files counts on the LMS
+            // only once they are downloaded, so each is asked for here, right after its page, and the item is
+            // recorded complete with this write when they all came back as files.
+            val touched = if (completionRecordedByView(item.kind) == null) {
+                emptyList()
+            } else {
+                loadedDetail.attachments.mapNotNull { it.request }.map { transport.touchAttachment(it) }
+            }
             dao.replaceDetailAndOpen(
                 LmsDetailEntity(
                     itemKey = key,
@@ -738,6 +804,11 @@ class RoomLmsSource(
                         refererUrl = attachment.request?.refererUrl,
                     )
                 },
+                completionAfterView = completionAfterOpening(
+                    item.kind,
+                    asked = touched.size,
+                    accepted = touched.count { it == LmsAttachmentTouchResult.Accepted },
+                )?.name,
             )
             LmsDetailLoadResult.Fresh(loadedDetail, attachmentsChanged)
         } catch (_: OfficialCoursePageRequiredException) {

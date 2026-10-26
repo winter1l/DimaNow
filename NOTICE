@@ -6,7 +6,8 @@ or operated by Dong-Ah Institute of Media and Arts. University names and links
 are used only to identify public information sources. No university trademark
 license is granted.
 
-Campus boundary data includes information derived from OpenStreetMap data.
+Campus boundary data and the campus map (app/src/main/assets/campus_map.json) include information derived from
+OpenStreetMap data.
 © OpenStreetMap contributors. OpenStreetMap data is available under the Open
 Database License: https://www.openstreetmap.org/copyright
 

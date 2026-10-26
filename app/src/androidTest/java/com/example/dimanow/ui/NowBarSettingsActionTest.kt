@@ -1,5 +1,6 @@
 package com.example.dimanow.ui
 
+import androidx.compose.ui.test.hasTestTag
 import android.os.SystemClock
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
@@ -78,6 +79,8 @@ class NowBarSettingsActionTest {
     private fun openNowBarSetupGuide() {
         // D-110: Settings opens from 전체.
         composeRule.onNodeWithTag("nav_ALL").performClick()
+        // 전체 grew (D-131): on a landscape tablet 설정 starts below the fold.
+        composeRule.onNodeWithTag("all_list").performScrollToNode(hasTestTag("all_settings"))
         composeRule.onNodeWithTag("all_settings").performClick()
         // Settings is a lazy list: scroll the list until each row is composed, then tap it.
         composeRule.onNodeWithTag("settings_list").performScrollToNode(hasText("고급 및 진단"))

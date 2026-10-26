@@ -25,6 +25,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
@@ -65,6 +67,8 @@ internal fun LmsDetailScreen(
     onBack: () -> Unit,
     onMessage: (String) -> Unit,
     modifier: Modifier = Modifier,
+    /** D-131 (Q-025): shown in the detail pane beside the list on a wide window; its bar closes the pane with an X. */
+    inPane: Boolean = false,
 ) {
     val detail = presented.detail
     val context = LocalContext.current
@@ -114,6 +118,8 @@ internal fun LmsDetailScreen(
         onBack = onBack,
         modifier = modifier,
         titleMaxLines = 2,
+        backDescription = if (inPane) "내용 닫기" else "뒤로",
+        navigationIcon = if (inPane) Icons.Default.Close else Icons.AutoMirrored.Filled.ArrowBack,
     ) {
         if (presented.attachmentsChanged) {
             Surface(

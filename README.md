@@ -175,6 +175,7 @@ CSV는 정확히 같은 물리 운행 행의 중복, 잘못된 요일·구역·�
 - 식단 발견: [DIMA 공식 홈페이지](https://www.dima.ac.kr/?p=1), 학생식당 공식 공개 Instagram embed, 사용자가 명시적으로 제출한 기숙사 주간 식단표
 - 학교 공지: [DIMA 공식 공지사항](https://www.dima.ac.kr/?p=111)
 - 위치 경계: 사용자 승인 GeoJSON과 © OpenStreetMap contributors
+- 캠퍼스 지도: OpenStreetMap 추출(`app/src/main/assets/campus_map.json`, © OpenStreetMap contributors, ODbL 1.0)
 
 앱 소스는 [Apache License 2.0](LICENSE)으로 공개합니다. 학교와 Instagram의 원문·이미지는 각 권리자에게 있으며 이 저장소의 소프트웨어 라이선스가 적용되지 않습니다. 위치 데이터 attribution과 제3자 구성요소는 [NOTICE](NOTICE)를 확인하세요.
 

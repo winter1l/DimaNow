@@ -35,7 +35,9 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material.icons.filled.QrCode2
 import androidx.compose.material3.Icon
+import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -270,6 +272,11 @@ fun MealScreen(
             refreshLabel = "식단 새로고침",
             listTag = "meal_list",
             pageIndex = venue.ordinal,
+            floatingActionButton = if (venue == MealVenue.DORMITORY) {
+                { MealTicketFab(onClick = { openPaycoMealTicket(context) }) }
+            } else {
+                null
+            },
             // 식당 전환과 요일 선택은 스크롤해도 항상 닿을 수 있도록 헤더에 고정한다 (D-057)
             subHeader = {
                 // D-103: 식당 전환은 M3 연결형 버튼 그룹이다
@@ -502,6 +509,20 @@ private fun MealDayHeading(date: LocalDate, today: LocalDate, trailing: String?)
             )
         }
     }
+}
+
+/**
+ * D-133: PAYCO's 식권 home from the 기숙사 식단, the screen's one FAB, so it stays in reach while the list jumps to the
+ * current meal; its 사용하기 shows the 식권 barcode. 식단 신고 stays at the end of the list.
+ */
+@Composable
+private fun MealTicketFab(onClick: () -> Unit) {
+    ExtendedFloatingActionButton(
+        onClick = onClick,
+        icon = { Icon(Icons.Default.QrCode2, contentDescription = null) },
+        text = { Text("PAYCO 식권") },
+        modifier = Modifier.testTag("dorm_meal_ticket_shortcut"),
+    )
 }
 
 /** 본관 학생식당의 선택한 하루. */

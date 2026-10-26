@@ -1,5 +1,9 @@
 package com.example.dimanow.ui
 
+import kotlinx.coroutines.launch
+import androidx.compose.runtime.remember
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -49,6 +53,8 @@ internal fun HomeAcademicAgendaCard(
     today: LocalDate,
     modifier: Modifier = Modifier,
     tag: String = "dashboard_academic",
+    /** D-131(3): opens the signed-in intranet while a 성적 열람 period runs; null hides the button. */
+    onOpenGrades: (() -> Unit)? = null,
 ) {
     HomeContainerCard(modifier = modifier.testTag(tag)) {
         HomeCardHeader(icon = Icons.Default.Event, title = "학사 일정", showChevron = false)
@@ -69,6 +75,13 @@ internal fun HomeAcademicAgendaCard(
                         Text(event.name, style = MaterialTheme.typography.bodyLarge)
                         Text(dates, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
+                    if (onOpenGrades != null && running && isGradeViewing(event)) {
+                        TextButton(
+                            shapes = ButtonDefaults.shapes(),
+                            onClick = onOpenGrades,
+                            modifier = Modifier.testTag("academic_open_grades"),
+                        ) { Text("성적 보기") }
+                    }
                     Surface(
                         shape = DimaShapes.Badge,
                         color = if (running) MaterialTheme.colorScheme.tertiaryContainer else DimaTheme.colors.cardInner,
@@ -85,3 +98,35 @@ internal fun HomeAcademicAgendaCard(
         }
     }
 }
+
+/** A 학사 일정 row for viewing grades (`성적 열람`, `계절학기 성적 열람 및 성적 정정`…), D-131(3). */
+internal fun isGradeViewing(event: ServiceCalendar.AcademicEvent): Boolean = "성적" in event.name && "열람" in event.name
+
+/** The intranet's own front page, where its menu leads to the grades (the grade page's URL is not yet known). */
+internal const val INTRANET_HOME_URL = "https://intranet.dima.ac.kr/default.aspx"
+
+/**
+ * D-131(3): opens the signed-in intranet with its menu kept, for the 성적 열람 period; without the school bridge
+ * (previews) it falls back to the browser.
+ */
+@Composable
+internal fun rememberGradesOpener(): () -> Unit {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val bridge = com.example.dimanow.school.LocalSchoolServiceBridge.current
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
+    return remember(bridge, context) {
+        {
+            if (bridge == null) {
+                openUrl(context, INTRANET_HOME_URL)
+            } else {
+                scope.launch {
+                    val result = bridge.open(com.example.dimanow.school.SchoolService.INTRANET, INTRANET_HOME_URL, "성적 보기", fitsPage = false)
+                    if (result is com.example.dimanow.school.SchoolServiceResult.Failure) {
+                        android.widget.Toast.makeText(context, result.message, android.widget.Toast.LENGTH_SHORT).show()
+                    }
+                }
+            }
+        }
+    }
+}
+

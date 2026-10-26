@@ -9,6 +9,8 @@ import androidx.work.WorkerParameters
 import com.example.dimanow.DimaNowApplication
 import com.example.dimanow.lms.LmsSnapshot
 import com.example.dimanow.lms.kindLabel
+import com.example.dimanow.school.LibraryDueList
+import com.example.dimanow.school.SchoolReadCache
 import com.example.dimanow.time.MinuteTicker
 import com.example.dimanow.ui.todayHomeTasks
 import java.time.LocalTime
@@ -18,8 +20,9 @@ import kotlinx.coroutines.flow.first
 
 /**
  * The morning deadline notification (D-125(1), D-126(3)): one notification at 08:30 for everything due today,
- * such as `오늘 마감 과제 2개, 퀴즈 1개`. LMS needs the student's sign-in, so it reads the list last loaded in the
- * Courses tab and says when that was.
+ * such as `오늘 마감 과제 2개, 퀴즈 1개`, and since D-131 the library books due back today (`오늘 마감 과제 2개,
+ * 반납 1권`). LMS and the library need the student's sign-in, so it reads the lists last loaded in the Courses tab
+ * and on the 도서관 page (no account access in the background, D-074) and says when they were read.
  */
 object DeadlineDigestScheduler {
     internal const val WORK_NAME = "deadline-digest-0830"
@@ -41,24 +44,39 @@ class DeadlineDigestWorker(context: Context, parameters: WorkerParameters) : Cor
         val today = now.toLocalDate()
         if (preferences.deadlineDigestLastDay.first() == today.toEpochDay()) return Result.success()
         preferences.setDeadlineDigestLastDay(today.toEpochDay())
-        deadlineDigest(app.lmsSource.snapshot.first(), now)?.let { DeadlineDigestNotifier.post(applicationContext, it) }
+        val library = SchoolReadCache.savedLibraryDue()
+        deadlineDigest(app.lmsSource.snapshot.first(), now, library)?.let { DeadlineDigestNotifier.post(applicationContext, it) }
         return Result.success()
     }
 }
 
-internal data class DeadlineDigest(val title: String, val lines: List<String>, val basis: String?)
+/** [page] is the app page the notification opens: 수업, or 도서관 when only books are due. */
+internal data class DeadlineDigest(val title: String, val lines: List<String>, val basis: String?, val page: String = "COURSES")
 
-/** Today's open deadlines as one notification, or null when nothing is due today. */
-internal fun deadlineDigest(snapshot: LmsSnapshot, now: ZonedDateTime): DeadlineDigest? {
+/**
+ * Today's open deadlines and the library books due back today (D-131) as one notification, or null when nothing is
+ * due today. [library] is the due list saved by the last 도서관 read.
+ */
+internal fun deadlineDigest(snapshot: LmsSnapshot, now: ZonedDateTime, library: LibraryDueList? = null): DeadlineDigest? {
     val items = todayHomeTasks(snapshot.items, now.toInstant())
-    if (items.isEmpty()) return null
-    val counts = items.groupBy { kindLabel(it.kind) }.map { (label, group) -> "$label ${group.size}개" }
+    val returns = library?.books.orEmpty().filter { it.dueOn == now.toLocalDate() }
+    if (items.isEmpty() && returns.isEmpty()) return null
+    val counts = items.groupBy { kindLabel(it.kind) }.map { (label, group) -> "$label ${group.size}개" } +
+        listOfNotNull(returns.size.takeIf { it > 0 }?.let { "반납 ${it}권" })
+    val lmsReadAt = snapshot.lastSuccessAt?.takeIf { items.isNotEmpty() }?.atZone(MinuteTicker.CAMPUS_ZONE)?.format(DIGEST_BASIS)
+    val libraryReadAt = library?.readAt?.takeIf { returns.isNotEmpty() }?.atZone(MinuteTicker.CAMPUS_ZONE)?.format(DIGEST_BASIS)
     return DeadlineDigest(
-        title = "오늘 마감 ${counts.joinToString(", ")}",
+        title = if (items.isEmpty()) "오늘 반납 ${returns.size}권" else "오늘 마감 ${counts.joinToString(", ")}",
         lines = items.map { item ->
             "${requireNotNull(item.dueAt).atZone(MinuteTicker.CAMPUS_ZONE).format(DIGEST_TIME)} ${item.courseName} · ${item.title}"
+        } + returns.map { "반납 · ${it.title}" },
+        basis = when {
+            lmsReadAt != null && libraryReadAt != null -> "과제 $lmsReadAt · 도서관 $libraryReadAt 기준"
+            lmsReadAt != null -> "${lmsReadAt}에 불러온 목록 기준"
+            libraryReadAt != null -> "${libraryReadAt}에 불러온 도서관 목록 기준"
+            else -> null
         },
-        basis = snapshot.lastSuccessAt?.let { "${it.atZone(MinuteTicker.CAMPUS_ZONE).format(DIGEST_BASIS)}에 불러온 목록 기준" },
+        page = if (items.isEmpty()) "LIBRARY" else "COURSES",
     )
 }
 
@@ -72,14 +90,14 @@ internal object DeadlineDigestNotifier {
     @SuppressLint("MissingPermission") // CampusNotifications.canPost checks it
     fun post(context: Context, digest: DeadlineDigest) {
         if (!CampusNotifications.canPost(context)) return
-        CampusNotifications.channel(context, CHANNEL_ID, "과제 마감", "오늘 마감인 과제와 퀴즈를 아침에 한 번 모아 알려 줘요.")
+        CampusNotifications.channel(context, CHANNEL_ID, "과제 마감", "오늘 마감인 과제와 퀴즈, 반납일인 도서관 책을 아침에 한 번 모아 알려 줘요.")
         val style = NotificationCompat.InboxStyle().also { inbox -> digest.lines.forEach(inbox::addLine) }
         digest.basis?.let(style::setSummaryText)
         val notification = CampusNotifications.builder(context, CHANNEL_ID)
             .setContentTitle(digest.title)
             .setContentText(digest.lines.first())
             .setStyle(style)
-            .setContentIntent(CampusNotifications.openPage(context, 6211, "COURSES"))
+            .setContentIntent(CampusNotifications.openPage(context, 6211, digest.page))
             .build()
         NotificationManagerCompat.from(context).notify(NOTIFICATION_ID, notification)
     }

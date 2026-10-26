@@ -36,6 +36,26 @@ internal fun openApp(context: Context, packageName: String) {
     }
 }
 
+/**
+ * D-132: 예인관 meals are paid with PAYCO 식권. `payco://open/mealticket` opens PAYCO's 기업복지 home, the screen of the
+ * 식권 shortcut the student keeps on the home screen, where the 기숙사 식권 card's `사용하기` shows the 식권 barcode
+ * (observed 2026-10-26 on the student's phone). D-133: that barcode screen is not exported and no PAYCO link reaches
+ * it, and `payco://open/offline/main` is PAYCO's ordinary payment barcode, not the 식권, so the home is as close as
+ * an app can go. Without PAYCO the Play Store page opens.
+ */
+internal fun openPaycoMealTicket(context: Context) {
+    try {
+        context.startActivity(
+            Intent(Intent.ACTION_VIEW, Uri.parse(PAYCO_MEAL_TICKET_URI)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+        )
+    } catch (_: android.content.ActivityNotFoundException) {
+        openApp(context, PAYCO_APP_PACKAGE)
+    }
+}
+
+internal const val PAYCO_APP_PACKAGE = "com.nhnent.payapp"
+internal const val PAYCO_MEAL_TICKET_URI = "payco://open/mealticket"
+
 /** The library app (학술정보원) whose 모바일 열람증 opens the library gate; its card screen cannot be opened directly. */
 internal const val LIBRARY_APP_PACKAGE = "kr.ac.dima.lib"
 

@@ -15,7 +15,6 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
@@ -62,9 +61,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import com.example.dimanow.theme.DimaTheme
 import com.example.dimanow.theme.dimaScreenTitleStyle
@@ -258,6 +259,8 @@ internal fun ScreenScaffold(
         contentWindowInsets = WindowInsets.navigationBars.only(WindowInsetsSides.Bottom),
     ) { innerPadding ->
         val bottomClearance = if (floatingActionButton != null) FAB_CLEARANCE else 0.dp
+        val bottomPadding = innerPadding.calculateBottomPadding() + 24.dp + bottomClearance
+        val contentPadding = remember(bottomPadding) { ReadingColumnPadding(top = 12.dp, bottom = bottomPadding) }
         PullToRefresh(
             onRefresh = onRefresh,
             refreshing = refreshing,
@@ -265,12 +268,12 @@ internal fun ScreenScaffold(
                 .fillMaxSize()
                 .padding(top = innerPadding.calculateTopPadding()),
         ) {
-          BoxWithConstraints(Modifier.fillMaxSize()) {
-            val sideGutter = maxOf(16.dp, (maxWidth - DimaLayout.readingWidth) / 2)
             LazyColumn(
                 state = listState,
                 modifier = Modifier
                     .fillMaxSize()
+                    // D-131: the side gutters follow the list's own width, set in its measure pass.
+                    .readingColumnGutters(contentPadding)
                     // One entrance for the whole list, on first launch only: per-item entrances
                     // re-fire whenever scrolling composes an item again (D-058), and after a tab
                     // change the tab transition is the only motion (D-094(12)).
@@ -280,19 +283,50 @@ internal fun ScreenScaffold(
                         alpha = pageAlpha.value
                     }
                     .then(if (listTag != null) Modifier.testTag(listTag) else Modifier),
-                contentPadding = PaddingValues(
-                    start = sideGutter,
-                    end = sideGutter,
-                    top = 12.dp,
-                    bottom = innerPadding.calculateBottomPadding() + 24.dp + bottomClearance,
-                ),
+                contentPadding = contentPadding,
                 verticalArrangement = Arrangement.spacedBy(itemSpacing),
                 content = content,
             )
-          }
         }
     }
 }
+
+/**
+ * The content padding of [ScreenScaffold]'s list (D-104 centred reading column; D-131, Q-032 (g)).
+ *
+ * The side gutters keep the list's content in the [DimaLayout.readingWidth] column, centred on wider windows, with
+ * at least [MIN_SIDE_GUTTER] on narrow ones. They depend on the list's own width, which a `BoxWithConstraints` used to
+ * supply by subcomposing the whole list during layout. Now [readingColumnGutters] sits on the list and writes [gutter]
+ * from the list's constraints just before passing them on, and the list reads its padding only while it measures
+ * (after that write, in the same pass), so the layout is the one the `BoxWithConstraints` gave, with no subcomposition.
+ * [gutter] is a plain field on purpose: it is derived from the constraints of the very pass that reads it, so no
+ * state read or extra remeasure is needed. The top and bottom padding are fixed for one instance.
+ */
+private class ReadingColumnPadding(private val top: Dp, private val bottom: Dp) : PaddingValues {
+    var gutter: Dp = MIN_SIDE_GUTTER
+
+    override fun calculateLeftPadding(layoutDirection: LayoutDirection): Dp = gutter
+    override fun calculateTopPadding(): Dp = top
+    override fun calculateRightPadding(layoutDirection: LayoutDirection): Dp = gutter
+    override fun calculateBottomPadding(): Dp = bottom
+}
+
+/**
+ * Sets [padding]'s gutters from the list's width and measures the list unchanged (D-131). It must be on the list
+ * itself, after its size modifier, so the width it sees is the width the list is measured with.
+ */
+private fun Modifier.readingColumnGutters(padding: ReadingColumnPadding): Modifier = layout { measurable, constraints ->
+    padding.gutter = if (constraints.hasBoundedWidth) {
+        maxOf(MIN_SIDE_GUTTER, (constraints.maxWidth.toDp() - DimaLayout.readingWidth) / 2)
+    } else {
+        MIN_SIDE_GUTTER
+    }
+    val placeable = measurable.measure(constraints)
+    layout(placeable.width, placeable.height) { placeable.place(0, 0) }
+}
+
+/** The list's side margin on windows narrower than the reading column plus two margins (D-104). */
+private val MIN_SIDE_GUTTER = 16.dp
 
 /** How far, as a share of the list width, a newly chosen mode's list starts to the side (D-129). */
 private const val PAGE_SHIFT = 0.18f

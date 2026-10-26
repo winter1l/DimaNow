@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Article
 import androidx.compose.material.icons.automirrored.filled.Assignment
@@ -54,12 +55,14 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.onClick
+import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.example.dimanow.theme.DimaTheme
 import com.example.dimanow.ui.DimaIconBadge
@@ -170,9 +173,9 @@ private fun <T> LmsFilterMenuChip(
  * and can jump between groups.
  */
 @Composable
-private fun LmsSectionHeader(title: String, count: Int?) {
+private fun LmsSectionHeader(title: String, count: Int?, modifier: Modifier = Modifier) {
     Row(
-        modifier = Modifier.padding(start = 4.dp, top = 12.dp).semantics(mergeDescendants = true) { heading() },
+        modifier = modifier.padding(start = 4.dp, top = 12.dp).semantics(mergeDescendants = true) { heading() },
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         Text(
@@ -206,16 +209,27 @@ private fun LmsFoldedSection(
     onOpenItem: (LmsItem) -> Unit,
     tag: String,
     completed: Boolean,
+    modifier: Modifier = Modifier,
     showCourseName: Boolean = true,
+    selected: (LmsItem) -> Boolean? = { null },
 ) {
-    Column {
+    Column(modifier) {
         LmsFoldHeader(title = title, count = items.size, completed = completed, expanded = expanded, onToggle = onToggle, tag = tag)
         AnimatedVisibility(
             visible = expanded,
             enter = expandVertically(DimaMotion.spatialDefault()) + fadeIn(DimaMotion.effectsDefault()),
             exit = shrinkVertically(DimaMotion.spatialDefault()) + fadeOut(DimaMotion.effectsFast()),
         ) {
-            LmsItemList(items, now, onOpenItem, showCourseName, completed, Modifier.padding(top = 8.dp), muted = true)
+            LmsItemList(
+                items,
+                now,
+                onOpenItem,
+                Modifier.padding(top = 8.dp),
+                showCourseName = showCourseName,
+                completed = completed,
+                muted = true,
+                selected = selected,
+            )
         }
     }
 }
@@ -269,6 +283,13 @@ internal fun LmsItemsScreen(
     now: Instant,
     modifier: Modifier = Modifier,
     loginErrorMessage: String? = null,
+    /**
+     * D-131 (Q-025): true while the list sits beside the detail pane on a wide window. Every row then says whether it
+     * is the one open there ([selection]); on phones the detail takes the whole screen and rows carry no such state.
+     */
+    selectable: Boolean = false,
+    /** D-131: the item open in the detail pane beside the list, marked as the selected row. */
+    selection: LmsItem? = null,
 ) {
     val filtered = filterLmsItems(snapshot.items, selectedCourse, selectedKind)
     val filterActive = selectedCourse != null || selectedKind != null
@@ -302,6 +323,8 @@ internal fun LmsItemsScreen(
         onRefresh = onRefresh,
         refreshing = syncing && !visibleEmpty,
         refreshLabel = "수업 새로고침",
+        // D-131: rows are items of their own, so each item sets the gap above it (LmsLazyRows).
+        itemSpacing = 0.dp,
         // 모드 전환과 필터는 목록을 아무리 내려도 항상 닿을 수 있어야 한다 (D-057).
         subHeader = {
             // D-103: 모드 전환은 M3 연결형 버튼 그룹이다. D-117: 하단 탭 '전체'와 겹치지 않게 '할 일'·'과목별'로 부른다
@@ -324,24 +347,34 @@ internal fun LmsItemsScreen(
             }
         },
     ) {
+        // D-131 (Q-032 (g)): every section row is its own lazy item, so only the rows on screen compose (a course with
+        // 80 notices used to compose all of them in one item). The list therefore has no item spacing of its own; each
+        // item carries the gap above it, as the group columns had: 12dp between blocks, 8dp under a heading and before
+        // a fold, the segmented gap between rows. Folded rows stay inside their fold, which opens as one block (D-118).
+        val rows = LmsLazyRows()
+        fun selectedOf(item: LmsItem): Boolean? = if (selectable) selection?.entryKey() == item.entryKey() else null
+
         // 캐시된 목록 위에서 갱신이 실패하면 스낵바가 사라진 뒤에도 상태를 알 수 있게 배너로 남긴다 (D-056)
         if (hasError && !visibleEmpty) {
-            item(key = "lms_refresh_error") {
+            val top = rows.gap(LMS_BLOCK_GAP)
+            item(key = rows.key("lms_refresh_error")) {
                 LmsRefreshErrorBanner(
                     message = loginErrorMessage ?: "수업 정보를 불러오지 못했어요",
                     lastSuccessAt = snapshot.lastSuccessAt,
                     onRetry = onRefresh,
+                    modifier = Modifier.padding(top = top),
                 )
             }
         } else if (!visibleEmpty) {
             // D-117: 목록이 언제 것인지 한 줄로 알린다
             snapshot.lastSuccessAt?.let { readAt ->
-                item(key = "lms_updated") {
+                val top = rows.gap(LMS_BLOCK_GAP)
+                item(key = rows.key("lms_updated")) {
                     Text(
                         lmsUpdatedLabel(readAt, now),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(horizontal = 4.dp).testTag("lms_updated"),
+                        modifier = Modifier.padding(top = top).padding(horizontal = 4.dp).testTag("lms_updated"),
                     )
                 }
             }
@@ -349,9 +382,11 @@ internal fun LmsItemsScreen(
 
         when {
             visibleEmpty && syncing -> {
-                item(key = "lms_loading") {
+                val top = rows.gap(LMS_BLOCK_GAP)
+                item(key = rows.key("lms_loading")) {
                     Column(
                         modifier = Modifier
+                            .padding(top = top)
                             .fillMaxWidth()
                             .padding(vertical = 20.dp),
                         horizontalAlignment = Alignment.CenterHorizontally,
@@ -363,18 +398,20 @@ internal fun LmsItemsScreen(
                 }
             }
             visibleEmpty && hasError -> {
-                item(key = "lms_error") {
+                val top = rows.gap(LMS_BLOCK_GAP)
+                item(key = rows.key("lms_error")) {
                     // 원문 오류(HTTP 코드 등)는 보이지 않고, 무슨 일인지와 다음 행동만 알린다 (D-094(14))
                     ErrorState(
                         message = "수업 정보를 불러오지 못했어요",
                         supporting = loginErrorMessage ?: "인터넷 연결을 확인하고 다시 시도해 주세요",
                         onRetry = onRefresh,
-                        modifier = Modifier.testTag("lms_error"),
+                        modifier = Modifier.padding(top = top).testTag("lms_error"),
                     )
                 }
             }
             visibleEmpty -> {
-                item(key = "lms_empty") {
+                val top = rows.gap(LMS_BLOCK_GAP)
+                item(key = rows.key("lms_empty")) {
                     val needsSignIn = sessionState != LmsSessionState.ACTIVE
                     val neverLoaded = snapshot.syncState == LmsSyncState.IDLE && snapshot.lastSuccessAt == null
                     EmptyState(
@@ -402,17 +439,18 @@ internal fun LmsItemsScreen(
                             filterActive -> ({ onCourseChange(null); onKindChange(null) })
                             else -> null
                         },
-                        modifier = Modifier.testTag("lms_empty"),
+                        modifier = Modifier.padding(top = top).testTag("lms_empty"),
                     )
                 }
             }
         }
         // Keep cached completed learning available below the status, even while refreshing or retrying.
         if (todayMode) {
-            // D-117: 다가오는 마감 → 새 소식 → 기한 지남, 섹션마다 카드 묶음 하나
+            // D-117: 다가오는 마감 → 새 소식 → 기한 지남, 섹션마다 머리글 아래 카드 묶음 하나
             agenda.groups.forEach { group ->
-                item(key = "agenda-${group.key}") {
-                    if (group.key == LmsAgendaGroupKey.COMPLETED) {
+                val top = rows.gap(LMS_BLOCK_GAP)
+                if (group.key == LmsAgendaGroupKey.COMPLETED) {
+                    item(key = rows.key("agenda-${group.key}"), contentType = LMS_FOLD) {
                         LmsFoldedSection(
                             title = group.title,
                             items = group.items,
@@ -422,60 +460,74 @@ internal fun LmsItemsScreen(
                             onOpenItem = onOpenItem,
                             tag = "lms_completed_toggle",
                             completed = true,
+                            selected = ::selectedOf,
+                            modifier = Modifier.padding(top = top),
                         )
-                    } else {
-                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            LmsSectionHeader(group.title, group.items.size)
-                            LmsItemList(group.items, now, onOpenItem)
-                        }
                     }
+                } else {
+                    item(key = rows.key("agenda-${group.key}"), contentType = LMS_HEADER) {
+                        LmsSectionHeader(group.title, group.items.size, Modifier.padding(top = top))
+                    }
+                    lmsRowItems(rows, "agenda-${group.key}", group.items, now, onOpenItem, showCourseName = true, selected = ::selectedOf)
                 }
             }
         } else {
             // 과목별 (D-118): 과목마다 남은 항목, 접힌 기한 지남, 접힌 완료한 학습 순서
             coursePlan.groups.forEach { group ->
-                item(key = "course-${group.courseId}") {
-                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        LmsSectionHeader(group.courseName, group.items.size.takeIf { it > 0 })
-                        if (group.items.isNotEmpty()) {
-                            LmsItemList(group.items, now, onOpenItem, showCourseName = false)
-                        } else {
-                            // Only folds left: say so plainly, as text that does not look like something to tap.
-                            Text(
-                                "남은 학습이 없어요",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.padding(horizontal = 4.dp).testTag("lms_course_empty_${group.courseId}"),
-                            )
-                        }
-                        if (group.overdue.isNotEmpty()) {
-                            val key = "course-${group.courseId}-overdue"
-                            LmsFoldedSection(
-                                title = "기한 지남",
-                                items = group.overdue,
-                                expanded = key in openSections,
-                                onToggle = { toggleSection(key) },
-                                now = now,
-                                onOpenItem = onOpenItem,
-                                tag = "lms_overdue_toggle_${group.courseId}",
-                                completed = false,
-                                showCourseName = false,
-                            )
-                        }
-                        if (group.completed.isNotEmpty()) {
-                            val key = "course-${group.courseId}-completed"
-                            LmsFoldedSection(
-                                title = "완료한 학습",
-                                items = group.completed,
-                                expanded = key in openSections,
-                                onToggle = { toggleSection(key) },
-                                now = now,
-                                onOpenItem = onOpenItem,
-                                tag = "lms_completed_toggle_${group.courseId}",
-                                completed = true,
-                                showCourseName = false,
-                            )
-                        }
+                val headerTop = rows.gap(LMS_BLOCK_GAP)
+                item(key = rows.key("course-${group.courseId}"), contentType = LMS_HEADER) {
+                    LmsSectionHeader(group.courseName, group.items.size.takeIf { it > 0 }, Modifier.padding(top = headerTop))
+                }
+                if (group.items.isNotEmpty()) {
+                    lmsRowItems(rows, "course-${group.courseId}", group.items, now, onOpenItem, showCourseName = false, selected = ::selectedOf)
+                } else {
+                    val top = rows.gap(LMS_GROUP_GAP)
+                    item(key = rows.key("course-${group.courseId}-empty")) {
+                        // Only folds left: say so plainly, as text that does not look like something to tap.
+                        Text(
+                            "남은 학습이 없어요",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(top = top).padding(horizontal = 4.dp).testTag("lms_course_empty_${group.courseId}"),
+                        )
+                    }
+                }
+                if (group.overdue.isNotEmpty()) {
+                    val key = "course-${group.courseId}-overdue"
+                    val top = rows.gap(LMS_GROUP_GAP)
+                    item(key = rows.key(key), contentType = LMS_FOLD) {
+                        LmsFoldedSection(
+                            title = "기한 지남",
+                            items = group.overdue,
+                            expanded = key in openSections,
+                            onToggle = { toggleSection(key) },
+                            now = now,
+                            onOpenItem = onOpenItem,
+                            tag = "lms_overdue_toggle_${group.courseId}",
+                            completed = false,
+                            showCourseName = false,
+                            selected = ::selectedOf,
+                            modifier = Modifier.padding(top = top),
+                        )
+                    }
+                }
+                if (group.completed.isNotEmpty()) {
+                    val key = "course-${group.courseId}-completed"
+                    val top = rows.gap(LMS_GROUP_GAP)
+                    item(key = rows.key(key), contentType = LMS_FOLD) {
+                        LmsFoldedSection(
+                            title = "완료한 학습",
+                            items = group.completed,
+                            expanded = key in openSections,
+                            onToggle = { toggleSection(key) },
+                            now = now,
+                            onOpenItem = onOpenItem,
+                            tag = "lms_completed_toggle_${group.courseId}",
+                            completed = true,
+                            showCourseName = false,
+                            selected = ::selectedOf,
+                            modifier = Modifier.padding(top = top),
+                        )
                     }
                 }
             }
@@ -501,31 +553,106 @@ private fun LmsRefreshErrorBanner(
     )
 }
 
-/** One section's rows as an M3 Expressive segmented list on the card tone, as the 전체 and 설정 pages are (D-117). */
+/**
+ * A fold's rows as an M3 Expressive segmented list on the card tone, as the 전체 and 설정 pages are (D-117). The open
+ * sections' rows are lazy items of their own ([lmsRowItems], D-131); a fold keeps its rows together so it opens as one
+ * block on the expressive spring (D-118).
+ */
 @Composable
 private fun LmsItemList(
     items: List<LmsItem>,
     now: Instant,
     onOpenItem: (LmsItem) -> Unit,
+    modifier: Modifier = Modifier,
     showCourseName: Boolean = true,
     completed: Boolean = false,
-    modifier: Modifier = Modifier,
     muted: Boolean = false,
+    selected: (LmsItem) -> Boolean? = { null },
 ) {
     DimaSegmentedList(modifier) {
         items.forEachIndexed { index, item ->
             key(item.kind, item.courseId, item.id) {
-                LmsItemRow(item, index, items.size, now, onOpenItem, showCourseName, completed, muted)
+                LmsItemRow(item, index, items.size, now, onOpenItem, showCourseName, completed, muted = muted, selected = selected(item))
             }
         }
     }
 }
 
 /**
+ * One open section's rows as lazy items of their own (D-131, Q-032 (g)), keyed by the LMS entry and shaped as one
+ * segmented list: the first row sits [LMS_GROUP_GAP] under its heading, the others [ListItemDefaults.SegmentedGap]
+ * apart, with the group's outer corners large and the inner ones small, as [DimaSegmentedList] lays them out.
+ */
+private fun LazyListScope.lmsRowItems(
+    rows: LmsLazyRows,
+    section: String,
+    items: List<LmsItem>,
+    now: Instant,
+    onOpenItem: (LmsItem) -> Unit,
+    showCourseName: Boolean,
+    selected: (LmsItem) -> Boolean?,
+) {
+    items.forEachIndexed { index, item ->
+        val top = rows.gap(if (index == 0) LMS_GROUP_GAP else ListItemDefaults.SegmentedGap)
+        item(key = rows.key("$section-row-${item.entryKey()}"), contentType = LMS_ROW) {
+            LmsItemRow(
+                item = item,
+                index = index,
+                count = items.size,
+                now = now,
+                onOpenItem = onOpenItem,
+                showCourseName = showCourseName,
+                completed = false,
+                selected = selected(item),
+                modifier = Modifier.padding(top = top),
+            )
+        }
+    }
+}
+
+/**
+ * Builds the 수업 list's lazy items (D-131): the gap above each item (none above the first, as the list's spacing had)
+ * and keys that stay unique even if the LMS ever listed one entry twice, since a repeated lazy key would crash the list.
+ */
+private class LmsLazyRows {
+    private var first = true
+    private val used = HashMap<String, Int>()
+
+    fun gap(space: Dp): Dp = if (first) {
+        first = false
+        0.dp
+    } else {
+        space
+    }
+
+    fun key(base: String): String {
+        val seen = (used[base] ?: 0) + 1
+        used[base] = seen
+        return if (seen == 1) base else "$base#$seen"
+    }
+}
+
+/** One LMS entry, as the cache keys it: an item keeps this through refreshes and detail loads. */
+private fun LmsItem.entryKey(): String = "$kind:$courseId:$id"
+
+/** Between blocks of the 수업 list (the list's item spacing before its rows became items, D-131). */
+private val LMS_BLOCK_GAP = 12.dp
+
+/** Under a section heading and before a fold, as the course group's column spaced them (D-118). */
+private val LMS_GROUP_GAP = 8.dp
+
+private const val LMS_HEADER = "lms_header"
+private const val LMS_ROW = "lms_row"
+private const val LMS_FOLD = "lms_fold"
+
+/**
  * One learning item (D-117): its kind as an icon, the title, `새 항목 · 과제 · 과목` and the exact deadline below,
  * and on the right how much time is left. Only a deadline within about two days takes the warning color, and its
  * words say so too. Completion is the section's job, so rows no longer repeat 미완료. D-118: the title is title-medium
  * on the text color and the course name Bold on the text color, while the kind stays quieter.
+ *
+ * D-131: beside the detail pane on a wide window, [selected] says whether this row is the one open there; the open
+ * row takes the secondary container tone and is announced as selected. Null on phones (no selection state).
  */
 @Composable
 private fun LmsItemRow(
@@ -536,7 +663,9 @@ private fun LmsItemRow(
     onOpenItem: (LmsItem) -> Unit,
     showCourseName: Boolean,
     completed: Boolean,
+    modifier: Modifier = Modifier,
     muted: Boolean = false,
+    selected: Boolean? = null,
 ) {
     val due = if (completed) null else item.dueAt?.let { lmsDueLabel(it, now) }
     val changeColor = MaterialTheme.colorScheme.primary
@@ -561,7 +690,10 @@ private fun LmsItemRow(
     SegmentedListItem(
         onClick = { onOpenItem(item) },
         shapes = ListItemDefaults.segmentedShapes(index = index, count = count),
-        modifier = Modifier.semantics { onClick(label = "열기") { onOpenItem(item); true } },
+        modifier = modifier.semantics {
+            onClick(label = "열기") { onOpenItem(item); true }
+            selected?.let { this.selected = it }
+        },
         leadingContent = { DimaIconBadge(lmsKindIcon(item.kind), muted = muted) },
         trailingContent = due?.let { label ->
             {
@@ -586,7 +718,11 @@ private fun LmsItemRow(
                 }
             }
         },
-        colors = if (muted) ListItemDefaults.segmentedColors(containerColor = DimaTheme.colors.cardMuted) else dimaSegmentedListColors(),
+        colors = when {
+            selected == true -> ListItemDefaults.segmentedColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)
+            muted -> ListItemDefaults.segmentedColors(containerColor = DimaTheme.colors.cardMuted)
+            else -> dimaSegmentedListColors()
+        },
     ) {
         Text(
             item.title,

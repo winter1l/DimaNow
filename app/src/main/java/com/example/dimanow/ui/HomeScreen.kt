@@ -111,6 +111,8 @@ internal fun DashboardScreen(
     onEditHome: (() -> Unit)? = null,
     /** D-128(3): the student opened 학교 공지 from Home (offers keyword alerts once). */
     onNoticeOpened: () -> Unit = {},
+    /** D-132: opens 캠퍼스 지도 on a class's room; null hides the location button (previews and tests). */
+    onShowRoom: ((String) -> Unit)? = null,
 ) {
     val context = LocalContext.current
     val nowTime = now.toLocalTime()
@@ -243,11 +245,22 @@ internal fun DashboardScreen(
                                         // 비워 둔 강의실·교수는 빈 구분자 없이 건너뛴다
                                         listOf(course.room, course.professor).filter(String::isNotBlank).joinToString(" · ")
                                             .takeIf(String::isNotEmpty)?.let { place ->
-                                                Text(
-                                                    text = place,
-                                                    style = MaterialTheme.typography.bodyMedium,
-                                                    color = MaterialTheme.colorScheme.onPrimaryContainer,
-                                                )
+                                                // D-132: the location button after the room line opens 캠퍼스 지도 on the room
+                                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                                    Text(
+                                                        text = place,
+                                                        style = MaterialTheme.typography.bodyMedium,
+                                                        color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                                        modifier = Modifier.weight(1f, fill = false),
+                                                    )
+                                                    if (onShowRoom != null && course.room.isNotBlank()) {
+                                                        RoomLocationButton(
+                                                            onClick = { onShowRoom(course.room) },
+                                                            tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                                                            modifier = Modifier.testTag("home_hero_room_map"),
+                                                        )
+                                                    }
+                                                }
                                             }
                                         // 셔틀 출발 정보는 바로 아래 셔틀 카드가 캡슐로 보여주므로
                                         // 히어로 카드에서 같은 내용을 문장으로 반복하지 않는다 (D-056)
@@ -357,7 +370,7 @@ internal fun DashboardScreen(
             // D-107: 지금 진행 중이거나 2주 안에 시작하는 학사 일정(시험 주간 포함). 없으면 카드도 없다
             val academicAgenda = serviceCalendar.academicAgenda(now.toLocalDate()).take(4)
             if (academicAgenda.isNotEmpty()) item(key = "academic") {
-                HomeAcademicAgendaCard(academicAgenda, now.toLocalDate())
+                HomeAcademicAgendaCard(academicAgenda, now.toLocalDate(), onOpenGrades = rememberGradesOpener())
             }
         }
 

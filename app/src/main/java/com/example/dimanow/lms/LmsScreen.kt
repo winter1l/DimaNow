@@ -2,18 +2,37 @@ package com.example.dimanow.lms
 
 import androidx.compose.material.icons.filled.PlayCircle
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Article
 import androidx.compose.material.icons.filled.Devices
 import androidx.compose.material3.ButtonDefaults
 import android.webkit.WebView
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.consumeWindowInsets
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.only
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.width
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.VerticalDivider
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalWindowInfo
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
+import com.example.dimanow.ui.EmptyState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -60,6 +79,11 @@ fun LmsRoute(
     now: Instant,
     modifier: Modifier = Modifier,
     onFullScreenChange: (Boolean) -> Unit = {},
+    /**
+     * D-131 (Q-025): list and detail side by side on a wide window ([lmsTwoPaneWindow]); an opened item shows in the
+     * detail pane beside the list instead of taking the whole screen, and Back clears the selection.
+     */
+    twoPane: Boolean = lmsTwoPaneWindow(),
     authenticationContent: @Composable (LmsLoginRequest, (List<LmsCourse>) -> Unit) -> Unit = { request, authenticated ->
         LmsAuthenticationWebView(request, { loginBridge.complete(request, it) }, authenticated, loginBridge::cancel, silent = request.credentials.automaticLogin)
     },
@@ -88,8 +112,10 @@ fun LmsRoute(
     val silentLogin = loginRequest?.credentials?.automaticLogin == true
     BackHandler(enabled = loginRequest != null && !silentLogin) { loginBridge.cancel() }
     BackHandler(enabled = renderedPageRequest != null) { renderedPageBridge?.cancel() }
-    // 로그인 WebView·글 상세가 떠 있는 동안 상위 셸이 하단 내비를 숨기게 알린다 (D-044)
-    val fullScreen = (loginRequest != null && !silentLogin) || renderedPageRequest != null || selectedDetail != null || officialCoursePage != null
+    // 로그인 WebView·글 상세가 떠 있는 동안 상위 셸이 하단 내비를 숨기게 알린다 (D-044).
+    // D-131: on a wide window the detail is a pane beside the list, so the rail stays.
+    val fullScreen = (loginRequest != null && !silentLogin) || renderedPageRequest != null ||
+        (selectedDetail != null && !twoPane) || officialCoursePage != null
     LaunchedEffect(fullScreen) { onFullScreenChange(fullScreen) }
     DisposableEffect(Unit) {
         onDispose { onFullScreenChange(false) }
@@ -185,6 +211,60 @@ fun LmsRoute(
         )
     }
 
+    fun openItem(item: LmsItem) {
+        scope.launch {
+            suspend fun present(result: LmsDetailLoadResult): Boolean = when (result) {
+                is LmsDetailLoadResult.Fresh -> {
+                    selectedDetail = LmsPresentedDetail(
+                        result.detail,
+                        cached = false,
+                        attachmentsChanged = result.attachmentsChanged,
+                    )
+                    true
+                }
+                is LmsDetailLoadResult.Cached -> {
+                    selectedDetail = LmsPresentedDetail(result.detail, cached = true, attachmentsChanged = false)
+                    true
+                }
+                LmsDetailLoadResult.OfficialCoursePage -> {
+                    val course = snapshot.courses.firstOrNull { it.id == item.courseId }
+                    if (course == null) {
+                        snackbar.showSnackbar("공식 LMS에서 이 수업을 찾지 못했어요")
+                        false
+                    } else if (item.kind == LmsItemKind.CONTENT) {
+                        pendingOfficialCoursePage = LmsOfficialCoursePage(item, course)
+                        true
+                    } else {
+                        officialCoursePage = LmsOfficialCoursePage(item, course)
+                        true
+                    }
+                }
+                is LmsDetailLoadResult.Failure -> {
+                    snackbar.showSnackbar(result.message)
+                    false
+                }
+                LmsDetailLoadResult.SessionExpired -> false
+            }
+            val first = source.loadDetail(item)
+            if (!present(first) && first == LmsDetailLoadResult.SessionExpired) {
+                autoLoginCoordinator.markExpired()
+                if (autoLoginCoordinator.ensureActive(force = true) == LmsSessionState.ACTIVE) {
+                    val retried = source.loadDetail(item)
+                    if (!present(retried)) {
+                        snackbar.showSnackbar(
+                            if (retried == LmsDetailLoadResult.SessionExpired) LmsUserMessages.SIGN_IN_REQUIRED else LmsUserMessages.DETAIL_FAILED,
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    val needsSignIn = sessionState != LmsSessionState.ACTIVE && (
+        credentialState == CredentialState.EMPTY || credentialState == CredentialState.INVALIDATED ||
+            sessionState == LmsSessionState.CREDENTIALS_NEED_REVIEW
+        )
+
     Box(modifier = modifier.fillMaxSize()) {
         when {
             loginRequest != null && !silentLogin -> Unit // The authentication host below owns manual progress.
@@ -212,7 +292,7 @@ fun LmsRoute(
                 onMessage = { scope.launch { snackbar.showSnackbar(it) } },
                 modifier = Modifier.fillMaxSize(),
             )
-            selectedDetail != null -> LmsDetailScreen(
+            selectedDetail != null && !twoPane -> LmsDetailScreen(
                 presented = requireNotNull(selectedDetail),
                 source = source,
                 sessionController = sessionController,
@@ -221,10 +301,8 @@ fun LmsRoute(
                 onMessage = { scope.launch { snackbar.showSnackbar(it) } },
                 modifier = Modifier.fillMaxSize(),
             )
-            sessionState != LmsSessionState.ACTIVE && (
-                credentialState == CredentialState.EMPTY || credentialState == CredentialState.INVALIDATED ||
-                    sessionState == LmsSessionState.CREDENTIALS_NEED_REVIEW
-                ) -> LmsLoginScreen(
+            // An item already open beside the list stays there; otherwise signing in comes first, as on phones.
+            needsSignIn && !(twoPane && selectedDetail != null) -> LmsLoginScreen(
                     needsReview = sessionState == LmsSessionState.CREDENTIALS_NEED_REVIEW || credentialState == CredentialState.INVALIDATED,
                     onLogin = { username, password, automatic ->
                         scope.launch {
@@ -240,72 +318,55 @@ fun LmsRoute(
                     },
                     modifier = Modifier.fillMaxSize(),
                 )
-            else -> LmsItemsScreen(
-                snapshot = if (silentLogin) snapshot.copy(syncState = LmsSyncState.SYNCING, errorMessage = null) else snapshot,
-                sessionState = sessionState,
-                loginErrorMessage = loginError.takeUnless { sessionState == LmsSessionState.ACTIVE || silentLogin },
-                selectedCourse = selectedCourse,
-                selectedKind = selectedKind,
-                onCourseChange = { selectedCourse = it },
-                onKindChange = { selectedKind = it },
-                onRefresh = {
-                    scope.launch {
-                        // 셔틀·식단처럼 직접 당긴 새로고침은 바뀐 것이 없을 때도 알린다
-                        val before = source.snapshot.first().items
-                        if (loginAndRefresh(force = true)) snackbar.showSnackbar(lmsRefreshMessage(before, source.snapshot.first().items))
-                    }
-                },
-                onOpenItem = { item ->
-                    scope.launch {
-                        suspend fun present(result: LmsDetailLoadResult): Boolean = when (result) {
-                            is LmsDetailLoadResult.Fresh -> {
-                                selectedDetail = LmsPresentedDetail(
-                                    result.detail,
-                                    cached = false,
-                                    attachmentsChanged = result.attachmentsChanged,
-                                )
-                                true
-                            }
-                            is LmsDetailLoadResult.Cached -> {
-                                selectedDetail = LmsPresentedDetail(result.detail, cached = true, attachmentsChanged = false)
-                                true
-                            }
-                            LmsDetailLoadResult.OfficialCoursePage -> {
-                                val course = snapshot.courses.firstOrNull { it.id == item.courseId }
-                                if (course == null) {
-                                    snackbar.showSnackbar("공식 LMS에서 이 수업을 찾지 못했어요")
-                                    false
-                                } else if (item.kind == LmsItemKind.CONTENT) {
-                                    pendingOfficialCoursePage = LmsOfficialCoursePage(item, course)
-                                    true
-                                } else {
-                                    officialCoursePage = LmsOfficialCoursePage(item, course)
-                                    true
-                                }
-                            }
-                            is LmsDetailLoadResult.Failure -> {
-                                snackbar.showSnackbar(result.message)
-                                false
-                            }
-                            LmsDetailLoadResult.SessionExpired -> false
+            // D-131 (Q-025): the list keeps one place in the composition whether or not a detail pane sits beside it,
+            // so opening an item on a wide window keeps the list's mode, folds and scroll position.
+            else -> Row(Modifier.fillMaxSize()) {
+                LmsItemsScreen(
+                    snapshot = if (silentLogin) snapshot.copy(syncState = LmsSyncState.SYNCING, errorMessage = null) else snapshot,
+                    sessionState = sessionState,
+                    loginErrorMessage = loginError.takeUnless { sessionState == LmsSessionState.ACTIVE || silentLogin },
+                    selectedCourse = selectedCourse,
+                    selectedKind = selectedKind,
+                    onCourseChange = { selectedCourse = it },
+                    onKindChange = { selectedKind = it },
+                    onRefresh = {
+                        scope.launch {
+                            // 셔틀·식단처럼 직접 당긴 새로고침은 바뀐 것이 없을 때도 알린다
+                            val before = source.snapshot.first().items
+                            if (loginAndRefresh(force = true)) snackbar.showSnackbar(lmsRefreshMessage(before, source.snapshot.first().items))
                         }
-                        val first = source.loadDetail(item)
-                        if (!present(first) && first == LmsDetailLoadResult.SessionExpired) {
-                            autoLoginCoordinator.markExpired()
-                            if (autoLoginCoordinator.ensureActive(force = true) == LmsSessionState.ACTIVE) {
-                                val retried = source.loadDetail(item)
-                                if (!present(retried)) {
-                                    snackbar.showSnackbar(
-                                        if (retried == LmsDetailLoadResult.SessionExpired) LmsUserMessages.SIGN_IN_REQUIRED else LmsUserMessages.DETAIL_FAILED,
-                                    )
-                                }
-                            }
-                        }
-                    }
-                },
-                now = now,
-                modifier = Modifier.fillMaxSize(),
-            )
+                    },
+                    onOpenItem = ::openItem,
+                    now = now,
+                    selectable = twoPane,
+                    selection = selectedDetail?.detail?.item?.takeIf { twoPane },
+                    modifier = if (twoPane) {
+                        Modifier
+                            .width(LMS_LIST_PANE_WIDTH)
+                            .fillMaxHeight()
+                            // The list pane does not reach the window's end edge; the detail pane takes that inset.
+                            .consumeWindowInsets(WindowInsets.safeDrawing.only(WindowInsetsSides.End))
+                            .testTag("lms_list_pane")
+                    } else {
+                        Modifier.fillMaxSize()
+                    },
+                )
+                if (twoPane) {
+                    VerticalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                    LmsDetailPane(
+                        presented = selectedDetail,
+                        source = source,
+                        sessionController = sessionController,
+                        autoLoginCoordinator = autoLoginCoordinator,
+                        onClose = { selectedDetail = null },
+                        onMessage = { scope.launch { snackbar.showSnackbar(it) } },
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxHeight()
+                            .consumeWindowInsets(WindowInsets.safeDrawing.only(WindowInsetsSides.Start)),
+                    )
+                }
+            }
         }
         loginRequest?.let { request ->
             key(request) {
@@ -342,6 +403,74 @@ fun LmsRoute(
         }
     }
 }
+
+/**
+ * The detail pane beside the 수업 list on a wide window (D-131, Q-025): the opened item's native detail, or a quiet
+ * line saying where it will show while nothing is open. Each item gets its own detail state, so moving to another
+ * item starts at its top with no download of the previous one still shown.
+ */
+@Composable
+private fun LmsDetailPane(
+    presented: LmsPresentedDetail?,
+    source: LmsSource,
+    sessionController: LmsSessionController,
+    autoLoginCoordinator: LmsAutoLoginCoordinator,
+    onClose: () -> Unit,
+    onMessage: (String) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Box(modifier.testTag("lms_detail_pane")) {
+        if (presented == null) {
+            EmptyState(
+                message = "학습을 고르면 여기에 내용이 보여요",
+                icon = Icons.AutoMirrored.Filled.Article,
+                contained = false,
+                modifier = Modifier
+                    .align(Alignment.Center)
+                    .statusBarsPadding()
+                    .padding(24.dp)
+                    .testTag("lms_detail_placeholder"),
+            )
+        } else {
+            val item = presented.detail.item
+            key(item.kind, item.courseId, item.id) {
+                LmsDetailScreen(
+                    presented = presented,
+                    source = source,
+                    sessionController = sessionController,
+                    autoLoginCoordinator = autoLoginCoordinator,
+                    onBack = onClose,
+                    onMessage = onMessage,
+                    inPane = true,
+                    modifier = Modifier.fillMaxSize(),
+                )
+            }
+        }
+    }
+}
+
+/**
+ * D-131 (Q-025): whether the window is wide enough for the 수업 list and an item's detail side by side. It reads the
+ * window width as the shell's rail choice does (D-104), and uses the M3 expanded width class ([lmsUsesTwoPane]).
+ */
+@Composable
+internal fun lmsTwoPaneWindow(): Boolean {
+    val windowWidth = with(LocalDensity.current) { LocalWindowInfo.current.containerSize.width.toDp() }
+    return lmsUsesTwoPane(windowWidth)
+}
+
+/**
+ * Pure choice of the list-detail layout (D-131): from the M3 expanded width, 840dp. Between the rail's 600dp
+ * (D-104) and 840dp the rail already takes part of the width, and the detail beside a phone-wide list would be
+ * narrower than a phone.
+ */
+internal fun lmsUsesTwoPane(windowWidth: Dp): Boolean = windowWidth >= LMS_TWO_PANE_MIN_WIDTH
+
+/** The M3 expanded window width class, where list-detail layouts show both panes (D-131). */
+internal val LMS_TWO_PANE_MIN_WIDTH = 840.dp
+
+/** The list pane's width beside the detail (D-131): the M3 list-detail default, about a phone's width. */
+private val LMS_LIST_PANE_WIDTH = 360.dp
 
 internal val SEOUL = ZoneId.of("Asia/Seoul")
 internal val LMS_DETAIL_TIME = DateTimeFormatter.ofPattern("yyyy년 M월 d일 HH:mm")

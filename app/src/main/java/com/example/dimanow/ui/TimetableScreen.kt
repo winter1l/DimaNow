@@ -106,6 +106,8 @@ internal fun TimetableScreen(
     onAddCourseRequestHandled: () -> Unit = {},
     /** D-110: the timetable opens from 전체 or Home as a page with a Back action. */
     onBack: (() -> Unit)? = null,
+    /** D-132: opens 캠퍼스 지도 on a course's room; null hides the location buttons. */
+    onShowRoom: ((String) -> Unit)? = null,
 ) {
     val scope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
@@ -378,6 +380,7 @@ internal fun TimetableScreen(
                         onDelete = { pendingDelete = course },
                         onChangeOnce = { changingOnce = course },
                         nextOccurrence = nextCourseOccurrence(course, today, schedule.termStart, schedule.termEnd, schedule.noClassDates),
+                        onShowRoom = onShowRoom,
                     )
                 }
             }
@@ -386,7 +389,7 @@ internal fun TimetableScreen(
         // D-129: the 학사 일정 that shape the term (registration, exams, 성적 열람…) sit with the timetable too,
         // from today to the end of the term, in the Home card's form.
         if (termAgenda.isNotEmpty()) item(key = "academic_agenda") {
-            HomeAcademicAgendaCard(termAgenda, today, Modifier.padding(top = 8.dp), tag = "timetable_academic")
+            HomeAcademicAgendaCard(termAgenda, today, Modifier.padding(top = 8.dp), tag = "timetable_academic", onOpenGrades = rememberGradesOpener())
         }
 
         if (schedule.noClassDates.isNotEmpty()) item(key = "no_class_dates") {
@@ -562,6 +565,8 @@ fun CourseSummaryCard(
     modifier: Modifier = Modifier,
     onChangeOnce: (() -> Unit)? = null,
     nextOccurrence: LocalDate? = null,
+    /** D-132: opens 캠퍼스 지도 on the room; null hides the location button. */
+    onShowRoom: ((String) -> Unit)? = null,
 ) {
     var menuExpanded by remember { mutableStateOf(false) }
     ElevatedCard(
@@ -589,6 +594,7 @@ fun CourseSummaryCard(
                     Surface(
                         shape = DimaShapes.Badge,
                         color = MaterialTheme.colorScheme.primaryContainer,
+                        modifier = Modifier.align(Alignment.CenterVertically),
                     ) {
                         Text(
                             text = "${course.start.format(TIME)} – ${course.end.format(TIME)}",
@@ -597,11 +603,20 @@ fun CourseSummaryCard(
                             modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
                         )
                     }
-                    Text(
-                        text = course.room,
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.primary,
-                    )
+                    // D-132: the location button beside the room opens 캠퍼스 지도 on it
+                    Row(modifier = Modifier.align(Alignment.CenterVertically), verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = course.room,
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
+                        if (onShowRoom != null && course.room.isNotBlank()) {
+                            RoomLocationButton(
+                                onClick = { onShowRoom(course.room) },
+                                modifier = Modifier.testTag("course_room_map_${course.id}"),
+                            )
+                        }
+                    }
                 }
                 Text(
                     text = course.name,

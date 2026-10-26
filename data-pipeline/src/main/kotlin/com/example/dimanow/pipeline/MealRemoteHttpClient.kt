@@ -5,12 +5,16 @@ import java.net.InetAddress
 import java.net.URI
 import java.net.URL
 
-internal enum class MealRemoteEndpoint {
+/** [subject] names the data in failure messages ("식단 원격 응답 503"). */
+internal enum class MealRemoteEndpoint(val subject: String = "식단") {
     DIMA_DISCOVERY,
     INSTAGRAM_PROFILE,
     INSTAGRAM_POST,
     INSTAGRAM_EMBED,
     INSTAGRAM_IMAGE,
+
+    /** The public 학사일정 page, optionally for one year (`?p=78&nyear=2027`, D-131(2)). */
+    DIMA_ACADEMIC_CALENDAR("학사일정"),
 }
 
 internal data class DownloadedImage(val bytes: ByteArray, val mimeType: String)
@@ -53,8 +57,10 @@ internal object MealRemoteUrlPolicy {
                 host == "www.instagram.com" && EMBED_PATH.matches(path) && query == null
             MealRemoteEndpoint.INSTAGRAM_IMAGE ->
                 (host.endsWith(".cdninstagram.com") || host.endsWith(".fbcdn.net")) && path.startsWith('/') && path.length > 1
+            MealRemoteEndpoint.DIMA_ACADEMIC_CALENDAR ->
+                host in setOf("www.dima.ac.kr", "dima.ac.kr") && path in setOf("", "/") && query != null && CALENDAR_QUERY.matches(query)
         }
-        require(allowed) { "허용되지 않은 식단 원격 URL입니다." }
+        require(allowed) { "허용되지 않은 ${endpoint.subject} 원격 URL입니다." }
         return URI.create(buildString {
             append("https://")
             append(host)
@@ -101,6 +107,7 @@ internal object MealRemoteUrlPolicy {
 
     private val POST_PATH = Regex("/p/[A-Za-z0-9_-]{1,32}/")
     private val EMBED_PATH = Regex("/p/[A-Za-z0-9_-]{1,32}/embed/captioned/")
+    private val CALENDAR_QUERY = Regex("p=78(?:&nyear=20[0-9]{2})?")
 }
 
 internal class MealRemoteHttpClient(
@@ -146,10 +153,10 @@ internal class MealRemoteHttpClient(
                     current = uri.resolve(location).toASCIIString()
                     return@repeat
                 }
-                require(status == HttpURLConnection.HTTP_OK) { "식단 원격 응답 $status" }
-                require(connection.contentLengthLong in -1L..maxBytes.toLong()) { "식단 원격 응답이 너무 큽니다." }
+                require(status == HttpURLConnection.HTTP_OK) { "${endpoint.subject} 원격 응답 $status" }
+                require(connection.contentLengthLong in -1L..maxBytes.toLong()) { "${endpoint.subject} 원격 응답이 너무 큽니다." }
                 val bytes = connection.inputStream.use { it.readNBytes(maxBytes + 1) }
-                require(bytes.size <= maxBytes) { "식단 원격 응답이 너무 큽니다." }
+                require(bytes.size <= maxBytes) { "${endpoint.subject} 원격 응답이 너무 큽니다." }
                 val mimeType = connection.contentType?.substringBefore(';')?.trim()?.lowercase().orEmpty()
                 if (requireImage) require(mimeType.startsWith("image/")) { "식단 파일이 이미지가 아닙니다." }
                 return DownloadedImage(bytes, mimeType)

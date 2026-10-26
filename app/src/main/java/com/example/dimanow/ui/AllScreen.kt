@@ -1,5 +1,7 @@
 package com.example.dimanow.ui
 
+import androidx.compose.material.icons.filled.Map
+import androidx.compose.material.icons.filled.LocalLibrary
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -69,7 +71,7 @@ internal fun AllScreen(
                     icon = Icons.Default.Schedule,
                     title = "시간표",
                     supporting = "수업 알림과 Now Bar 안내에 쓰는 시간표예요.",
-                    index = 0, count = 3, tag = "all_timetable",
+                    index = 0, count = 5, tag = "all_timetable",
                     onClick = { onOpen(AppPage.TIMETABLE) },
                 )
                 AllRow(
@@ -77,15 +79,30 @@ internal fun AllScreen(
                     title = "기숙사",
                     supporting = dorm?.summary?.let { "상점 ${it.merit}점 · 벌점 ${it.demerit}점 · 외출·외박 신청" }
                         ?: "상벌점과 외출·외박 신청",
-                    index = 1, count = 3, tag = "all_dorm",
+                    index = 1, count = 5, tag = "all_dorm",
                     onClick = { onOpen(AppPage.DORM) },
                 )
                 AllRow(
                     icon = Icons.Default.Videocam,
                     title = "장비 대여",
                     supporting = "DIMA C 대여 현황과 신청",
-                    index = 2, count = 3, tag = "all_equipment",
+                    index = 2, count = 5, tag = "all_equipment",
                     onClick = { onOpen(AppPage.EQUIPMENT) },
+                )
+                // D-131: 도서관 (대출·반납일, 이용 시간) and the campus map
+                AllRow(
+                    icon = Icons.Default.LocalLibrary,
+                    title = "도서관",
+                    supporting = "대출·반납일과 이용 시간",
+                    index = 3, count = 5, tag = "all_library",
+                    onClick = { onOpen(AppPage.LIBRARY) },
+                )
+                AllRow(
+                    icon = Icons.Default.Map,
+                    title = "캠퍼스 지도",
+                    supporting = "셔틀·4402 정류장과 건물 위치",
+                    index = 4, count = 5, tag = "all_map",
+                    onClick = { onOpen(AppPage.MAP) },
                 )
             }
         }

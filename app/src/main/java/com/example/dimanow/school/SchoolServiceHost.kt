@@ -318,6 +318,7 @@ private fun schoolServiceWebView(
     }
 
     fun focusPage(view: WebView) {
+        if (!request.fitsPage) return
         service.pageFocusScript?.let { view.evaluateJavascript(it, null) }
     }
 

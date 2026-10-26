@@ -1,5 +1,7 @@
 package com.example.dimanow.ui
 
+import androidx.compose.material.icons.filled.Map
+import androidx.compose.material.icons.filled.LocalLibrary
 import android.provider.Settings
 import android.webkit.CookieManager
 import androidx.compose.animation.AnimatedContent
@@ -123,6 +125,9 @@ internal enum class AppPage(val title: String, val icon: ImageVector, val outlin
     TIMETABLE("시간표", Icons.Default.Schedule, Icons.Outlined.Schedule),
     DORM("기숙사", Icons.Default.Apartment),
     EQUIPMENT("장비 대여", Icons.Default.Videocam),
+    // D-131: phase 3 pages opened from 전체
+    LIBRARY("도서관", Icons.Default.LocalLibrary),
+    MAP("캠퍼스 지도", Icons.Default.Map),
     SETTINGS("설정", Icons.Default.Settings),
     ;
 
@@ -131,7 +136,7 @@ internal enum class AppPage(val title: String, val icon: ImageVector, val outlin
 
     /** Pages opened from 전체 (or Home's timetable buttons): no navigation bar, a Back action instead. */
     val isSubPage: Boolean
-        get() = this == TIMETABLE || this == DORM || this == EQUIPMENT || this == SETTINGS
+        get() = this == TIMETABLE || this == DORM || this == EQUIPMENT || this == LIBRARY || this == MAP || this == SETTINGS
 }
 
 /**
@@ -206,9 +211,29 @@ fun DimaNowApp(
     val initialUpdateState = remember { AppUpdateUiState(currentVersion = "") }
     val updateState by (appUpdateCoordinator?.state ?: remember { kotlinx.coroutines.flow.flowOf(initialUpdateState) })
         .collectAsStateWithLifecycle(initialValue = initialUpdateState)
+    // D-132: the room 캠퍼스 지도 opens on (a class's location button) and, when that was a page over 전체 such as
+    // 시간표, the page Back from the map returns to.
+    var mapFocusRoom by rememberSaveable { mutableStateOf<String?>(null) }
+    var mapReturn by rememberSaveable { mutableStateOf<AppPage?>(null) }
     fun open(target: AppPage) {
         if (target.isSubPage && !page.isSubPage) subPageReturn = page
+        if (target == AppPage.MAP) {
+            mapFocusRoom = null
+            mapReturn = null
+        }
         page = target
+    }
+    fun openMapFor(room: String) {
+        val from = page
+        open(AppPage.MAP)
+        mapFocusRoom = room
+        mapReturn = from.takeIf { it.isSubPage }
+    }
+    /** Where Back from [from] goes: the map back to the page that opened it, other pages as before. */
+    fun backTarget(from: AppPage): AppPage = when {
+        from == AppPage.MAP -> mapReturn ?: subPageReturn
+        from.isSubPage -> subPageReturn
+        else -> AppPage.DASHBOARD
     }
     // nonce가 붙은 이벤트라 같은 위젯을 연달아 탭해도 매번 다시 이동한다 (#7)
     LaunchedEffect(targetPageEvent) {
@@ -223,6 +248,8 @@ fun DimaNowApp(
             // D-128: app shortcuts and the keyword alert open these too
             "DORM" -> open(AppPage.DORM)
             "LIBRARY_CARD" -> openApp(appContext, LIBRARY_APP_PACKAGE)
+            // D-131(1): a morning digest with only books due opens the 도서관 page
+            "LIBRARY" -> open(AppPage.LIBRARY)
             // D-126(4): the outing reminder opens 외출·외박 신청 over the 기숙사 page
             "OUTING" -> {
                 open(AppPage.DORM)
@@ -243,6 +270,8 @@ fun DimaNowApp(
     // Settings is a transient destination: it opens from the top each time.
     LaunchedEffect(page) {
         if (page != AppPage.SETTINGS) tabStateHolder.removeState(AppPage.SETTINGS.name)
+        // D-132: so is 캠퍼스 지도, so each location button opens it on its own room.
+        if (page != AppPage.MAP) tabStateHolder.removeState(AppPage.MAP.name)
     }
 
     // D-121: M3 predictive back. While the gesture is held the page being left shrinks and rounds
@@ -259,7 +288,7 @@ fun DimaNowApp(
                     backPreview.snapTo(event.progress)
                 }
             }
-            page = if (page.isSubPage) subPageReturn else AppPage.DASHBOARD
+            page = backTarget(page)
             scope.launch { backPreview.animateTo(0f, DimaMotion.spatialDefault()) }
         } catch (cancelled: CancellationException) {
             scope.launch { backPreview.animateTo(0f, DimaMotion.spatialFast()) }
@@ -388,6 +417,7 @@ fun DimaNowApp(
                     lmsSessionController = lmsSessionController,
                     onNavigateToPage = ::open,
                     onAddCourse = { addCourseRequest = System.currentTimeMillis(); open(AppPage.TIMETABLE) },
+                    onShowRoom = ::openMapFor,
                     updateState = updateState,
                     appUpdateCoordinator = appUpdateCoordinator,
                     modifier = pageModifier,
@@ -399,6 +429,7 @@ fun DimaNowApp(
                     addCourseRequest = addCourseRequest,
                     onAddCourseRequestHandled = { addCourseRequest = 0L },
                     onBack = { page = subPageReturn },
+                    onShowRoom = ::openMapFor,
                 )
                 AppPage.ALL -> AllScreen(
                     onOpen = ::open,
@@ -450,6 +481,15 @@ fun DimaNowApp(
                     onBack = { page = subPageReturn },
                     modifier = pageModifier,
                 )
+                AppPage.LIBRARY -> LibraryScreen(
+                    onBack = { page = subPageReturn },
+                    modifier = pageModifier,
+                )
+                AppPage.MAP -> CampusMapScreen(
+                    onBack = { page = backTarget(AppPage.MAP) },
+                    modifier = pageModifier,
+                    focusRoom = mapFocusRoom,
+                )
                 }
                }
               }
@@ -488,6 +528,7 @@ private fun DashboardRoute(
     lmsSessionController: LmsSessionController,
     onNavigateToPage: (AppPage) -> Unit,
     onAddCourse: () -> Unit,
+    onShowRoom: (String) -> Unit,
     updateState: AppUpdateUiState,
     appUpdateCoordinator: AppUpdateCoordinator?,
     modifier: Modifier,
@@ -569,6 +610,7 @@ private fun DashboardRoute(
         notices = notices,
         onNavigateToPage = onNavigateToPage,
         onAddCourse = onAddCourse,
+        onShowRoom = onShowRoom,
         updateNotice = if (topCards.isEmpty()) null else {
             { Column(verticalArrangement = Arrangement.spacedBy(16.dp)) { topCards.forEach { card -> card() } } }
         },
@@ -587,6 +629,7 @@ private fun DashboardRoute(
                 HomeShortcut.OUTING -> outingLauncher.request()
                 HomeShortcut.LIBRARY_CARD -> openApp(homeContext, LIBRARY_APP_PACKAGE)
                 HomeShortcut.HEYOUNG -> openApp(homeContext, HEYOUNG_APP_PACKAGE)
+                HomeShortcut.MEAL_TICKET -> openPaycoMealTicket(homeContext)
             }
         },
         onEditHome = { editingHome = true },
@@ -632,6 +675,7 @@ private fun TimetableRoute(
     addCourseRequest: Long,
     onAddCourseRequestHandled: () -> Unit,
     onBack: () -> Unit,
+    onShowRoom: (String) -> Unit,
 ) {
     val schedule by repository.schedule.collectRetainedAsState(initialValue = remember { emptyTermSchedule() })
     TimetableScreen(
@@ -639,6 +683,7 @@ private fun TimetableRoute(
         addCourseRequest = addCourseRequest,
         onAddCourseRequestHandled = onAddCourseRequestHandled,
         onBack = onBack,
+        onShowRoom = onShowRoom,
     )
 }
 

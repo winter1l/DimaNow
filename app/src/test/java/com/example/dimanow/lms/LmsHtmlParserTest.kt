@@ -658,7 +658,7 @@ class LmsHtmlParserTest {
         assertEquals(listOf("2주자료.pdf"), detail.attachments.map { it.fileName })
         assertEquals(
             "https://lms.dima.ac.kr/lms/class/boardItem/doDownloadFile.dunet?" +
-                "boarditem_attach_file_no=30379&board_no=6&boarditem_no=32258&learning_design_yn=N&time_flag=",
+                "boarditem_attach_file_no=30379&board_no=6&boarditem_no=32258&learning_design_yn=N&time_flag=OK",
             detail.attachments.single().downloadUrl,
         )
     }
@@ -725,7 +725,7 @@ class LmsHtmlParserTest {
                     "board_no" to "6",
                     "boarditem_no" to "32258",
                     "learning_design_yn" to "Y",
-                    "time_flag" to "",
+                    "time_flag" to "OK",
                 ),
                 refererUrl = finalUrl,
             ),
@@ -945,6 +945,7 @@ class LmsHtmlParserTest {
                     "board_no" to "7",
                     "boarditem_no" to "91",
                     "learning_design_yn" to "Y",
+                    "time_flag" to "OK",
                 ),
                 refererUrl = finalUrl,
             ),

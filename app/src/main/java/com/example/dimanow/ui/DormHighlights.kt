@@ -181,7 +181,7 @@ internal fun DormTodayCard(rollCall: RollCallStatus, time: LocalTime, kakaoAcces
                 Text(headline, style = MaterialTheme.typography.titleLarge)
             }
         }
-        detail?.let { Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+        detail?.let { KoreanText(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) }
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             DormChip(Icons.Default.DoorFront, doorText(time), warning = !DormHours.doorOpen(time), modifier = Modifier.testTag("dorm_door"))
             if (pastDeadline) DormChip(Icons.Default.Schedule, "외출·외박 신청 마감 지남", warning = true)
@@ -216,7 +216,7 @@ internal fun HomeRollCallCard(rollCall: RollCallStatus, time: LocalTime, onOpenD
             }
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 Text(headline, style = MaterialTheme.typography.titleMedium)
-                detail?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                detail?.let { KoreanText(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
             }
         }
         if (pastDeadline) DormChip(Icons.Default.Schedule, "외출·외박 신청 마감이 지났어요", warning = true, modifier = Modifier.testTag("home_roll_call_late"))

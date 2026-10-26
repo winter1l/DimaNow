@@ -10,11 +10,19 @@ class AllFooterUpdateTest {
     private val release = AppUpdateRelease("2.2", "https://github.com/winter1l/DimaNow/releases/tag/v2.2", "https://example.invalid/a.apk", 1L, "0".repeat(64))
 
     @Test
-    fun `an unchecked version offers a check`() {
-        assertEquals(
-            AllFooterUpdate("버전 2.1", AllFooterUpdate.Action.CHECK, "업데이트 확인"),
-            allFooterUpdate(AppUpdateUiState("2.1")),
-        )
+    fun `an unchecked or failed check shows only the version`() {
+        // D-134: the app checks every day by itself, so 전체 offers no check button.
+        assertEquals(AllFooterUpdate("버전 2.1"), allFooterUpdate(AppUpdateUiState("2.1")))
+        assertEquals(AllFooterUpdate("버전 2.1"), allFooterUpdate(AppUpdateUiState("2.1", AppUpdatePhase.CHECKING)))
+        assertEquals(AllFooterUpdate("버전 2.1"), allFooterUpdate(AppUpdateUiState("2.1", AppUpdatePhase.ERROR)))
+    }
+
+    @Test
+    fun `a version not put off asks at launch until it is acted on`() {
+        assertEquals(true, launchesUpdatePrompt(AppUpdateUiState("2.1", AppUpdatePhase.AVAILABLE, latestRelease = release, promptVersion = "2.2")))
+        assertEquals(false, launchesUpdatePrompt(AppUpdateUiState("2.1", AppUpdatePhase.AVAILABLE, latestRelease = release)))
+        assertEquals(false, launchesUpdatePrompt(AppUpdateUiState("2.1", AppUpdatePhase.DOWNLOADING, latestRelease = release, promptVersion = "2.2")))
+        assertEquals(false, launchesUpdatePrompt(AppUpdateUiState("2.1", AppUpdatePhase.UP_TO_DATE)))
     }
 
     @Test

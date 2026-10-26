@@ -90,7 +90,7 @@ internal const val CAMPUS_MAP_STUDENT_LIMIT_METERS = 1_000.0
 
 /**
  * The list's second line for [place] (D-131(5)): its kind, then how far it is from the student when the position is
- * known (`학교 구역 · 내 위치에서 320m`).
+ * known (`학교 구역 · 내 위치에서 320m`); the map passes a position only while the student is on it (D-134).
  */
 internal fun campusPlaceSupportingText(place: CampusPlace, student: GeoPoint?): String =
     listOfNotNull(

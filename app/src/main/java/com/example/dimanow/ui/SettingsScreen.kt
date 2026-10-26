@@ -6,6 +6,7 @@ import androidx.compose.material3.IconButtonDefaults
 import android.provider.Settings
 import com.example.dimanow.theme.DimaShapes
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -295,6 +296,7 @@ internal fun NowBarSetupDialog(
     )
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 internal fun AppUpdateCard(
     state: AppUpdateUiState,
@@ -338,20 +340,19 @@ internal fun AppUpdateCard(
                     modifier = Modifier.fillMaxWidth(),
                 )
             }
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            // D-134: the action and 릴리스 보기 side by side, wrapping only when they do not fit.
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 when (state.phase) {
                     AppUpdatePhase.AVAILABLE -> Button(shapes = ButtonDefaults.shapes(), onClick = onDownload) { Text("다운로드 및 설치") }
                     AppUpdatePhase.DOWNLOADING -> OutlinedButton(shapes = ButtonDefaults.shapes(), onClick = onCancelDownload) { Text("취소") }
                     AppUpdatePhase.READY_TO_INSTALL, AppUpdatePhase.PERMISSION_REQUIRED -> Button(shapes = ButtonDefaults.shapes(), onClick = onContinueInstall) { Text("설치 계속") }
                     else -> OutlinedButton(shapes = ButtonDefaults.shapes(), enabled = state.phase != AppUpdatePhase.CHECKING, onClick = onCheck) { Text("업데이트 확인") }
                 }
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    if (state.phase == AppUpdatePhase.AVAILABLE || state.phase == AppUpdatePhase.READY_TO_INSTALL || state.phase == AppUpdatePhase.PERMISSION_REQUIRED) {
-                        OutlinedButton(shapes = ButtonDefaults.shapes(), onClick = onCheck) { Text("업데이트 확인") }
-                    }
-                    state.latestRelease?.let { release ->
-                        OutlinedButton(shapes = ButtonDefaults.shapes(), onClick = { openUrl(context, release.releasePageUrl) }) { Text("릴리스 보기") }
-                    }
+                if (state.phase == AppUpdatePhase.AVAILABLE || state.phase == AppUpdatePhase.READY_TO_INSTALL || state.phase == AppUpdatePhase.PERMISSION_REQUIRED) {
+                    OutlinedButton(shapes = ButtonDefaults.shapes(), onClick = onCheck) { Text("업데이트 확인") }
+                }
+                state.latestRelease?.let { release ->
+                    OutlinedButton(shapes = ButtonDefaults.shapes(), onClick = { openUrl(context, release.releasePageUrl) }) { Text("릴리스 보기") }
                 }
             }
         }

@@ -78,6 +78,15 @@ import java.time.format.DateTimeFormatter
 import kotlinx.coroutines.flow.first
 
 /**
+ * Which 식당 Home's 식단 card shows (D-134): the 기숙사 in the 예인관 zone, as before (D-067). A 예인관 resident
+ * elsewhere sees the 기숙사 too, except on the main campus while the 학생식당 has yet to serve or is serving today;
+ * so at 19:00 off campus or with location off, the open 석식 shows instead of `학생식당 · 운영 종료`.
+ */
+internal fun homeShowsDormitoryMeal(zone: CampusZoneId, livesInDorm: Boolean, cafeteria: MealServiceState?): Boolean =
+    zone == CampusZoneId.YEIN || livesInDorm &&
+        !(zone == CampusZoneId.MAIN && (cafeteria == MealServiceState.BEFORE_OPEN || cafeteria == MealServiceState.OPEN))
+
+/**
  * `null` for [shuttle], [meal], [dormitoryMeal] or [notices] means the source has not emitted its
  * first cached value yet; the matching card shows a loading placeholder instead of an empty or
  * error state (D-094).
@@ -113,6 +122,8 @@ internal fun DashboardScreen(
     onNoticeOpened: () -> Unit = {},
     /** D-132: opens 캠퍼스 지도 on a class's room; null hides the location button (previews and tests). */
     onShowRoom: ((String) -> Unit)? = null,
+    /** D-134: the student lives in 예인관 (home base 엔터관 방향), so Home's 식단 card leans to the 기숙사. */
+    livesInDorm: Boolean = false,
 ) {
     val context = LocalContext.current
     val nowTime = now.toLocalTime()
@@ -139,10 +150,10 @@ internal fun DashboardScreen(
 
     val todayMeal = meal?.days?.firstOrNull { it.date == now.toLocalDate() }
     val homeDormitoryMeal = dormitoryMeal?.homeServiceAt(now)
-    val useDormitoryMeal = zone == CampusZoneId.YEIN
+    val mealStatusNow = meal?.serviceStatusAt(now)
+    val useDormitoryMeal = homeShowsDormitoryMeal(zone, livesInDorm, mealStatusNow?.state)
     // D-094: 선택된 식당의 원본이 아직 첫 값을 내보내지 않았으면 불러오는 중으로 본다
     val mealLoading = if (useDormitoryMeal) dormitoryMeal == null else meal == null
-    val mealStatusNow = meal?.serviceStatusAt(now)
     val homeMealOpen = if (useDormitoryMeal) {
         homeDormitoryMeal?.let { day ->
             groupDormitorySections(day.sections).any { mealServiceStatus(day.date, it.hours, now).state == MealServiceState.OPEN }

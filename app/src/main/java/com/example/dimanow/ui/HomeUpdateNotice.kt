@@ -38,6 +38,50 @@ internal fun AppUpdateUiState.showsHomeNotice(): Boolean =
     promptVersion != null || phase == AppUpdatePhase.DOWNLOADING ||
         phase == AppUpdatePhase.READY_TO_INSTALL || phase == AppUpdatePhase.PERMISSION_REQUIRED
 
+/** D-134: a version not put off with 나중에 that can still be fetched or installed asks once at launch. */
+internal fun launchesUpdatePrompt(state: AppUpdateUiState): Boolean =
+    state.promptVersion != null && state.phase in setOf(
+        AppUpdatePhase.AVAILABLE,
+        AppUpdatePhase.READY_TO_INSTALL,
+        AppUpdatePhase.PERMISSION_REQUIRED,
+    )
+
+/**
+ * D-134: the launch pop-up for a new version (the student asked for it, superseding D-102's card-only offer). It says
+ * which version, then 업데이트 (download and install, or install what is already downloaded) or 나중에.
+ */
+@Composable
+internal fun UpdateLaunchPrompt(
+    state: AppUpdateUiState,
+    onUpdate: () -> Unit,
+    onLater: () -> Unit,
+    onClose: () -> Unit,
+) {
+    val version = state.promptVersion ?: state.latestRelease?.versionName.orEmpty()
+    DimaAlertDialog(
+        onDismissRequest = onClose,
+        icon = Icons.Default.SystemUpdate,
+        tone = DialogTone.INFO,
+        title = "새 버전이 나왔어요",
+        text = {
+            Text(
+                if (state.preparedUpdate != null) {
+                    "받아 둔 DIMA Now $version 버전을 설치할 수 있어요."
+                } else {
+                    "DIMA Now $version 버전으로 업데이트할 수 있어요. 받는 동안에도 앱을 쓸 수 있어요."
+                },
+            )
+        },
+        confirmLabel = if (state.preparedUpdate != null) "설치하기" else "업데이트",
+        onConfirm = onUpdate,
+        dismissLabel = "나중에",
+        onDismiss = onLater,
+        confirmTag = "update_prompt_confirm",
+        dismissTag = "update_prompt_later",
+        modifier = Modifier.testTag("update_prompt"),
+    )
+}
+
 /**
  * The new-version card at the top of Home (D-102). It replaces the dialog that opened over the app at launch:
  * Apple HIG and the Toss guide both rule out interrupting people on entry, so the offer waits in the feed,

@@ -74,7 +74,7 @@ internal fun EmptyState(
                 }
                 Text(message, style = MaterialTheme.typography.titleMedium, textAlign = TextAlign.Center)
                 supporting?.let {
-                    Text(
+                    KoreanText(
                         it,
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -131,9 +131,9 @@ internal fun ErrorState(
                 .semantics(mergeDescendants = false) { liveRegion = LiveRegionMode.Polite },
             verticalArrangement = Arrangement.spacedBy(4.dp),
         ) {
-            Text(message, style = MaterialTheme.typography.bodyMedium, color = contentColor)
+            KoreanText(message, style = MaterialTheme.typography.bodyMedium, color = contentColor)
             supporting?.let {
-                Text(
+                KoreanText(
                     it,
                     style = MaterialTheme.typography.bodySmall,
                     color = if (contained) contentColor else MaterialTheme.colorScheme.onSurfaceVariant,

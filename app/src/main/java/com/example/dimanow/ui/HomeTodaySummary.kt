@@ -238,7 +238,7 @@ internal fun HomeCompactPrompt(
             horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             DimaIconBadge(icon, size = 32.dp)
-            Text(
+            KoreanText(
                 text,
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,

@@ -25,7 +25,6 @@ import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SegmentedListItem
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -56,7 +55,6 @@ internal fun AllScreen(
     onOpen: (AppPage) -> Unit,
     modifier: Modifier = Modifier,
     updateState: AppUpdateUiState? = null,
-    onCheckUpdate: () -> Unit = {},
     onDownloadUpdate: () -> Unit = {},
     onContinueInstall: () -> Unit = {},
 ) {
@@ -157,7 +155,7 @@ internal fun AllScreen(
             }
         }
         item(key = "footer") {
-            AllFooter(updateState, onCheckUpdate, onDownloadUpdate, onContinueInstall)
+            AllFooter(updateState, onDownloadUpdate, onContinueInstall)
         }
     }
     if (showFeedback) FeedbackDialog(onDismiss = { showFeedback = false })
@@ -188,24 +186,27 @@ private fun AllRow(
                 modifier = Modifier.size(20.dp),
             )
         },
-        supportingContent = { Text(supporting) },
+        supportingContent = { KoreanText(supporting) },
         colors = dimaSegmentedListColors(),
     ) {
         Text(title)
     }
 }
 
-/** What the foot of 전체 says about updates, and which action its button runs (D-122). */
+/**
+ * What the foot of 전체 says about updates, and which action its button runs (D-122). D-134: the app checks every
+ * day by itself, so there is no check button; `최신 버전이에요` appears only once a check said so, and a newer
+ * version brings its button.
+ */
 internal data class AllFooterUpdate(val text: String, val action: Action? = null, val actionLabel: String? = null) {
-    enum class Action { CHECK, DOWNLOAD, CONTINUE_INSTALL }
+    enum class Action { DOWNLOAD, CONTINUE_INSTALL }
 }
 
 internal fun allFooterUpdate(state: AppUpdateUiState): AllFooterUpdate {
     val version = "버전 ${state.currentVersion}"
     val latest = state.latestRelease?.versionName
     return when (state.phase) {
-        AppUpdatePhase.IDLE, AppUpdatePhase.ERROR -> AllFooterUpdate(version, AllFooterUpdate.Action.CHECK, "업데이트 확인")
-        AppUpdatePhase.CHECKING -> AllFooterUpdate("$version · 업데이트를 확인하고 있어요")
+        AppUpdatePhase.IDLE, AppUpdatePhase.ERROR, AppUpdatePhase.CHECKING -> AllFooterUpdate(version)
         AppUpdatePhase.UP_TO_DATE -> AllFooterUpdate("$version · 최신 버전이에요")
         AppUpdatePhase.AVAILABLE -> AllFooterUpdate(
             "$version · ${latest ?: "새"} 버전이 나왔어요",
@@ -228,7 +229,6 @@ internal fun allFooterUpdate(state: AppUpdateUiState): AllFooterUpdate {
 @Composable
 private fun AllFooter(
     updateState: AppUpdateUiState?,
-    onCheckUpdate: () -> Unit,
     onDownloadUpdate: () -> Unit,
     onContinueInstall: () -> Unit,
 ) {
@@ -257,20 +257,13 @@ private fun AllFooter(
                 modifier = Modifier.testTag("all_version"),
             )
             val run = when (footer.action) {
-                AllFooterUpdate.Action.CHECK -> onCheckUpdate
                 AllFooterUpdate.Action.DOWNLOAD -> onDownloadUpdate
                 AllFooterUpdate.Action.CONTINUE_INSTALL -> onContinueInstall
                 null -> null
             }
             if (run != null && footer.actionLabel != null) {
-                if (footer.action == AllFooterUpdate.Action.CHECK) {
-                    TextButton(shapes = ButtonDefaults.shapes(), onClick = run, modifier = Modifier.testTag("all_update_action")) {
-                        Text(footer.actionLabel)
-                    }
-                } else {
-                    FilledTonalButton(shapes = ButtonDefaults.shapes(), onClick = run, modifier = Modifier.testTag("all_update_action")) {
-                        Text(footer.actionLabel)
-                    }
+                FilledTonalButton(shapes = ButtonDefaults.shapes(), onClick = run, modifier = Modifier.testTag("all_update_action")) {
+                    Text(footer.actionLabel)
                 }
             }
         }

@@ -277,6 +277,10 @@ fun MealScreen(
             } else {
                 null
             },
+            // D-134: the Scaffold lays the snackbar out, so it pushes the PAYCO 식권 FAB up instead of covering it.
+            snackbarHost = {
+                SnackbarHost(snackbarHostState, Modifier.semantics { liveRegion = LiveRegionMode.Polite })
+            },
             // 식당 전환과 요일 선택은 스크롤해도 항상 닿을 수 있도록 헤더에 고정한다 (D-057)
             subHeader = {
                 // D-103: 식당 전환은 M3 연결형 버튼 그룹이다
@@ -353,13 +357,6 @@ fun MealScreen(
                 mainCafeteriaDayContent(meal = meal, date = selectedDay, today = today, nowTime = nowTime)
             }
         }
-    SnackbarHost(
-        snackbarHostState,
-        Modifier
-            .align(Alignment.BottomCenter)
-            .padding(16.dp)
-            .semantics { liveRegion = LiveRegionMode.Polite },
-    )
     }
     if (showDormitoryPhotoSource) {
         AlertDialog(

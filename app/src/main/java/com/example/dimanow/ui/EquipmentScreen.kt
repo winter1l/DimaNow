@@ -228,7 +228,7 @@ internal fun EquipmentScreen(onBack: () -> Unit, modifier: Modifier = Modifier) 
                         .padding(top = EQUIPMENT_BLOCK_GAP),
                 ) { shown ->
                     when (shown.phase) {
-                        EquipmentCatalogPhase.LOADING -> LoadingLine("DIMA C에서 장비 목록을 불러오는 중이에요")
+                        EquipmentCatalogPhase.LOADING -> LoadingLine("DIMA C에서 장비 목록을 불러오는 중이에요", slowHint = SCHOOL_READ_SLOW_HINT)
                         EquipmentCatalogPhase.ERROR ->
                             ErrorState(shown.error.orEmpty(), onRetry = if (bridge != null) ::loadCatalog else null)
                         // After the sign-in was closed: nothing is read until the student asks again.
@@ -442,7 +442,7 @@ private fun EquipmentDaysPanel(
         ) { shown ->
             Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 when (shown.phase) {
-                    EquipmentDaysPhase.LOADING -> LoadingLine("대여 현황을 불러오는 중이에요")
+                    EquipmentDaysPhase.LOADING -> LoadingLine("대여 현황을 불러오는 중이에요", slowHint = SCHOOL_READ_SLOW_HINT)
                     EquipmentDaysPhase.ERROR -> ErrorState(shown.error.orEmpty(), onRetry = onRetry)
                     EquipmentDaysPhase.DAYS -> {
                         EquipmentWeekGrid(shown.days, today)

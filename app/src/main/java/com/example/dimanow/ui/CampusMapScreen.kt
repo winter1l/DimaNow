@@ -186,8 +186,9 @@ internal fun CampusMapScreen(onBack: () -> Unit, modifier: Modifier = Modifier, 
     val stops = remember(places) { places.filter { it.kind == CampusPlaceKind.BUS_4402_STOP } }
     val position = rememberStudentPosition()
     val studentSample = (position as? StudentPosition.Known)?.sample
-    val student = studentSample?.point
     val nearStudent = studentSample?.takeIf { greatCircleMeters(CAMPUS_MAP_ORIGIN, it.point) <= CAMPUS_MAP_STUDENT_LIMIT_METERS }
+    // D-134: distances only while the student is on the map; from far away (`내 위치에서 9089km`) they say nothing.
+    val student = nearStudent?.point
     val projection = remember { LocalProjection(CAMPUS_MAP_ORIGIN) }
     val baseMap = rememberCampusBaseMap()
     val scene = remember(baseMap, nearStudent?.point) {

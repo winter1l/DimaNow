@@ -289,7 +289,7 @@ private fun SetupRow(item: SetupItem, index: Int, count: Int, onAction: (Guidanc
         },
         supportingContent = {
             Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                Text(item.description)
+                KoreanText(item.description)
                 item.status?.let { Text(it, style = MaterialTheme.typography.labelMedium) }
             }
         },

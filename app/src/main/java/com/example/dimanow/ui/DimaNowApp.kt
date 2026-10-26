@@ -308,6 +308,24 @@ fun DimaNowApp(
         return
     }
 
+    // D-134 (supersedes D-102's card-only offer): a newer version also asks once per launch, over the app;
+    // 나중에 puts this version off as the Home card does, and closing the pop-up only waits for the next launch.
+    var updatePromptHandled by rememberSaveable { mutableStateOf(false) }
+    if (appUpdateCoordinator != null && !updatePromptHandled && launchesUpdatePrompt(updateState)) {
+        UpdateLaunchPrompt(
+            state = updateState,
+            onUpdate = {
+                updatePromptHandled = true
+                if (updateState.preparedUpdate != null) appUpdateCoordinator.continueInstall() else appUpdateCoordinator.downloadAndInstall()
+            },
+            onLater = {
+                updatePromptHandled = true
+                appUpdateCoordinator.dismissPrompt()
+            },
+            onClose = { updatePromptHandled = true },
+        )
+    }
+
     val showNavigation = !page.isSubPage && !(page == AppPage.COURSES && lmsFullScreen)
     // D-104: compact windows keep the bottom bar; from the M3 medium width (tablets, unfolded foldables)
     // the same destinations move to a navigation rail at the start edge.
@@ -434,7 +452,6 @@ fun DimaNowApp(
                 AppPage.ALL -> AllScreen(
                     onOpen = ::open,
                     updateState = updateState,
-                    onCheckUpdate = { appUpdateCoordinator?.checkManually() },
                     onDownloadUpdate = { appUpdateCoordinator?.downloadAndInstall() },
                     onContinueInstall = { appUpdateCoordinator?.continueInstall() },
                     modifier = pageModifier,
@@ -603,6 +620,7 @@ private fun DashboardRoute(
         lmsSnapshot = homeLms,
         lmsSessionState = homeLmsSession,
         zone = resolvedZone,
+        livesInDorm = homeBase == HomeBase.YEIN,
         testMode = locationMode == LocationMode.TEST,
         shuttle = shuttle,
         meal = meal,

@@ -1,5 +1,11 @@
 package com.example.dimanow.ui
 
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.Box
@@ -111,22 +117,50 @@ internal class RetainedFlowValues {
 
 internal val LocalRetainedFlowValues = staticCompositionLocalOf<RetainedFlowValues?> { null }
 
-/** A calm placeholder shown while a source has not emitted yet (Material3 1.4.0 has no LoadingIndicator). */
+/**
+ * A calm placeholder shown while a source has not emitted yet (Material3 1.4.0 has no LoadingIndicator). With
+ * [slowHint], a second line says so once the wait passes [SLOW_LOADING_MILLIS] (D-134: a school read may wait up to
+ * a minute with nothing else on screen).
+ */
 @Composable
-internal fun LoadingLine(text: String, modifier: Modifier = Modifier) {
+internal fun LoadingLine(text: String, modifier: Modifier = Modifier, slowHint: String? = null) {
+    var slow by remember(slowHint) { mutableStateOf(false) }
+    if (slowHint != null) {
+        LaunchedEffect(slowHint) {
+            kotlinx.coroutines.delay(SLOW_LOADING_MILLIS)
+            slow = true
+        }
+    }
     Row(
         modifier = modifier,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         DimaLoadingIndicator(size = 32.dp)
-        Text(
-            text = text,
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
+        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(
+                text = text,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            if (slow && slowHint != null) {
+                Text(
+                    text = slowHint,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier
+                        .testTag("loading_slow_hint")
+                        .semantics { liveRegion = androidx.compose.ui.semantics.LiveRegionMode.Polite },
+                )
+            }
+        }
     }
 }
+
+internal const val SLOW_LOADING_MILLIS = 10_000L
+
+/** The second line of a school-site read that is taking long (D-134). */
+internal const val SCHOOL_READ_SLOW_HINT = "학교 사이트 응답이 늦어요. 조금만 더 기다려 주세요."
 
 /**
  * Home has no refresh control, so an empty shuttle cache never asks the user to refresh

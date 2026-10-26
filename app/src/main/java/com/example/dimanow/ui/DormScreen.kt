@@ -189,7 +189,7 @@ internal fun DormScreen(onBack: () -> Unit, onOpenMeals: () -> Unit, modifier: M
                 }
                 item(key = "points") {
                     when {
-                        read == null && loading -> LoadingLine("인트라넷에서 상벌점을 불러오는 중이에요")
+                        read == null && loading -> LoadingLine("인트라넷에서 상벌점을 불러오는 중이에요", slowHint = SCHOOL_READ_SLOW_HINT)
                         read == null -> HomeContainerCard(Modifier.testTag("dorm_points_card")) {
                             HomeCardHeader(icon = Icons.Default.Apartment, title = "상벌점", showChevron = false)
                             Text(
@@ -270,7 +270,7 @@ internal fun DormScreen(onBack: () -> Unit, onOpenMeals: () -> Unit, modifier: M
                                 trailingContent = {
                                     Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null, modifier = Modifier.size(20.dp))
                                 },
-                                supportingContent = { Text(supporting) },
+                                supportingContent = { KoreanText(supporting) },
                                 colors = dimaSegmentedListColors(),
                             ) {
                                 Text(item.title)
@@ -281,7 +281,7 @@ internal fun DormScreen(onBack: () -> Unit, onOpenMeals: () -> Unit, modifier: M
             }
             DormTopic.POINTS -> {
                 when {
-                    read == null && loading -> item(key = "points_loading") { LoadingLine("인트라넷에서 상벌점을 불러오는 중이에요") }
+                    read == null && loading -> item(key = "points_loading") { LoadingLine("인트라넷에서 상벌점을 불러오는 중이에요", slowHint = SCHOOL_READ_SLOW_HINT) }
                     read != null -> {
                         item(key = "points_totals") {
                             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -481,7 +481,7 @@ internal fun OutingWarningDialog(warning: OutingWarning, now: LocalTime, onOpen:
         modifier = Modifier.testTag("dorm_outing_warning"),
     ) {
         Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-            Text(text)
+            KoreanText(text)
             DialogTimeline(points = points, highlight = 1, tone = DialogTone.WARNING)
         }
     }
@@ -593,7 +593,7 @@ private fun GuideLine(text: String, marker: String = "•") {
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.widthIn(min = if (marker.length > 1) 48.dp else 12.dp),
         )
-        Text(text, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+        KoreanText(text, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
     }
 }
 
@@ -643,7 +643,7 @@ private fun LinkRow(icon: ImageVector, title: String, supporting: String, index:
         modifier = Modifier.testTag(tag).semantics { onClick(label = "브라우저에서 열기") { onClick(); true } },
         leadingContent = { DimaIconBadge(icon) },
         trailingContent = { Icon(Icons.AutoMirrored.Filled.OpenInNew, contentDescription = null, modifier = Modifier.size(20.dp)) },
-        supportingContent = { Text(supporting) },
+        supportingContent = { KoreanText(supporting) },
         colors = dimaSegmentedListColors(),
     ) {
         Text(title)

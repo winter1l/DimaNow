@@ -152,7 +152,8 @@ internal fun LibraryScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
             loadPublic(force = true)
             if (bridge != null) load()
         },
-        refreshing = (loading && read != null) || publicLoading,
+        // D-134: the first read of 이용 시간 has its own loading line, so the pull indicator joins only a reload.
+        refreshing = (loading && read != null) || (publicLoading && publicInfo != null),
         refreshLabel = "대출 현황 새로고침",
     ) {
         val shown = read
@@ -170,7 +171,7 @@ internal fun LibraryScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
                 label = "library_loans",
             ) { state ->
                 when (state.phase) {
-                    LibraryLoansPhase.LOADING -> LoadingLine("도서관에서 대출 현황을 불러오는 중이에요")
+                    LibraryLoansPhase.LOADING -> LoadingLine("도서관에서 대출 현황을 불러오는 중이에요", slowHint = SCHOOL_READ_SLOW_HINT)
                     LibraryLoansPhase.ERROR -> ErrorState(state.error.orEmpty(), onRetry = if (bridge != null) ::load else null)
                     // After the sign-in was closed: nothing is read until the student asks again.
                     LibraryLoansPhase.START -> EmptyState(
@@ -368,7 +369,7 @@ private fun LibraryNotice(text: String) {
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Icon(Icons.Default.Warning, contentDescription = null, modifier = Modifier.size(20.dp))
-            Text(text, style = MaterialTheme.typography.bodyMedium)
+            KoreanText(text, style = MaterialTheme.typography.bodyMedium)
         }
     }
 }
@@ -485,7 +486,7 @@ private fun LibraryLinkRow(
                 modifier = Modifier.size(20.dp),
             )
         },
-        supportingContent = { Text(supporting) },
+        supportingContent = { KoreanText(supporting) },
         colors = dimaSegmentedListColors(),
     ) {
         Text(title)

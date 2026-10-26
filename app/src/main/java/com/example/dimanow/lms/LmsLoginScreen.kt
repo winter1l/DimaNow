@@ -106,22 +106,6 @@ internal fun LmsLoginScreen(
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
-                    // D-099: 비공식 앱, 전송 경로, 저장 방식과 중복 로그인을 로그인 전에 알린다.
-                    // D-102: 같은 내용을 한 덩어리 문단 대신 항목별로 나눠 읽기 쉽게 한다
-                    Surface(shape = DimaShapes.Tile, color = DimaTheme.colors.card) {
-                        Column(
-                            Modifier.fillMaxWidth().padding(16.dp).testTag("lms_consent"),
-                            verticalArrangement = Arrangement.spacedBy(6.dp),
-                        ) {
-                            Text("로그인 전에 확인해 주세요", style = MaterialTheme.typography.labelLarge)
-                            LmsNoticeLine("DIMA Now는 학교가 만든 앱이 아니에요.")
-                            LmsNoticeLine("학번과 비밀번호는 학교 공식 로그인 화면(portal·lms.dima.ac.kr)에만 입력되고, 개발자나 다른 서버로 보내지 않아요.")
-                            // D-107: 저장한 계정이 인트라넷·DIMA C 읽기에도 쓰인다는 것을 미리 알린다
-                            LmsNoticeLine("저장한 계정은 장비 대여·인트라넷 시간표·예인관 상벌점·외출·외박 신청·도서관 화면을 열 때 같은 포털 로그인으로 인트라넷·DIMA C·도서관(intranet·udimac·lib.dima.ac.kr)에 들어가는 데도 써요.")
-                            LmsNoticeLine("학교 통합 로그인 중 한 구간(sso.dima.ac.kr:8080)은 학교가 암호화하지 않은 연결을 써서, 공용 Wi-Fi에서는 로그인 정보가 노출될 수 있어요.")
-                            LmsNoticeLine("학교 LMS는 한 곳에서만 로그인돼요. 다른 기기에서 로그인 중이면 그 로그인을 끊기 전에 먼저 물어봐요.")
-                        }
-                    }
                     if (needsReview) {
                         Surface(
                             modifier = Modifier.fillMaxWidth(),
@@ -170,14 +154,31 @@ internal fun LmsLoginScreen(
                     ) {
                         Column(Modifier.weight(1f)) {
                             Text("자동 로그인 (선택)")
+                            // D-107: 저장한 계정이 인트라넷·DIMA C·도서관 읽기에도 쓰인다는 것을 켜기 전에 알린다
+                            // (D-134: 로그인 전 안내에서 이 스위치 설명으로 옮겼다)
                             Text(
-                                "켜면 학번과 비밀번호를 이 기기에만 암호화해 저장하고, 수업 탭이나 장비 대여 같은 학교 정보 화면을 열 때 자동으로 로그인해요. " +
-                                    "설정의 수업 계정에서 언제든 지울 수 있어요.",
+                                "켜면 학번과 비밀번호를 이 기기에만 암호화해 저장하고, 수업 탭과 장비 대여·인트라넷 시간표·예인관 상벌점·" +
+                                    "외출·외박 신청·도서관 화면을 열 때 같은 포털 로그인으로 인트라넷·DIMA C·도서관" +
+                                    "(intranet·udimac·lib.dima.ac.kr)에 자동으로 로그인해요. 설정의 수업 계정에서 언제든 지울 수 있어요.",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }
                         Switch(checked = automatic, onCheckedChange = null)
+                    }
+                    // D-099: 비공식 앱, 전송 경로와 중복 로그인을 로그인 전에 알린다. D-102: 항목별로 나눠 읽기 쉽게 한다.
+                    // D-134: 입력 칸이 폰 첫 화면에 보이도록 칸과 자동 로그인 뒤, 로그인 버튼 바로 앞에 둔다.
+                    Surface(shape = DimaShapes.Tile, color = DimaTheme.colors.card) {
+                        Column(
+                            Modifier.fillMaxWidth().padding(16.dp).testTag("lms_consent"),
+                            verticalArrangement = Arrangement.spacedBy(6.dp),
+                        ) {
+                            Text("로그인 전에 확인해 주세요", style = MaterialTheme.typography.labelLarge)
+                            LmsNoticeLine("DIMA Now는 학교가 만든 앱이 아니에요.")
+                            LmsNoticeLine("학번과 비밀번호는 학교 공식 로그인 화면(portal·lms.dima.ac.kr)에만 입력되고, 개발자나 다른 서버로 보내지 않아요.")
+                            LmsNoticeLine("학교 통합 로그인 중 한 구간(sso.dima.ac.kr:8080)은 학교가 암호화하지 않은 연결을 써서, 공용 Wi-Fi에서는 로그인 정보가 노출될 수 있어요.")
+                            LmsNoticeLine("학교 LMS는 한 곳에서만 로그인돼요. 다른 기기에서 로그인 중이면 그 로그인을 끊기 전에 먼저 물어봐요.")
+                        }
                     }
                     Button(shapes = ButtonDefaults.shapes(), 
                         onClick = { onLogin(username, password, automatic) },
@@ -201,7 +202,7 @@ private fun LmsNoticeLine(text: String) {
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.clearAndSetSemantics { },
         )
-        Text(text, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        com.example.dimanow.ui.KoreanText(text, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 

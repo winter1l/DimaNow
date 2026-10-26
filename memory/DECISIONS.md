@@ -738,3 +738,10 @@ Confirmed: "이제 다음 2단계를 진행해줘." (phase 2 of the 2026-10-26 p
 2. App shortcuts (long-press the icon): 셔틀, 식단, 외출·외박 신청, 모바일 열람증. Quick Settings tile `다음 셔틀`: shows the next campus shuttle from the current location and opens the 셔틀 tab.
 3. Notice keyword alerts: off by default; keywords are kept on the device only; matching new 학교 공지 (published once a day) post one notification per notice. The first time the student opens the full notice list, a sheet suggests turning it on with sample keywords (장학, 기숙사, 수강신청, 휴강); `나중에` dismisses it for good.
 4. ICS export from the 시간표 page: the term's weekly classes (weekly repeats until the term ends, no-class days skipped) and/or the 학사 일정, shared through the share sheet as an `.ics` file; the app never writes to a calendar (D-125(6)).
+
+## D-129 — 시간표 shows 학사 일정; mode switches slide; arrow-shaped back control; meal "not posted" wording — 2026-10-26
+Confirmed: "시간표 화면에 학사 일정도 같이 보이게 해. 그리고 상단에 두 모드를 변경할 수 있는 셔틀, 식단, 수업 탭에서 좌우 페이지 전환 애니메이션이 있으면 좋을 것 같아. 또 셔틀 탭에 '화살표 지금' 버튼을 M3expressive의 모양 요소로 있는 화살표만 두는게 좋을 것 같아. 현재 식단 탭에서 아직 식단이 올라오지 않았는데 앱에서는 못 불러온 것처럼 표시되서 이를 다르게 아직 올라오지 않았다고 고쳐주면 좋겠어."
+1. The 시간표 page lists the term's 학사 일정 (today to the term end, up to 12) in the Home card's form.
+2. Switching 교내 셔틀/4402, 본관 학생식당/기숙사 and 할 일/과목별 slides the list in from the chosen side (18% of the width) with a fade, on the non-bouncy spring; reduced motion skips it (`ScreenScaffold.pageIndex`).
+3. The strips' `지금` button becomes the M3 Expressive `MaterialShapes.Arrow` alone (48dp, primary, no label), turned to point at the next departure; TalkBack hears `지금 다음 차로 이동`.
+4. The student cafeteria line says `이번 주 식단이 아직 올라오지 않았어요` when the data server has no new week (WAITING) or could not read the post (NEEDS_REVIEW); only the app's own failed download shows the error with retry.

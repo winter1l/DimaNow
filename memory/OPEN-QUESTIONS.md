@@ -175,3 +175,5 @@ Resolved 2026-10-23: Q-028 — the user confirmed that DIMA C에서 신청하기
 - Q-030 update (2026-10-26): the D-126(4) guard leaves out only notices that look plainly 1:1 (not a group conversation, no conversation title, no sub text). No KakaoTalk notification was in the shade when checked (field names only, values not printed), so which fields KakaoTalk fills is still unverified; check on the next real 점호 notice.
 
 - Q-036 (open, 2026-10-26): `CampusSummaryWidgetLayoutTest` fails on the test tablet at its current font_scale 1.08 (compact shuttle line 85 > 54 px; threshold summary NPE) and passes at 1.0. Unknown whether the widgets really clip on a phone at a larger font size or the test is too strict; widget code unchanged since D-116.
+
+- Q-037 (open, 2026-10-26): the student meal pipeline's last state is NEEDS_REVIEW with "식단 원격 응답 401" (2026-10-19 11:07 KST, from the Instagram endpoints in `MealRemoteHttpClient`), after that week had published. Unknown whether Instagram now refuses anonymous reads (which would block this week's menu) or it was a one-off; watch the 2026-10-26 Monday runs.

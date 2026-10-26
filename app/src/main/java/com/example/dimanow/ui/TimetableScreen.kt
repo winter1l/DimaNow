@@ -183,6 +183,10 @@ internal fun TimetableScreen(
         )
         }
     }
+    val termAgenda = remember(serviceCalendar, today, schedule.termEnd) {
+        val daysLeft = java.time.temporal.ChronoUnit.DAYS.between(today, schedule.termEnd).coerceAtLeast(30)
+        serviceCalendar.academicAgenda(today, lookAheadDays = daysLeft).take(12)
+    }
     ScreenScaffold(
         title = "시간표",
         modifier = modifier,
@@ -377,6 +381,12 @@ internal fun TimetableScreen(
                     )
                 }
             }
+        }
+
+        // D-129: the 학사 일정 that shape the term (registration, exams, 성적 열람…) sit with the timetable too,
+        // from today to the end of the term, in the Home card's form.
+        if (termAgenda.isNotEmpty()) item(key = "academic_agenda") {
+            HomeAcademicAgendaCard(termAgenda, today, Modifier.padding(top = 8.dp), tag = "timetable_academic")
         }
 
         if (schedule.noClassDates.isNotEmpty()) item(key = "no_class_dates") {

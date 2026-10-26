@@ -1,5 +1,8 @@
 package com.example.dimanow.ui
 
+import androidx.compose.ui.draw.rotate
+import androidx.compose.material3.toShape
+import androidx.compose.material3.MaterialShapes
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.TextStyle
@@ -212,6 +215,7 @@ internal fun shuttleCapsuleColors(isNearest: Boolean, isLastService: Boolean): P
  * [endedNote] non-null ends the strip with `오늘 운행이 끝났어요` and that line beneath (empty for none).
  * [onCardInner] lifts the tiles off a card that itself uses the inner tone (the current-location card, D-095).
  */
+@OptIn(androidx.compose.material3.ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 internal fun DepartureStrip(
     chips: List<TimetableChipSpec>,
@@ -342,15 +346,22 @@ internal fun DepartureStrip(
                 .align(if (lastSide < 0) Alignment.CenterStart else Alignment.CenterEnd)
                 .padding(horizontal = edgePadding),
         ) {
-            FilledTonalButton(
+            // D-129: the way back is the M3 Expressive Arrow shape itself, pointing at the next departure — no label;
+            // TalkBack still hears `지금 다음 차로 이동`.
+            val pointsLeft = lastSide < 0
+            // The Arrow polygon points up; the whole button turns to face left or right.
+            val arrow = MaterialShapes.Arrow.toShape()
+            Surface(
                 onClick = { scope.launch { backToNext() } },
-                shapes = ButtonDefaults.shapes(),
-                modifier = Modifier.testTag("departure_strip_back"),
-            ) {
-                if (lastSide < 0) Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null, modifier = Modifier.size(18.dp))
-                Text("지금", modifier = Modifier.padding(horizontal = 4.dp))
-                if (lastSide > 0) Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = null, modifier = Modifier.size(18.dp))
-            }
+                shape = arrow,
+                color = MaterialTheme.colorScheme.primary,
+                shadowElevation = 3.dp,
+                modifier = Modifier
+                    .size(48.dp)
+                    .rotate(if (pointsLeft) -90f else 90f)
+                    .testTag("departure_strip_back")
+                    .semantics { contentDescription = "지금 다음 차로 이동" },
+            ) {}
         }
     }
 }

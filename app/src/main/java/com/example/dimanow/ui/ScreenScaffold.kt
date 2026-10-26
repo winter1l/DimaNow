@@ -1,5 +1,11 @@
 package com.example.dimanow.ui
 
+import androidx.compose.runtime.mutableStateOf
+import com.example.dimanow.ui.motion.LocalReducedMotion
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.coroutineScope
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.animation.core.Animatable
 import androidx.compose.ui.Alignment
 import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.material3.pulltorefresh.PullToRefreshDefaults
@@ -141,6 +147,11 @@ internal fun ScreenScaffold(
     refreshing: Boolean = false,
     refreshLabel: String = "새로고침",
     itemSpacing: Dp = 12.dp,
+    /**
+     * D-129: the index of the mode chosen in [subHeader]'s two-way switch (셔틀, 식단, 수업). When it changes,
+     * the list slides in from the side of the newly chosen mode, as a page would; null keeps the list still.
+     */
+    pageIndex: Int? = null,
     content: LazyListScope.() -> Unit,
 ) {
     val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior()
@@ -163,6 +174,22 @@ internal fun ScreenScaffold(
         if (scrollToTopSignal != handledScrollToTop) {
             handledScrollToTop = scrollToTopSignal
             listState.animateScrollToItem(0)
+        }
+    }
+    val pageShift = remember { Animatable(0f) }
+    val pageAlpha = remember { Animatable(1f) }
+    var shownPage by remember { mutableStateOf(pageIndex) }
+    val reducedMotion = LocalReducedMotion.current
+    LaunchedEffect(pageIndex) {
+        val previous = shownPage
+        shownPage = pageIndex
+        if (pageIndex == null || previous == null || previous == pageIndex || reducedMotion) return@LaunchedEffect
+        // A short shared-axis move on the non-bouncy spring the strips use; the fade covers the swap of items.
+        pageShift.snapTo(if (pageIndex > previous) PAGE_SHIFT else -PAGE_SHIFT)
+        pageAlpha.snapTo(0f)
+        coroutineScope {
+            launch { pageShift.animateTo(0f, departureMotion()) }
+            launch { pageAlpha.animateTo(1f, DimaMotion.effectsDefault()) }
         }
     }
     val titleSlot: @Composable () -> Unit = titleContent ?: { title?.let { DimaTopAppBarTitle(it) } }
@@ -248,6 +275,10 @@ internal fun ScreenScaffold(
                     // re-fire whenever scrolling composes an item again (D-058), and after a tab
                     // change the tab transition is the only motion (D-094(12)).
                     .entrance()
+                    .graphicsLayer {
+                        translationX = pageShift.value * size.width
+                        alpha = pageAlpha.value
+                    }
                     .then(if (listTag != null) Modifier.testTag(listTag) else Modifier),
                 contentPadding = PaddingValues(
                     start = sideGutter,
@@ -262,6 +293,9 @@ internal fun ScreenScaffold(
         }
     }
 }
+
+/** How far, as a share of the list width, a newly chosen mode's list starts to the side (D-129). */
+private const val PAGE_SHIFT = 0.18f
 
 /** Any offset well past the bar height marks content as scrolled under the pinned bar. */
 private const val SCROLLED_CONTENT_OFFSET = -100_000f

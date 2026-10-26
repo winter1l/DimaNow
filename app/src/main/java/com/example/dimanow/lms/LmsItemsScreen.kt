@@ -296,6 +296,8 @@ internal fun LmsItemsScreen(
         title = "수업",
         modifier = modifier,
         listTag = "lms_history",
+        // D-129: 할 일(0) and 과목별(1) slide in from their side
+        pageIndex = if (todayMode) 0 else 1,
         // 새로고침은 목록을 당기거나 상단 버튼으로 실행한다 (D-058, D-103)
         onRefresh = onRefresh,
         refreshing = syncing && !visibleEmpty,

@@ -150,6 +150,7 @@ fun ShuttleScreen(
         refreshing = refreshing,
         refreshLabel = "셔틀 새로고침",
         listTag = "shuttle_list",
+        pageIndex = shuttleView.ordinal,
         // D-102: 식단 화면처럼 노선 전환과 요일 선택을 머리에 고정해, 시간표를 내려 읽다가도 바로 바꿀 수 있다 (D-057)
         subHeader = {
             // D-103: 노선 전환은 M3 연결형 버튼 그룹이다

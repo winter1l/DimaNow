@@ -269,6 +269,7 @@ fun MealScreen(
             refreshing = refreshing,
             refreshLabel = "식단 새로고침",
             listTag = "meal_list",
+            pageIndex = venue.ordinal,
             // 식당 전환과 요일 선택은 스크롤해도 항상 닿을 수 있도록 헤더에 고정한다 (D-057)
             subHeader = {
                 // D-103: 식당 전환은 M3 연결형 버튼 그룹이다

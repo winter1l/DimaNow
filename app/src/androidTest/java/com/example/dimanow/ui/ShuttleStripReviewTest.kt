@@ -111,6 +111,8 @@ class ShuttleStripReviewTest {
         val strip = compose.onAllNodes(hasScrollToIndexAction() and !hasTestTag("shuttle_list") and hasAnyDescendant(hasTestTag("next_departure_0"))).onFirst()
         repeat(4) { strip.performTouchInput { swipeLeft() } }
         compose.waitForIdle()
+        // D-129: the back control is the Arrow shape alone, pointing back at the next departure.
+        saveRoot("after-swipe")
         compose.onAllNodes(hasTestTag("departure_strip_back")).onFirst().assertExists().performClick()
         compose.waitForIdle()
         compose.onAllNodes(hasTestTag("next_departure_0"), useUnmergedTree = true).onFirst().assertIsDisplayed()

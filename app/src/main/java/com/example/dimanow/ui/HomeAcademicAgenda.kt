@@ -44,8 +44,13 @@ internal fun academicEventDates(event: ServiceCalendar.AcademicEvent): String =
  * dates and a status badge — tertiary while it runs, quieter while it is still ahead. It holds no action.
  */
 @Composable
-internal fun HomeAcademicAgendaCard(events: List<ServiceCalendar.AcademicEvent>, today: LocalDate, modifier: Modifier = Modifier) {
-    HomeContainerCard(modifier = modifier.testTag("dashboard_academic")) {
+internal fun HomeAcademicAgendaCard(
+    events: List<ServiceCalendar.AcademicEvent>,
+    today: LocalDate,
+    modifier: Modifier = Modifier,
+    tag: String = "dashboard_academic",
+) {
+    HomeContainerCard(modifier = modifier.testTag(tag)) {
         HomeCardHeader(icon = Icons.Default.Event, title = "학사 일정", showChevron = false)
         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
             events.forEach { event ->

@@ -1,5 +1,5 @@
 {
-    "generatedAt": "2026-10-26T02:07:52.469194171Z",
+    "generatedAt": "2026-10-26T03:52:12.897850742Z",
     "datasets": {
         "shuttle": {
             "revision": 2,
@@ -29,12 +29,12 @@
             "sourceUrl": "https://www.dima.ac.kr/?p=111"
         },
         "dorm_meal": {
-            "revision": 7,
+            "revision": 8,
             "state": "READY",
-            "publishedAt": "2026-10-22T08:52:40.199732267Z",
-            "lastAttemptAt": "2026-10-22T08:52:40.199732267Z",
-            "url": "dorm-meal/4b63c996b9f0dcc17b4adc6a3d4bc8558362c89c6623886f3bfd73c24fe7199c.json",
-            "sha256": "4b63c996b9f0dcc17b4adc6a3d4bc8558362c89c6623886f3bfd73c24fe7199c",
+            "publishedAt": "2026-10-26T03:52:12.897850742Z",
+            "lastAttemptAt": "2026-10-26T03:52:12.897850742Z",
+            "url": "dorm-meal/7c099f3c14717db6e0845538a9eb1b4e8f055363250522dd86ead727c7d74892.json",
+            "sha256": "7c099f3c14717db6e0845538a9eb1b4e8f055363250522dd86ead727c7d74892",
             "sourceUrl": "r2://dima-now-dorm-photos/submissions"
         },
         "calendar": {

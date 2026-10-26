@@ -34,6 +34,7 @@ Purpose: durable project context that survives session and context changes.
 | `shuttle-summary-20260921.md` | D-087 immediate-vehicle notification simplification and validation/device limits | Append dated evidence |
 | `device-update-20260921.md` | Wireless replacement install, PC Tailscale startup preference, active-use screen policy and cellular ADB limits | Append dated evidence |
 | `ui-review-20260930.md` | Read-only M3 Expressive UI/UX review of the D-093 baseline (findings implemented by D-094) | Append dated evidence |
+| `login-review-20261026.md` | Sign-in review after the 3045 test: every place the app signs in (LMS, school sites), findings and the proposed fix plan | Append dated evidence |
 | `ui-review-20261026.md` | Read-only UI/UX review after D-133 (emulator light/dark, font 1.3): snackbar over the FAB, Korean mid-word line breaks, far map distances, Home meal venue, sign-in fold, long school-read waits | Append dated evidence |
 | `launch-readiness-20261017.md` | Read-only public-launch readiness review: blockers, decisions needed, external requirements and proposed order | Append dated evidence |
 | `ux-guide-pass-20261022.md` | D-102 UX pass from Apple HIG, Material 3 and the Toss guide: sources, changes, kept decisions and emulator evidence | Append dated evidence |

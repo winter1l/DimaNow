@@ -522,7 +522,7 @@ fun LmsRoute(
  * item starts at its top with no download of the previous one still shown.
  *
  * D-137: the pane's content changes in place: the placeholder and the first or last detail cross-fade
- * ([dimaContentReveal]), one item to the next fades through ([dimaFadeThrough], growing in unless motion is reduced).
+ * ([dimaContentReveal]), one item to the next fades through ([dimaFadeThrough]).
  * Each item is its own content, keyed by its LMS entry, which also gives it its own detail state.
  */
 @Composable
@@ -535,13 +535,12 @@ private fun LmsDetailPane(
     onMessage: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val reduced = LocalReducedMotion.current
     Box(modifier.testTag("lms_detail_pane")) {
         AnimatedContent(
             targetState = presented,
             contentKey = { it?.detail?.item?.entryKey() },
             transitionSpec = {
-                if (initialState == null || targetState == null) dimaContentReveal() else dimaFadeThrough(scale = !reduced)
+                if (initialState == null || targetState == null) dimaContentReveal() else dimaFadeThrough()
             },
             label = "lms_detail_pane",
             modifier = Modifier.fillMaxSize(),

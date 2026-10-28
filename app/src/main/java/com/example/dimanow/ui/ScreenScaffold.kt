@@ -1,6 +1,11 @@
 package com.example.dimanow.ui
 
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.runtime.key
+import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.platform.LocalLayoutDirection
+import com.example.dimanow.ui.motion.dimaLateral
 import androidx.compose.material3.contentColorFor
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.mutableStateOf
@@ -10,8 +15,6 @@ import com.example.dimanow.ui.motion.LocalListChangeMotion
 import com.example.dimanow.ui.motion.LocalReducedMotion
 import com.example.dimanow.ui.motion.dimaPopIn
 import com.example.dimanow.ui.motion.dimaPopOut
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.coroutineScope
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.animation.core.Animatable
 import androidx.compose.ui.Alignment
@@ -140,6 +143,10 @@ internal fun DimaTopAppBarTitle(text: String) {
  * - On wide windows the list keeps [DimaLayout.readingWidth] and centers, and the bar and [subHeader]
  *   line up with it (D-104); the list itself still spans the window, so it scrolls and refreshes from
  *   anywhere.
+ * - D-138: with [pageIndex] each of the screen's own tabs is a page with its own list and scroll position, and a tab
+ *   change slides the two pages together by the full width ([dimaLateral], M3's lateral pattern). [content] is called
+ *   with the page it builds, and while the pages move it builds both, so it must build the page it is given, not the
+ *   tab chosen now.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -159,22 +166,27 @@ internal fun ScreenScaffold(
     refreshLabel: String = "새로고침",
     itemSpacing: Dp = 12.dp,
     /**
-     * D-129: the index of the mode chosen in [subHeader]'s two-way switch (셔틀, 식단, 수업). When it changes,
-     * the list slides in from the side of the newly chosen mode, as a page would; null keeps the list still.
+     * D-129, D-138: the page of the tab chosen in [subHeader]'s switch (셔틀, 식단, 수업), from 0. Each page has its own
+     * list; when it changes, the pages slide together (M3 lateral). Null: one list, [listState], page 0.
      */
     pageIndex: Int? = null,
+    /** D-138: the pages' own list states, one per page; by default each page remembers its own. */
+    pageListStates: List<LazyListState>? = null,
     /**
-     * D-137: what the list shows within one mode, such as the chosen day or a load phase (never a minute-tick text).
-     * When it changes, the whole list fades in again on the slow effects spring without moving; null keeps it still.
+     * D-137: what the list shows within one page, such as the chosen day or a load phase (never a minute-tick text).
+     * When it changes, the list fades in again on the slow effects spring without moving; a page change does not fade.
      */
     contentKey: Any? = null,
-    content: LazyListScope.() -> Unit,
+    content: LazyListScope.(page: Int) -> Unit,
 ) {
+    // D-138: the shown page's list drives the bar's tint and a reselected tab's scroll to the top.
+    val pageStates = if (pageIndex == null) null else pageListStates ?: rememberPageListStates(SCREEN_PAGES)
+    val activeState = pageStates?.getOrNull(pageIndex ?: 0) ?: listState
     val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior()
     // The pinned behavior only sees user drags; programmatic jumps (the meal list's scrollToItem,
     // tests' scrollToIndex) must tint the bar too, so the list position is the source of truth.
-    LaunchedEffect(listState, scrollBehavior) {
-        snapshotFlow { listState.canScrollBackward }.collect { scrolledAway ->
+    LaunchedEffect(activeState, scrollBehavior) {
+        snapshotFlow { activeState.canScrollBackward }.collect { scrolledAway ->
             scrollBehavior.state.contentOffset = if (scrolledAway) {
                 minOf(scrollBehavior.state.contentOffset, SCROLLED_CONTENT_OFFSET)
             } else {
@@ -189,56 +201,26 @@ internal fun ScreenScaffold(
     LaunchedEffect(scrollToTopSignal) {
         if (scrollToTopSignal != handledScrollToTop) {
             handledScrollToTop = scrollToTopSignal
-            listState.animateScrollToItem(0)
+            activeState.animateScrollToItem(0)
         }
     }
-    val pageShift = remember { Animatable(0f) }
-    val pageAlpha = remember { Animatable(1f) }
-    // The page and content key the list has been shown for. D-137: while they lag the parameters, the composition
-    // that already holds the new list hides it at its start place; before, the start state was set only once the
-    // effect below ran, so the new list could show in place for a frame, vanish and then slide in (a blink).
-    var shownPage by remember { mutableStateOf(pageIndex) }
+    // D-137: another day or phase within one page fades the list in again where it is. The content key and page the
+    // list was last shown for lag the parameters for one composition, and that composition, which already holds the
+    // new list, hides it, so it never shows in place for a frame before the fade starts (a blink). A page change does
+    // not fade: its pages slide (D-138).
+    val keyAlpha = remember { Animatable(1f) }
     var shownKey by remember { mutableStateOf(contentKey) }
-    val pageSwitch = pageIndex != null && shownPage != null && pageIndex != shownPage
-    val switching = pageSwitch || contentKey != shownKey
+    var shownKeyPage by remember { mutableStateOf(pageIndex) }
     val reducedMotion = LocalReducedMotion.current
-    val pendingShift = when {
-        !pageSwitch -> 0f
-        pageIndex > (shownPage ?: 0) -> PAGE_SHIFT
-        else -> -PAGE_SHIFT
-    }
+    val keySwitch = !reducedMotion && pageIndex == shownKeyPage && contentKey != shownKey
     LaunchedEffect(pageIndex, contentKey) {
-        val from = shownPage
-        val to = pageIndex
-        val keyChanged = contentKey != shownKey
-        when {
-            reducedMotion || (!keyChanged && (to == null || from == null || to == from)) -> {
-                pageShift.snapTo(0f)
-                pageAlpha.snapTo(1f)
-                shownPage = to
-                shownKey = contentKey
-            }
-            to != null && from != null && to != from -> {
-                // A short shared-axis move on the non-bouncy spring (D-124, D-137); the fade covers the swap of items.
-                pageShift.snapTo(if (to > from) PAGE_SHIFT else -PAGE_SHIFT)
-                pageAlpha.snapTo(0f)
-                shownPage = to
-                shownKey = contentKey
-                coroutineScope {
-                    launch { pageShift.animateTo(0f, DimaMotion.settle()) }
-                    launch { pageAlpha.animateTo(1f, DimaMotion.effectsDefault()) }
-                }
-            }
-            else -> {
-                // D-137: another day or phase in the same mode fades in again where it is, with no shift.
-                pageShift.snapTo(0f)
-                pageAlpha.snapTo(0f)
-                shownPage = to
-                shownKey = contentKey
-                pageAlpha.animateTo(1f, DimaMotion.effectsSlow())
-            }
-        }
+        val fade = !reducedMotion && pageIndex == shownKeyPage && contentKey != shownKey
+        keyAlpha.snapTo(if (fade) 0f else 1f)
+        shownKey = contentKey
+        shownKeyPage = pageIndex
+        if (fade) keyAlpha.animateTo(1f, DimaMotion.effectsSlow())
     }
+    val shownAlpha: () -> Float = { if (keySwitch) 0f else keyAlpha.value }
     // D-137: the FAB that was last passed, so one the caller stops passing can still draw while it shrinks away.
     val shownFab = rememberLastNonNull(floatingActionButton)
     val titleSlot: @Composable () -> Unit = titleContent ?: { title?.let { DimaTopAppBarTitle(it) } }
@@ -325,7 +307,6 @@ internal fun ScreenScaffold(
     ) { innerPadding ->
         val bottomClearance = if (floatingActionButton != null) FAB_CLEARANCE else 0.dp
         val bottomPadding = innerPadding.calculateBottomPadding() + 24.dp + bottomClearance
-        val contentPadding = remember(bottomPadding) { ReadingColumnPadding(top = 12.dp, bottom = bottomPadding) }
         PullToRefresh(
             onRefresh = onRefresh,
             refreshing = refreshing,
@@ -333,33 +314,30 @@ internal fun ScreenScaffold(
                 .fillMaxSize()
                 .padding(top = innerPadding.calculateTopPadding()),
         ) {
-            // D-137: items composed by a whole-list switch do not also fade on their own (D-094(12)); the list fades.
-            CompositionLocalProvider(LocalListChangeMotion provides !switching) {
-                LazyColumn(
-                    state = listState,
-                    modifier = Modifier
-                        .fillMaxSize()
-                        // D-131: the side gutters follow the list's own width, set in its measure pass.
-                        .readingColumnGutters(contentPadding)
-                        // One entrance for the whole list, on first launch only: per-item entrances
-                        // re-fire whenever scrolling composes an item again (D-058), and after a tab
-                        // change the tab transition is the only motion (D-094(12)).
-                        .entrance()
-                        .graphicsLayer {
-                            // D-137: hidden at its start place until the switch has begun; reduced motion swaps at once.
-                            if (switching && !reducedMotion) {
-                                translationX = pendingShift * size.width
-                                alpha = 0f
-                            } else {
-                                translationX = pageShift.value * size.width
-                                alpha = pageAlpha.value
-                            }
-                        }
-                        .then(if (listTag != null) Modifier.testTag(listTag) else Modifier),
-                    contentPadding = contentPadding,
-                    verticalArrangement = Arrangement.spacedBy(itemSpacing),
-                    content = content,
-                )
+            // D-137: items composed by a whole-list change do not also fade on their own (D-094(12)); the list fades.
+            CompositionLocalProvider(LocalListChangeMotion provides !keySwitch) {
+                // One entrance for the whole list, on first launch only: per-item entrances re-fire whenever scrolling
+                // composes an item again (D-058), and after a tab change the tab transition is the only motion
+                // (D-094(12)).
+                if (pageStates == null) {
+                    ScaffoldList(listState, bottomPadding, itemSpacing, listTag, shownAlpha, Modifier.entrance()) { content(0) }
+                } else {
+                    val ltr = LocalLayoutDirection.current == LayoutDirection.Ltr
+                    AnimatedContent(
+                        targetState = pageIndex ?: 0,
+                        transitionSpec = { dimaLateral(forward = (targetState > initialState) == ltr, reducedMotion) },
+                        modifier = Modifier.fillMaxSize().clipToBounds().entrance(),
+                        label = "screen_pages",
+                    ) { page ->
+                        ScaffoldList(
+                            state = pageStates.getOrElse(page) { listState },
+                            bottomPadding = bottomPadding,
+                            itemSpacing = itemSpacing,
+                            listTag = listTag,
+                            alpha = if (page == pageIndex) shownAlpha else FullAlpha,
+                        ) { content(page) }
+                    }
+                }
             }
         }
     }
@@ -402,8 +380,43 @@ private fun Modifier.readingColumnGutters(padding: ReadingColumnPadding): Modifi
 /** The list's side margin on windows narrower than the reading column plus two margins (D-104). */
 private val MIN_SIDE_GUTTER = 16.dp
 
-/** How far, as a share of the list width, a newly chosen mode's list starts to the side (D-129). */
-private const val PAGE_SHIFT = 0.18f
+/** The screen tabs every paged screen has today (셔틀, 식단, 수업: two each). */
+private const val SCREEN_PAGES = 2
+
+private val FullAlpha: () -> Float = { 1f }
+
+/** One list state per page, each saved with the screen (D-138). */
+@Composable
+private fun rememberPageListStates(count: Int): List<LazyListState> = List(count) { page -> key(page) { rememberLazyListState() } }
+
+/**
+ * One page's list (D-138): the reading column's gutters ([readingColumnGutters]) and the fade of a content change
+ * ([alpha], read in the draw phase).
+ */
+@Composable
+private fun ScaffoldList(
+    state: LazyListState,
+    bottomPadding: Dp,
+    itemSpacing: Dp,
+    listTag: String?,
+    alpha: () -> Float,
+    modifier: Modifier = Modifier,
+    content: LazyListScope.() -> Unit,
+) {
+    val contentPadding = remember(bottomPadding) { ReadingColumnPadding(top = 12.dp, bottom = bottomPadding) }
+    LazyColumn(
+        state = state,
+        modifier = modifier
+            .fillMaxSize()
+            // D-131: the side gutters follow the list's own width, set in its measure pass.
+            .readingColumnGutters(contentPadding)
+            .graphicsLayer { this.alpha = alpha() }
+            .then(if (listTag != null) Modifier.testTag(listTag) else Modifier),
+        contentPadding = contentPadding,
+        verticalArrangement = Arrangement.spacedBy(itemSpacing),
+        content = content,
+    )
+}
 
 /** Any offset well past the bar height marks content as scrolled under the pinned bar. */
 private const val SCROLLED_CONTENT_OFFSET = -100_000f

@@ -389,22 +389,27 @@ internal fun LmsItemsScreen(
     }
     // 과목별은 과목 순서로 묶고, 과목마다 남은 항목·기한 지남·완료한 학습으로 나눈다 (D-058, D-118)
     val coursePlan = remember(filtered, snapshot.courses, now) { planLmsByCourse(filtered, snapshot.courses, now) }
-    val visibleEmpty = if (todayMode) {
+    // D-138: 할 일 and 과목별 are pages drawn side by side while they slide, so what each shows is worked out per page.
+    fun visibleEmptyIn(today: Boolean) = if (today) {
         agenda.groups.none { it.key != LmsAgendaGroupKey.COMPLETED }
     } else {
         filtered.isEmpty()
     }
+    val visibleEmpty = visibleEmptyIn(todayMode)
     // D-137: the line or card above the list and the block standing in for an empty list, each one item whose content
     // changes in place (R2), so a refresh failure, a new read time or the list arriving never pops.
-    val status = lmsListStatus(
-        signedInElsewhere = signedInElsewhere,
-        showsError = hasError && !visibleEmpty,
-        updatedLabel = snapshot.lastSuccessAt?.takeUnless { visibleEmpty }?.let { lmsUpdatedLabel(it, now) },
-        errorMessage = loginErrorMessage ?: "수업 정보를 불러오지 못했어요",
-        lastSuccessAt = snapshot.lastSuccessAt,
-    )
-    val placeholder = when {
-        !visibleEmpty -> null
+    fun statusIn(today: Boolean): LmsListStatus {
+        val empty = visibleEmptyIn(today)
+        return lmsListStatus(
+            signedInElsewhere = signedInElsewhere,
+            showsError = hasError && !empty,
+            updatedLabel = snapshot.lastSuccessAt?.takeUnless { empty }?.let { lmsUpdatedLabel(it, now) },
+            errorMessage = loginErrorMessage ?: "수업 정보를 불러오지 못했어요",
+            lastSuccessAt = snapshot.lastSuccessAt,
+        )
+    }
+    fun placeholderIn(today: Boolean): LmsListPlaceholder? = when {
+        !visibleEmptyIn(today) -> null
         syncing -> LmsListPlaceholder.Loading
         // D-135: the card above says why nothing new is read and offers 이 기기로 로그인.
         signedInElsewhere -> null
@@ -415,7 +420,7 @@ internal fun LmsItemsScreen(
             needsSignIn = sessionState != LmsSessionState.ACTIVE,
             neverLoaded = snapshot.syncState == LmsSyncState.IDLE && snapshot.lastSuccessAt == null,
             filterActive = filterActive,
-            todayMode = todayMode,
+            todayMode = today,
         )
     }
     // Quick opens (a cached detail) show nothing at the row; only a wait past the grace does (D-137). Only the row
@@ -437,7 +442,7 @@ internal fun LmsItemsScreen(
         title = "수업",
         modifier = modifier,
         listTag = "lms_history",
-        // D-129: 할 일(0) and 과목별(1) slide in from their side
+        // D-129, D-138: 할 일(0) and 과목별(1) are pages that slide together
         pageIndex = if (todayMode) 0 else 1,
         // 새로고침은 목록을 당기거나 상단 버튼으로 실행한다 (D-058, D-103)
         onRefresh = onRefresh,
@@ -476,7 +481,10 @@ internal fun LmsItemsScreen(
                 }
             }
         },
-    ) {
+    ) { page ->
+        val pageToday = page == 0
+        val status = statusIn(pageToday)
+        val placeholder = placeholderIn(pageToday)
         // D-131 (Q-032 (g)): every section row is its own lazy item, so only the rows on screen compose (a course with
         // 80 notices used to compose all of them in one item). The list therefore has no item spacing of its own; each
         // item carries the gap above it, as the group columns had: 12dp between blocks, 8dp under a heading and before
@@ -577,7 +585,7 @@ internal fun LmsItemsScreen(
         // 과목별) turns that off through ScreenScaffold. They never fade out, since a removed item keeps the specs of its
         // last composition and would also fade during the switch (D-094(12)), and nothing slides into the place of a
         // fading row (see lmsRowItems).
-        if (todayMode) {
+        if (pageToday) {
             // D-117: 다가오는 마감 → 새 소식 → 기한 지남, 섹션마다 머리글 아래 카드 묶음 하나
             agenda.groups.forEach { group ->
                 val top = rows.gap(LMS_BLOCK_GAP)

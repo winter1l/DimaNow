@@ -174,7 +174,7 @@ fun ShuttleScreen(
         listTag = "shuttle_list",
         pageIndex = shuttleView.ordinal,
         // D-137: within 교내 셔틀 a day change, the first cache read or a retry that replaces an error fades the whole
-        // list in again; 4402 has no days, and switching modes slides instead (pageIndex).
+        // list in again; 4402 has no days, and switching routes slides the pages (pageIndex, D-138).
         contentKey = if (shuttleView == ShuttleView.CAMPUS) activeDay to phase else null,
         // D-102: 식단 화면처럼 노선 전환과 요일 선택을 머리에 고정해, 시간표를 내려 읽다가도 바로 바꿀 수 있다 (D-057)
         subHeader = {
@@ -206,8 +206,9 @@ fun ShuttleScreen(
                 }
             }
         },
-    ) {
-        if (shuttleView == ShuttleView.BUS_4402) {
+    ) { page ->
+        // D-138: each route is a page of its own, built from the page given, since both are drawn while they slide.
+        if (page == ShuttleView.BUS_4402.ordinal) {
             item(key = "bus_4402") {
                 Bus4402ScheduleContent(now = now, nearbyStopNumber = nearbyTransitStopNumber, resetSignal = stripReset)
             }

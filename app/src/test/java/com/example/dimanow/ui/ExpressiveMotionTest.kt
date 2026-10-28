@@ -37,7 +37,7 @@ class ExpressiveMotionTest {
 
     @Test
     fun `reduced motion turns every page change into the plain fade-through`() {
-        val fade = dimaFadeThrough(scale = false)
+        val fade = dimaFadeThrough()
         for (motion in PageMotion.entries) {
             val reduced = dimaPageTransform(motion, slidePx = 84, reducedMotion = true)
             assertEquals(fade.targetContentEnter, reduced.targetContentEnter)
@@ -48,12 +48,25 @@ class ExpressiveMotionTest {
     }
 
     @Test
-    fun `a navigation-bar change grows the incoming page only when motion is allowed`() {
-        val topLevel = dimaPageTransform(PageMotion.TOP_LEVEL, slidePx = 84, reducedMotion = false)
-        assertEquals(dimaFadeThrough().targetContentEnter, topLevel.targetContentEnter)
-        assertNotEquals("D-137: the incoming page grows as it fades in", dimaFadeThrough(scale = false).targetContentEnter, topLevel.targetContentEnter)
-        // Both forms leave the same way: the outgoing page only fades.
-        assertEquals(dimaFadeThrough(scale = false).initialContentExit, topLevel.initialContentExit)
+    fun `a navigation-bar change only fades, with motion allowed or not`() {
+        // D-138: M3's top-level pattern is a quick fade; D-137's growth from 92% was too much.
+        for (reduced in listOf(false, true)) {
+            val topLevel = dimaPageTransform(PageMotion.TOP_LEVEL, slidePx = 84, reducedMotion = reduced)
+            assertEquals(androidx.compose.animation.fadeIn(com.example.dimanow.ui.motion.DimaMotion.effectsDefault()), topLevel.targetContentEnter)
+            assertEquals(androidx.compose.animation.fadeOut(com.example.dimanow.ui.motion.DimaMotion.effectsFast()), topLevel.initialContentExit)
+        }
+    }
+
+    @Test
+    fun `a screen's own tabs slide both ways and only fade under reduced motion`() {
+        val forward = com.example.dimanow.ui.motion.dimaLateral(forward = true, reducedMotion = false)
+        val backward = com.example.dimanow.ui.motion.dimaLateral(forward = false, reducedMotion = false)
+        assertNotEquals(forward.targetContentEnter, backward.targetContentEnter)
+        assertNotEquals("D-138: the pages slide, they do not only fade", dimaFadeThrough().targetContentEnter, forward.targetContentEnter)
+        assertEquals(null, forward.sizeTransform)
+        val reduced = com.example.dimanow.ui.motion.dimaLateral(forward = true, reducedMotion = true)
+        assertEquals(dimaFadeThrough().targetContentEnter, reduced.targetContentEnter)
+        assertEquals(dimaFadeThrough().initialContentExit, reduced.initialContentExit)
     }
 
     @Test

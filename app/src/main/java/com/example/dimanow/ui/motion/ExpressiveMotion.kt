@@ -11,6 +11,7 @@ import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
 import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.VisibilityThreshold
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.lazy.LazyItemScope
 import androidx.compose.runtime.DisposableEffect
@@ -159,28 +160,47 @@ fun ProvideReducedMotion(content: @Composable () -> Unit) {
 private fun animationsRemoved(resolver: ContentResolver): Boolean =
     Settings.Global.getFloat(resolver, Settings.Global.ANIMATOR_DURATION_SCALE, 1f) == 0f
 
-/** How far the incoming page of a fade-through starts below its full size (M3 fade-through, D-137). */
-const val FADE_THROUGH_INITIAL_SCALE = 0.92f
-
 /**
  * Material fade-through between navigation-bar destinations (D-103): the outgoing page fades out
  * quickly while the incoming page fades in more slowly, so the old page is gone before the new one
- * is fully there. Sideways motion is reserved for swipeable tabs and carousels. Since D-104 both
- * fades use the motion scheme's effects springs (fast out, default in) instead of fixed durations.
- * Since D-137 the incoming page also grows from [FADE_THROUGH_INITIAL_SCALE] on the slow spatial spring, as the M3
- * fade-through does; [scale] false (reduced motion) leaves the plain fades.
+ * is fully there. Since D-104 both fades use the motion scheme's effects springs (fast out, default in)
+ * instead of fixed durations. D-138: only fades, as M3's top-level pattern says ("a quick fade"); D-137's growth from
+ * 92% on the bouncy spring was too much for the most frequent change in the app.
  */
-fun dimaFadeThrough(scale: Boolean = true): ContentTransform {
-    val enter = fadeIn(animationSpec = DimaMotion.effectsDefault())
-    return (if (scale) enter + scaleIn(DimaMotion.spatialSlow(), initialScale = FADE_THROUGH_INITIAL_SCALE) else enter)
-        .togetherWith(fadeOut(animationSpec = DimaMotion.effectsFast()))
+fun dimaFadeThrough(): ContentTransform =
+    fadeIn(animationSpec = DimaMotion.effectsDefault()).togetherWith(fadeOut(animationSpec = DimaMotion.effectsFast()))
+
+/**
+ * M3's lateral pattern for a screen's own tabs (D-138; 셔틀's 교내 셔틀/4402, 식단's 본관/기숙사, 수업's 할 일/과목별): the
+ * two pages slide together by the full width, the new one in from the side of its tab, with no fade ("elements are
+ * grouped and slide in unison"), on the non-bouncy spring. [forward] is a move to a tab further toward the end edge;
+ * pass it already mirrored for right-to-left layouts. Under [reducedMotion] the pages only fade.
+ */
+fun dimaLateral(forward: Boolean, reducedMotion: Boolean): ContentTransform {
+    if (reducedMotion) {
+        return ContentTransform(fadeIn(DimaMotion.effectsDefault()), fadeOut(DimaMotion.effectsFast()), sizeTransform = null)
+    }
+    val direction = if (forward) 1 else -1
+    return ContentTransform(
+        targetContentEnter = slideInHorizontally(LateralSpring) { direction * it },
+        initialContentExit = slideOutHorizontally(LateralSpring) { -direction * it },
+        sizeTransform = null,
+    )
 }
+
+/** The lateral slide's spring: [DimaMotion.settle]'s values, ending within a pixel. */
+private val LateralSpring = spring(
+    dampingRatio = Spring.DampingRatioNoBouncy,
+    stiffness = Spring.StiffnessMediumLow,
+    visibilityThreshold = IntOffset.VisibilityThreshold,
+)
 
 /**
  * Which M3 transition pattern a page change uses (D-121, m3.material.io/styles/motion/transitions/transition-patterns).
  * - [TOP_LEVEL]: between navigation-bar destinations, the fade-through of D-103.
  * - [FORWARD]/[BACKWARD]: one level deeper (전체 → 기숙사) or back up again; "Android uses a fade as screens slide",
- *   so the pages move a short distance sideways while they fade.
+ *   so the pages move a short distance sideways while they fade. M3 calls a full-width slide here excessive for so
+ *   frequent a change; that slide is the lateral pattern of a screen's own tabs ([dimaLateral]).
  */
 enum class PageMotion { TOP_LEVEL, FORWARD, BACKWARD }
 
@@ -199,18 +219,19 @@ val PageSlideDistance = 32.dp
 
 /**
  * The [ContentTransform] for [motion] (D-121). Forward: the new page comes in from the end edge while the old one
- * leaves toward the start; backward mirrors it. Position uses the *slow* spatial spring (M3: full-screen motion is
- * slow), opacity the effects springs, as the fade-through does. [slidePx] is [PageSlideDistance] in pixels, negated
- * for right-to-left layouts. With [reducedMotion] every change is the plain fade-through: no sideways movement.
+ * leaves toward the start; backward mirrors it. Position uses the non-bouncy [DimaMotion.settle] spring (D-138: M3
+ * says common transitions should not use bouncy springs; before, the slow spatial spring overshot), opacity the
+ * effects springs, as the fade-through does. [slidePx] is [PageSlideDistance] in pixels, negated for right-to-left
+ * layouts. With [reducedMotion] every change is the plain fade-through: no sideways movement.
  */
 fun dimaPageTransform(motion: PageMotion, slidePx: Int, reducedMotion: Boolean): ContentTransform {
-    if (reducedMotion || motion == PageMotion.TOP_LEVEL) return dimaFadeThrough(scale = !reducedMotion)
+    if (reducedMotion || motion == PageMotion.TOP_LEVEL) return dimaFadeThrough()
     val direction = if (motion == PageMotion.FORWARD) 1 else -1
     return (
-        slideInHorizontally(DimaMotion.spatialSlow()) { direction * slidePx } +
+        slideInHorizontally(DimaMotion.settle()) { direction * slidePx } +
             fadeIn(DimaMotion.effectsDefault())
         ).togetherWith(
-        slideOutHorizontally(DimaMotion.spatialSlow()) { -direction * slidePx } +
+        slideOutHorizontally(DimaMotion.settle()) { -direction * slidePx } +
             fadeOut(DimaMotion.effectsFast()),
     )
 }

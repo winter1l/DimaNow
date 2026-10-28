@@ -245,7 +245,9 @@ fun MealScreen(
     // 선택은 고른 날(오늘)과 함께 저장해 탭 전환에도 유지하고, 날짜가 바뀐 뒤에는 새 기본값을 쓴다 (D-094(12))
     var daySelection by rememberSaveable { mutableStateOf(today to defaultDay) }
     val selectedDay = if (daySelection.first == today) daySelection.second else defaultDay
-    val listState = rememberLazyListState()
+    // D-138: each venue is a page with its own list and scroll; the moves below act on the chosen venue's list.
+    val venueListStates = listOf(rememberLazyListState(), rememberLazyListState())
+    val listState = venueListStates[venue.ordinal]
     // The last venue/day/focus the list was moved for; returning to the tab restores the user's scroll.
     var lastAutoScrollKey by rememberSaveable { mutableStateOf<String?>(null) }
     val now = ZonedDateTime.of(today, nowTime, MinuteTicker.CAMPUS_ZONE)
@@ -297,7 +299,7 @@ fun MealScreen(
     Box(modifier = modifier.fillMaxSize()) {
         ScreenScaffold(
             title = "식단",
-            listState = listState,
+            pageListStates = venueListStates,
             modifier = Modifier.fillMaxSize(),
             // 새로고침은 목록을 당기거나 상단 버튼으로 실행한다 (D-058, D-103)
             onRefresh = ::refreshMeal,
@@ -332,17 +334,19 @@ fun MealScreen(
                     itemTag = { "meal_day_${it.dayOfWeek.name}" },
                 )
             },
-        ) {
+        ) { page ->
+            // D-138: built for the venue of the page given; both venues are drawn while their pages slide.
+            val pageVenue = MealVenue.entries[page]
             val dormitoryMeal = loadedDormitoryMeal
             val meal = loadedMeal
-            if (venue == MealVenue.DORMITORY && dormitoryMeal == null || venue == MealVenue.MAIN_CAFETERIA && meal == null) {
+            if (pageVenue == MealVenue.DORMITORY && dormitoryMeal == null || pageVenue == MealVenue.MAIN_CAFETERIA && meal == null) {
                 item(key = "meal_loading") {
                     LoadingLine(
                         text = "식단을 불러오고 있어요",
                         modifier = Modifier.padding(16.dp).testTag("meal_loading"),
                     )
                 }
-            } else if (venue == MealVenue.DORMITORY && dormitoryMeal != null) {
+            } else if (pageVenue == MealVenue.DORMITORY && dormitoryMeal != null) {
                 // 업로드는 15분까지 폴링되므로 진행 상태를 상시 카드로 보여준다 (D-056)
                 // D-137: these rows fade in and out; the day's items below glide to make room instead of jumping.
                 if (uploadingDormitoryMeal) {

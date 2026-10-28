@@ -553,3 +553,10 @@ Observed (same setup; the app's record file holds only times, read with run-as):
 
 ## 2026-10-28 — D-136 on the tablet (debug build)
 Observed: the review capture `ShuttleStripReviewTest.serviceEndedAtNightDark` (Monday timetable at 23:00, dark) shows 엔터관행 and 원룸촌행 with every time as quiet text, the last as `21:50` with `막차 · 운동장` and `17:45` with `막차` small beneath, then `오늘 운행이 끝났어요`; no amber cell. 도서관: a read at 17:18 saved `library-read.json`, `library-due.json` and `library-public.json` in the no-backup school folder; after a force-stop and relaunch, opening 도서관 showed the loans card (`오늘 17:18 기준`), 이용 시간 and the hours notices 0.6 s after the tap, with no loading line. 기숙사: after one 상벌점 read (17:20) and a force-stop, the 상벌점 card showed `오늘 17:20 기준` 0.6 s after opening. Not observed: the phone; the strip at night on a device.
+
+## 2026-10-28 — D-137 motion on the tablet (debug build, uncommitted tree)
+Observed (SM-X710, Android 16, landscape with the rail, animations at the default scale; screen recordings `screenrecord` read frame by frame):
+1. Rail destinations: 홈 → 셔틀 and 식단 → 전체 — the outgoing page fades and the incoming page appears slightly smaller and grows to full width over about 0.3 s; the selected 식단 day (`수 28`) is a round pill.
+2. 전체 → 기숙사: the rail fades and narrows away while 전체 fades and 기숙사 slides in; the 기숙사 column then widens into the freed space smoothly. Back (edge swipe) returned to 전체 with the rail sliding back in.
+3. Not observed: the in-app predictive back preview. The tablet's edge swipe is taken by Samsung One Hand Operation+ (`SGPController … action=key_back` in logcat), which sends a Back key, so the app receives no gesture progress there. Also not observed: dialog mark morphs, list item fades, sheets, onboarding, the phone.
+Tests: 520 JVM tests pass; lint 0 errors; 39 instrumented classes (159 tests: every `ui` class, onboarding, LmsHistoryScreenTest, LmsNativeDetailScreenTest, LmsTwoPaneTest, RoomCampusDataRepositoryTest) pass on the tablet, before and after the review fixes.

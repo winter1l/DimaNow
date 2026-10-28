@@ -121,6 +121,10 @@ class ShuttleStripReviewTest {
     @Test
     fun lastServiceAtNightDark() = capture("21-38-dark", 21, 38, dark = true)
 
+    /** D-136: after the day's service the last departure is a quiet past time, not an amber cell. */
+    @Test
+    fun serviceEndedAtNightDark() = capture("23-00-dark", 23, 0, dark = true)
+
     private fun saveRoot(name: String) {
         val directory = File(InstrumentationRegistry.getInstrumentation().targetContext.getExternalFilesDir(null), "d124-review")
             .apply { mkdirs() }

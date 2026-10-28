@@ -1,19 +1,31 @@
 package com.example.dimanow.school
 
+import java.io.File
 import java.net.HttpURLConnection
 import java.net.URL
 import java.net.URLEncoder
 import java.time.Instant
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.addJsonObject
+import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.intOrNull
+import kotlinx.serialization.json.longOrNull
+import kotlinx.serialization.json.put
+import kotlinx.serialization.json.putJsonArray
 
 /**
  * What the library shows everyone, read without signing in (D-132): the 이용시간 block of its front page (the page
@@ -24,6 +36,16 @@ import kotlinx.serialization.json.contentOrNull
 object LibraryPublicSource {
     private val mutableInfo = MutableStateFlow<LibraryPublicInfo?>(null)
     val info: StateFlow<LibraryPublicInfo?> = mutableInfo.asStateFlow()
+    @Volatile private var file: File? = null
+    private val io = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+    /** Keeps the last read in [file] and shows it as soon as it is loaded, so the hours show at once (D-136). */
+    fun persistIn(file: File) {
+        this.file = file
+        io.launch {
+            runCatching { decodeLibraryPublicInfo(file.readText()) }.getOrNull()?.let { mutableInfo.compareAndSet(null, it) }
+        }
+    }
 
     /** Reads again when nothing was read or the last read is older than an hour. */
     fun isDue(now: Instant): Boolean = mutableInfo.value?.readAt?.isBefore(now.minusSeconds(3_600)) ?: true
@@ -34,7 +56,10 @@ object LibraryPublicSource {
             // The notice list is a bonus: a failure there keeps the hours.
             val notices = runCatching { parseLibraryNotices(get(LIBRARY_NOTICE_LIST_URL)) }.getOrDefault(emptyList())
             LibraryPublicInfo(hours, hoursNotices(notices, LocalDate.now(java.time.ZoneId.of("Asia/Seoul"))), now)
-        }.onSuccess { mutableInfo.value = it }
+        }.onSuccess { read ->
+            mutableInfo.value = read
+            file?.let { runCatching { writeReplacing(it, encodeLibraryPublicInfo(read)) } }
+        }
     }
 
     private fun get(url: String): String {
@@ -55,6 +80,48 @@ object LibraryPublicSource {
 data class LibraryNotice(val title: String, val url: String, val postedOn: LocalDate?)
 
 data class LibraryPublicInfo(val hours: List<LibraryHours>, val notices: List<LibraryNotice>, val readAt: Instant)
+
+internal fun encodeLibraryPublicInfo(info: LibraryPublicInfo): String = buildJsonObject {
+    put("version", 1)
+    put("readAt", info.readAt.toEpochMilli())
+    putJsonArray("hours") {
+        info.hours.forEach { hours ->
+            addJsonObject {
+                put("place", hours.place)
+                put("text", hours.text)
+            }
+        }
+    }
+    putJsonArray("notices") {
+        info.notices.forEach { notice ->
+            addJsonObject {
+                put("title", notice.title)
+                put("url", notice.url)
+                notice.postedOn?.let { put("postedOn", it.toString()) }
+            }
+        }
+    }
+}.toString()
+
+internal fun decodeLibraryPublicInfo(text: String): LibraryPublicInfo? {
+    val root = Json.parseToJsonElement(text) as? JsonObject ?: return null
+    if ((root["version"] as? JsonPrimitive)?.intOrNull != 1) return null
+    val readAt = (root["readAt"] as? JsonPrimitive)?.longOrNull?.let(Instant::ofEpochMilli) ?: return null
+    fun JsonObject.string(name: String) = (this[name] as? JsonPrimitive)?.contentOrNull
+    val hours = (root["hours"] as? JsonArray).orEmpty().mapNotNull { element ->
+        val line = element as? JsonObject ?: return@mapNotNull null
+        LibraryHours(line.string("place") ?: return@mapNotNull null, line.string("text") ?: return@mapNotNull null)
+    }
+    val notices = (root["notices"] as? JsonArray).orEmpty().mapNotNull { element ->
+        val notice = element as? JsonObject ?: return@mapNotNull null
+        LibraryNotice(
+            title = notice.string("title") ?: return@mapNotNull null,
+            url = notice.string("url")?.takeIf { it.startsWith("https://lib.dima.ac.kr/") } ?: return@mapNotNull null,
+            postedOn = notice.string("postedOn")?.let { runCatching { LocalDate.parse(it) }.getOrNull() },
+        )
+    }
+    return LibraryPublicInfo(hours, notices, readAt)
+}
 
 internal val LIBRARY_HOURS_API_URL = "https://lib.dima.ac.kr/LibtechApi/GetSpongeManagement?l_module=" +
     URLEncoder.encode("메인", "UTF-8") + "&l_section=" + URLEncoder.encode("이용시간", "UTF-8")

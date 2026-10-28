@@ -1,7 +1,9 @@
 package com.example.dimanow.school
 
+import java.time.Instant
 import java.time.LocalDate
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Test
 
 class LibraryPublicTest {
@@ -17,6 +19,24 @@ class LibraryPublicTest {
             ),
             parseLibraryHoursApi(body),
         )
+    }
+
+    @Test
+    fun theSavedHoursAndNoticesComeBackAsTheyWere() {
+        // D-136: kept on the device so 도서관 shows its hours at once.
+        val info = LibraryPublicInfo(
+            hours = listOf(LibraryHours("리더스스테이션", "09:00 ~ 20:00"), LibraryHours("자유열람실", "24시간 운영중")),
+            notices = listOf(
+                LibraryNotice("입시기간 도서관 이용 안내", "https://lib.dima.ac.kr/Board/Detail/20260929101500000?n=notice", LocalDate.of(2026, 9, 29)),
+                LibraryNotice("휴관 안내", "https://lib.dima.ac.kr/Board/Detail/1?n=notice", null),
+            ),
+            readAt = Instant.ofEpochMilli(1_792_000_000_000),
+        )
+        assertEquals(info, decodeLibraryPublicInfo(encodeLibraryPublicInfo(info)))
+        // A saved link off the library's site is dropped.
+        val elsewhere = info.copy(notices = listOf(LibraryNotice("x", "https://evil.example/", null)))
+        assertEquals(emptyList<LibraryNotice>(), decodeLibraryPublicInfo(encodeLibraryPublicInfo(elsewhere))?.notices)
+        assertNull(decodeLibraryPublicInfo("""{"version":2,"readAt":1}"""))
     }
 
     @Test

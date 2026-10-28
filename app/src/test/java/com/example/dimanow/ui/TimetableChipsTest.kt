@@ -27,8 +27,10 @@ class TimetableChipsTest {
     }
 
     @Test
-    fun lastDepartureKeepsItsWarningToneEvenWhenPast() {
-        assertEquals(TimetableChipTone.LAST, timetableChipTone(isFirst = false, isLast = true, isPast = true, isNext = false, isSecond = false))
+    fun aLastDepartureIsWarnedUntilItLeavesThenQuietLikeTheOtherPastTimes() {
+        // D-136: after the day's service the amber 막차 cell read as if a bus were still to come.
+        assertEquals(TimetableChipTone.LAST, timetableChipTone(isFirst = false, isLast = true, isPast = false, isNext = false, isSecond = false))
+        assertEquals(TimetableChipTone.PAST, timetableChipTone(isFirst = false, isLast = true, isPast = true, isNext = false, isSecond = false))
         assertEquals(TimetableChipTone.NEXT_LAST, timetableChipTone(isFirst = false, isLast = true, isPast = false, isNext = true, isSecond = false))
         assertEquals(TimetableChipTone.PAST, timetableChipTone(isFirst = false, isLast = false, isPast = true, isNext = false, isSecond = false))
         assertEquals(TimetableChipTone.FIRST, timetableChipTone(isFirst = true, isLast = false, isPast = true, isNext = false, isSecond = false))

@@ -77,7 +77,8 @@ import kotlinx.coroutines.launch
 
 /**
  * Visual role of one departure in a route's strip, shared by the campus shuttle and 4402 (D-094(5), (10), D-124).
- * The order is the precedence: a last departure keeps its warning colour (D-016) even when past.
+ * The order is the precedence. A last departure has its warning colour (D-016) until it leaves; once the day's
+ * service is over it is a quiet past time like the others, keeping only its 막차 word (D-136).
  */
 internal enum class TimetableChipTone { NEXT_LAST, LAST, NEXT, SECOND, FIRST, PAST, UPCOMING }
 
@@ -141,7 +142,7 @@ internal fun timetableChipTone(
     isSecond: Boolean,
 ): TimetableChipTone = when {
     isNext && isLast -> TimetableChipTone.NEXT_LAST
-    isLast -> TimetableChipTone.LAST
+    isLast && !isPast -> TimetableChipTone.LAST
     isNext -> TimetableChipTone.NEXT
     isSecond -> TimetableChipTone.SECOND
     isFirst -> TimetableChipTone.FIRST
@@ -441,7 +442,7 @@ private fun DepartureCell(chip: TimetableChipSpec, onCardInner: Boolean, width: 
                             maxLines = 1,
                             softWrap = false,
                         )
-                        if (shown == CellKind.SMALL && chip.markers.isNotEmpty()) {
+                        if (shown == CellKind.SMALL && chip.markers.isNotEmpty() || shown == CellKind.QUIET && chip.leftAsLast) {
                             Text(
                                 text = chip.markers.joinToString(" · "),
                                 style = MaterialTheme.typography.labelSmall,
@@ -475,6 +476,10 @@ private fun cellKind(chip: TimetableChipSpec): CellKind = when {
     else -> CellKind.SMALL
 }
 
+/** The day's last departure, already gone: quiet, but its 막차 word stays under the time (D-136). */
+private val TimetableChipSpec.leftAsLast: Boolean
+    get() = isPast && markers.any { "막차" in it }
+
 private fun isNextCell(chip: TimetableChipSpec): Boolean =
     cellKind(chip) == CellKind.LARGE && (chip.tone == TimetableChipTone.NEXT || chip.tone == TimetableChipTone.NEXT_LAST)
 
@@ -490,7 +495,10 @@ private fun measuredCellWidth(chip: TimetableChipSpec, measurer: TextMeasurer, t
             widthOf(chip.clock, typography.titleMedium),
             if (chip.markers.isEmpty()) 0 else widthOf(chip.markers.joinToString(" · "), typography.labelSmall),
         )
-        CellKind.QUIET -> widthOf(chip.clock, typography.bodyLarge)
+        CellKind.QUIET -> maxOf(
+            widthOf(chip.clock, typography.bodyLarge),
+            if (chip.leftAsLast) widthOf(chip.markers.joinToString(" · "), typography.labelSmall) else 0,
+        )
     }
     val padding = when (cellKind(chip)) {
         CellKind.LARGE -> if (isNextCell(chip)) 40.dp else 28.dp

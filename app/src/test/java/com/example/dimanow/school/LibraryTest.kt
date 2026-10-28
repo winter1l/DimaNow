@@ -183,6 +183,17 @@ class LibraryTest {
     }
 
     @Test
+    fun `the saved read comes back as it was, so the page shows it at once after a restart`() {
+        // D-136: the whole read is kept beside the due list.
+        val read = SchoolReadCache.LibraryRead(parseLibraryStatus(SCRIPT_ANSWER), Instant.ofEpochMilli(1_792_000_000_000))
+        assertEquals(read, decodeLibraryRead(encodeLibraryRead(read)))
+        val empty = SchoolReadCache.LibraryRead(LibraryStatus(null, 0, emptyList(), emptyList()), Instant.ofEpochMilli(1))
+        assertEquals(empty, decodeLibraryRead(encodeLibraryRead(empty)))
+        assertNull(decodeLibraryRead("""{"version":2,"readAt":1,"books":[],"hours":[]}"""))
+        assertNull(runCatching { decodeLibraryRead("not json") }.getOrNull())
+    }
+
+    @Test
     fun `opening the page reads again only after half an hour`() {
         val now = Instant.parse("2026-10-26T01:00:00Z")
         assertTrue(libraryAutoReadDue(null, now))

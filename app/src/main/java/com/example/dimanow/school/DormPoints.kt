@@ -108,10 +108,10 @@ private fun parseDormDate(value: String): LocalDate? {
 }
 
 /**
- * What the school screens read (D-107). The last 상벌점 read is also kept in the app's no-backup storage, so the
- * card shows it after a restart until the student refreshes it (D-108); equipment availability lives in memory
- * only. The last 도서관 read lives in memory, and only its titles and due dates are also saved beside the 상벌점,
- * for the morning digest (D-131). Deleting the school account or all app data removes all of them.
+ * What the school screens read (D-107). The last 상벌점 read (D-108) and the last 도서관 read (D-136) are also kept in
+ * the app's no-backup storage, so their screens show them at once after a restart and read again only when they
+ * are due; the library's titles and due dates are saved once more on their own for the morning digest (D-131).
+ * Equipment lives in memory only. Deleting the school account or all app data removes all of them.
  */
 object SchoolReadCache {
     /** The last 상벌점 read and when it was made; [summary] is null when the list was empty. */
@@ -126,21 +126,27 @@ object SchoolReadCache {
     private var dormPointsFile: File? = null
     // Set at startup and read by the morning digest's worker thread.
     @Volatile private var libraryDueFile: File? = null
+    private var libraryReadFile: File? = null
 
     private val mutableDormPoints = MutableStateFlow<DormPointsRead?>(null)
     val dormPoints: StateFlow<DormPointsRead?> = mutableDormPoints.asStateFlow()
 
     /**
-     * Keeps 상벌점 reads in [file] and shows the saved one as soon as it is loaded. The library's due list (D-131) is
-     * kept beside it in the same no-backup folder, so this one call at startup places both.
+     * Keeps the 상벌점 and 도서관 reads in [directory] (no-backup storage) and shows the saved ones as soon as they are
+     * loaded. The library's due list for the morning digest (D-131) is kept in the same folder.
      */
-    fun persistDormPointsIn(file: File) {
-        dormPointsFile = file
-        libraryDueFile = File(file.parentFile, LIBRARY_DUE_FILE_NAME)
+    fun persistIn(directory: File) {
+        val dormFile = File(directory, DORM_POINTS_FILE_NAME).also { dormPointsFile = it }
+        val libraryFile = File(directory, LIBRARY_READ_FILE_NAME).also { libraryReadFile = it }
+        libraryDueFile = File(directory, LIBRARY_DUE_FILE_NAME)
         val loading = generation
         io.launch {
-            val saved = runCatching { decodeDormPointsRead(file.readText()) }.getOrNull() ?: return@launch
-            if (generation == loading) mutableDormPoints.compareAndSet(null, saved)
+            runCatching { decodeDormPointsRead(dormFile.readText()) }.getOrNull()?.let { saved ->
+                if (generation == loading) mutableDormPoints.compareAndSet(null, saved)
+            }
+            runCatching { decodeLibraryRead(libraryFile.readText()) }.getOrNull()?.let { saved ->
+                if (generation == loading) mutableLibrary.compareAndSet(null, saved)
+            }
         }
     }
 
@@ -160,14 +166,16 @@ object SchoolReadCache {
     private val mutableLibrary = MutableStateFlow<LibraryRead?>(null)
     val library: StateFlow<LibraryRead?> = mutableLibrary.asStateFlow()
 
-    /** Shows [read] and saves its titles and due dates, nothing else, for the morning digest. */
+    /** Shows [read] and saves it, and its titles and due dates once more for the morning digest. */
     fun setLibrary(read: LibraryRead) {
         mutableLibrary.value = read
-        val file = libraryDueFile ?: return
+        val readFile = libraryReadFile
+        val dueFile = libraryDueFile
         val writing = generation
         io.launch {
             if (generation != writing) return@launch
-            runCatching { writeReplacing(file, encodeLibraryDue(read.status.dueList(read.readAt))) }
+            readFile?.let { runCatching { writeReplacing(it, encodeLibraryRead(read)) } }
+            dueFile?.let { runCatching { writeReplacing(it, encodeLibraryDue(read.status.dueList(read.readAt))) } }
         }
     }
 
@@ -218,17 +226,21 @@ object SchoolReadCache {
         mutableLibrary.value = null
         dormPointsFile?.let { file -> io.launch { file.delete() } }
         libraryDueFile?.let { file -> io.launch { file.delete() } }
+        libraryReadFile?.let { file -> io.launch { file.delete() } }
     }
+}
 
-    /** Writes [text] to a temporary file beside [file] and moves it into place, so a crash never leaves half a file. */
-    private fun writeReplacing(file: File, text: String) {
-        file.parentFile?.mkdirs()
-        val partial = File(file.parentFile, file.name + ".tmp")
-        partial.writeText(text)
-        if (!partial.renameTo(file)) {
-            file.writeText(partial.readText())
-            partial.delete()
-        }
+/** The file name of the saved 상벌점 read, in the school folder of the no-backup storage. */
+internal const val DORM_POINTS_FILE_NAME = "dorm-points.json"
+
+/** Writes [text] to a temporary file beside [file] and moves it into place, so a crash never leaves half a file. */
+internal fun writeReplacing(file: File, text: String) {
+    file.parentFile?.mkdirs()
+    val partial = File(file.parentFile, file.name + ".tmp")
+    partial.writeText(text)
+    if (!partial.renameTo(file)) {
+        file.writeText(partial.readText())
+        partial.delete()
     }
 }
 

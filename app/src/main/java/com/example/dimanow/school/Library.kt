@@ -298,7 +298,7 @@ fun libraryDueLabel(dueOn: LocalDate?, today: LocalDate): String {
 /** How old a read may be before opening 도서관 reads the loans again by itself. */
 internal val LIBRARY_AUTO_READ_AFTER: Duration = Duration.ofMinutes(30)
 
-/** Opening 도서관 reads the loans when none were read in this process, or the last read is older than half an hour. */
+/** Opening 도서관 reads the loans when none is saved, or the saved read is older than half an hour. */
 internal fun libraryAutoReadDue(readAt: Instant?, now: Instant): Boolean =
     readAt == null || Duration.between(readAt, now) >= LIBRARY_AUTO_READ_AFTER
 
@@ -313,6 +313,65 @@ fun LibraryStatus.dueList(readAt: Instant): LibraryDueList =
 
 /** The file name of the saved due list, in the school folder of the no-backup storage beside the 상벌점 file. */
 internal const val LIBRARY_DUE_FILE_NAME = "library-due.json"
+
+/** The file name of the saved 도서관 read (D-136), beside the due list. */
+internal const val LIBRARY_READ_FILE_NAME = "library-read.json"
+
+/** The saved form of a 도서관 read: what the page showed and when, so it shows at once after a restart (D-136). */
+internal fun encodeLibraryRead(read: SchoolReadCache.LibraryRead): String = buildJsonObject {
+    put("version", 1)
+    put("readAt", read.readAt.toEpochMilli())
+    read.status.overdueCount?.let { put("overdueCount", it) }
+    read.status.loanCount?.let { put("loanCount", it) }
+    putJsonArray("books") {
+        read.status.books.forEach { book ->
+            addJsonObject {
+                put("title", book.title)
+                book.loanedOn?.let { put("loanedOn", it.toString()) }
+                book.dueOn?.let { put("dueOn", it.toString()) }
+                book.renewable?.let { put("renewable", it) }
+                if (book.markedOverdue) put("markedOverdue", true)
+            }
+        }
+    }
+    putJsonArray("hours") {
+        read.status.hours.forEach { hours ->
+            addJsonObject {
+                put("place", hours.place)
+                put("text", hours.text)
+            }
+        }
+    }
+}.toString()
+
+internal fun decodeLibraryRead(text: String): SchoolReadCache.LibraryRead? {
+    val root = Json.parseToJsonElement(text) as? JsonObject ?: return null
+    if ((root["version"] as? JsonPrimitive)?.intOrNull != 1) return null
+    val readAt = (root["readAt"] as? JsonPrimitive)?.longOrNull?.let(Instant::ofEpochMilli) ?: return null
+    fun JsonObject.string(name: String) = (this[name] as? JsonPrimitive)?.contentOrNull
+    fun JsonObject.date(name: String) = string(name)?.let { runCatching { LocalDate.parse(it) }.getOrNull() }
+    val books = (root["books"] as? JsonArray).orEmpty().mapNotNull { element ->
+        val book = element as? JsonObject ?: return@mapNotNull null
+        LibraryBook(
+            title = book.string("title") ?: return@mapNotNull null,
+            loanedOn = book.date("loanedOn"),
+            dueOn = book.date("dueOn"),
+            renewable = (book["renewable"] as? JsonPrimitive)?.booleanOrNull,
+            markedOverdue = (book["markedOverdue"] as? JsonPrimitive)?.booleanOrNull == true,
+        )
+    }
+    val hours = (root["hours"] as? JsonArray).orEmpty().mapNotNull { element ->
+        val line = element as? JsonObject ?: return@mapNotNull null
+        LibraryHours(line.string("place") ?: return@mapNotNull null, line.string("text") ?: return@mapNotNull null)
+    }
+    val status = LibraryStatus(
+        overdueCount = (root["overdueCount"] as? JsonPrimitive)?.intOrNull,
+        loanCount = (root["loanCount"] as? JsonPrimitive)?.intOrNull,
+        books = books,
+        hours = hours,
+    )
+    return SchoolReadCache.LibraryRead(status, readAt)
+}
 
 internal fun encodeLibraryDue(list: LibraryDueList): String = buildJsonObject {
     put("version", 1)

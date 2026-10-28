@@ -204,8 +204,16 @@ internal fun EquipmentScreen(onBack: () -> Unit, modifier: Modifier = Modifier) 
                 onOpenNotice = { openUrl(context, EquipmentRentalNotice.SEARCH_URL) },
             )
         }
-        applyError?.let { message ->
-            item(key = "equipment_apply_error") { ErrorState(message, modifier = Modifier.padding(top = EQUIPMENT_BLOCK_GAP)) }
+        // D-137: always present, so a failed 신청 opens its message in place and the catalog below moves with it, as
+        // the refresh message under the section does; with no message it takes no space.
+        item(key = "equipment_apply_error") {
+            AnimatedContent(targetState = applyError, transitionSpec = { dimaContentReveal() }, label = "equipment_apply_error") { message ->
+                if (message != null) {
+                    ErrorState(message, modifier = Modifier.padding(top = EQUIPMENT_BLOCK_GAP))
+                } else {
+                    Spacer(Modifier.fillMaxWidth())
+                }
+            }
         }
         item(key = "equipment_section") {
             Column(Modifier.padding(top = EQUIPMENT_BLOCK_GAP + 8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {

@@ -1,7 +1,15 @@
 package com.example.dimanow.ui
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.material3.contentColorFor
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.graphics.Color
+import com.example.dimanow.ui.motion.LocalListChangeMotion
 import com.example.dimanow.ui.motion.LocalReducedMotion
+import com.example.dimanow.ui.motion.dimaPopIn
+import com.example.dimanow.ui.motion.dimaPopOut
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.coroutineScope
 import androidx.compose.ui.graphics.graphicsLayer
@@ -127,6 +135,8 @@ internal fun DimaTopAppBarTitle(text: String) {
  * - [onRefresh] enables Material pull-to-refresh (D-058) and a [refreshLabel] action in the bar
  *   (D-103); without it no refresh node or action is added.
  * - [snackbarHost] is laid out by the Scaffold, so undo snackbars sit above the FAB.
+ * - D-137: a [floatingActionButton] that comes or goes (식단's PAYCO 식권 with 기숙사, 시간표's add button with the
+ *   first course) grows in from its centre and shrinks away ([dimaPopIn]/[dimaPopOut]; a fade under reduced motion).
  * - On wide windows the list keeps [DimaLayout.readingWidth] and centers, and the bar and [subHeader]
  *   line up with it (D-104); the list itself still spans the window, so it scrolls and refreshes from
  *   anywhere.
@@ -153,6 +163,11 @@ internal fun ScreenScaffold(
      * the list slides in from the side of the newly chosen mode, as a page would; null keeps the list still.
      */
     pageIndex: Int? = null,
+    /**
+     * D-137: what the list shows within one mode, such as the chosen day or a load phase (never a minute-tick text).
+     * When it changes, the whole list fades in again on the slow effects spring without moving; null keeps it still.
+     */
+    contentKey: Any? = null,
     content: LazyListScope.() -> Unit,
 ) {
     val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior()
@@ -179,20 +194,53 @@ internal fun ScreenScaffold(
     }
     val pageShift = remember { Animatable(0f) }
     val pageAlpha = remember { Animatable(1f) }
+    // The page and content key the list has been shown for. D-137: while they lag the parameters, the composition
+    // that already holds the new list hides it at its start place; before, the start state was set only once the
+    // effect below ran, so the new list could show in place for a frame, vanish and then slide in (a blink).
     var shownPage by remember { mutableStateOf(pageIndex) }
+    var shownKey by remember { mutableStateOf(contentKey) }
+    val pageSwitch = pageIndex != null && shownPage != null && pageIndex != shownPage
+    val switching = pageSwitch || contentKey != shownKey
     val reducedMotion = LocalReducedMotion.current
-    LaunchedEffect(pageIndex) {
-        val previous = shownPage
-        shownPage = pageIndex
-        if (pageIndex == null || previous == null || previous == pageIndex || reducedMotion) return@LaunchedEffect
-        // A short shared-axis move on the non-bouncy spring the strips use; the fade covers the swap of items.
-        pageShift.snapTo(if (pageIndex > previous) PAGE_SHIFT else -PAGE_SHIFT)
-        pageAlpha.snapTo(0f)
-        coroutineScope {
-            launch { pageShift.animateTo(0f, departureMotion()) }
-            launch { pageAlpha.animateTo(1f, DimaMotion.effectsDefault()) }
+    val pendingShift = when {
+        !pageSwitch -> 0f
+        pageIndex > (shownPage ?: 0) -> PAGE_SHIFT
+        else -> -PAGE_SHIFT
+    }
+    LaunchedEffect(pageIndex, contentKey) {
+        val from = shownPage
+        val to = pageIndex
+        val keyChanged = contentKey != shownKey
+        when {
+            reducedMotion || (!keyChanged && (to == null || from == null || to == from)) -> {
+                pageShift.snapTo(0f)
+                pageAlpha.snapTo(1f)
+                shownPage = to
+                shownKey = contentKey
+            }
+            to != null && from != null && to != from -> {
+                // A short shared-axis move on the non-bouncy spring (D-124, D-137); the fade covers the swap of items.
+                pageShift.snapTo(if (to > from) PAGE_SHIFT else -PAGE_SHIFT)
+                pageAlpha.snapTo(0f)
+                shownPage = to
+                shownKey = contentKey
+                coroutineScope {
+                    launch { pageShift.animateTo(0f, DimaMotion.settle()) }
+                    launch { pageAlpha.animateTo(1f, DimaMotion.effectsDefault()) }
+                }
+            }
+            else -> {
+                // D-137: another day or phase in the same mode fades in again where it is, with no shift.
+                pageShift.snapTo(0f)
+                pageAlpha.snapTo(0f)
+                shownPage = to
+                shownKey = contentKey
+                pageAlpha.animateTo(1f, DimaMotion.effectsSlow())
+            }
         }
     }
+    // D-137: the FAB that was last passed, so one the caller stops passing can still draw while it shrinks away.
+    val shownFab = rememberLastNonNull(floatingActionButton)
     val titleSlot: @Composable () -> Unit = titleContent ?: { title?.let { DimaTopAppBarTitle(it) } }
     val actions: @Composable RowScope.() -> Unit = {
         // D-103: pull-to-refresh gets a one-tap equivalent in the bar (M3 pull-to-refresh guidance),
@@ -219,7 +267,7 @@ internal fun ScreenScaffold(
             val scrolledUnder by remember(scrollBehavior) {
                 derivedStateOf { scrollBehavior.state.overlappedFraction > 0.01f }
             }
-            val headerColor by animateColorAsState(
+            val headerColor = animateColorAsState(
                 targetValue = if (scrolledUnder) {
                     defaults.scrolledContainerColor
                 } else {
@@ -228,7 +276,13 @@ internal fun ScreenScaffold(
                 animationSpec = DimaMotion.effectsDefault(),
                 label = "screen_header_color",
             )
-            Surface(color = headerColor) {
+            // D-137: the tint is drawn behind a transparent surface and bar, read in the draw phase, so the bar, its
+            // title and actions and the pinned controls do not recompose on every frame of the colour change.
+            Surface(
+                color = Color.Transparent,
+                contentColor = contentColorFor(defaults.containerColor),
+                modifier = Modifier.drawBehind { drawRect(headerColor.value) },
+            ) {
                 Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
                     DimaTopAppBar(
                         title = titleSlot,
@@ -236,7 +290,7 @@ internal fun ScreenScaffold(
                         navigationIcon = navigationIcon,
                         actions = actions,
                         scrollBehavior = scrollBehavior,
-                        colors = defaults.copy(containerColor = headerColor, scrolledContainerColor = headerColor),
+                        colors = defaults.copy(containerColor = Color.Transparent, scrolledContainerColor = Color.Transparent),
                     )
                     if (subHeader != null) {
                         Column(
@@ -251,7 +305,18 @@ internal fun ScreenScaffold(
                 }
             }
         },
-        floatingActionButton = { floatingActionButton?.invoke() },
+        // D-137: AnimatedVisibility, not Modifier.animateFloatingActionButton, which keeps a hidden FAB composed and
+        // reachable by TalkBack. A FAB present at the first composition shows without an entrance.
+        floatingActionButton = {
+            AnimatedVisibility(
+                visible = floatingActionButton != null,
+                enter = dimaPopIn(reducedMotion),
+                exit = dimaPopOut(reducedMotion),
+                label = "screen_fab",
+            ) {
+                shownFab?.invoke()
+            }
+        },
         // Placed by the Scaffold above the FAB and the gesture bar (D-094(14) undo snackbars).
         snackbarHost = snackbarHost,
         // A bottom NavigationBar in the app shell consumes this inset; Settings has none, so its
@@ -268,25 +333,34 @@ internal fun ScreenScaffold(
                 .fillMaxSize()
                 .padding(top = innerPadding.calculateTopPadding()),
         ) {
-            LazyColumn(
-                state = listState,
-                modifier = Modifier
-                    .fillMaxSize()
-                    // D-131: the side gutters follow the list's own width, set in its measure pass.
-                    .readingColumnGutters(contentPadding)
-                    // One entrance for the whole list, on first launch only: per-item entrances
-                    // re-fire whenever scrolling composes an item again (D-058), and after a tab
-                    // change the tab transition is the only motion (D-094(12)).
-                    .entrance()
-                    .graphicsLayer {
-                        translationX = pageShift.value * size.width
-                        alpha = pageAlpha.value
-                    }
-                    .then(if (listTag != null) Modifier.testTag(listTag) else Modifier),
-                contentPadding = contentPadding,
-                verticalArrangement = Arrangement.spacedBy(itemSpacing),
-                content = content,
-            )
+            // D-137: items composed by a whole-list switch do not also fade on their own (D-094(12)); the list fades.
+            CompositionLocalProvider(LocalListChangeMotion provides !switching) {
+                LazyColumn(
+                    state = listState,
+                    modifier = Modifier
+                        .fillMaxSize()
+                        // D-131: the side gutters follow the list's own width, set in its measure pass.
+                        .readingColumnGutters(contentPadding)
+                        // One entrance for the whole list, on first launch only: per-item entrances
+                        // re-fire whenever scrolling composes an item again (D-058), and after a tab
+                        // change the tab transition is the only motion (D-094(12)).
+                        .entrance()
+                        .graphicsLayer {
+                            // D-137: hidden at its start place until the switch has begun; reduced motion swaps at once.
+                            if (switching && !reducedMotion) {
+                                translationX = pendingShift * size.width
+                                alpha = 0f
+                            } else {
+                                translationX = pageShift.value * size.width
+                                alpha = pageAlpha.value
+                            }
+                        }
+                        .then(if (listTag != null) Modifier.testTag(listTag) else Modifier),
+                    contentPadding = contentPadding,
+                    verticalArrangement = Arrangement.spacedBy(itemSpacing),
+                    content = content,
+                )
+            }
         }
     }
 }
@@ -339,6 +413,22 @@ private val HEADER_MAX_WIDTH = DimaLayout.readingWidth + 32.dp
 
 /** Room for a 56dp FAB and its 16dp margin, so the last list item can scroll clear of it. */
 private val FAB_CLEARANCE = 72.dp
+
+/**
+ * The last non-null [value] (D-137), so content an `AnimatedVisibility` is taking away can still draw what it showed
+ * while it leaves. A plain field rather than state: it only changes together with [value], whose change already
+ * recomposes the caller.
+ */
+@Composable
+internal fun <T : Any> rememberLastNonNull(value: T?): T? {
+    val last = remember { LastNonNull<T>() }
+    if (value != null) last.value = value
+    return last.value
+}
+
+private class LastNonNull<T : Any> {
+    var value: T? = null
+}
 
 /**
  * M3 pull-to-refresh wrapper (D-058).

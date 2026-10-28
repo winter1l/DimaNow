@@ -1,5 +1,8 @@
 package com.example.dimanow.ui
 
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
@@ -46,6 +49,11 @@ import com.example.dimanow.domain.CampusZoneId
 import com.example.dimanow.domain.DisplayVocabulary
 import com.example.dimanow.theme.DimaShapes
 import com.example.dimanow.theme.DimaTheme
+import com.example.dimanow.ui.motion.DimaMotion
+import com.example.dimanow.ui.motion.dimaCollapseOut
+import com.example.dimanow.ui.motion.dimaContentReveal
+import com.example.dimanow.ui.motion.dimaContentSwap
+import com.example.dimanow.ui.motion.dimaExpandIn
 
 /**
  * M3 connected button group for one exclusive choice (D-103), replacing segmented buttons, which Material 3
@@ -168,6 +176,9 @@ internal fun SettingsSectionHeader(text: String, modifier: Modifier = Modifier) 
 /**
  * A settings section that opens in place (D-094(6)): the whole row toggles it, the chevron turns,
  * and screen readers hear its expanded state and get expand/collapse actions.
+ * D-137: a changed [supporting] line turns over to the new one ([dimaContentSwap]) and [supportingColor] follows on
+ * the effects spring, so `2개가 꺼져 있어요` becomes `모두 켜져 있어요` visibly when the student returns from the system
+ * settings.
  */
 @Composable
 internal fun SettingsExpander(
@@ -178,6 +189,7 @@ internal fun SettingsExpander(
     supporting: String? = null,
     supportingColor: androidx.compose.ui.graphics.Color = MaterialTheme.colorScheme.onSurfaceVariant,
 ) {
+    val supportingTone by animateColorAsState(supportingColor, DimaMotion.effectsDefault(), label = "settings_expander_supporting")
     Surface(
         onClick = onToggle,
         modifier = modifier
@@ -194,8 +206,14 @@ internal fun SettingsExpander(
         ) {
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 Text(title, style = MaterialTheme.typography.titleMedium)
-                supporting?.let {
-                    Text(it, style = MaterialTheme.typography.bodySmall, color = supportingColor)
+                if (supporting != null) {
+                    AnimatedContent(
+                        targetState = supporting,
+                        transitionSpec = { dimaContentSwap() },
+                        label = "settings_expander_supporting",
+                    ) { line ->
+                        Text(line, style = MaterialTheme.typography.bodySmall, color = supportingTone)
+                    }
                 }
             }
             ExpandChevron(
@@ -238,27 +256,39 @@ internal fun LocationTestCard(
             ) {
                 Column(Modifier.weight(1f)) {
                     Text("테스트 모드", style = MaterialTheme.typography.labelLarge)
-                    Text(
-                        if (testMode) "GPS 반영 안 함" else "현재 위치 자동 판정",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
+                    // D-137: the line says what the switch now does by fading to its new words.
+                    AnimatedContent(
+                        targetState = testMode,
+                        transitionSpec = { dimaContentReveal() },
+                        label = "location_test_mode",
+                    ) { test ->
+                        Text(
+                            if (test) "GPS 반영 안 함" else "현재 위치 자동 판정",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
                 }
                 Switch(checked = testMode, onCheckedChange = null)
             }
             Text("테스트 위치", style = MaterialTheme.typography.labelLarge)
-            SettingsChoice(
-                options = CampusZoneId.entries.map { zone -> zone to DisplayVocabulary.zoneName(zone) },
-                selected = testZone.takeIf { testMode },
-                onSelect = { zone -> zone?.let(onTestZone) },
-                enabled = testMode,
-                itemTag = { zone -> "test_zone_${zone?.name}" },
-            )
-            if (testMode) {
-                TransitStopTestControls(
-                    testStopNumber = testTransitStopNumber,
-                    onChange = onTestTransitStop,
+            // One child of the card's spaced column, so the 4402 controls' gap opens with them instead of jumping.
+            Column {
+                SettingsChoice(
+                    options = CampusZoneId.entries.map { zone -> zone to DisplayVocabulary.zoneName(zone) },
+                    selected = testZone.takeIf { testMode },
+                    onSelect = { zone -> zone?.let(onTestZone) },
+                    enabled = testMode,
+                    itemTag = { zone -> "test_zone_${zone?.name}" },
                 )
+                // D-137: the 4402 stop choice opens and closes with the switch.
+                AnimatedVisibility(visible = testMode, enter = dimaExpandIn(), exit = dimaCollapseOut(), label = "location_test_stop") {
+                    TransitStopTestControls(
+                        testStopNumber = testTransitStopNumber,
+                        onChange = onTestTransitStop,
+                        modifier = Modifier.padding(top = 8.dp),
+                    )
+                }
             }
         }
     }

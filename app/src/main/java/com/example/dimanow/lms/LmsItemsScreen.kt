@@ -1,16 +1,25 @@
 package com.example.dimanow.lms
 
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.ContentTransform
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.expandHorizontally
+import androidx.compose.animation.shrinkHorizontally
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.TaskAlt
+import androidx.compose.material3.FilterChipDefaults
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.Surface
-import androidx.compose.animation.expandVertically
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -51,12 +60,13 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.onClick
-import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
@@ -64,8 +74,10 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.example.dimanow.theme.DimaShapes
 import com.example.dimanow.theme.DimaTheme
 import com.example.dimanow.ui.DimaIconBadge
+import com.example.dimanow.ui.DimaLoadingIndicator
 import com.example.dimanow.ui.DimaSegmentedList
 import com.example.dimanow.ui.EmptyState
 import com.example.dimanow.ui.ExpandChevron
@@ -73,7 +85,19 @@ import com.example.dimanow.ui.expandableSemantics
 import com.example.dimanow.ui.ErrorState
 import com.example.dimanow.ui.ScreenScaffold
 import com.example.dimanow.ui.dimaSegmentedListColors
+import com.example.dimanow.ui.motion.AnimatedCountText
 import com.example.dimanow.ui.motion.DimaMotion
+import com.example.dimanow.ui.motion.LocalListChangeMotion
+import com.example.dimanow.ui.motion.LocalReducedMotion
+import com.example.dimanow.ui.motion.dimaCollapseOut
+import com.example.dimanow.ui.motion.dimaContentReveal
+import com.example.dimanow.ui.motion.dimaExpandIn
+import com.example.dimanow.ui.motion.dimaIconSwap
+import com.example.dimanow.ui.motion.dimaItemChange
+import com.example.dimanow.ui.motion.dimaPopIn
+import com.example.dimanow.ui.motion.dimaPopOut
+import com.example.dimanow.ui.motion.loadingGrace
+import com.example.dimanow.ui.motion.rememberShownAfter
 import java.time.Clock
 import java.time.Instant
 
@@ -94,9 +118,11 @@ private fun LmsFilterRow(
     onCourseChange: (String?) -> Unit,
     onKindChange: (LmsItemKind?) -> Unit,
 ) {
+    val reduced = LocalReducedMotion.current
+    // The gaps sit beside each control rather than in the row's arrangement, so the clear button's gap grows and
+    // shrinks with it instead of appearing in one frame (D-137).
     Row(
         modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         LmsFilterMenuChip(
@@ -108,6 +134,7 @@ private fun LmsFilterRow(
             onSelect = onKindChange,
             modifier = Modifier.weight(1f),
         )
+        Spacer(Modifier.width(LMS_FILTER_GAP))
         LmsFilterMenuChip(
             label = selectedCourse?.let { id -> courses.firstOrNull { it.id == id }?.name } ?: "전체 과목",
             selected = selectedCourse != null,
@@ -117,10 +144,16 @@ private fun LmsFilterRow(
             onSelect = onCourseChange,
             modifier = Modifier.weight(1f),
         )
-        if (filterActive) {
-            IconButton(shapes = IconButtonDefaults.shapes(), 
+        // D-137: the clear button pops in from its own centre while the chips make room for it, and leaves the same
+        // way; under reduced motion it only fades (D-121(4)).
+        AnimatedVisibility(
+            visible = filterActive,
+            enter = expandHorizontally(DimaMotion.spatialFast()) + dimaPopIn(reduced),
+            exit = shrinkHorizontally(DimaMotion.spatialFast()) + dimaPopOut(reduced),
+        ) {
+            IconButton(shapes = IconButtonDefaults.shapes(),
                 onClick = { onCourseChange(null); onKindChange(null) },
-                modifier = Modifier.testTag("lms_filter_clear"),
+                modifier = Modifier.padding(start = LMS_FILTER_GAP).testTag("lms_filter_clear"),
             ) {
                 Icon(Icons.Default.Close, contentDescription = "필터 초기화")
             }
@@ -128,7 +161,15 @@ private fun LmsFilterRow(
     }
 }
 
-/** 선택값을 라벨로 보여주고 누르면 선택지를 메뉴로 펼치는 필터 칩 (D-058). */
+/** Between the filter controls (D-058). */
+private val LMS_FILTER_GAP = 6.dp
+
+/**
+ * 선택값을 라벨로 보여주고 누르면 선택지를 메뉴로 펼치는 필터 칩 (D-058).
+ *
+ * D-137: a chosen filter rounds into a pill and takes its fill on the fast effects spring, and the arrow turns over
+ * while the menu is open (not under reduced motion, D-121(4)); the turn is read in the draw phase.
+ */
 @Composable
 private fun <T> LmsFilterMenuChip(
     label: String,
@@ -140,6 +181,18 @@ private fun <T> LmsFilterMenuChip(
     modifier: Modifier = Modifier,
 ) {
     var expanded by remember { mutableStateOf(false) }
+    val reduced = LocalReducedMotion.current
+    val arrowTurn = animateFloatAsState(
+        targetValue = if (expanded && !reduced) 180f else 0f,
+        animationSpec = DimaMotion.spatialFast(),
+        label = "lms_filter_arrow",
+    )
+    val selectedFill = MaterialTheme.colorScheme.secondaryContainer
+    val fill by animateColorAsState(
+        targetValue = if (selected) selectedFill else selectedFill.copy(alpha = 0f),
+        animationSpec = DimaMotion.effectsFast(),
+        label = "lms_filter_fill",
+    )
     Box(modifier = modifier) {
         FilterChip(
             selected = selected,
@@ -147,9 +200,19 @@ private fun <T> LmsFilterMenuChip(
             label = {
                 Text(label, maxLines = 1, overflow = TextOverflow.Ellipsis)
             },
+            shapes = FilterChipDefaults.shapes(
+                shape = FilterChipDefaults.shape,
+                selectedShape = CircleShape,
+                pressedShape = DimaShapes.Small,
+            ),
             trailingIcon = {
-                Icon(Icons.Default.ArrowDropDown, contentDescription = null, modifier = Modifier.size(18.dp))
+                Icon(
+                    Icons.Default.ArrowDropDown,
+                    contentDescription = null,
+                    modifier = Modifier.size(18.dp).graphicsLayer { rotationZ = arrowTurn.value },
+                )
             },
+            colors = FilterChipDefaults.filterChipColors(containerColor = fill, selectedContainerColor = fill),
             modifier = Modifier.fillMaxWidth().testTag(tag),
         )
         DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
@@ -171,25 +234,28 @@ private fun <T> LmsFilterMenuChip(
  * A card group's heading (D-118): the name in title-large on the page's text color with the count beside it in the
  * primary color, so each group is easy to find while scrolling. Screen readers hear one heading (`다가오는 마감 2개`)
  * and can jump between groups.
+ *
+ * D-137: the count rolls when items arrive or leave ([AnimatedCountText]). Both texts share title-large, so aligning
+ * their tops keeps the baselines of D-118 together; a baseline read through the rolling count would move with it.
  */
 @Composable
 private fun LmsSectionHeader(title: String, count: Int?, modifier: Modifier = Modifier) {
     Row(
         modifier = modifier.padding(start = 4.dp, top = 12.dp).semantics(mergeDescendants = true) { heading() },
         horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.Top,
     ) {
         Text(
             title,
             style = MaterialTheme.typography.titleLarge,
             color = MaterialTheme.colorScheme.onSurface,
-            modifier = Modifier.alignByBaseline().weight(1f, fill = false),
+            modifier = Modifier.weight(1f, fill = false),
         )
         count?.let {
-            Text(
-                "${it}개",
+            AnimatedCountText(
+                text = "${it}개",
                 style = MaterialTheme.typography.titleLarge,
                 color = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.alignByBaseline(),
             )
         }
     }
@@ -212,13 +278,15 @@ private fun LmsFoldedSection(
     modifier: Modifier = Modifier,
     showCourseName: Boolean = true,
     selected: (LmsItem) -> Boolean? = { null },
+    opening: (LmsItem) -> LmsRowOpening = { LmsRowOpening.NONE },
 ) {
     Column(modifier) {
         LmsFoldHeader(title = title, count = items.size, completed = completed, expanded = expanded, onToggle = onToggle, tag = tag)
+        // The shared fold motion of D-118 (D-137: the tokens themselves, so the fold never drifts from them).
         AnimatedVisibility(
             visible = expanded,
-            enter = expandVertically(DimaMotion.spatialDefault()) + fadeIn(DimaMotion.effectsDefault()),
-            exit = shrinkVertically(DimaMotion.spatialDefault()) + fadeOut(DimaMotion.effectsFast()),
+            enter = dimaExpandIn(),
+            exit = dimaCollapseOut(),
         ) {
             LmsItemList(
                 items,
@@ -229,6 +297,7 @@ private fun LmsFoldedSection(
                 completed = completed,
                 muted = true,
                 selected = selected,
+                opening = opening,
             )
         }
     }
@@ -264,7 +333,8 @@ private fun LmsFoldHeader(title: String, count: Int, completed: Boolean, expande
                 modifier = Modifier.size(20.dp),
             )
             Text(title, style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
-            Text("${count}개", style = MaterialTheme.typography.labelLarge)
+            // D-137: an item finished or missed rolls the count, as the section headings do.
+            AnimatedCountText("${count}개", style = MaterialTheme.typography.labelLarge, color = LocalContentColor.current)
             ExpandChevron(expanded, Modifier.size(20.dp), label = "lms_fold_chevron")
         }
     }
@@ -297,6 +367,11 @@ internal fun LmsItemsScreen(
     selectable: Boolean = false,
     /** D-131: the item open in the detail pane beside the list, marked as the selected row. */
     selection: LmsItem? = null,
+    /**
+     * D-137: the [entryKey] of the item whose detail is being read after a tap. Once that takes longer than the
+     * loading grace, its row shows the loading indicator in place of its kind mark.
+     */
+    openingKey: String? = null,
 ) {
     val filtered = filterLmsItems(snapshot.items, selectedCourse, selectedKind)
     val filterActive = selectedCourse != null || selectedKind != null
@@ -319,6 +394,44 @@ internal fun LmsItemsScreen(
     } else {
         filtered.isEmpty()
     }
+    // D-137: the line or card above the list and the block standing in for an empty list, each one item whose content
+    // changes in place (R2), so a refresh failure, a new read time or the list arriving never pops.
+    val status = lmsListStatus(
+        signedInElsewhere = signedInElsewhere,
+        showsError = hasError && !visibleEmpty,
+        updatedLabel = snapshot.lastSuccessAt?.takeUnless { visibleEmpty }?.let { lmsUpdatedLabel(it, now) },
+        errorMessage = loginErrorMessage ?: "수업 정보를 불러오지 못했어요",
+        lastSuccessAt = snapshot.lastSuccessAt,
+    )
+    val placeholder = when {
+        !visibleEmpty -> null
+        syncing -> LmsListPlaceholder.Loading
+        // D-135: the card above says why nothing new is read and offers 이 기기로 로그인.
+        signedInElsewhere -> null
+        // 원문 오류(HTTP 코드 등)는 보이지 않고, 무슨 일인지와 다음 행동만 알린다 (D-094(14))
+        hasError -> LmsListPlaceholder.Failed(loginErrorMessage ?: "인터넷 연결을 확인하고 다시 시도해 주세요")
+        else -> lmsEmptyPlaceholder(
+            interactiveAuth = sessionState == LmsSessionState.INTERACTIVE_AUTH_REQUIRED,
+            needsSignIn = sessionState != LmsSessionState.ACTIVE,
+            neverLoaded = snapshot.syncState == LmsSyncState.IDLE && snapshot.lastSuccessAt == null,
+            filterActive = filterActive,
+            todayMode = todayMode,
+        )
+    }
+    // Quick opens (a cached detail) show nothing at the row; only a wait past the grace does (D-137). Only the row
+    // tapped last carries the swap, so the other rows keep their plain mark (D-131 keeps rows light).
+    val openingShown = rememberShownAfter(openingKey != null)
+    val lastOpened = remember { LmsLastOpened() }
+    if (openingKey != null) lastOpened.key = openingKey
+    val opening: (LmsItem) -> LmsRowOpening = { item ->
+        val key = item.entryKey()
+        when {
+            openingShown && key == openingKey -> LmsRowOpening.SHOWN
+            key == lastOpened.key -> LmsRowOpening.SLOT
+            else -> LmsRowOpening.NONE
+        }
+    }
+    val reduced = LocalReducedMotion.current
 
     ScreenScaffold(
         title = "수업",
@@ -334,23 +447,33 @@ internal fun LmsItemsScreen(
         itemSpacing = 0.dp,
         // 모드 전환과 필터는 목록을 아무리 내려도 항상 닿을 수 있어야 한다 (D-057).
         subHeader = {
-            // D-103: 모드 전환은 M3 연결형 버튼 그룹이다. D-117: 하단 탭 '전체'와 겹치지 않게 '할 일'·'과목별'로 부른다
-            com.example.dimanow.ui.DimaConnectedChoice(
-                options = listOf(true to "할 일", false to "과목별"),
-                selected = todayMode,
-                onSelect = { todayMode = it },
-                itemTag = { if (it) "lms_mode_today" else "lms_mode_all" },
-            )
-            if (!todayMode || filterActive) {
-                LmsFilterRow(
-                    courses = snapshot.courses,
-                    kinds = LmsItemKind.entries.filter { kind -> snapshot.items.any { it.kind == kind } },
-                    selectedCourse = selectedCourse,
-                    selectedKind = selectedKind,
-                    filterActive = filterActive,
-                    onCourseChange = onCourseChange,
-                    onKindChange = onKindChange,
+            // D-137: the filter row folds open under the switch on the non-bouncy spring the list's shift uses, as the
+            // shuttle weekday row does, so the pinned header never bobs; its gap folds with it.
+            Column {
+                // D-103: 모드 전환은 M3 연결형 버튼 그룹이다. D-117: 하단 탭 '전체'와 겹치지 않게 '할 일'·'과목별'로 부른다
+                com.example.dimanow.ui.DimaConnectedChoice(
+                    options = listOf(true to "할 일", false to "과목별"),
+                    selected = todayMode,
+                    onSelect = { todayMode = it },
+                    itemTag = { if (it) "lms_mode_today" else "lms_mode_all" },
                 )
+                AnimatedVisibility(
+                    visible = !todayMode || filterActive,
+                    enter = if (reduced) EnterTransition.None else dimaExpandIn(DimaMotion.settle()),
+                    exit = if (reduced) ExitTransition.None else dimaCollapseOut(DimaMotion.settle()),
+                ) {
+                    Box(Modifier.padding(top = 8.dp)) {
+                        LmsFilterRow(
+                            courses = snapshot.courses,
+                            kinds = LmsItemKind.entries.filter { kind -> snapshot.items.any { it.kind == kind } },
+                            selectedCourse = selectedCourse,
+                            selectedKind = selectedKind,
+                            filterActive = filterActive,
+                            onCourseChange = onCourseChange,
+                            onKindChange = onKindChange,
+                        )
+                    }
+                }
             }
         },
     ) {
@@ -361,104 +484,99 @@ internal fun LmsItemsScreen(
         val rows = LmsLazyRows()
         fun selectedOf(item: LmsItem): Boolean? = if (selectable) selection?.entryKey() == item.entryKey() else null
 
-        if (signedInElsewhere) {
-            val top = rows.gap(LMS_BLOCK_GAP)
-            item(key = rows.key("lms_signed_in_elsewhere")) {
-                LmsSignedInElsewhereCard(snapshot.lastSuccessAt, onSignInHere, Modifier.padding(top = top))
-            }
-        } else if (hasError && !visibleEmpty) {
-            // 캐시된 목록 위에서 갱신이 실패하면 스낵바가 사라진 뒤에도 상태를 알 수 있게 배너로 남긴다 (D-056)
-            val top = rows.gap(LMS_BLOCK_GAP)
-            item(key = rows.key("lms_refresh_error")) {
-                LmsRefreshErrorBanner(
-                    message = loginErrorMessage ?: "수업 정보를 불러오지 못했어요",
-                    lastSuccessAt = snapshot.lastSuccessAt,
-                    onRetry = onRefresh,
-                    modifier = Modifier.padding(top = top),
-                )
-            }
-        } else if (!visibleEmpty) {
-            // D-117: 목록이 언제 것인지 한 줄로 알린다
-            snapshot.lastSuccessAt?.let { readAt ->
-                val top = rows.gap(LMS_BLOCK_GAP)
-                item(key = rows.key("lms_updated")) {
-                    Text(
-                        lmsUpdatedLabel(readAt, now),
+        // D-137: always the first item. Its content carries the gap below it, so with nothing to say it takes no
+        // space and the next block starts at the top, as before; a change fades in place while the height follows.
+        item(key = "lms_status") {
+            val changes = LocalListChangeMotion.current
+            AnimatedContent(
+                targetState = status,
+                contentKey = { it.kind },
+                transitionSpec = { lmsBlockChange(changes) },
+                label = "lms_status",
+            ) { shown ->
+                val below = Modifier.padding(bottom = LMS_BLOCK_GAP)
+                when (shown) {
+                    is LmsListStatus.Elsewhere -> LmsSignedInElsewhereCard(
+                        shown.lastSuccessAt,
+                        onSignInHere,
+                        // A sign-in already under way is not started twice.
+                        enabled = sessionState != LmsSessionState.AUTHENTICATING,
+                        modifier = below,
+                    )
+                    // 캐시된 목록 위에서 갱신이 실패하면 스낵바가 사라진 뒤에도 상태를 알 수 있게 배너로 남긴다 (D-056)
+                    is LmsListStatus.Failed -> LmsRefreshErrorBanner(
+                        message = shown.message,
+                        lastSuccessAt = shown.lastSuccessAt,
+                        onRetry = onRefresh,
+                        modifier = below,
+                    )
+                    // D-117: 목록이 언제 것인지 한 줄로 알린다. D-137: a refresh rolls the time to the new one.
+                    is LmsListStatus.Updated -> AnimatedCountText(
+                        text = shown.label,
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(top = top).padding(horizontal = 4.dp).testTag("lms_updated"),
+                        modifier = below.padding(horizontal = 4.dp).testTag("lms_updated"),
                     )
+                    LmsListStatus.None -> Spacer(Modifier.fillMaxWidth())
                 }
             }
         }
 
-        when {
-            visibleEmpty && syncing -> {
-                val top = rows.gap(LMS_BLOCK_GAP)
-                item(key = rows.key("lms_loading")) {
-                    Column(
-                        modifier = Modifier
-                            .padding(top = top)
-                            .fillMaxWidth()
-                            .padding(vertical = 20.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(12.dp),
-                    ) {
-                        com.example.dimanow.ui.DimaLoadingIndicator()
-                        Text("수업 정보를 불러오고 있어요", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        placeholder?.let { shownPlaceholder ->
+            val top = rows.gap(LMS_BLOCK_GAP)
+            // D-137: loading, failure and the empty messages change in place; when the list arrives this item fades
+            // out as the groups fade in together (D-122(6)), as 장비 대여's catalog does. When the other mode has
+            // learning to show, switching to it would remove this item too, so it then leaves without a fade of its
+            // own (the whole list fades in that switch).
+            val emptyInBothModes = filtered.isEmpty() && agenda.groups.none { it.key != LmsAgendaGroupKey.COMPLETED }
+            item(key = rows.key("lms_state")) {
+                val changes = LocalListChangeMotion.current
+                AnimatedContent(
+                    targetState = shownPlaceholder,
+                    contentKey = { it.key },
+                    transitionSpec = { lmsBlockChange(changes) },
+                    label = "lms_state",
+                    modifier = dimaItemChange(fadeIn = true, fadeOut = emptyInBothModes).padding(top = top),
+                ) { state ->
+                    when (state) {
+                        // A read that ends within the grace shows nothing (D-137).
+                        LmsListPlaceholder.Loading -> Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 20.dp)
+                                .loadingGrace(),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(12.dp),
+                        ) {
+                            DimaLoadingIndicator()
+                            Text("수업 정보를 불러오고 있어요", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                        is LmsListPlaceholder.Failed -> ErrorState(
+                            message = "수업 정보를 불러오지 못했어요",
+                            supporting = state.supporting,
+                            onRetry = onRefresh,
+                            modifier = Modifier.testTag("lms_error"),
+                        )
+                        is LmsListPlaceholder.Empty -> EmptyState(
+                            message = state.message,
+                            supporting = state.supporting,
+                            actionLabel = state.action?.label,
+                            onAction = when (state.action) {
+                                LmsEmptyAction.REFRESH, LmsEmptyAction.LOAD -> onRefresh
+                                LmsEmptyAction.CLEAR_FILTERS -> ({ onCourseChange(null); onKindChange(null) })
+                                null -> null
+                            },
+                            modifier = Modifier.testTag("lms_empty"),
+                        )
                     }
-                }
-            }
-            // D-135: the card above says why nothing new is read and offers 이 기기로 로그인.
-            visibleEmpty && signedInElsewhere -> Unit
-            visibleEmpty && hasError -> {
-                val top = rows.gap(LMS_BLOCK_GAP)
-                item(key = rows.key("lms_error")) {
-                    // 원문 오류(HTTP 코드 등)는 보이지 않고, 무슨 일인지와 다음 행동만 알린다 (D-094(14))
-                    ErrorState(
-                        message = "수업 정보를 불러오지 못했어요",
-                        supporting = loginErrorMessage ?: "인터넷 연결을 확인하고 다시 시도해 주세요",
-                        onRetry = onRefresh,
-                        modifier = Modifier.padding(top = top).testTag("lms_error"),
-                    )
-                }
-            }
-            visibleEmpty -> {
-                val top = rows.gap(LMS_BLOCK_GAP)
-                item(key = rows.key("lms_empty")) {
-                    val needsSignIn = sessionState != LmsSessionState.ACTIVE
-                    val neverLoaded = snapshot.syncState == LmsSyncState.IDLE && snapshot.lastSuccessAt == null
-                    EmptyState(
-                        message = when {
-                            sessionState == LmsSessionState.INTERACTIVE_AUTH_REQUIRED -> "추가 인증이 필요해요"
-                            needsSignIn -> "수업 정보를 확인하려면 로그인해 주세요"
-                            neverLoaded -> "아직 불러온 수업 정보가 없어요"
-                            filterActive -> "선택한 조건에 맞는 학습이 없어요"
-                            todayMode -> "남은 할 일이 없어요"
-                            else -> "등록된 학습이 없어요"
-                        },
-                        supporting = if (todayMode && !needsSignIn && !neverLoaded && !filterActive) {
-                            "새 과제나 공지가 올라오면 여기에 보여요."
-                        } else {
-                            null
-                        },
-                        actionLabel = when {
-                            needsSignIn -> "다시 시도"
-                            neverLoaded -> "수업 정보 불러오기"
-                            filterActive -> "필터 초기화"
-                            else -> null
-                        },
-                        onAction = when {
-                            needsSignIn || neverLoaded -> onRefresh
-                            filterActive -> ({ onCourseChange(null); onKindChange(null) })
-                            else -> null
-                        },
-                        modifier = Modifier.padding(top = top).testTag("lms_empty"),
-                    )
                 }
             }
         }
         // Keep cached completed learning available below the status, even while refreshing or retrying.
+        // D-137: headings, rows and folds added by a data change fade in on their own; a whole-list switch (할 일 ↔
+        // 과목별) turns that off through ScreenScaffold. They never fade out, since a removed item keeps the specs of its
+        // last composition and would also fade during the switch (D-094(12)), and nothing slides into the place of a
+        // fading row (see lmsRowItems).
         if (todayMode) {
             // D-117: 다가오는 마감 → 새 소식 → 기한 지남, 섹션마다 머리글 아래 카드 묶음 하나
             agenda.groups.forEach { group ->
@@ -475,14 +593,15 @@ internal fun LmsItemsScreen(
                             tag = "lms_completed_toggle",
                             completed = true,
                             selected = ::selectedOf,
-                            modifier = Modifier.padding(top = top),
+                            opening = opening,
+                            modifier = dimaItemChange(fadeIn = true, fadeOut = false).padding(top = top),
                         )
                     }
                 } else {
                     item(key = rows.key("agenda-${group.key}"), contentType = LMS_HEADER) {
-                        LmsSectionHeader(group.title, group.items.size, Modifier.padding(top = top))
+                        LmsSectionHeader(group.title, group.items.size, dimaItemChange(fadeIn = true, fadeOut = false).padding(top = top))
                     }
-                    lmsRowItems(rows, "agenda-${group.key}", group.items, now, onOpenItem, showCourseName = true, selected = ::selectedOf)
+                    lmsRowItems(rows, "agenda-${group.key}", group.items, now, onOpenItem, showCourseName = true, selected = ::selectedOf, opening = opening)
                 }
             }
         } else {
@@ -490,10 +609,14 @@ internal fun LmsItemsScreen(
             coursePlan.groups.forEach { group ->
                 val headerTop = rows.gap(LMS_BLOCK_GAP)
                 item(key = rows.key("course-${group.courseId}"), contentType = LMS_HEADER) {
-                    LmsSectionHeader(group.courseName, group.items.size.takeIf { it > 0 }, Modifier.padding(top = headerTop))
+                    LmsSectionHeader(
+                        group.courseName,
+                        group.items.size.takeIf { it > 0 },
+                        dimaItemChange(fadeIn = true, fadeOut = false).padding(top = headerTop),
+                    )
                 }
                 if (group.items.isNotEmpty()) {
-                    lmsRowItems(rows, "course-${group.courseId}", group.items, now, onOpenItem, showCourseName = false, selected = ::selectedOf)
+                    lmsRowItems(rows, "course-${group.courseId}", group.items, now, onOpenItem, showCourseName = false, selected = ::selectedOf, opening = opening)
                 } else {
                     val top = rows.gap(LMS_GROUP_GAP)
                     item(key = rows.key("course-${group.courseId}-empty")) {
@@ -502,7 +625,10 @@ internal fun LmsItemsScreen(
                             "남은 학습이 없어요",
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(top = top).padding(horizontal = 4.dp).testTag("lms_course_empty_${group.courseId}"),
+                            modifier = dimaItemChange(fadeIn = true, fadeOut = false)
+                                .padding(top = top)
+                                .padding(horizontal = 4.dp)
+                                .testTag("lms_course_empty_${group.courseId}"),
                         )
                     }
                 }
@@ -521,7 +647,8 @@ internal fun LmsItemsScreen(
                             completed = false,
                             showCourseName = false,
                             selected = ::selectedOf,
-                            modifier = Modifier.padding(top = top),
+                            opening = opening,
+                            modifier = dimaItemChange(fadeIn = true, fadeOut = false).padding(top = top),
                         )
                     }
                 }
@@ -540,7 +667,8 @@ internal fun LmsItemsScreen(
                             completed = true,
                             showCourseName = false,
                             selected = ::selectedOf,
-                            modifier = Modifier.padding(top = top),
+                            opening = opening,
+                            modifier = dimaItemChange(fadeIn = true, fadeOut = false).padding(top = top),
                         )
                     }
                 }
@@ -550,12 +678,115 @@ internal fun LmsItemsScreen(
 }
 
 /**
+ * How a block of the 수업 list changes in place (D-137): [dimaContentReveal], or at once while ScreenScaffold fades
+ * the whole list in a 할 일 ↔ 과목별 switch ([LocalListChangeMotion] false), so the block does not also animate the
+ * same change (D-094(12)).
+ */
+private fun lmsBlockChange(changes: Boolean): ContentTransform =
+    if (changes) dimaContentReveal() else ContentTransform(EnterTransition.None, ExitTransition.None, sizeTransform = null)
+
+/** The line or card above the 수업 list (D-137); [kind] keys its change, so only another kind cross-fades. */
+internal sealed interface LmsListStatus {
+    val kind: String
+
+    /** D-135: another device most likely holds the LMS session. */
+    data class Elsewhere(val lastSuccessAt: Instant?) : LmsListStatus {
+        override val kind: String get() = "elsewhere"
+    }
+
+    /** A refresh failed over a list in hand (D-056). */
+    data class Failed(val message: String, val lastSuccessAt: Instant?) : LmsListStatus {
+        override val kind: String get() = "failed"
+    }
+
+    /** When the list was read (D-117). */
+    data class Updated(val label: String) : LmsListStatus {
+        override val kind: String get() = "updated"
+    }
+
+    data object None : LmsListStatus {
+        override val kind: String get() = "none"
+    }
+}
+
+/**
+ * Pure choice of [LmsListStatus], in the order the list always used: the sign-in elsewhere first, then a failed
+ * refresh over a list in hand ([showsError]), then the read time ([updatedLabel], null for an empty list).
+ */
+internal fun lmsListStatus(
+    signedInElsewhere: Boolean,
+    showsError: Boolean,
+    updatedLabel: String?,
+    errorMessage: String,
+    lastSuccessAt: Instant?,
+): LmsListStatus = when {
+    signedInElsewhere -> LmsListStatus.Elsewhere(lastSuccessAt)
+    showsError -> LmsListStatus.Failed(errorMessage, lastSuccessAt)
+    updatedLabel != null -> LmsListStatus.Updated(updatedLabel)
+    else -> LmsListStatus.None
+}
+
+/** What stands in for an empty 수업 list (D-137); [key] keys its change, so each message cross-fades into the next. */
+internal sealed interface LmsListPlaceholder {
+    val key: String
+
+    data object Loading : LmsListPlaceholder {
+        override val key: String get() = "loading"
+    }
+
+    data class Failed(val supporting: String) : LmsListPlaceholder {
+        override val key: String get() = "failed"
+    }
+
+    data class Empty(val message: String, val supporting: String?, val action: LmsEmptyAction?) : LmsListPlaceholder {
+        override val key: String get() = "empty:$message"
+    }
+}
+
+/** The one follow-up an empty 수업 list offers. */
+internal enum class LmsEmptyAction(val label: String) {
+    REFRESH("다시 시도"),
+    LOAD("수업 정보 불러오기"),
+    CLEAR_FILTERS("필터 초기화"),
+}
+
+/** Pure wording of an empty 수업 list (D-094(14), D-117), unchanged from the list it replaced. */
+internal fun lmsEmptyPlaceholder(
+    interactiveAuth: Boolean,
+    needsSignIn: Boolean,
+    neverLoaded: Boolean,
+    filterActive: Boolean,
+    todayMode: Boolean,
+): LmsListPlaceholder.Empty = LmsListPlaceholder.Empty(
+    message = when {
+        interactiveAuth -> "추가 인증이 필요해요"
+        needsSignIn -> "수업 정보를 확인하려면 로그인해 주세요"
+        neverLoaded -> "아직 불러온 수업 정보가 없어요"
+        filterActive -> "선택한 조건에 맞는 학습이 없어요"
+        todayMode -> "남은 할 일이 없어요"
+        else -> "등록된 학습이 없어요"
+    },
+    supporting = if (todayMode && !needsSignIn && !neverLoaded && !filterActive) "새 과제나 공지가 올라오면 여기에 보여요." else null,
+    action = when {
+        needsSignIn -> LmsEmptyAction.REFRESH
+        neverLoaded -> LmsEmptyAction.LOAD
+        filterActive -> LmsEmptyAction.CLEAR_FILTERS
+        else -> null
+    },
+)
+
+/**
  * D-135: the session ended within the LMS's two hours of this device's last use, so another device most likely holds
  * it. Not an error: the saved list stays, and signing in here is the student's choice. The app cannot tell when the
  * other place is done (closing a site does not sign it out), so the card asks the student to tap once it is.
  */
 @Composable
-private fun LmsSignedInElsewhereCard(lastSuccessAt: Instant?, onSignInHere: () -> Unit, modifier: Modifier = Modifier) {
+private fun LmsSignedInElsewhereCard(
+    lastSuccessAt: Instant?,
+    onSignInHere: () -> Unit,
+    enabled: Boolean,
+    modifier: Modifier = Modifier,
+) {
     EmptyState(
         message = "다른 곳에서 LMS에 로그인한 것 같아요",
         supporting = "그곳에서 다 썼다면 이 기기로 로그인을 눌러 주세요. 쓰는 중에 누르면 그곳의 로그인이 끊겨서, " +
@@ -563,6 +794,7 @@ private fun LmsSignedInElsewhereCard(lastSuccessAt: Instant?, onSignInHere: () -
             (lastSuccessAt?.let { "저장된 목록은 ${LMS_DETAIL_TIME.format(it.atZone(SEOUL))}에 받은 거예요." } ?: "저장된 목록을 보여 드려요."),
         actionLabel = "이 기기로 로그인",
         onAction = onSignInHere,
+        actionEnabled = enabled,
         actionTag = "lms_sign_in_here",
         modifier = modifier.testTag("lms_signed_in_elsewhere"),
     )
@@ -601,11 +833,15 @@ private fun LmsItemList(
     completed: Boolean = false,
     muted: Boolean = false,
     selected: (LmsItem) -> Boolean? = { null },
+    opening: (LmsItem) -> LmsRowOpening = { LmsRowOpening.NONE },
 ) {
     DimaSegmentedList(modifier) {
         items.forEachIndexed { index, item ->
             key(item.kind, item.courseId, item.id) {
-                LmsItemRow(item, index, items.size, now, onOpenItem, showCourseName, completed, muted = muted, selected = selected(item))
+                LmsItemRow(
+                    item, index, items.size, now, onOpenItem, showCourseName, completed,
+                    muted = muted, selected = selected(item), opening = opening(item),
+                )
             }
         }
     }
@@ -615,6 +851,10 @@ private fun LmsItemList(
  * One open section's rows as lazy items of their own (D-131, Q-032 (g)), keyed by the LMS entry and shaped as one
  * segmented list: the first row sits [LMS_GROUP_GAP] under its heading, the others [ListItemDefaults.SegmentedGap]
  * apart, with the group's outer corners large and the inner ones small, as [DimaSegmentedList] lays them out.
+ *
+ * D-137: a row added by a data change fades in. Rows do not glide to new places: the folds and the status above them
+ * animate their own height, and placed rows would chase every frame of it; without the glide a fading row would have
+ * the next row jump under it, so a removed row simply goes, as before.
  */
 private fun LazyListScope.lmsRowItems(
     rows: LmsLazyRows,
@@ -624,6 +864,7 @@ private fun LazyListScope.lmsRowItems(
     onOpenItem: (LmsItem) -> Unit,
     showCourseName: Boolean,
     selected: (LmsItem) -> Boolean?,
+    opening: (LmsItem) -> LmsRowOpening,
 ) {
     items.forEachIndexed { index, item ->
         val top = rows.gap(if (index == 0) LMS_GROUP_GAP else ListItemDefaults.SegmentedGap)
@@ -637,7 +878,8 @@ private fun LazyListScope.lmsRowItems(
                 showCourseName = showCourseName,
                 completed = false,
                 selected = selected(item),
-                modifier = Modifier.padding(top = top),
+                opening = opening(item),
+                modifier = dimaItemChange(fadeIn = true, fadeOut = false).padding(top = top),
             )
         }
     }
@@ -666,7 +908,7 @@ private class LmsLazyRows {
 }
 
 /** One LMS entry, as the cache keys it: an item keeps this through refreshes and detail loads. */
-private fun LmsItem.entryKey(): String = "$kind:$courseId:$id"
+internal fun LmsItem.entryKey(): String = "$kind:$courseId:$id"
 
 /** Between blocks of the 수업 list (the list's item spacing before its rows became items, D-131). */
 private val LMS_BLOCK_GAP = 12.dp
@@ -686,6 +928,11 @@ private const val LMS_FOLD = "lms_fold"
  *
  * D-131: beside the detail pane on a wide window, [selected] says whether this row is the one open there; the open
  * row takes the secondary container tone and is announced as selected. Null on phones (no selection state).
+ * D-137: there the row is the selectable segmented item, so the selection eases its tone and morphs its shape with
+ * the theme's motion scheme.
+ *
+ * D-137: while [opening] is [LmsRowOpening.SHOWN] (the tap is being answered past the loading grace) the kind mark
+ * turns into the loading indicator in the same fixed slot, so the title never moves, and screen readers hear `여는 중`.
  */
 @Composable
 private fun LmsItemRow(
@@ -699,7 +946,9 @@ private fun LmsItemRow(
     modifier: Modifier = Modifier,
     muted: Boolean = false,
     selected: Boolean? = null,
+    opening: LmsRowOpening = LmsRowOpening.NONE,
 ) {
+    val reduced = LocalReducedMotion.current
     val due = if (completed) null else item.dueAt?.let { lmsDueLabel(it, now) }
     val changeColor = MaterialTheme.colorScheme.primary
     // D-119: folded rows (기한 지남, 완료한 학습) sit on a quieter tone with quieter text than what is still to do.
@@ -720,43 +969,49 @@ private fun LmsItemRow(
             withStyle(SpanStyle(color = courseColor, fontWeight = FontWeight.Bold)) { append(item.courseName) }
         }
     }
-    SegmentedListItem(
-        onClick = { onOpenItem(item) },
-        shapes = ListItemDefaults.segmentedShapes(index = index, count = count),
-        modifier = modifier.semantics {
-            onClick(label = "열기") { onOpenItem(item); true }
-            selected?.let { this.selected = it }
-        },
-        leadingContent = { DimaIconBadge(lmsKindIcon(item.kind), muted = muted) },
-        trailingContent = due?.let { label ->
-            {
-                Text(
-                    label.text,
-                    style = if (label.urgent) MaterialTheme.typography.labelLargeEmphasized else MaterialTheme.typography.labelLarge,
-                    color = if (label.urgent) DimaTheme.colors.warning else MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-        },
-        supportingContent = {
-            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                Text(
-                    meta,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                lmsWhenLine(item)?.let {
-                    Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    val rowModifier = modifier.semantics {
+        onClick(label = "열기") { onOpenItem(item); true }
+        if (opening == LmsRowOpening.SHOWN) stateDescription = "여는 중"
+    }
+    val leading: @Composable () -> Unit = {
+        if (opening == LmsRowOpening.NONE) {
+            DimaIconBadge(lmsKindIcon(item.kind), size = LMS_ROW_MARK_SIZE, muted = muted)
+        } else {
+            Box(Modifier.size(LMS_ROW_MARK_SIZE), contentAlignment = Alignment.Center) {
+                AnimatedContent(
+                    targetState = opening == LmsRowOpening.SHOWN,
+                    transitionSpec = { dimaIconSwap(reduced) },
+                    label = "lms_row_opening",
+                ) { busy ->
+                    if (busy) DimaLoadingIndicator(size = 32.dp) else DimaIconBadge(lmsKindIcon(item.kind), size = LMS_ROW_MARK_SIZE, muted = muted)
                 }
             }
-        },
-        colors = when {
-            selected == true -> ListItemDefaults.segmentedColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)
-            muted -> ListItemDefaults.segmentedColors(containerColor = DimaTheme.colors.cardMuted)
-            else -> dimaSegmentedListColors()
-        },
-    ) {
+        }
+    }
+    val trailing: (@Composable () -> Unit)? = due?.let { label ->
+        {
+            Text(
+                label.text,
+                style = if (label.urgent) MaterialTheme.typography.labelLargeEmphasized else MaterialTheme.typography.labelLarge,
+                color = if (label.urgent) DimaTheme.colors.warning else MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+    val supporting: @Composable () -> Unit = {
+        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(
+                meta,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            lmsWhenLine(item)?.let {
+                Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+    }
+    val title: @Composable () -> Unit = {
         Text(
             item.title,
             style = MaterialTheme.typography.titleMedium,
@@ -765,6 +1020,49 @@ private fun LmsItemRow(
             overflow = TextOverflow.Ellipsis,
         )
     }
+    val shapes = ListItemDefaults.segmentedShapes(index = index, count = count)
+    if (selected != null) {
+        // The selectable overload announces the selection itself, so the row does not set it again.
+        SegmentedListItem(
+            selected = selected,
+            onClick = { onOpenItem(item) },
+            shapes = shapes,
+            modifier = rowModifier,
+            leadingContent = leading,
+            trailingContent = trailing,
+            supportingContent = supporting,
+            colors = ListItemDefaults.segmentedColors(
+                containerColor = if (muted) DimaTheme.colors.cardMuted else DimaTheme.colors.card,
+                selectedContainerColor = MaterialTheme.colorScheme.secondaryContainer,
+            ),
+            content = title,
+        )
+    } else {
+        SegmentedListItem(
+            onClick = { onOpenItem(item) },
+            shapes = shapes,
+            modifier = rowModifier,
+            leadingContent = leading,
+            trailingContent = trailing,
+            supportingContent = supporting,
+            colors = if (muted) ListItemDefaults.segmentedColors(containerColor = DimaTheme.colors.cardMuted) else dimaSegmentedListColors(),
+            content = title,
+        )
+    }
+}
+
+/** The kind mark's slot at a row's start; the opening indicator takes the same slot (D-137). */
+private val LMS_ROW_MARK_SIZE = 40.dp
+
+/**
+ * A row's part in opening an item (D-137): [NONE] for most rows, [SLOT] for the row tapped last, whose mark sits in the
+ * swap slot from the tap on (so the swap after the grace animates), and [SHOWN] while its loading indicator shows.
+ */
+private enum class LmsRowOpening { NONE, SLOT, SHOWN }
+
+/** The entry tapped last; a plain holder written while composing, since it only follows the opening key. */
+private class LmsLastOpened {
+    var key: String? = null
 }
 
 private const val TODO_COMPLETED = "todo-completed"

@@ -1,5 +1,6 @@
 package com.example.dimanow.ui.schedule
 
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.EditCalendar
 import androidx.compose.material3.ButtonDefaults
@@ -7,6 +8,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
@@ -35,6 +37,8 @@ import androidx.compose.ui.unit.dp
 import com.example.dimanow.domain.Course
 import com.example.dimanow.domain.CourseOverride
 import com.example.dimanow.domain.CourseOverrideKind
+import com.example.dimanow.ui.motion.dimaCollapseOut
+import com.example.dimanow.ui.motion.dimaExpandIn
 import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalTime
@@ -82,48 +86,72 @@ internal fun CourseOverrideDialog(
             ) {
                 Text(course.name, style = MaterialTheme.typography.titleSmall)
                 Text("선택한 날짜의 수업에만 적용돼요", style = MaterialTheme.typography.bodySmall)
-                OutlinedButton(shapes = ButtonDefaults.shapes(), onClick = { pickingDate = true }, modifier = Modifier.fillMaxWidth()) {
-                    Text(date?.format(OVERRIDE_DATE) ?: "수업 날짜 선택")
-                }
-                if (!dateValid) {
-                    Text("학기 안의 해당 수업 요일을 선택해 주세요", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
-                }
-                CourseOverrideKind.entries.forEach { option ->
-                    Row(
-                        modifier = Modifier.fillMaxWidth().selectable(
-                            selected = kind == option,
-                            onClick = { kind = option },
-                            role = Role.RadioButton,
-                        ),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        RadioButton(selected = kind == option, onClick = null)
-                        Text(overrideKindLabel(option))
+                // D-137: messages and the 시간·강의실 fields unfold in place with their 12dp gap inside, so the dialog
+                // grows into them instead of jumping (the gap of the column above them would appear in one frame).
+                Column {
+                    OutlinedButton(shapes = ButtonDefaults.shapes(), onClick = { pickingDate = true }, modifier = Modifier.fillMaxWidth()) {
+                        Text(date?.format(OVERRIDE_DATE) ?: "수업 날짜 선택")
+                    }
+                    AnimatedVisibility(visible = !dateValid, enter = dimaExpandIn(), exit = dimaCollapseOut(), label = "override_date_error") {
+                        Text(
+                            "학기 안의 해당 수업 요일을 선택해 주세요",
+                            color = MaterialTheme.colorScheme.error,
+                            style = MaterialTheme.typography.bodySmall,
+                            modifier = Modifier.padding(top = 12.dp),
+                        )
                     }
                 }
-                if (changed) {
-                    OutlinedTextField(
-                        value = startText,
-                        onValueChange = { startText = it },
-                        label = { Text("시작 시간 (HH:mm)") },
-                        singleLine = true,
-                        isError = start == null,
-                    )
-                    OutlinedTextField(
-                        value = endText,
-                        onValueChange = { endText = it },
-                        label = { Text("종료 시간 (HH:mm)") },
-                        singleLine = true,
-                        isError = !timeValid,
-                    )
-                    if (!timeValid) Text("종료 시간은 시작 시간보다 늦어야 해요", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
-                    OutlinedTextField(
-                        value = room,
-                        onValueChange = { room = it },
-                        label = { Text("강의실") },
-                        singleLine = true,
-                        isError = room.isBlank(),
-                    )
+                Column {
+                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        CourseOverrideKind.entries.forEach { option ->
+                            Row(
+                                modifier = Modifier.fillMaxWidth().selectable(
+                                    selected = kind == option,
+                                    onClick = { kind = option },
+                                    role = Role.RadioButton,
+                                ),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                RadioButton(selected = kind == option, onClick = null)
+                                Text(overrideKindLabel(option))
+                            }
+                        }
+                    }
+                    AnimatedVisibility(visible = changed, enter = dimaExpandIn(), exit = dimaCollapseOut(), label = "override_changed_fields") {
+                        Column(Modifier.padding(top = 12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                            OutlinedTextField(
+                                value = startText,
+                                onValueChange = { startText = it },
+                                label = { Text("시작 시간 (HH:mm)") },
+                                singleLine = true,
+                                isError = start == null,
+                            )
+                            Column {
+                                OutlinedTextField(
+                                    value = endText,
+                                    onValueChange = { endText = it },
+                                    label = { Text("종료 시간 (HH:mm)") },
+                                    singleLine = true,
+                                    isError = !timeValid,
+                                )
+                                AnimatedVisibility(visible = !timeValid, enter = dimaExpandIn(), exit = dimaCollapseOut(), label = "override_time_error") {
+                                    Text(
+                                        "종료 시간은 시작 시간보다 늦어야 해요",
+                                        color = MaterialTheme.colorScheme.error,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        modifier = Modifier.padding(top = 12.dp),
+                                    )
+                                }
+                            }
+                            OutlinedTextField(
+                                value = room,
+                                onValueChange = { room = it },
+                                label = { Text("강의실") },
+                                singleLine = true,
+                                isError = room.isBlank(),
+                            )
+                        }
+                    }
                 }
             }
         },

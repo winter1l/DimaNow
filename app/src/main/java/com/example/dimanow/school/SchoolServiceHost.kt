@@ -14,6 +14,13 @@ import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.LocalActivity
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.MutableTransitionState
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -43,10 +50,14 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -58,8 +69,12 @@ import com.example.dimanow.ui.DialogTone
 import com.example.dimanow.ui.DimaAlertDialog
 import com.example.dimanow.lms.SavedLmsCredentials
 import com.example.dimanow.lms.lmsCredentialSubmissionScript
+import com.example.dimanow.lms.webPageEntrance
 import com.example.dimanow.ui.DimaLoadingIndicator
 import com.example.dimanow.ui.DimaTopAppBar
+import com.example.dimanow.ui.motion.DimaMotion
+import com.example.dimanow.ui.motion.LocalReducedMotion
+import com.example.dimanow.ui.motion.PageSlideDistance
 import com.example.dimanow.ui.openUrl
 import kotlinx.coroutines.launch
 import java.io.ByteArrayInputStream
@@ -123,6 +138,25 @@ private fun SchoolServiceSession(
         onDispose { if (portalShown) activity?.window?.clearFlags(WindowManager.LayoutParams.FLAG_SECURE) }
     }
     val onScreen = surface != SchoolSurface.HIDDEN
+    // D-137: the sign-in form comes in as a forward step answering the control the student tapped, and fades out once
+    // the account is entered; the session's area stays full size until it has gone.
+    val form = remember { MutableTransitionState(false) }
+    form.targetState = askCredentials
+    val formShown = form.currentState || form.targetState
+    val reduced = LocalReducedMotion.current
+    val slidePx = with(LocalDensity.current) { PageSlideDistance.roundToPx() } *
+        (if (LocalLayoutDirection.current == LayoutDirection.Rtl) -1 else 1)
+    // D-137: a page opened for the student fades in over its loading line once it is ready. When the portal appears
+    // over a hidden read, the whole page comes in at once ([webPageEntrance]), so the WebView does not fade twice.
+    val webShown = portalShown || surface == SchoolSurface.PAGE
+    val webAlpha = remember { Animatable(0f) }
+    LaunchedEffect(webShown) {
+        when {
+            !webShown -> webAlpha.snapTo(0f)
+            request.opensPage -> webAlpha.animateTo(1f, DimaMotion.effectsDefault())
+            else -> webAlpha.snapTo(1f)
+        }
+    }
     // Back steps back through the shown page's own history; otherwise it closes, as the close button does.
     BackHandler(enabled = onScreen || askCredentials) {
         val webView = slot.webView
@@ -140,11 +174,14 @@ private fun SchoolServiceSession(
             Icon(Icons.Default.Close, contentDescription = if (request.opensPage) "닫기" else "로그인 취소")
         }
     }
-    Box(modifier = if (onScreen || askCredentials) Modifier.fillMaxSize() else Modifier.size(1.dp)) {
+    Box(modifier = if (onScreen || formShown) Modifier.fillMaxSize() else Modifier.size(1.dp)) {
         Column(
             modifier = if (onScreen) {
                 Modifier
                     .fillMaxSize()
+                    // D-137: the forward page motion of D-121, drawn in a layer: the WebView inside is never kept by
+                    // an animated container. A hidden read has no layer and never animates.
+                    .webPageEntrance()
                     .background(MaterialTheme.colorScheme.surface)
                     .statusBarsPadding()
                     .navigationBarsPadding()
@@ -200,9 +237,15 @@ private fun SchoolServiceSession(
                         webView.stopLoading()
                         webView.destroy()
                     },
-                    modifier = if (onScreen) Modifier.fillMaxSize() else Modifier.size(1.dp),
+                    modifier = if (onScreen) Modifier.fillMaxSize().graphicsLayer { alpha = webAlpha.value } else Modifier.size(1.dp),
                 )
-                if (surface == SchoolSurface.OPENING) {
+                // The loading line leaves on the fast effects spring as the page fades in beneath it (D-137). Named
+                // in full: inside the page's column the column's own overload would be chosen.
+                androidx.compose.animation.AnimatedVisibility(
+                    visible = surface == SchoolSurface.OPENING,
+                    enter = EnterTransition.None,
+                    exit = fadeOut(DimaMotion.effectsFast()),
+                ) {
                     Column(
                         modifier = Modifier
                             .fillMaxSize()
@@ -245,7 +288,15 @@ private fun SchoolServiceSession(
                 dismissTag = "school_sign_in_cancel",
             )
         }
-        if (askCredentials) {
+        AnimatedVisibility(
+            visibleState = form,
+            enter = if (reduced) {
+                fadeIn(DimaMotion.effectsDefault())
+            } else {
+                fadeIn(DimaMotion.effectsDefault()) + slideInHorizontally(DimaMotion.spatialSlow()) { slidePx }
+            },
+            exit = fadeOut(DimaMotion.effectsFast()),
+        ) {
             // The same form as the Courses tab: the account goes only to the official portal page, and saving it
             // (opt-in) also signs the Courses tab in next time.
             LmsLoginScreen(

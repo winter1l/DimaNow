@@ -1,8 +1,11 @@
 package com.example.dimanow.ui
 
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.material.icons.filled.Map
 import androidx.compose.material.icons.filled.LocalLibrary
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -21,8 +24,10 @@ import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material3.Icon
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ProgressIndicatorDefaults
 import androidx.compose.material3.SegmentedListItem
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -43,6 +48,10 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.dimanow.school.SchoolReadCache
 import com.example.dimanow.update.AppUpdatePhase
 import com.example.dimanow.update.AppUpdateUiState
+import com.example.dimanow.ui.motion.DimaMotion
+import com.example.dimanow.ui.motion.dimaCollapseOut
+import com.example.dimanow.ui.motion.dimaContentSwap
+import com.example.dimanow.ui.motion.dimaExpandIn
 
 /**
  * 전체 (D-110), the last bottom-bar destination as in the Toss app: what the student opens now and then rather
@@ -213,9 +222,8 @@ internal fun allFooterUpdate(state: AppUpdateUiState): AllFooterUpdate {
             AllFooterUpdate.Action.DOWNLOAD,
             "업데이트 받기",
         )
-        AppUpdatePhase.DOWNLOADING -> AllFooterUpdate(
-            "$version · 새 버전을 받고 있어요${state.downloadProgress?.let { " ($it%)" }.orEmpty()}",
-        )
+        // D-137: the share received is a bar under the line, so the line stays one sentence for the whole download.
+        AppUpdatePhase.DOWNLOADING -> AllFooterUpdate("$version · 새 버전을 받고 있어요")
         AppUpdatePhase.READY_TO_INSTALL, AppUpdatePhase.PERMISSION_REQUIRED -> AllFooterUpdate(
             "$version · ${latest ?: "새"} 버전을 설치할 수 있어요",
             AllFooterUpdate.Action.CONTINUE_INSTALL,
@@ -225,7 +233,13 @@ internal fun allFooterUpdate(state: AppUpdateUiState): AllFooterUpdate {
     }
 }
 
-/** The unofficial notice and the running version, quiet and centred at the end of 전체 (D-122). */
+/**
+ * The unofficial notice and the running version, quiet and centred at the end of 전체 (D-122).
+ *
+ * D-137: the update line turns over to the next one when the phase changes (never per percent), its colour follows
+ * on the effects spring, a download shows a flat progress bar, and the action button opens and closes in place. The
+ * 6dp gaps sit inside the parts that come and go, so nothing jumps when they do.
+ */
 @Composable
 private fun AllFooter(
     updateState: AppUpdateUiState?,
@@ -235,7 +249,6 @@ private fun AllFooter(
     Column(
         modifier = Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 16.dp).testTag("all_footer"),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
         Text(
             UNOFFICIAL_NOTICE,
@@ -245,25 +258,61 @@ private fun AllFooter(
         )
         if (updateState != null) {
             val footer = allFooterUpdate(updateState)
-            Text(
-                footer.text,
-                style = MaterialTheme.typography.labelMedium,
-                color = if (footer.action == AllFooterUpdate.Action.DOWNLOAD || footer.action == AllFooterUpdate.Action.CONTINUE_INSTALL) {
-                    MaterialTheme.colorScheme.primary
-                } else {
-                    MaterialTheme.colorScheme.onSurfaceVariant
-                },
-                textAlign = TextAlign.Center,
-                modifier = Modifier.testTag("all_version"),
+            val tone by animateColorAsState(
+                if (footer.action != null) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                DimaMotion.effectsDefault(),
+                label = "all_footer_tone",
             )
+            // Keyed on the footer, which holds no percent, so a download in progress never turns the line over.
+            AnimatedContent(
+                targetState = footer,
+                transitionSpec = { dimaContentSwap() },
+                contentAlignment = Alignment.TopCenter,
+                label = "all_footer_update",
+                modifier = Modifier.padding(top = 6.dp),
+            ) { shown ->
+                Text(
+                    shown.text,
+                    style = MaterialTheme.typography.labelMedium,
+                    color = tone,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.testTag("all_version"),
+                )
+            }
+            val received by animateFloatAsState(
+                (updateState.downloadProgress ?: 0) / 100f,
+                ProgressIndicatorDefaults.ProgressAnimationSpec,
+                label = "all_footer_progress",
+            )
+            AnimatedVisibility(
+                visible = updateState.phase == AppUpdatePhase.DOWNLOADING,
+                enter = dimaExpandIn(),
+                exit = dimaCollapseOut(),
+                label = "all_footer_progress",
+            ) {
+                // Read only in the indicator's draw, so the bar's motion never recomposes the footer (R10).
+                LinearProgressIndicator(progress = { received }, modifier = Modifier.padding(top = 6.dp))
+            }
             val run = when (footer.action) {
                 AllFooterUpdate.Action.DOWNLOAD -> onDownloadUpdate
                 AllFooterUpdate.Action.CONTINUE_INSTALL -> onContinueInstall
                 null -> null
             }
-            if (run != null && footer.actionLabel != null) {
-                FilledTonalButton(shapes = ButtonDefaults.shapes(), onClick = run, modifier = Modifier.testTag("all_update_action")) {
-                    Text(footer.actionLabel)
+            val action = rememberLastNonNull(if (run != null && footer.actionLabel != null) footer.actionLabel to run else null)
+            AnimatedVisibility(
+                visible = run != null && footer.actionLabel != null,
+                enter = dimaExpandIn(),
+                exit = dimaCollapseOut(),
+                label = "all_update_action",
+            ) {
+                action?.let { (label, onClick) ->
+                    FilledTonalButton(
+                        shapes = ButtonDefaults.shapes(),
+                        onClick = onClick,
+                        modifier = Modifier.padding(top = 6.dp).testTag("all_update_action"),
+                    ) {
+                        Text(label)
+                    }
                 }
             }
         }

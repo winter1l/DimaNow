@@ -3,10 +3,11 @@ package com.example.dimanow.lms
 import androidx.compose.material.icons.filled.PlayCircle
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Article
-import androidx.compose.material.icons.filled.Devices
 import androidx.compose.material3.ButtonDefaults
-import android.webkit.WebView
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.EnterExitState
+import androidx.compose.animation.core.Animatable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
@@ -27,12 +28,26 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.VerticalDivider
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import com.example.dimanow.ui.EmptyState
+import com.example.dimanow.ui.collectRetainedAsState
+import com.example.dimanow.ui.motion.DimaMotion
+import com.example.dimanow.ui.motion.LocalReducedMotion
+import com.example.dimanow.ui.motion.PageSlideDistance
+import com.example.dimanow.ui.motion.PredictiveBackPage
+import com.example.dimanow.ui.motion.dimaContentReveal
+import com.example.dimanow.ui.motion.dimaFadeThrough
+import com.example.dimanow.ui.motion.dimaPageTransform
+import com.example.dimanow.ui.motion.pageMotionFor
+import com.example.dimanow.ui.motion.predictiveBackBackdrop
+import com.example.dimanow.ui.motion.rememberPredictiveBackPreview
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -41,6 +56,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.key
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -95,7 +111,9 @@ fun LmsRoute(
     // D-135: the LMS ended this device's session within two hours of its last use, so another device most likely
     // signed in; the list waits for the student's 이 기기로 로그인 instead of signing that device out.
     val signedInElsewhere by autoLoginCoordinator.signedInElsewhere.collectAsStateWithLifecycle()
-    val snapshot by source.snapshot.collectAsStateWithLifecycle(initialValue = LmsSnapshot())
+    // D-137: the tab entered again starts from the list it last showed (the shell keeps it, as Home's 수업 card does),
+    // not from an empty snapshot that flashed the empty card, clamped the restored scroll and counted every row as new.
+    val snapshot by source.snapshot.collectRetainedAsState(initialValue = LmsSnapshot())
     val loginRequest by loginBridge.request.collectAsStateWithLifecycle()
     val renderedPageRequest by (
         renderedPageBridge?.request ?: remember { kotlinx.coroutines.flow.flowOf<LmsRenderedPageRequest?>(null) }
@@ -106,10 +124,37 @@ fun LmsRoute(
     var selectedDetail by remember { mutableStateOf<LmsPresentedDetail?>(null) }
     var officialCoursePage by remember { mutableStateOf<LmsOfficialCoursePage?>(null) }
     var pendingOfficialCoursePage by remember { mutableStateOf<LmsOfficialCoursePage?>(null) }
-    BackHandler(enabled = selectedDetail != null) { selectedDetail = null }
-    BackHandler(enabled = officialCoursePage != null) { officialCoursePage = null }
-    BackHandler(enabled = pendingOfficialCoursePage != null) { pendingOfficialCoursePage = null }
+    // D-137: the item whose detail is being read after a tap; its row answers the tap, and other taps wait for it.
+    var openingKey by remember { mutableStateOf<String?>(null) }
     val silentLogin = loginRequest?.credentials?.automaticLogin == true
+    val needsSignIn = sessionState != LmsSessionState.ACTIVE && (
+        credentialState == CredentialState.EMPTY || credentialState == CredentialState.INVALIDATED ||
+            sessionState == LmsSessionState.CREDENTIALS_NEED_REVIEW
+        )
+    val surface: LmsSurface = when {
+        loginRequest != null && !silentLogin -> LmsSurface.Authenticating // The authentication host below owns manual progress.
+        renderedPageRequest != null && renderedPageBridge != null -> LmsSurface.Rendered
+        officialCoursePage != null -> LmsSurface.Official(requireNotNull(officialCoursePage))
+        selectedDetail != null && !twoPane -> LmsSurface.Detail(requireNotNull(selectedDetail))
+        // An item already open beside the list stays there; otherwise signing in comes first, as on phones.
+        needsSignIn && !(twoPane && selectedDetail != null) -> LmsSurface.SignIn
+        else -> LmsSurface.Items
+    }
+    // D-131: on a wide window Back first clears the item open beside the list.
+    BackHandler(enabled = twoPane && selectedDetail != null && surface == LmsSurface.Items) { selectedDetail = null }
+    // D-137: M3 predictive back for the detail and the official page. While the gesture is held the page shrinks and
+    // rounds over a backdrop; letting go goes back to the list with the backward page motion.
+    val backPreview = rememberPredictiveBackPreview(
+        enabled = surface is LmsSurface.Detail || surface is LmsSurface.Official,
+        currentKey = surface.key,
+    ) {
+        when (surface) {
+            is LmsSurface.Official -> officialCoursePage = null
+            is LmsSurface.Detail -> selectedDetail = null
+            else -> Unit
+        }
+    }
+    BackHandler(enabled = pendingOfficialCoursePage != null) { pendingOfficialCoursePage = null }
     BackHandler(enabled = loginRequest != null && !silentLogin) { loginBridge.cancel() }
     BackHandler(enabled = renderedPageRequest != null) { renderedPageBridge?.cancel() }
     // 로그인 WebView·글 상세가 떠 있는 동안 상위 셸이 하단 내비를 숨기게 알린다 (D-044).
@@ -202,6 +247,13 @@ fun LmsRoute(
     }
 
     fun openItem(item: LmsItem) {
+        // D-137: one item opens at a time; its row says so once the read outlasts the loading grace.
+        if (openingKey != null) return
+        openingKey = item.entryKey()
+        // A message does not hold the open: the row stops waiting as soon as the read has ended.
+        fun say(message: String) {
+            scope.launch { snackbar.showSnackbar(message) }
+        }
         scope.launch {
             suspend fun present(result: LmsDetailLoadResult): Boolean = when (result) {
                 is LmsDetailLoadResult.Fresh -> {
@@ -220,7 +272,7 @@ fun LmsRoute(
                 LmsDetailLoadResult.OfficialCoursePage -> {
                     val course = snapshot.courses.firstOrNull { it.id == item.courseId }
                     if (course == null) {
-                        snackbar.showSnackbar("공식 LMS에서 이 수업을 찾지 못했어요")
+                        say("공식 LMS에서 이 수업을 찾지 못했어요")
                         false
                     } else if (item.kind == LmsItemKind.CONTENT) {
                         pendingOfficialCoursePage = LmsOfficialCoursePage(item, course)
@@ -231,7 +283,7 @@ fun LmsRoute(
                     }
                 }
                 is LmsDetailLoadResult.Failure -> {
-                    snackbar.showSnackbar(result.message)
+                    say(result.message)
                     false
                 }
                 LmsDetailLoadResult.SessionExpired -> false
@@ -242,84 +294,91 @@ fun LmsRoute(
                 if (autoLoginCoordinator.ensureActive(force = true) == LmsSessionState.ACTIVE) {
                     val retried = source.loadDetail(item)
                     if (!present(retried)) {
-                        snackbar.showSnackbar(
-                            if (retried == LmsDetailLoadResult.SessionExpired) LmsUserMessages.SIGN_IN_REQUIRED else LmsUserMessages.DETAIL_FAILED,
-                        )
+                        say(if (retried == LmsDetailLoadResult.SessionExpired) LmsUserMessages.SIGN_IN_REQUIRED else LmsUserMessages.DETAIL_FAILED)
                     }
                 } else if (autoLoginCoordinator.signedInElsewhere.value) {
-                    snackbar.showSnackbar(LmsUserMessages.SIGNED_IN_ELSEWHERE_HINT)
+                    say(LmsUserMessages.SIGNED_IN_ELSEWHERE_HINT)
                 }
             }
+        }.invokeOnCompletion {
+            // Shown, failed, or handed over to the official page; the row no longer waits.
+            openingKey = null
         }
     }
 
-    val needsSignIn = sessionState != LmsSessionState.ACTIVE && (
-        credentialState == CredentialState.EMPTY || credentialState == CredentialState.INVALIDATED ||
-            sessionState == LmsSessionState.CREDENTIALS_NEED_REVIEW
-        )
-
-    Box(modifier = modifier.fillMaxSize()) {
-        when {
-            loginRequest != null && !silentLogin -> Unit // The authentication host below owns manual progress.
-            renderedPageRequest != null && renderedPageBridge != null -> LmsRenderedPageWebView(
-                request = requireNotNull(renderedPageRequest),
-                onComplete = renderedPageBridge::complete,
-                onCancel = renderedPageBridge::cancel,
-                modifier = Modifier.fillMaxSize(),
-            )
-            officialCoursePage != null -> LmsOfficialCourseWebView(
-                page = requireNotNull(officialCoursePage),
-                onBack = { officialCoursePage = null },
-                onLaunched = {
-                    officialCoursePage?.item?.let { item ->
-                        scope.launch { source.markItemOpened(item) }
-                    }
-                },
-                onSessionExpired = {
-                    officialCoursePage = null
-                    scope.launch {
-                        autoLoginCoordinator.markExpired()
-                        snackbar.showSnackbar(
-                            if (autoLoginCoordinator.signedInElsewhere.value) {
-                                LmsUserMessages.SIGNED_IN_ELSEWHERE_HINT
-                            } else {
-                                LmsUserMessages.SIGN_IN_REQUIRED
-                            },
-                        )
-                    }
-                },
-                onMessage = { scope.launch { snackbar.showSnackbar(it) } },
-                modifier = Modifier.fillMaxSize(),
-            )
-            selectedDetail != null && !twoPane -> LmsDetailScreen(
-                presented = requireNotNull(selectedDetail),
-                source = source,
-                sessionController = sessionController,
-                autoLoginCoordinator = autoLoginCoordinator,
-                onBack = { selectedDetail = null },
-                onMessage = { scope.launch { snackbar.showSnackbar(it) } },
-                modifier = Modifier.fillMaxSize(),
-            )
-            // An item already open beside the list stays there; otherwise signing in comes first, as on phones.
-            needsSignIn && !(twoPane && selectedDetail != null) -> LmsLoginScreen(
-                    needsReview = sessionState == LmsSessionState.CREDENTIALS_NEED_REVIEW || credentialState == CredentialState.INVALIDATED,
-                    onLogin = { username, password, automatic ->
-                        scope.launch {
-                            val credentials = SavedLmsCredentials(username.trim(), password, automatic)
-                            if (automatic) {
-                                credentialStore.save(credentials)
-                                loginAndRefresh(force = true, credentialsChanged = true)
-                            } else {
-                                credentialStore.delete()
-                                manualLogin(credentials)
-                            }
-                        }
-                    },
-                    modifier = Modifier.fillMaxSize(),
+    // D-137: one page motion per change of what the tab shows, as the shell's pages have (D-121): the list, the sign-in
+    // and the phone detail move with dimaPageTransform. The pages that hold a WebView (the official page, the rendered
+    // page's wait, the sign-in frame) stay outside the transition, since AnimatedContent must never keep a WebView; the
+    // pages beneath them are empty, as before. The snackbar stays over it all.
+    val reduced = LocalReducedMotion.current
+    val slidePx = with(LocalDensity.current) { PageSlideDistance.roundToPx() } *
+        (if (LocalLayoutDirection.current == LayoutDirection.Rtl) -1 else 1)
+    // The list and the sign-in keep their saveable state (mode, folds, scroll) while a sub-page is shown (D-137: the
+    // list was rebuilt at 할 일, at the top, with its folds closed after every detail on a phone).
+    val surfaceStates = rememberSaveableStateHolder()
+    Box(
+        modifier = modifier
+            .fillMaxSize()
+            // The shrinking page needs a backdrop one tone apart, as the shell's preview has (D-121).
+            .predictiveBackBackdrop(backPreview, MaterialTheme.colorScheme.surfaceContainerHighest),
+    ) {
+        AnimatedContent(
+            targetState = surface,
+            contentKey = { it.key },
+            transitionSpec = {
+                dimaPageTransform(
+                    pageMotionFor(
+                        fromSubPage = initialState.subPage,
+                        toSubPage = targetState.subPage,
+                        toIsBackTarget = targetState == LmsSurface.Items,
+                    ),
+                    slidePx,
+                    reduced,
                 )
-            // D-131 (Q-025): the list keeps one place in the composition whether or not a detail pane sits beside it,
-            // so opening an item on a wide window keeps the list's mode, folds and scroll position.
-            else -> Row(Modifier.fillMaxSize()) {
+            },
+            label = "lms_surface",
+            modifier = Modifier.fillMaxSize(),
+        ) { shown ->
+            // A page on its way out takes no new download (its content is still on screen for a moment).
+            val leaving = transition.targetState == EnterExitState.PostExit
+            when (shown) {
+                // Drawn over by the sign-in host, the rendered page or the official page, which hold WebViews and so
+                // are not part of the transition.
+                LmsSurface.Authenticating, LmsSurface.Rendered, is LmsSurface.Official -> Box(Modifier.fillMaxSize())
+                is LmsSurface.Detail -> PredictiveBackPage(backPreview, shown.key, Modifier.fillMaxSize()) {
+                    LmsDetailScreen(
+                        presented = shown.presented,
+                        source = source,
+                        sessionController = sessionController,
+                        autoLoginCoordinator = autoLoginCoordinator,
+                        onBack = { selectedDetail = null },
+                        onMessage = { scope.launch { snackbar.showSnackbar(it) } },
+                        leaving = leaving,
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                }
+                LmsSurface.SignIn -> surfaceStates.SaveableStateProvider(shown.key) {
+                    LmsLoginScreen(
+                        needsReview = sessionState == LmsSessionState.CREDENTIALS_NEED_REVIEW || credentialState == CredentialState.INVALIDATED,
+                        onLogin = { username, password, automatic ->
+                            scope.launch {
+                                val credentials = SavedLmsCredentials(username.trim(), password, automatic)
+                                if (automatic) {
+                                    credentialStore.save(credentials)
+                                    loginAndRefresh(force = true, credentialsChanged = true)
+                                } else {
+                                    credentialStore.delete()
+                                    manualLogin(credentials)
+                                }
+                            }
+                        },
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                }
+                // D-131 (Q-025): the list keeps one place in the composition whether or not a detail pane sits beside
+                // it, so opening an item on a wide window keeps the list's mode, folds and scroll position.
+                LmsSurface.Items -> surfaceStates.SaveableStateProvider(shown.key) {
+                  Row(Modifier.fillMaxSize()) {
                 LmsItemsScreen(
                     snapshot = if (silentLogin) snapshot.copy(syncState = LmsSyncState.SYNCING, errorMessage = null) else snapshot,
                     sessionState = sessionState,
@@ -345,6 +404,7 @@ fun LmsRoute(
                     now = now,
                     selectable = twoPane,
                     selection = selectedDetail?.detail?.item?.takeIf { twoPane },
+                    openingKey = openingKey,
                     modifier = if (twoPane) {
                         Modifier
                             .width(LMS_LIST_PANE_WIDTH)
@@ -371,6 +431,53 @@ fun LmsRoute(
                             .consumeWindowInsets(WindowInsets.safeDrawing.only(WindowInsetsSides.Start)),
                     )
                 }
+                  }
+                }
+            }
+        }
+        // The official course page is a WebView, so it lies over the transition: it comes in with the forward page
+        // motion through a layer of its own and takes the back preview there (D-137); closing it removes it at once and
+        // the list comes back with the backward motion beneath.
+        (surface as? LmsSurface.Official)?.let { official ->
+            key(official.page) {
+                PredictiveBackPage(backPreview, official.key, Modifier.fillMaxSize()) {
+                    LmsOfficialCourseWebView(
+                        page = official.page,
+                        onBack = { officialCoursePage = null },
+                        onLaunched = {
+                            officialCoursePage?.item?.let { item ->
+                                scope.launch { source.markItemOpened(item) }
+                            }
+                        },
+                        onSessionExpired = {
+                            officialCoursePage = null
+                            scope.launch {
+                                autoLoginCoordinator.markExpired()
+                                snackbar.showSnackbar(
+                                    if (autoLoginCoordinator.signedInElsewhere.value) {
+                                        LmsUserMessages.SIGNED_IN_ELSEWHERE_HINT
+                                    } else {
+                                        LmsUserMessages.SIGN_IN_REQUIRED
+                                    },
+                                )
+                            }
+                        },
+                        onMessage = { scope.launch { snackbar.showSnackbar(it) } },
+                        modifier = Modifier.fillMaxSize().webPageEntrance(),
+                    )
+                }
+            }
+        }
+        // The wait while a hidden WebView renders an item comes in the same way (D-137).
+        val rendered = renderedPageRequest
+        if (surface == LmsSurface.Rendered && rendered != null && renderedPageBridge != null) {
+            key(rendered) {
+                LmsRenderedPageWebView(
+                    request = rendered,
+                    onComplete = renderedPageBridge::complete,
+                    onCancel = renderedPageBridge::cancel,
+                    modifier = Modifier.fillMaxSize().webPageEntrance(),
+                )
             }
         }
         loginRequest?.let { request ->
@@ -413,6 +520,10 @@ fun LmsRoute(
  * The detail pane beside the 수업 list on a wide window (D-131, Q-025): the opened item's native detail, or a quiet
  * line saying where it will show while nothing is open. Each item gets its own detail state, so moving to another
  * item starts at its top with no download of the previous one still shown.
+ *
+ * D-137: the pane's content changes in place: the placeholder and the first or last detail cross-fade
+ * ([dimaContentReveal]), one item to the next fades through ([dimaFadeThrough], growing in unless motion is reduced).
+ * Each item is its own content, keyed by its LMS entry, which also gives it its own detail state.
  */
 @Composable
 private fun LmsDetailPane(
@@ -424,33 +535,110 @@ private fun LmsDetailPane(
     onMessage: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val reduced = LocalReducedMotion.current
     Box(modifier.testTag("lms_detail_pane")) {
-        if (presented == null) {
-            EmptyState(
-                message = "학습을 고르면 여기에 내용이 보여요",
-                icon = Icons.AutoMirrored.Filled.Article,
-                contained = false,
-                modifier = Modifier
-                    .align(Alignment.Center)
-                    .statusBarsPadding()
-                    .padding(24.dp)
-                    .testTag("lms_detail_placeholder"),
-            )
-        } else {
-            val item = presented.detail.item
-            key(item.kind, item.courseId, item.id) {
+        AnimatedContent(
+            targetState = presented,
+            contentKey = { it?.detail?.item?.entryKey() },
+            transitionSpec = {
+                if (initialState == null || targetState == null) dimaContentReveal() else dimaFadeThrough(scale = !reduced)
+            },
+            label = "lms_detail_pane",
+            modifier = Modifier.fillMaxSize(),
+        ) { shown ->
+            if (shown == null) {
+                Box(Modifier.fillMaxSize()) {
+                    EmptyState(
+                        message = "학습을 고르면 여기에 내용이 보여요",
+                        icon = Icons.AutoMirrored.Filled.Article,
+                        contained = false,
+                        modifier = Modifier
+                            .align(Alignment.Center)
+                            .statusBarsPadding()
+                            .padding(24.dp)
+                            .testTag("lms_detail_placeholder"),
+                    )
+                }
+            } else {
                 LmsDetailScreen(
-                    presented = presented,
+                    presented = shown,
                     source = source,
                     sessionController = sessionController,
                     autoLoginCoordinator = autoLoginCoordinator,
                     onBack = onClose,
                     onMessage = onMessage,
                     inPane = true,
+                    // The item being replaced is still on screen for a moment; it starts no download.
+                    leaving = transition.targetState == EnterExitState.PostExit,
                     modifier = Modifier.fillMaxSize(),
                 )
             }
         }
+    }
+}
+
+/**
+ * What the 수업 tab shows over its whole area (D-137), one page of its page transition. [key] names the page for the
+ * transition, its saved state and the back preview; [subPage] pages sit one level below the list (D-121), so they
+ * come in with the forward motion and Back leaves them with the backward one.
+ */
+private sealed interface LmsSurface {
+    val key: String
+    val subPage: Boolean get() = false
+
+    data object SignIn : LmsSurface {
+        override val key: String get() = "sign_in"
+    }
+
+    /** The official portal's sign-in frame lies over the tab; nothing is drawn beneath it, as before. */
+    data object Authenticating : LmsSurface {
+        override val key: String get() = "authenticating"
+    }
+
+    data object Items : LmsSurface {
+        override val key: String get() = "items"
+    }
+
+    /** An item's native detail on a phone (D-044); on a wide window it is a pane of [Items] instead (D-131). */
+    data class Detail(val presented: LmsPresentedDetail) : LmsSurface {
+        override val key: String get() = "detail:${presented.detail.item.entryKey()}"
+        override val subPage: Boolean get() = true
+    }
+
+    /** The official course page, a WebView laid over the transition; this page itself stays empty. */
+    data class Official(val page: LmsOfficialCoursePage) : LmsSurface {
+        override val key: String get() = "official:${page.item.entryKey()}"
+        override val subPage: Boolean get() = true
+    }
+
+    /** The wait while a hidden WebView renders an item, laid over the transition as well; this page stays empty. */
+    data object Rendered : LmsSurface {
+        override val key: String get() = "rendered"
+        override val subPage: Boolean get() = true
+    }
+}
+
+/**
+ * The forward page motion of D-121 for a page that holds a WebView (D-137), which `AnimatedContent` and
+ * `AnimatedVisibility` must never keep: from its first frame the page is transparent and [PageSlideDistance] toward
+ * the end edge, then it fades in on the default effects spring as it slides into place on the slow spatial spring.
+ * Both are read in the draw phase. Under reduced motion it only fades (and Compose finishes that at once). Apply it
+ * only while the page is on screen: it runs once, when it first composes.
+ */
+@Composable
+internal fun Modifier.webPageEntrance(): Modifier {
+    val reduced = LocalReducedMotion.current
+    val slidePx = with(LocalDensity.current) { PageSlideDistance.toPx() } *
+        (if (LocalLayoutDirection.current == LayoutDirection.Rtl) -1f else 1f)
+    val alpha = remember { Animatable(0f) }
+    val shift = remember { Animatable(if (reduced) 0f else slidePx) }
+    LaunchedEffect(Unit) {
+        launch { shift.animateTo(0f, DimaMotion.spatialSlow()) }
+        alpha.animateTo(1f, DimaMotion.effectsDefault())
+    }
+    return this.graphicsLayer {
+        this.alpha = alpha.value
+        translationX = shift.value
     }
 }
 

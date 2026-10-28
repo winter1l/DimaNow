@@ -1,6 +1,10 @@
 package com.example.dimanow.ui
 
 import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.layout.layout
+import androidx.compose.foundation.border
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.material3.toShape
 import androidx.compose.material3.MaterialShapes
 import androidx.compose.ui.unit.Density
@@ -8,7 +12,6 @@ import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.TextMeasurer
 import androidx.compose.material3.Typography
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.animation.core.animateDpAsState
@@ -24,7 +27,6 @@ import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -73,6 +75,10 @@ import com.example.dimanow.theme.DimaTheme
 import com.example.dimanow.ui.motion.AnimatedCountText
 import com.example.dimanow.ui.motion.DimaMotion
 import com.example.dimanow.ui.motion.LocalReducedMotion
+import com.example.dimanow.ui.motion.dimaItemChange
+import com.example.dimanow.ui.motion.dimaPopIn
+import com.example.dimanow.ui.motion.dimaPopOut
+import com.example.dimanow.ui.motion.pressScale
 import kotlinx.coroutines.launch
 
 /**
@@ -337,13 +343,22 @@ internal fun DepartureStrip(
                 )
             }
             if (endedNote != null) {
-                item(key = "ended") { EndedCell(endedNote, onCardInner, Modifier.fillMaxHeight()) }
+                item(key = "ended") {
+                    // D-137: when the day's last departure leaves while the card is shown, the note fades in as the
+                    // strip settles on it; opacity only, so no second spring joins the hand-over (D-124(5)).
+                    EndedCell(
+                        endedNote,
+                        onCardInner,
+                        Modifier.fillMaxHeight().then(dimaItemChange(fadeIn = true, fadeOut = false, placement = false)),
+                    )
+                }
             }
         }
         AnimatedVisibility(
             visible = offScreen != 0,
-            enter = fadeIn(DimaMotion.effectsDefault()),
-            exit = fadeOut(DimaMotion.effectsFast()),
+            // D-137: the strip's one primary control grows from its own centre (a fade under reduced motion).
+            enter = dimaPopIn(reducedMotion),
+            exit = dimaPopOut(reducedMotion),
             modifier = Modifier
                 .align(if (lastSide < 0) Alignment.CenterStart else Alignment.CenterEnd)
                 .padding(horizontal = edgePadding),
@@ -353,13 +368,17 @@ internal fun DepartureStrip(
             val pointsLeft = lastSide < 0
             // The Arrow polygon points up; the whole button turns to face left or right.
             val arrow = MaterialShapes.Arrow.toShape()
+            val pressSource = remember { MutableInteractionSource() }
             Surface(
                 onClick = { scope.launch { backToNext() } },
                 shape = arrow,
                 color = MaterialTheme.colorScheme.primary,
                 shadowElevation = 3.dp,
+                interactionSource = pressSource,
                 modifier = Modifier
                     .size(48.dp)
+                    // D-137: it squeezes under the finger like the app's other controls; 0.97 is invisible at 48dp.
+                    .pressScale(pressSource, scaleDown = ARROW_PRESSED_SCALE)
                     .rotate(if (pointsLeft) -90f else 90f)
                     .testTag("departure_strip_back")
                     .semantics { contentDescription = "지금 다음 차로 이동" },
@@ -370,11 +389,19 @@ internal fun DepartureStrip(
 
 private enum class CellKind { LARGE, SMALL, QUIET }
 
+/** How far the back-to-next arrow shrinks under the finger (D-137); the app's 0.97 does not show at 48dp. */
+private const val ARROW_PRESSED_SCALE = 0.9f
+
 /**
  * One time of the strip. The next departure fills with primary (warning when it is the last service) and is fully
  * round; the one after is a secondary tile; later times are inner tiles, the first train tertiary, the last amber,
  * stadium boarding outlined in tertiary with its word; past times are quiet text. A change of kind cross-fades while
  * the width follows on `departureMotion`; colours move on the effects spring.
+ *
+ * D-137: the width, its countdown's size and the round shape share that one spring, and the cross-fade adds no size
+ * animation of its own. The hand-over's per-frame values are read where they are used (the width in measure, the
+ * shape in the layer, the fill in draw, the ink only by the texts), so a departure leaving no longer recomposes the
+ * whole cell or builds a shape on every frame (D-121(4)); what is drawn is unchanged (D-124(5)).
  */
 @Composable
 private fun DepartureCell(chip: TimetableChipSpec, onCardInner: Boolean, width: Dp, modifier: Modifier = Modifier) {
@@ -393,24 +420,38 @@ private fun DepartureCell(chip: TimetableChipSpec, onCardInner: Boolean, width: 
         chip.tone == TimetableChipTone.FIRST -> colors.tertiaryContainer to colors.onTertiaryContainer
         else -> tile to colors.onSurface
     }
-    val fill by animateColorAsState(container, DimaMotion.effectsDefault(), label = "strip_fill")
-    val ink by animateColorAsState(content, DimaMotion.effectsDefault(), label = "strip_ink")
-    val round by animateFloatAsState(if (isNext) 1f else 0f, departureMotion(), label = "strip_round")
-    val shownWidth by animateDpAsState(width, departureMotion(), label = "strip_width")
-    Surface(
-        shape = if (round == 0f) DimaShapes.Tile else DimaShapes.tileToPill(round),
-        color = fill,
-        contentColor = ink,
-        border = if (stadium && kind != CellKind.LARGE) BorderStroke(1.5.dp, colors.tertiary) else null,
-        modifier = modifier.width(shownWidth).semantics(mergeDescendants = true) { contentDescription = chip.description },
+    val fill = animateColorAsState(container, DimaMotion.effectsDefault(), label = "strip_fill")
+    val inkState = animateColorAsState(content, DimaMotion.effectsDefault(), label = "strip_ink")
+    val round = animateFloatAsState(if (isNext) 1f else 0f, departureMotion(), label = "strip_round")
+    val shownWidth = animateDpAsState(width, departureMotion(), label = "strip_width")
+    // Layered as a Surface is: the border over the fill, which is clipped to the shape with the content.
+    Box(
+        propagateMinConstraints = true,
+        modifier = modifier
+            .layout { measurable, constraints ->
+                val cellWidth = shownWidth.value.roundToPx().coerceIn(constraints.minWidth, constraints.maxWidth)
+                val placeable = measurable.measure(constraints.copy(minWidth = cellWidth, maxWidth = cellWidth))
+                layout(placeable.width, placeable.height) { placeable.place(0, 0) }
+            }
+            .semantics(mergeDescendants = true) { contentDescription = chip.description }
+            // Only a small or quiet cell is outlined, and those are never round.
+            .then(if (stadium && kind != CellKind.LARGE) Modifier.border(1.5.dp, colors.tertiary, DimaShapes.Tile) else Modifier)
+            .graphicsLayer {
+                val fraction = round.value
+                shape = if (fraction == 0f) DimaShapes.Tile else DimaShapes.tileToPill(fraction)
+                clip = true
+            }
+            .drawBehind { drawRect(fill.value) },
     ) {
         AnimatedContent(
             targetState = kind,
             modifier = Modifier.fillMaxSize(),
-            transitionSpec = { fadeIn(DimaMotion.effectsDefault()) togetherWith fadeOut(DimaMotion.effectsFast()) },
+            // No size transform: the cell's width above is the only width animation.
+            transitionSpec = { (fadeIn(DimaMotion.effectsDefault()) togetherWith fadeOut(DimaMotion.effectsFast())).using(null) },
             contentAlignment = Alignment.Center,
             label = "strip_cell",
         ) { shown ->
+            val ink = inkState.value
             Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
                 when (shown) {
                     // The shuttle tab keeps its stacked cell: clock and markers small on top, countdown large
@@ -423,11 +464,14 @@ private fun DepartureCell(chip: TimetableChipSpec, onCardInner: Boolean, width: 
                             maxLines = 1,
                             softWrap = false,
                         )
+                        // D-137: the countdown is part of the cell's measured width, so its size follows the
+                        // width's spring; the overshooting default moved the clock line above sideways (D-124(5)).
                         AnimatedCountText(
                             text = chip.countdown.orEmpty(),
                             style = MaterialTheme.typography.titleLargeEmphasized.copy(fontFeatureSettings = TABULAR_FIGURES),
                             color = ink,
                             singleLine = true,
+                            sizeSpec = departureMotion(),
                         )
                     }
                     else -> Column(

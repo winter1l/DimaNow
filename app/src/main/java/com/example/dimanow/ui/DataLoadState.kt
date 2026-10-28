@@ -13,8 +13,7 @@ import androidx.compose.ui.unit.Density
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.material3.Typography
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.animation.core.spring
-import androidx.compose.animation.core.Spring
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.FiniteAnimationSpec
 import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
@@ -53,6 +52,9 @@ import com.example.dimanow.shuttle.ShuttleData
 import com.example.dimanow.shuttle.ShuttleRefreshResult
 import com.example.dimanow.ui.motion.AnimatedCountText
 import com.example.dimanow.ui.motion.DimaMotion
+import com.example.dimanow.ui.motion.dimaCollapseOut
+import com.example.dimanow.ui.motion.dimaExpandIn
+import com.example.dimanow.ui.motion.loadingGrace
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.runtime.getValue
@@ -118,9 +120,13 @@ internal class RetainedFlowValues {
 internal val LocalRetainedFlowValues = staticCompositionLocalOf<RetainedFlowValues?> { null }
 
 /**
- * A calm placeholder shown while a source has not emitted yet (Material3 1.4.0 has no LoadingIndicator). With
- * [slowHint], a second line says so once the wait passes [SLOW_LOADING_MILLIS] (D-134: a school read may wait up to
- * a minute with nothing else on screen).
+ * A calm placeholder shown while a source has not emitted yet: the M3 Expressive [DimaLoadingIndicator] beside one
+ * line of text. With [slowHint], a second line grows in beneath it once the wait passes [SLOW_LOADING_MILLIS]
+ * (D-134: a school read may wait up to a minute with nothing else on screen).
+ *
+ * D-137: the line keeps its place and semantics from the first frame but stays transparent for
+ * [com.example.dimanow.ui.motion.LOADING_GRACE_MILLIS] and then fades in ([loadingGrace]), so a Room or DataStore read
+ * that finishes sooner shows no indicator at all (M3: nothing below 200 ms).
  */
 @Composable
 internal fun LoadingLine(text: String, modifier: Modifier = Modifier, slowHint: String? = null) {
@@ -132,23 +138,30 @@ internal fun LoadingLine(text: String, modifier: Modifier = Modifier, slowHint: 
         }
     }
     Row(
-        modifier = modifier,
+        modifier = modifier.loadingGrace(),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         DimaLoadingIndicator(size = 32.dp)
-        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Column {
             Text(
                 text = text,
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            if (slow && slowHint != null) {
+            // D-137: the hint grows in, its 2dp gap inside, so the block does not jump when it arrives.
+            AnimatedVisibility(
+                visible = slow && slowHint != null,
+                enter = dimaExpandIn(),
+                exit = dimaCollapseOut(),
+                label = "loading_slow_hint",
+            ) {
                 Text(
-                    text = slowHint,
+                    text = slowHint.orEmpty(),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier
+                        .padding(top = 2.dp)
                         .testTag("loading_slow_hint")
                         .semantics { liveRegion = androidx.compose.ui.semantics.LiveRegionMode.Polite },
                 )
@@ -216,9 +229,10 @@ internal const val TABULAR_FIGURES = "tnum"
 /**
  * The non-bouncy spring of departure hand-overs (D-124): when a departure leaves, the strip's scroll, the cells'
  * widths and the round shape move together on it. The expressive spatial spring's overshoot made them jump.
+ * D-137: it is [DimaMotion.settle] itself (the same values), so the hand-over and the app's other settling moves share
+ * one token.
  */
-internal fun <T> departureMotion(): FiniteAnimationSpec<T> =
-    spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessMediumLow)
+internal fun <T> departureMotion(): FiniteAnimationSpec<T> = DimaMotion.settle()
 
 /** The height of [DepartureLargeContent] at the current font scale, so strips and capsules keep one height. */
 internal fun Density.departureLargeHeight(typography: Typography): Dp = maxOf(

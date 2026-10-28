@@ -9,7 +9,6 @@ import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
-import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performScrollToNode
 import com.example.dimanow.domain.CampusZoneId
 import com.example.dimanow.domain.SampleSchedule
@@ -68,7 +67,9 @@ class HomeEditorTest {
         }
         compose.onNodeWithContentDescription("셔틀 위로").performClick()
         compose.onNodeWithTag("home_editor_show_meal").performClick()
-        compose.onNodeWithTag("home_editor_favorite_heyoung").performScrollTo().performClick()
+        // D-137: the editor is a lazy list, so a row below the fold is composed only once the list scrolls to it.
+        compose.onNodeWithTag("home_editor_list").performScrollToNode(hasTestTag("home_editor_favorite_heyoung"))
+        compose.onNodeWithTag("home_editor_favorite_heyoung").performClick()
         compose.onNodeWithTag("home_editor_save").performClick()
 
         val (order, hidden, picked) = requireNotNull(saved)

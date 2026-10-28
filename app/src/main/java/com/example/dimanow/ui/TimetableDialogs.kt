@@ -1,9 +1,27 @@
 package com.example.dimanow.ui
 
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.Crossfade
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.expandHorizontally
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkHorizontally
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.filled.EventBusy
 import androidx.compose.material.icons.filled.DeleteOutline
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
+import com.example.dimanow.theme.DimaShapes
+import com.example.dimanow.ui.motion.DimaMotion
+import com.example.dimanow.ui.motion.dimaCollapseOut
+import com.example.dimanow.ui.motion.dimaContentReveal
+import com.example.dimanow.ui.motion.dimaExpandIn
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -134,17 +152,35 @@ internal fun GuidancePauseSetting(
 ) {
     Column(modifier = modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text("휴강 모드", style = MaterialTheme.typography.titleSmall)
-        Text(
-            text = pause?.let { pauseLabel(it, today) } ?: "수업 안내 켜짐",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        // D-137: the status cross-fades in place, without a size animation, so a label that wraps differently changes
+        // the card's height once and the timetable items below do not chase a growing card.
+        Crossfade(
+            targetState = pause?.let { pauseLabel(it, today) } ?: "수업 안내 켜짐",
+            animationSpec = DimaMotion.effectsDefault(),
+            label = "guidance_pause_status",
+        ) { status ->
+            Text(
+                text = status,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        Row {
             FilledTonalButton(shapes = ButtonDefaults.shapes(), onClick = onConfigure) {
                 Text(if (pause == null) "설정" else "변경")
             }
-            if (pause != null) {
-                TextButton(shapes = ButtonDefaults.shapes(), onClick = onClear, modifier = Modifier.testTag("clear_guidance_pause")) {
+            // D-137: 해제 widens in from beside the button and narrows away with its gap, instead of popping.
+            AnimatedVisibility(
+                visible = pause != null,
+                enter = fadeIn(DimaMotion.effectsDefault()) + expandHorizontally(DimaMotion.spatialFast(), expandFrom = Alignment.Start),
+                exit = fadeOut(DimaMotion.effectsFast()) + shrinkHorizontally(DimaMotion.spatialFast(), shrinkTowards = Alignment.Start),
+                label = "guidance_pause_clear",
+            ) {
+                TextButton(
+                    shapes = ButtonDefaults.shapes(),
+                    onClick = onClear,
+                    modifier = Modifier.padding(start = 8.dp).testTag("clear_guidance_pause"),
+                ) {
                     Text("해제")
                 }
             }
@@ -180,6 +216,7 @@ fun CourseEditorDialog(initial: Course?, onDismiss: () -> Unit, onSave: (List<Co
     var showEndPicker by remember { mutableStateOf(false) }
     var confirmDiscard by remember { mutableStateOf(false) }
     var nameTouched by remember { mutableStateOf(false) }
+    val haptics = LocalHapticFeedback.current
     val adding = initial == null
     val valid = name.isNotBlank() && days.isNotEmpty() && end.isAfter(start)
     val edited = name != initial?.name.orEmpty() || room != initial?.room.orEmpty() ||
@@ -249,34 +286,45 @@ fun CourseEditorDialog(initial: Course?, onDismiss: () -> Unit, onSave: (List<Co
                 EditorSection(if (adding) "요일 · 여러 요일을 고를 수 있어요" else "요일") {
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         DayOfWeek.entries.forEach { option ->
-                            FilterChip(
+                            WeekdayChip(
+                                label = koreanWeekdayLabel(option).removeSuffix("요일"),
+                                description = koreanWeekdayLabel(option),
                                 selected = option in days,
                                 onClick = {
                                     // 수정은 한 수업이라 요일 하나만, 새 수업은 요일마다 하나씩 만든다
-                                    days = when {
+                                    val next = when {
                                         !adding -> setOf(option)
                                         option in days -> days - option
                                         else -> days + option
                                     }
+                                    // D-121/D-137: the day cells' segment tick, only when the choice changes.
+                                    if (next != days) haptics.performHapticFeedback(HapticFeedbackType.SegmentTick)
+                                    days = next
                                 },
-                                label = { Text(koreanWeekdayLabel(option).removeSuffix("요일")) },
-                                modifier = Modifier.semantics { contentDescription = koreanWeekdayLabel(option) },
                             )
                         }
                     }
                 }
 
                 EditorSection("시간") {
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        FilledTonalButton(shapes = ButtonDefaults.shapes(), onClick = { showStartPicker = true }, modifier = Modifier.weight(1f)) {
-                            Text("시작 ${start.format(TIME)}")
+                    Column {
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            FilledTonalButton(shapes = ButtonDefaults.shapes(), onClick = { showStartPicker = true }, modifier = Modifier.weight(1f)) {
+                                Text("시작 ${start.format(TIME)}")
+                            }
+                            FilledTonalButton(shapes = ButtonDefaults.shapes(), onClick = { showEndPicker = true }, modifier = Modifier.weight(1f)) {
+                                Text("종료 ${end.format(TIME)}")
+                            }
                         }
-                        FilledTonalButton(shapes = ButtonDefaults.shapes(), onClick = { showEndPicker = true }, modifier = Modifier.weight(1f)) {
-                            Text("종료 ${end.format(TIME)}")
+                        // D-137: the message unfolds under the buttons with its gap, instead of the form jumping.
+                        AnimatedVisibility(visible = !end.isAfter(start), enter = dimaExpandIn(), exit = dimaCollapseOut(), label = "course_time_error") {
+                            Text(
+                                "종료 시간을 시작 시간보다 늦게 설정해 주세요",
+                                color = MaterialTheme.colorScheme.error,
+                                style = MaterialTheme.typography.bodySmall,
+                                modifier = Modifier.padding(top = 8.dp),
+                            )
                         }
-                    }
-                    if (!end.isAfter(start)) {
-                        Text("종료 시간을 시작 시간보다 늦게 설정해 주세요", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
                     }
                 }
 
@@ -290,16 +338,14 @@ fun CourseEditorDialog(initial: Course?, onDismiss: () -> Unit, onSave: (List<Co
                 )
 
                 EditorSection("수업 건물 · 셔틀 안내 방향을 정해요") {
-                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        listOf(CampusZoneId.MAIN, CampusZoneId.YEIN).forEach { option ->
-                            FilterChip(
-                                selected = zone == option,
-                                onClick = { zone = option },
-                                label = { Text(DisplayVocabulary.originName(option)) },
-                                modifier = Modifier.testTag("course_zone_${option.name}"),
-                            )
-                        }
-                    }
+                    // D-137: one of two buildings is an exclusive choice, so it is the connected button group (D-103):
+                    // the chosen button morphs to its checked shape and the change ticks under the finger.
+                    DimaConnectedChoice(
+                        options = listOf(CampusZoneId.MAIN, CampusZoneId.YEIN).map { it to DisplayVocabulary.originName(it) },
+                        selected = zone,
+                        onSelect = { zone = it },
+                        itemTag = { "course_zone_${it.name}" },
+                    )
                 }
 
                 OutlinedTextField(
@@ -342,6 +388,57 @@ fun CourseEditorDialog(initial: Course?, onDismiss: () -> Unit, onSave: (List<Co
             dismissButton = { TextButton(shapes = ButtonDefaults.shapes(), onClick = { confirmDiscard = false }) { Text("계속 작성") } },
         )
     }
+}
+
+/**
+ * One weekday in the course form (D-137, the app's chip motion as in the day cells): a chosen day rounds to a pill on
+ * the theme's fast spatial spring and tightens under the finger, and its fill, label and outline change on the fast
+ * effects spring instead of switching in one frame. The outline is drawn in both states and fades, so it does not
+ * vanish while the fill is still arriving.
+ */
+@Composable
+private fun WeekdayChip(label: String, description: String, selected: Boolean, onClick: () -> Unit) {
+    val defaults = FilterChipDefaults.filterChipColors()
+    val container by animateColorAsState(
+        if (selected) defaults.selectedContainerColor else defaults.containerColor,
+        DimaMotion.effectsFast(),
+        label = "weekday_chip_container",
+    )
+    val ink by animateColorAsState(
+        if (selected) defaults.selectedLabelColor else defaults.labelColor,
+        DimaMotion.effectsFast(),
+        label = "weekday_chip_label",
+    )
+    val outlineColor = MaterialTheme.colorScheme.outlineVariant
+    val outline by animateColorAsState(
+        if (selected) outlineColor.copy(alpha = 0f) else outlineColor,
+        DimaMotion.effectsFast(),
+        label = "weekday_chip_outline",
+    )
+    FilterChip(
+        selected = selected,
+        onClick = onClick,
+        label = { Text(label) },
+        shapes = FilterChipDefaults.shapes(
+            shape = FilterChipDefaults.shape,
+            selectedShape = CircleShape,
+            pressedShape = DimaShapes.Small,
+        ),
+        colors = FilterChipDefaults.filterChipColors(
+            containerColor = container,
+            labelColor = ink,
+            selectedContainerColor = container,
+            selectedLabelColor = ink,
+        ),
+        border = FilterChipDefaults.filterChipBorder(
+            enabled = true,
+            selected = selected,
+            borderColor = outline,
+            selectedBorderColor = outline,
+            selectedBorderWidth = 1.dp,
+        ),
+        modifier = Modifier.semantics { contentDescription = description },
+    )
 }
 
 /** A labelled group of controls inside the course form. */
@@ -392,7 +489,16 @@ private fun CourseTimePickerDialog(title: String, initial: LocalTime, onDismiss:
             )
         },
     ) {
-        if (displayMode == TimePickerDisplayMode.Picker) TimePicker(state = state) else TimeInput(state = state)
+        // D-137: switching between the dial and typed entry cross-fades while the dialog grows or shrinks to the new
+        // entry, instead of jumping to its new size. Both share one state, so the chosen time carries over.
+        AnimatedContent(
+            targetState = displayMode,
+            transitionSpec = { dimaContentReveal() },
+            contentAlignment = Alignment.TopCenter,
+            label = "course_time_entry",
+        ) { mode ->
+            if (mode == TimePickerDisplayMode.Picker) TimePicker(state = state) else TimeInput(state = state)
+        }
     }
 }
 

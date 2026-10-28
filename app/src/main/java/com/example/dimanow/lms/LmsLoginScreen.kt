@@ -17,6 +17,7 @@ import android.webkit.WebView
 import android.webkit.WebChromeClient
 import android.webkit.WebViewClient
 import androidx.activity.compose.LocalActivity
+import androidx.compose.animation.core.Animatable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -49,6 +50,7 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -57,6 +59,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.input.KeyboardType
@@ -66,6 +69,7 @@ import androidx.compose.ui.viewinterop.AndroidView
 import com.example.dimanow.theme.DimaTheme
 import com.example.dimanow.ui.DimaLayout
 import com.example.dimanow.ui.ScreenScaffold
+import com.example.dimanow.ui.motion.DimaMotion
 
 @Composable
 internal fun LmsLoginScreen(
@@ -208,6 +212,13 @@ private fun LmsNoticeLine(text: String) {
     }
 }
 
+/**
+ * The frame of a sign-in the student sees: the bar, the loading indicator and its line over the hidden WebView.
+ *
+ * D-137: it fades in once on the default effects spring as the sign-in form fades out beneath it (the 수업 tab's
+ * top-level motion). The fade is a layer over the whole frame, read in the draw phase, so the WebView is never kept
+ * by an animated container; it is a 1dp invisible view and draws nothing either way.
+ */
 @Composable
 private fun LmsAuthenticationFrame(
     silent: Boolean,
@@ -219,10 +230,12 @@ private fun LmsAuthenticationFrame(
         Box(Modifier.size(1.dp)) { content() }
         return
     }
+    val appear = remember { Animatable(0f) }
+    LaunchedEffect(Unit) { appear.animateTo(1f, DimaMotion.effectsDefault()) }
     LmsFullScreenPane(
         title = "로그인",
         onBack = onCancel,
-        modifier = modifier,
+        modifier = modifier.graphicsLayer { alpha = appear.value },
         backDescription = "로그인 취소",
     ) {
         Box(

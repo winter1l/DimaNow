@@ -2,6 +2,8 @@ package com.example.dimanow.ui
 
 import androidx.compose.material.icons.filled.Campaign
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -23,6 +25,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.ListItemDefaults
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SegmentedListItem
 import androidx.compose.material3.Surface
@@ -65,7 +68,12 @@ import com.example.dimanow.school.parseLibraryStatus
 import com.example.dimanow.theme.DimaShapes
 import com.example.dimanow.theme.DimaTheme
 import com.example.dimanow.time.MinuteTicker
+import com.example.dimanow.ui.motion.AnimatedCountText
+import com.example.dimanow.ui.motion.DimaMotion
+import com.example.dimanow.ui.motion.dimaCollapseOut
 import com.example.dimanow.ui.motion.dimaContentReveal
+import com.example.dimanow.ui.motion.dimaExpandIn
+import com.example.dimanow.ui.motion.dimaItemChange
 import java.time.Instant
 import java.time.LocalDate
 import kotlinx.coroutines.launch
@@ -193,29 +201,22 @@ internal fun LibraryScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
         }
         // D-132: always shown — the front page's hours (without signing in), or those the signed-in read found.
         item(key = "library_hours_header") { SettingsSectionHeader("이용 시간") }
+        // D-137: the hours and their notices are one item whose content cross-fades and grows when the first read
+        // finishes, so 바로가기 below follows the growth instead of jumping (the size spring is the only one).
         item(key = "library_hours") {
             val hours = publicInfo?.hours.orEmpty().ifEmpty { shown?.status?.hours.orEmpty() }
-            if (hours.isEmpty() && publicLoading) {
-                LoadingLine("도서관 이용 시간을 불러오는 중이에요")
-            } else {
-                LibraryHoursList(hours, onOpenHome = { openUrl(context, LIBRARY_HOME_URL) })
-            }
-        }
-        // Vacations, exam weeks and holidays change the hours by notice, not on the front page.
-        val notices = publicInfo?.notices.orEmpty()
-        if (notices.isNotEmpty()) {
-            item(key = "library_hours_notices_header") { SettingsSectionHeader("이용 시간 공지") }
-            item(key = "library_hours_notices") {
-                DimaSegmentedList(Modifier.testTag("library_hours_notices")) {
-                    notices.forEachIndexed { index, notice ->
-                        LibraryLinkRow(
-                            icon = Icons.Default.Campaign,
-                            title = notice.title,
-                            supporting = notice.postedOn?.let { "${it.monthValue}월 ${it.dayOfMonth}일 게시" } ?: "도서관 공지",
-                            index = index, count = notices.size, tag = "library_notice_$index",
-                            external = true, externalLabel = "공지 열기",
-                            onClick = { openUrl(context, notice.url) },
-                        )
+            AnimatedContent(
+                targetState = LibraryHoursView(hours, publicInfo?.notices.orEmpty(), loading = hours.isEmpty() && publicLoading),
+                contentKey = { it.phase },
+                transitionSpec = { dimaContentReveal() },
+                label = "library_hours",
+            ) { view ->
+                if (view.phase == LibraryHoursPhase.LOADING) {
+                    LoadingLine("도서관 이용 시간을 불러오는 중이에요")
+                } else {
+                    Column {
+                        LibraryHoursList(view.hours, onOpenHome = { openUrl(context, LIBRARY_HOME_URL) })
+                        LibraryHourNotices(view.notices, onOpen = { openUrl(context, it) })
                     }
                 }
             }
@@ -248,8 +249,63 @@ internal fun LibraryScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
                 )
             }
         }
-        openError?.let { message -> item(key = "library_open_error") { ErrorState(message) } }
+        // D-137: the last item, so it fades in and out in place with nothing below it to move.
+        openError?.let { message ->
+            item(key = "library_open_error") { ErrorState(message, modifier = dimaItemChange(fadeIn = true, fadeOut = true)) }
+        }
     }
+}
+
+/** What the 이용 시간 part shows; the content changes with an animation only when [phase] changes. */
+private enum class LibraryHoursPhase { LOADING, LIST, EMPTY }
+
+/** The 이용 시간 part's content, carried whole so the content fading out keeps showing what it showed. */
+private data class LibraryHoursView(
+    val hours: List<LibraryHours>,
+    val notices: List<com.example.dimanow.school.LibraryNotice>,
+    val loading: Boolean,
+) {
+    val phase: LibraryHoursPhase
+        get() = when {
+            loading -> LibraryHoursPhase.LOADING
+            hours.isEmpty() -> LibraryHoursPhase.EMPTY
+            else -> LibraryHoursPhase.LIST
+        }
+}
+
+/**
+ * The notices that change the hours (D-132): vacations, exam weeks and holidays change them by notice, not on the
+ * front page. D-137: notices found after the hours open below them as a card section does ([dimaExpandIn]); ones that
+ * go keep showing while they fold away.
+ */
+@Composable
+private fun LibraryHourNotices(notices: List<com.example.dimanow.school.LibraryNotice>, onOpen: (String) -> Unit) {
+    val held = remember { LibraryNoticesHolder() }
+    if (notices.isNotEmpty()) held.notices = notices
+    AnimatedVisibility(visible = notices.isNotEmpty(), enter = dimaExpandIn(), exit = dimaCollapseOut()) {
+        val shown = held.notices
+        // The list's 12dp item gap, kept inside the folding part (it used to sit between items).
+        Column(Modifier.padding(top = 12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            SettingsSectionHeader("이용 시간 공지")
+            DimaSegmentedList(Modifier.testTag("library_hours_notices")) {
+                shown.forEachIndexed { index, notice ->
+                    LibraryLinkRow(
+                        icon = Icons.Default.Campaign,
+                        title = notice.title,
+                        supporting = notice.postedOn?.let { "${it.monthValue}월 ${it.dayOfMonth}일 게시" } ?: "도서관 공지",
+                        index = index, count = shown.size, tag = "library_notice_$index",
+                        external = true, externalLabel = "공지 열기",
+                        onClick = { onOpen(notice.url) },
+                    )
+                }
+            }
+        }
+    }
+}
+
+/** The last notices shown, read while they fold away; a plain holder, since nothing recomposes on it. */
+private class LibraryNoticesHolder {
+    var notices: List<com.example.dimanow.school.LibraryNotice> = emptyList()
 }
 
 /** What the loans part of the page shows; the content changes with an animation only when this changes. */
@@ -300,34 +356,48 @@ private fun LibraryLoanSummary(status: LibraryStatus, readAt: Instant, today: Lo
     val dueToday = status.books.count { it.dueOn == today }
     HomeContainerCard(Modifier.testTag("library_summary")) {
         HomeCardHeader(icon = Icons.Default.LocalLibrary, title = "대출 현황", showChevron = false)
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            modifier = Modifier.testTag("library_counts").semantics(mergeDescendants = true) {},
-        ) {
-            LibraryCountTile(
-                "대출 중",
-                status.loans,
-                MaterialTheme.colorScheme.secondaryContainer,
-                MaterialTheme.colorScheme.onSecondaryContainer,
-                Modifier.weight(1f),
-            )
-            LibraryCountTile(
-                "연체",
-                overdue,
-                if (overdue > 0) DimaTheme.colors.warningContainer else DimaTheme.colors.cardInner,
-                if (overdue > 0) DimaTheme.colors.onWarningContainer else MaterialTheme.colorScheme.onSurfaceVariant,
-                Modifier.weight(1f),
-            )
-        }
-        when {
-            overdue > 0 -> LibraryNotice("반납 예정일이 지난 책이 ${overdue}권 있어요. 도서관에 반납해 주세요.")
-            dueToday > 0 -> LibraryNotice("오늘 반납할 책이 ${dueToday}권 있어요.")
-            status.loans == 0 -> Text(
-                "지금 대출 중인 책이 없어요.",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.testTag("library_no_loans"),
-            )
+        // The tiles and the line under them are one child of the card, so the line's gap folds with it (D-137).
+        Column {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.testTag("library_counts").semantics(mergeDescendants = true) {},
+            ) {
+                LibraryCountTile(
+                    "대출 중",
+                    status.loans,
+                    MaterialTheme.colorScheme.secondaryContainer,
+                    MaterialTheme.colorScheme.onSecondaryContainer,
+                    Modifier.weight(1f),
+                )
+                LibraryCountTile(
+                    "연체",
+                    overdue,
+                    if (overdue > 0) DimaTheme.colors.warningContainer else DimaTheme.colors.cardInner,
+                    if (overdue > 0) DimaTheme.colors.onWarningContainer else MaterialTheme.colorScheme.onSurfaceVariant,
+                    Modifier.weight(1f),
+                )
+            }
+            // D-137: after a renewal or a return the line changes in place: the warning gives way to the next one, or
+            // folds away as the page grows or shrinks to it.
+            AnimatedContent(
+                targetState = libraryLoanNote(overdue, dueToday, status.loans),
+                contentKey = { it.kind },
+                transitionSpec = { dimaContentReveal() },
+                label = "library_loan_note",
+            ) { note ->
+                when (note.kind) {
+                    LibraryLoanNoteKind.OVERDUE ->
+                        LibraryNotice("반납 예정일이 지난 책이 ${note.count}권 있어요. 도서관에 반납해 주세요.", Modifier.padding(top = 12.dp))
+                    LibraryLoanNoteKind.DUE_TODAY -> LibraryNotice("오늘 반납할 책이 ${note.count}권 있어요.", Modifier.padding(top = 12.dp))
+                    LibraryLoanNoteKind.NO_LOANS -> Text(
+                        "지금 대출 중인 책이 없어요.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 12.dp).testTag("library_no_loans"),
+                    )
+                    LibraryLoanNoteKind.NONE -> Spacer(Modifier.fillMaxWidth())
+                }
+            }
         }
         // The page named more loans than its rows gave: say so rather than show a short list as the whole.
         status.incompleteNote?.let { note ->
@@ -347,24 +417,44 @@ private fun LibraryLoanSummary(status: LibraryStatus, readAt: Instant, today: Lo
     }
 }
 
+/** The line under the count tiles (D-131); its [kind] keys the change, so a new count alone changes the text. */
+private enum class LibraryLoanNoteKind { OVERDUE, DUE_TODAY, NO_LOANS, NONE }
+
+private data class LibraryLoanNote(val kind: LibraryLoanNoteKind, val count: Int = 0)
+
+/** Pure choice of the line, in the card's order: overdue books first, then books due today, then no loans. */
+private fun libraryLoanNote(overdue: Int, dueToday: Int, loans: Int): LibraryLoanNote = when {
+    overdue > 0 -> LibraryLoanNote(LibraryLoanNoteKind.OVERDUE, overdue)
+    dueToday > 0 -> LibraryLoanNote(LibraryLoanNoteKind.DUE_TODAY, dueToday)
+    loans == 0 -> LibraryLoanNote(LibraryLoanNoteKind.NO_LOANS)
+    else -> LibraryLoanNote(LibraryLoanNoteKind.NONE)
+}
+
+/**
+ * One count tile (D-122's 상벌점 tiles). D-137: after a renewal or a return the number rolls to the new count and the
+ * tile's tone eases on the default effects spring (연체 1 → 0 as the amber gives way); the first composition, from the
+ * kept read, does not animate.
+ */
 @Composable
 private fun LibraryCountTile(label: String, count: Int, container: Color, content: Color, modifier: Modifier) {
-    Surface(modifier = modifier, shape = DimaShapes.Tile, color = container, contentColor = content) {
+    val containerColor by animateColorAsState(container, DimaMotion.effectsDefault(), label = "library_tile_container")
+    val contentColor by animateColorAsState(content, DimaMotion.effectsDefault(), label = "library_tile_content")
+    Surface(modifier = modifier, shape = DimaShapes.Tile, color = containerColor, contentColor = contentColor) {
         Column(Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
             Text(label, style = MaterialTheme.typography.labelLarge)
-            Text("${count}권", style = MaterialTheme.typography.headlineSmall)
+            AnimatedCountText("${count}권", style = MaterialTheme.typography.headlineSmall, color = LocalContentColor.current)
         }
     }
 }
 
 /** A short warning inside the summary card, in the app's warning container (not the error roles, D-104). */
 @Composable
-private fun LibraryNotice(text: String) {
+private fun LibraryNotice(text: String, modifier: Modifier = Modifier) {
     Surface(
         shape = DimaShapes.Tile,
         color = DimaTheme.colors.warningContainer,
         contentColor = DimaTheme.colors.onWarningContainer,
-        modifier = Modifier.fillMaxWidth().testTag("library_notice"),
+        modifier = modifier.fillMaxWidth().testTag("library_notice"),
     ) {
         Row(
             modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),

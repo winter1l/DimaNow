@@ -14,6 +14,17 @@ interface CampusDataRepository {
     suspend fun ensureSeeded()
     suspend fun saveCourse(course: Course): Long
     suspend fun deleteCourse(id: Long)
+
+    /**
+     * Deletes the courses [remove] and saves [add] as one change (D-137): the Room repository writes them in one
+     * transaction, so the timetable is observed once with the new courses instead of draining and refilling course
+     * by course while its list animates. This default writes one by one, for repositories without transactions.
+     */
+    suspend fun replaceCourses(remove: List<Long>, add: List<Course>) {
+        remove.forEach { deleteCourse(it) }
+        add.forEach { saveCourse(it) }
+    }
+
     suspend fun setCourseOverride(override: com.example.dimanow.domain.CourseOverride) { error("수업 1회 변경을 지원하지 않아요.") }
     suspend fun removeCourseOverride(courseId: Long, date: LocalDate) { error("수업 1회 변경을 지원하지 않아요.") }
     suspend fun setTerm(start: LocalDate, end: LocalDate)

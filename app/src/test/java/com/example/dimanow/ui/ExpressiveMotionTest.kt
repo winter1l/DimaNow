@@ -37,7 +37,7 @@ class ExpressiveMotionTest {
 
     @Test
     fun `reduced motion turns every page change into the plain fade-through`() {
-        val fade = dimaFadeThrough()
+        val fade = dimaFadeThrough(scale = false)
         for (motion in PageMotion.entries) {
             val reduced = dimaPageTransform(motion, slidePx = 84, reducedMotion = true)
             assertEquals(fade.targetContentEnter, reduced.targetContentEnter)
@@ -45,6 +45,22 @@ class ExpressiveMotionTest {
         }
         val forward = dimaPageTransform(PageMotion.FORWARD, slidePx = 84, reducedMotion = false)
         assertNotEquals("forward pages slide as they fade", fade.targetContentEnter, forward.targetContentEnter)
+    }
+
+    @Test
+    fun `a navigation-bar change grows the incoming page only when motion is allowed`() {
+        val topLevel = dimaPageTransform(PageMotion.TOP_LEVEL, slidePx = 84, reducedMotion = false)
+        assertEquals(dimaFadeThrough().targetContentEnter, topLevel.targetContentEnter)
+        assertNotEquals("D-137: the incoming page grows as it fades in", dimaFadeThrough(scale = false).targetContentEnter, topLevel.targetContentEnter)
+        // Both forms leave the same way: the outgoing page only fades.
+        assertEquals(dimaFadeThrough(scale = false).initialContentExit, topLevel.initialContentExit)
+    }
+
+    @Test
+    fun `small elements only fade under reduced motion`() {
+        assertEquals(androidx.compose.animation.fadeIn(com.example.dimanow.ui.motion.DimaMotion.effectsFast()), com.example.dimanow.ui.motion.dimaPopIn(reduced = true))
+        assertNotEquals(com.example.dimanow.ui.motion.dimaPopIn(reduced = true), com.example.dimanow.ui.motion.dimaPopIn(reduced = false))
+        assertEquals(androidx.compose.animation.fadeOut(com.example.dimanow.ui.motion.DimaMotion.effectsFast()), com.example.dimanow.ui.motion.dimaPopOut(reduced = true))
     }
 
     @Test

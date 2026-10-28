@@ -6,26 +6,32 @@ import androidx.compose.material.icons.filled.Forum
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import android.os.Build
 import android.widget.Toast
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.material.icons.automirrored.filled.Rule
 import androidx.compose.material.icons.filled.Inventory2
 import androidx.compose.material.icons.filled.LocalLaundryService
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.AlertDialog
-import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.filled.Apartment
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.DoorFront
 import androidx.compose.material.icons.filled.Groups
@@ -42,13 +48,17 @@ import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.ListItemDefaults
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.SegmentedListItem
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -59,10 +69,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
@@ -86,10 +100,23 @@ import com.example.dimanow.school.summarizeDormPoints
 import com.example.dimanow.sync.ServiceCalendar
 import com.example.dimanow.theme.DimaShapes
 import com.example.dimanow.theme.DimaTheme
+import com.example.dimanow.ui.motion.AnimatedCountText
+import com.example.dimanow.ui.motion.DimaMotion
+import com.example.dimanow.ui.motion.LocalEntranceMotion
+import com.example.dimanow.ui.motion.LocalReducedMotion
+import com.example.dimanow.ui.motion.PageMotion
+import com.example.dimanow.ui.motion.PageSlideDistance
+import com.example.dimanow.ui.motion.PredictiveBackPage
+import com.example.dimanow.ui.motion.dimaContentReveal
+import com.example.dimanow.ui.motion.dimaIconSwap
+import com.example.dimanow.ui.motion.dimaPageTransform
+import com.example.dimanow.ui.motion.predictiveBackBackdrop
+import com.example.dimanow.ui.motion.rememberPredictiveBackPreview
 import java.time.Instant
 import java.time.LocalTime
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 /** The pages behind the 기숙사 first screen (D-113): each opens over it with Back. */
@@ -129,8 +156,16 @@ internal fun DormScreen(onBack: () -> Unit, onOpenMeals: () -> Unit, modifier: M
     // The door, 점호 and opening times change through the day; a minute is fine enough.
     // The shared minute ticker: lifecycle-aware, and it follows clock and time-zone changes.
     val now = rememberMinuteNow()
-    // Back from a detail page returns to the first screen before leaving 기숙사.
-    BackHandler(enabled = topic != null) { topic = null }
+    // Back from a detail page returns to the first screen before leaving 기숙사. D-137: with the M3 predictive back of
+    // every 전체 page — while the gesture is held the topic page shrinks and rounds over a backdrop.
+    val backPreview = rememberPredictiveBackPreview(enabled = topic != null, currentKey = topic, onBack = { topic = null })
+    // D-137: the first screen keeps its own scroll position while a topic is open; each topic page starts at its top.
+    // Before, all seven pages shared one list state, so a topic opened after scrolling started scrolled (its header
+    // already tinted) and Back put the first screen at the topic's position.
+    val firstScreenList = rememberLazyListState()
+    val reduced = LocalReducedMotion.current
+    val slidePx = with(LocalDensity.current) { PageSlideDistance.roundToPx() } *
+        (if (LocalLayoutDirection.current == LayoutDirection.Rtl) -1 else 1)
 
     fun load() {
         val service = bridge ?: return
@@ -157,11 +192,27 @@ internal fun DormScreen(onBack: () -> Unit, onOpenMeals: () -> Unit, modifier: M
     fun requestOuting() = outing.request()
     val read = saved
     val summary = read?.summary
-    val shown = topic
+    val points = DormPointsView(dormPointsPhase(read != null, loading), read)
+    val retry = if (bridge != null) ::load else null
 
-    ScreenScaffold(
+    // D-137: a topic page slides in forward and back out backward like every page opened from 전체 (D-121), instead of
+    // the one list swapping its items in place; under reduced motion the pages cross-fade. Each page is a scaffold of
+    // its own, and the page motion is its only entrance (D-094(12)).
+    AnimatedContent(
+        targetState = topic,
+        transitionSpec = {
+            dimaPageTransform(if (targetState != null) PageMotion.FORWARD else PageMotion.BACKWARD, slidePx, reduced)
+        },
+        label = "dorm_topic",
+        // The shrinking page needs a backdrop one tone apart, as the shell's preview has (D-121).
+        modifier = modifier
+            .fillMaxSize()
+            .predictiveBackBackdrop(backPreview, MaterialTheme.colorScheme.surfaceContainerHighest),
+    ) { shown ->
+      CompositionLocalProvider(LocalEntranceMotion provides false) {
+       PredictiveBackPage(backPreview, key = shown, modifier = Modifier.fillMaxSize()) {
+        ScreenScaffold(
         title = shown?.title ?: AppPage.DORM.title,
-        modifier = modifier,
         navigationIcon = {
             IconButton(
                 shapes = IconButtonDefaults.shapes(),
@@ -171,6 +222,7 @@ internal fun DormScreen(onBack: () -> Unit, onOpenMeals: () -> Unit, modifier: M
                 Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "뒤로")
             }
         },
+        listState = if (shown == null) firstScreenList else rememberLazyListState(),
         listTag = if (shown != null) "dorm_topic_list" else "dorm_list",
         // The points are what refreshes: on the first screen and on the 상벌점 page.
         onRefresh = if (bridge != null && (shown == null || shown == DormTopic.POINTS)) ::load else null,
@@ -188,28 +240,43 @@ internal fun DormScreen(onBack: () -> Unit, onOpenMeals: () -> Unit, modifier: M
                     )
                 }
                 item(key = "points") {
-                    when {
-                        read == null && loading -> LoadingLine("인트라넷에서 상벌점을 불러오는 중이에요", slowHint = SCHOOL_READ_SLOW_HINT)
-                        read == null -> HomeContainerCard(Modifier.testTag("dorm_points_card")) {
-                            HomeCardHeader(icon = Icons.Default.Apartment, title = "상벌점", showChevron = false)
-                            Text(
-                                "인트라넷의 상벌점을 불러와 이 기기에 저장해 둬요.",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                            if (bridge != null) {
-                                FilledTonalButton(
-                                    shapes = ButtonDefaults.shapes(),
-                                    onClick = ::load,
-                                    modifier = Modifier.heightIn(min = 48.dp).testTag("dorm_points_load"),
-                                ) { Text("상벌점 불러오기") }
+                    // D-137: 상벌점 불러오기 → the loading line → the summary cross-fade inside the item while it grows to
+                    // the new content, as 장비 대여's catalog does; a refresh with new numbers stays in place (same
+                    // phase) and rolls them. A failed read opens its message under the card (R2), in the same item.
+                    Column {
+                        AnimatedContent(
+                            targetState = points,
+                            contentKey = { it.phase },
+                            transitionSpec = { dimaContentReveal() },
+                            label = "dorm_points",
+                        ) { view ->
+                            when (view.phase) {
+                                DormPointsPhase.LOADING -> LoadingLine("인트라넷에서 상벌점을 불러오는 중이에요", slowHint = SCHOOL_READ_SLOW_HINT)
+                                DormPointsPhase.PROMPT -> HomeContainerCard(Modifier.testTag("dorm_points_card")) {
+                                    HomeCardHeader(icon = Icons.Default.Apartment, title = "상벌점", showChevron = false)
+                                    Text(
+                                        "인트라넷의 상벌점을 불러와 이 기기에 저장해 둬요.",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                    if (bridge != null) {
+                                        FilledTonalButton(
+                                            shapes = ButtonDefaults.shapes(),
+                                            onClick = ::load,
+                                            modifier = Modifier.heightIn(min = 48.dp).testTag("dorm_points_load"),
+                                        ) { Text("상벌점 불러오기") }
+                                    }
+                                }
+                                DormPointsPhase.SUMMARY -> view.read?.let { shownRead ->
+                                    PointsSummaryCard(shownRead.summary, shownRead.readAt) { topic = DormTopic.POINTS }
+                                }
                             }
                         }
-                        else -> PointsSummaryCard(summary, read.readAt) { topic = DormTopic.POINTS }
+                        DormMessage(error, onRetry = retry, label = "dorm_points_error")
                     }
                 }
-                error?.let { message -> item(key = "points_error") { ErrorState(message, onRetry = if (bridge != null) ::load else null) } }
                 item(key = "outing") {
+                  Column {
                     DimaSegmentedList {
                         SegmentedListItem(
                             onClick = ::requestOuting,
@@ -246,8 +313,10 @@ internal fun DormScreen(onBack: () -> Unit, onOpenMeals: () -> Unit, modifier: M
                             Text("PAYCO 식권")
                         }
                     }
+                    // D-137: a failed 외출·외박 신청 opens its message under the rows it came from (R2).
+                    DormMessage(outing.error, onRetry = null, label = "dorm_outing_error")
+                  }
                 }
-                outing.error?.let { message -> item(key = "outing_error") { ErrorState(message) } }
                 item(key = "info_header") { SettingsSectionHeader("생활 정보") }
                 item(key = "info") {
                     val openNow = DormGuide.facilities.count { facility ->
@@ -280,38 +349,38 @@ internal fun DormScreen(onBack: () -> Unit, onOpenMeals: () -> Unit, modifier: M
                 }
             }
             DormTopic.POINTS -> {
-                when {
-                    read == null && loading -> item(key = "points_loading") { LoadingLine("인트라넷에서 상벌점을 불러오는 중이에요", slowHint = SCHOOL_READ_SLOW_HINT) }
-                    read != null -> {
-                        item(key = "points_totals") {
-                            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                summary?.let { termLabel(it) }?.let { SettingsSectionHeader("$it 상벌점") }
-                                Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.testTag("dorm_points_total")) {
-                                    PointTotal("상점", summary?.merit ?: 0, MaterialTheme.colorScheme.primary, Modifier.weight(1f))
-                                    PointTotal("벌점", summary?.demerit ?: 0, MaterialTheme.colorScheme.error, Modifier.weight(1f))
-                                }
-                                Text(
-                                    dormPointsReadAtLabel(read.readAt, Instant.now()),
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    modifier = Modifier.padding(start = 4.dp).testTag("dorm_points_read_at"),
-                                )
+                // D-137: the totals take the read's phases in place as the first screen's card does, and a failed read
+                // opens its message under them (R2) instead of an item of its own popping in further down.
+                if (points.phase != DormPointsPhase.PROMPT || error != null) item(key = "points_totals") {
+                    Column {
+                        AnimatedContent(
+                            targetState = points,
+                            contentKey = { it.phase },
+                            transitionSpec = { dimaContentReveal() },
+                            label = "dorm_points_totals",
+                        ) { view ->
+                            when (view.phase) {
+                                DormPointsPhase.LOADING -> LoadingLine("인트라넷에서 상벌점을 불러오는 중이에요", slowHint = SCHOOL_READ_SLOW_HINT)
+                                DormPointsPhase.SUMMARY -> view.read?.let { PointsTotals(it) }
+                                DormPointsPhase.PROMPT -> Spacer(Modifier.fillMaxWidth())
                             }
                         }
-                        val entries = summary?.entries.orEmpty()
-                        item(key = "entries_header") { SettingsSectionHeader("이번 학기 내역") }
-                        if (entries.isEmpty()) {
-                            item(key = "entries_empty") { EmptyState("이번 학기에 기록된 상벌점이 없어요") }
-                        } else {
-                            item(key = "entries") {
-                                DimaSegmentedList(Modifier.testTag("dorm_points_entries")) {
-                                    entries.forEachIndexed { index, entry -> PointEntryRow(entry, index, entries.size) }
-                                }
+                        DormMessage(error, onRetry = retry, label = "dorm_points_page_error", top = if (points.phase == DormPointsPhase.PROMPT) 0.dp else 12.dp)
+                    }
+                }
+                if (read != null) {
+                    val entries = summary?.entries.orEmpty()
+                    item(key = "entries_header") { SettingsSectionHeader("이번 학기 내역") }
+                    if (entries.isEmpty()) {
+                        item(key = "entries_empty") { EmptyState("이번 학기에 기록된 상벌점이 없어요") }
+                    } else {
+                        item(key = "entries") {
+                            DimaSegmentedList(Modifier.testTag("dorm_points_entries")) {
+                                entries.forEachIndexed { index, entry -> PointEntryRow(entry, index, entries.size) }
                             }
                         }
                     }
                 }
-                error?.let { message -> item(key = "points_error") { ErrorState(message, onRetry = if (bridge != null) ::load else null) } }
                 item(key = "point_rules_header") { SettingsSectionHeader("벌점과 상점") }
                 item(key = "point_rules") {
                     GuideCard {
@@ -362,14 +431,7 @@ internal fun DormScreen(onBack: () -> Unit, onOpenMeals: () -> Unit, modifier: M
                     GuideCard {
                         Text("받는 주소", style = MaterialTheme.typography.titleSmall)
                         Text("${DormGuide.ADDRESS}(호수) (이름)", style = MaterialTheme.typography.bodyMedium)
-                        OutlinedButton(
-                            shapes = ButtonDefaults.shapes(),
-                            onClick = { copyAddress(context) },
-                            modifier = Modifier.heightIn(min = 48.dp).testTag("dorm_copy_address"),
-                        ) {
-                            Icon(Icons.Default.ContentCopy, contentDescription = null, modifier = Modifier.size(ButtonDefaults.IconSize))
-                            Text("주소 복사", modifier = Modifier.padding(start = ButtonDefaults.IconSpacing))
-                        }
+                        CopyAddressButton(onCopy = { copyAddress(context) })
                     }
                 }
                 item(key = "source") { SourceLine() }
@@ -419,6 +481,9 @@ internal fun DormScreen(onBack: () -> Unit, onOpenMeals: () -> Unit, modifier: M
                 item(key = "source") { SourceLine() }
             }
         }
+    }
+       }
+      }
     }
 
     if (showKakaoDialog) {
@@ -512,7 +577,8 @@ private fun PointsSummaryCard(summary: DormPointSummary?, readAt: Instant, onOpe
                 Modifier.weight(1f),
             )
         }
-        Text(
+        // D-137: load() shows no snackbar on success, so the read time rolling to the new one confirms the refresh.
+        AnimatedCountText(
             dormPointsReadAtLabel(readAt, Instant.now()),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -521,15 +587,112 @@ private fun PointsSummaryCard(summary: DormPointSummary?, readAt: Instant, onOpe
     }
 }
 
+/**
+ * One number tile of the 상벌점 card (D-122). D-137: a refresh with new numbers rolls the count, and the 벌점 tile's tone
+ * eases into the warning container on the default effects spring, as 도서관's count tiles do.
+ */
 @Composable
-private fun PointTile(label: String, points: Int, container: androidx.compose.ui.graphics.Color, content: androidx.compose.ui.graphics.Color, modifier: Modifier) {
-    Surface(modifier = modifier, shape = DimaShapes.Tile, color = container, contentColor = content) {
+private fun PointTile(label: String, points: Int, container: Color, content: Color, modifier: Modifier) {
+    val containerColor by animateColorAsState(container, DimaMotion.effectsDefault(), label = "dorm_point_tile_container")
+    val contentColor by animateColorAsState(content, DimaMotion.effectsDefault(), label = "dorm_point_tile_content")
+    Surface(modifier = modifier, shape = DimaShapes.Tile, color = containerColor, contentColor = contentColor) {
         Column(Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
             Text(label, style = MaterialTheme.typography.labelLarge)
-            Text("${points}점", style = MaterialTheme.typography.headlineSmall)
+            AnimatedCountText("${points}점", style = MaterialTheme.typography.headlineSmall, color = LocalContentColor.current)
         }
     }
 }
+
+/** The 상벌점 page's totals: this term's two numbers and when they were read (D-113). */
+@Composable
+private fun PointsTotals(read: SchoolReadCache.DormPointsRead) {
+    val summary = read.summary
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        summary?.let { termLabel(it) }?.let { SettingsSectionHeader("$it 상벌점") }
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.testTag("dorm_points_total")) {
+            PointTotal("상점", summary?.merit ?: 0, MaterialTheme.colorScheme.primary, Modifier.weight(1f))
+            PointTotal("벌점", summary?.demerit ?: 0, MaterialTheme.colorScheme.error, Modifier.weight(1f))
+        }
+        AnimatedCountText(
+            dormPointsReadAtLabel(read.readAt, Instant.now()),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(start = 4.dp).testTag("dorm_points_read_at"),
+        )
+    }
+}
+
+/**
+ * A message that opens in place under the block it belongs to (D-137, R2): it cross-fades in while the item grows to
+ * it, with its [top] gap inside, and with no message it takes no space. The message's live region announces it once.
+ */
+@Composable
+private fun DormMessage(message: String?, onRetry: (() -> Unit)?, label: String, top: Dp = 12.dp) {
+    AnimatedContent(targetState = message, transitionSpec = { dimaContentReveal() }, label = label) { shown ->
+        if (shown != null) {
+            ErrorState(shown, modifier = Modifier.padding(top = top), onRetry = onRetry)
+        } else {
+            Spacer(Modifier.fillMaxWidth())
+        }
+    }
+}
+
+/** What the 상벌점 card shows (D-137); the card changes with an animation only when the phase changes. */
+internal enum class DormPointsPhase { PROMPT, LOADING, SUMMARY }
+
+/**
+ * Pure choice of [DormPointsPhase]: the saved read whenever there is one (a refresh keeps it on screen and updates it
+ * in place), else the first read in progress, else the prompt to read.
+ */
+internal fun dormPointsPhase(hasRead: Boolean, loading: Boolean): DormPointsPhase = when {
+    hasRead -> DormPointsPhase.SUMMARY
+    loading -> DormPointsPhase.LOADING
+    else -> DormPointsPhase.PROMPT
+}
+
+/** The 상벌점 card's content, carried whole so the content fading out keeps showing what it showed. */
+private data class DormPointsView(val phase: DormPointsPhase, val read: SchoolReadCache.DormPointsRead?)
+
+/**
+ * 주소 복사 (D-137): after a copy the button's icon and label turn into a check and `복사했어요` (the icon swap of
+ * [dimaIconSwap]) and turn back once, about two seconds later; another tap starts the two seconds again. The button
+ * keeps a minimum width, so the label change barely moves it.
+ */
+@Composable
+private fun CopyAddressButton(onCopy: () -> Unit) {
+    val reduced = LocalReducedMotion.current
+    var copies by remember { mutableIntStateOf(0) }
+    var copied by remember { mutableStateOf(false) }
+    LaunchedEffect(copies) {
+        if (copied) {
+            delay(COPIED_CONFIRMATION_MILLIS)
+            copied = false
+        }
+    }
+    OutlinedButton(
+        shapes = ButtonDefaults.shapes(),
+        onClick = {
+            onCopy()
+            copied = true
+            copies++
+        },
+        modifier = Modifier.heightIn(min = 48.dp).widthIn(min = 144.dp).testTag("dorm_copy_address"),
+    ) {
+        AnimatedContent(targetState = copied, transitionSpec = { dimaIconSwap(reduced) }, label = "dorm_copy_address") { done ->
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    if (done) Icons.Default.Check else Icons.Default.ContentCopy,
+                    contentDescription = null,
+                    modifier = Modifier.size(ButtonDefaults.IconSize),
+                )
+                Text(if (done) "복사했어요" else "주소 복사", modifier = Modifier.padding(start = ButtonDefaults.IconSpacing))
+            }
+        }
+    }
+}
+
+/** How long 주소 복사 shows its check before it reads 주소 복사 again. */
+private const val COPIED_CONFIRMATION_MILLIS = 2_000L
 
 @Composable
 private fun SourceLine() {
@@ -570,7 +733,11 @@ internal fun rollCallText(status: RollCallStatus, zone: ZoneId = DormHours.CAMPU
 private fun copyAddress(context: Context) {
     val clipboard = context.getSystemService(ClipboardManager::class.java) ?: return
     clipboard.setPrimaryClip(ClipData.newPlainText("예인관 주소", DormGuide.ADDRESS))
-    Toast.makeText(context, "주소를 복사했어요. 호수와 이름을 붙여 주세요.", Toast.LENGTH_SHORT).show()
+    // D-137: from Android 13 the system's clipboard preview confirms the copy (and the button turns into a check), so
+    // a toast would say it twice; the card above already shows where the room and name go.
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
+        Toast.makeText(context, "주소를 복사했어요. 호수와 이름을 붙여 주세요.", Toast.LENGTH_SHORT).show()
+    }
 }
 
 @Composable
@@ -597,16 +764,24 @@ private fun GuideLine(text: String, marker: String = "•") {
     }
 }
 
+/** Open or closed now. D-137: when the hours turn on a minute tick, the tone eases on the default effects spring. */
 @Composable
 private fun OpenBadge(open: Boolean) {
-    Surface(
-        shape = DimaShapes.Badge,
-        color = if (open) MaterialTheme.colorScheme.primaryContainer else DimaTheme.colors.cardInner,
-    ) {
+    val container by animateColorAsState(
+        if (open) MaterialTheme.colorScheme.primaryContainer else DimaTheme.colors.cardInner,
+        DimaMotion.effectsDefault(),
+        label = "dorm_open_badge_container",
+    )
+    val content by animateColorAsState(
+        if (open) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
+        DimaMotion.effectsDefault(),
+        label = "dorm_open_badge_content",
+    )
+    Surface(shape = DimaShapes.Badge, color = container) {
         Text(
             if (open) "지금 이용 가능" else "지금은 닫힘",
             style = MaterialTheme.typography.labelMedium,
-            color = if (open) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
+            color = content,
             modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
         )
     }
@@ -662,7 +837,8 @@ private fun PointTotal(label: String, points: Int, accent: Color, modifier: Modi
     ) {
         Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text(label, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Text("${points}점", style = MaterialTheme.typography.headlineMedium, color = accent)
+            // D-137: a refresh with new numbers rolls the count.
+            AnimatedCountText("${points}점", style = MaterialTheme.typography.headlineMedium, color = accent)
         }
     }
 }

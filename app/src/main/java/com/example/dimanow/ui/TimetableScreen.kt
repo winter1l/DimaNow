@@ -1,8 +1,17 @@
 package com.example.dimanow.ui
 
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.SizeTransform
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.IconButtonDefaults
 import com.example.dimanow.theme.DimaTheme
-import com.example.dimanow.ui.motion.expressiveBounceClick
+import com.example.dimanow.ui.motion.DimaMotion
+import com.example.dimanow.ui.motion.dimaItemChange
+import com.example.dimanow.ui.motion.pressScale
 import com.example.dimanow.ui.schedule.KoreanDateRangePickerHeadline
 import com.example.dimanow.ui.schedule.KoreanLocale
 import com.example.dimanow.ui.schedule.TermEditorDialog
@@ -218,9 +227,13 @@ internal fun TimetableScreen(
         // D-102: 수업이 없을 때는 빈 화면 안내가 추가·불러오기 버튼을 함께 보여 주므로 FAB를 겹쳐 두지 않는다
         floatingActionButton = addCourseFab.takeUnless { noCourses },
     ) {
+        // D-137 (adopting D-121's left-over animateItem for list changes): every item fades in or out and the rest glide
+        // to their new places on the non-bouncy spring when the timetable's data changes — a deleted course or an undone
+        // change leaves and its neighbours close the gap, a course moved to another day travels to its group, the first
+        // course replaces the empty state. Items composed by scrolling or the first layout do not animate (D-058).
         item(key = "term") {
             ElevatedCard(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = dimaItemChange(placement = true).fillMaxWidth(),
                 shape = DimaShapes.Card,
                 colors = CardDefaults.elevatedCardColors(containerColor = DimaTheme.colors.card),
             ) {
@@ -242,10 +255,18 @@ internal fun TimetableScreen(
                                 horizontalArrangement = Arrangement.spacedBy(6.dp),
                             ) {
                                 Icon(Icons.Default.Schedule, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(16.dp))
-                                Text(
-                                    "학기 ${koreanDateLabel(schedule.termStart, today)} ~ ${koreanDateLabel(schedule.termEnd, today)}",
-                                    style = MaterialTheme.typography.labelMedium,
-                                )
+                                // D-137: a new term cross-fades in the pill while its width follows on the fast spatial
+                                // spring; the pill stays one line high, so the list beneath does not move.
+                                AnimatedContent(
+                                    targetState = "학기 ${koreanDateLabel(schedule.termStart, today)} ~ ${koreanDateLabel(schedule.termEnd, today)}",
+                                    transitionSpec = {
+                                        (fadeIn(DimaMotion.effectsDefault()) togetherWith fadeOut(DimaMotion.effectsFast()))
+                                            .using(SizeTransform { _, _ -> DimaMotion.spatialFast() })
+                                    },
+                                    label = "term_pill",
+                                ) { termText ->
+                                    Text(termText, style = MaterialTheme.typography.labelMedium)
+                                }
                             }
                         }
                     }
@@ -268,7 +289,7 @@ internal fun TimetableScreen(
         if (termEnded) item(key = "term_guide") {
             val suggestion = remember(today) { com.example.dimanow.calendar.AcademicTerms.suggest(today) }
             ElevatedCard(
-                modifier = Modifier.fillMaxWidth().testTag("term_ended_card"),
+                modifier = dimaItemChange(placement = true).fillMaxWidth().testTag("term_ended_card"),
                 shape = DimaShapes.Card,
                 colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer),
             ) {
@@ -292,9 +313,10 @@ internal fun TimetableScreen(
         }
         // D-102: 빈 시간표는 한 곳에서 채우는 두 방법(직접 추가, 다른 기기에서 저장한 파일)을 모두 보여 준다
         if (intranetImport?.loading == true) item(key = "intranet_import_loading") {
-            LoadingLine("인트라넷에서 시간표를 불러오는 중이에요")
+            LoadingLine("인트라넷에서 시간표를 불러오는 중이에요", dimaItemChange(placement = true))
         }
         if (noCourses) item(key = "courses_empty") {
+            val itemMotion = dimaItemChange(placement = true)
             if (intranetImport != null) {
                 // D-111: the same two ways as the add button; a saved timetable file loads from Settings.
                 EmptyState(
@@ -309,7 +331,7 @@ internal fun TimetableScreen(
                     secondaryActionLabel = "직접 추가",
                     onSecondaryAction = { editing = null; showEditor = true },
                     secondaryActionTag = "add_course",
-                    modifier = Modifier.testTag("timetable_empty_card"),
+                    modifier = itemMotion.testTag("timetable_empty_card"),
                 )
             } else {
                 EmptyState(
@@ -323,18 +345,24 @@ internal fun TimetableScreen(
                     secondaryActionLabel = "시간표 파일 불러오기",
                     onSecondaryAction = timetableImport::open,
                     secondaryActionTag = "empty_import_timetable",
-                    modifier = Modifier.testTag("timetable_empty_card"),
+                    modifier = itemMotion.testTag("timetable_empty_card"),
                 )
             }
         }
 
-        changeError?.let { error -> item(key = "change_error") { Text(error, color = MaterialTheme.colorScheme.error) } }
+        changeError?.let { error ->
+            item(key = "change_error") { Text(error, color = MaterialTheme.colorScheme.error, modifier = dimaItemChange(placement = true)) }
+        }
         val upcomingChanges = schedule.courseOverrides.filter { it.date >= today }
         if (upcomingChanges.isNotEmpty()) {
-            item(key = "changes_header") { Text("한 번만 바꾼 수업", style = MaterialTheme.typography.titleMedium) }
-            itemsIndexed(upcomingChanges, key = { index, change -> "change_${change.courseId}_${change.date}_$index" }) { _, change ->
+            item(key = "changes_header") {
+                Text("한 번만 바꾼 수업", style = MaterialTheme.typography.titleMedium, modifier = dimaItemChange(placement = true))
+            }
+            // One change per course and date (Room replaces on that pair), so the pair alone keys the row (D-137): an
+            // index in the key would rename every row below an undone change and fade them all.
+            items(upcomingChanges, key = { change -> "change_${change.courseId}_${change.date}" }) { change ->
                 val course = schedule.courses.firstOrNull { it.id == change.courseId }
-                OutlinedCard(Modifier.fillMaxWidth(), shape = DimaShapes.Card) {
+                OutlinedCard(dimaItemChange(placement = true).fillMaxWidth(), shape = DimaShapes.Card) {
                     Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
                         Column(Modifier.weight(1f)) {
                             Text("${koreanDateLabel(change.date, today)} · ${com.example.dimanow.ui.schedule.overrideKindLabel(change.kind)}")
@@ -358,7 +386,7 @@ internal fun TimetableScreen(
                 item(key = "day_${weekday.name}") {
                     // 오늘 요일은 식단 화면과 같은 '오늘' 배지로 찾기 쉽게 한다 (D-102)
                     Row(
-                        modifier = Modifier.padding(top = 8.dp, start = 4.dp),
+                        modifier = dimaItemChange(placement = true).padding(top = 8.dp, start = 4.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
@@ -378,6 +406,7 @@ internal fun TimetableScreen(
                         course = course,
                         onEdit = { editing = course; showEditor = true },
                         onDelete = { pendingDelete = course },
+                        modifier = dimaItemChange(placement = true),
                         onChangeOnce = { changingOnce = course },
                         nextOccurrence = nextCourseOccurrence(course, today, schedule.termStart, schedule.termEnd, schedule.noClassDates),
                         onShowRoom = onShowRoom,
@@ -389,7 +418,13 @@ internal fun TimetableScreen(
         // D-129: the 학사 일정 that shape the term (registration, exams, 성적 열람…) sit with the timetable too,
         // from today to the end of the term, in the Home card's form.
         if (termAgenda.isNotEmpty()) item(key = "academic_agenda") {
-            HomeAcademicAgendaCard(termAgenda, today, Modifier.padding(top = 8.dp), tag = "timetable_academic", onOpenGrades = rememberGradesOpener())
+            HomeAcademicAgendaCard(
+                termAgenda,
+                today,
+                dimaItemChange(placement = true).padding(top = 8.dp),
+                tag = "timetable_academic",
+                onOpenGrades = rememberGradesOpener(),
+            )
         }
 
         if (schedule.noClassDates.isNotEmpty()) item(key = "no_class_dates") {
@@ -397,39 +432,43 @@ internal fun TimetableScreen(
                 "지정한 휴강일",
                 style = MaterialTheme.typography.titleSmall,
                 color = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.padding(top = 8.dp),
+                modifier = dimaItemChange(placement = true).padding(top = 8.dp),
             )
         }
 
         if (schedule.noClassDates.isNotEmpty()) item(key = "no_class_date_list") {
-            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                schedule.noClassDates.sorted().forEach { date ->
-                    Surface(modifier = Modifier.fillMaxWidth(), shape = DimaShapes.Tile, color = DimaTheme.colors.card) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically,
+            // D-137: 삭제 folds the date away in place and 되돌리기 grows it back where it was; the 6dp gap folds with it.
+            AnimatedKeyedColumn(
+                items = schedule.noClassDates.sorted(),
+                key = { it },
+                modifier = dimaItemChange(placement = true),
+                gap = 6.dp,
+            ) { date ->
+                Surface(modifier = Modifier.fillMaxWidth(), shape = DimaShapes.Tile, color = DimaTheme.colors.card) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(text = koreanDateLabel(date, today), style = MaterialTheme.typography.bodyMedium)
+                        // 바로 지우고 스낵바의 되돌리기로 복구할 수 있게 한다 (D-094(14))
+                        TextButton(shapes = ButtonDefaults.shapes(),
+                            onClick = {
+                                scope.launch {
+                                    repository.removeNoClassDate(date)
+                                    val result = snackbarHostState.showSnackbar(
+                                        message = "휴강일을 삭제했어요",
+                                        actionLabel = "되돌리기",
+                                        duration = SnackbarDuration.Long,
+                                    )
+                                    if (result == SnackbarResult.ActionPerformed) repository.addNoClassDate(date)
+                                }
+                            },
+                            modifier = Modifier
+                                .testTag("delete_no_class_${date}")
+                                .semantics { contentDescription = "${koreanDateLabel(date, today)} 휴강일 삭제" },
                         ) {
-                            Text(text = koreanDateLabel(date, today), style = MaterialTheme.typography.bodyMedium)
-                            // 바로 지우고 스낵바의 되돌리기로 복구할 수 있게 한다 (D-094(14))
-                            TextButton(shapes = ButtonDefaults.shapes(), 
-                                onClick = {
-                                    scope.launch {
-                                        repository.removeNoClassDate(date)
-                                        val result = snackbarHostState.showSnackbar(
-                                            message = "휴강일을 삭제했어요",
-                                            actionLabel = "되돌리기",
-                                            duration = SnackbarDuration.Long,
-                                        )
-                                        if (result == SnackbarResult.ActionPerformed) repository.addNoClassDate(date)
-                                    }
-                                },
-                                modifier = Modifier
-                                    .testTag("delete_no_class_${date}")
-                                    .semantics { contentDescription = "${koreanDateLabel(date, today)} 휴강일 삭제" },
-                            ) {
-                                Text("삭제", color = MaterialTheme.colorScheme.error)
-                            }
+                            Text("삭제", color = MaterialTheme.colorScheme.error)
                         }
                     }
                 }
@@ -569,10 +608,16 @@ fun CourseSummaryCard(
     onShowRoom: ((String) -> Unit)? = null,
 ) {
     var menuExpanded by remember { mutableStateOf(false) }
+    // D-137: the card owns its click, as Home's summary cards do, so the ripple follows the 20dp corners and the card
+    // lifts on press; the shared press scale reads the card's own interactions. Before, a clickable outside the card
+    // filled its rectangle past the corners and the card never showed its pressed elevation.
+    val interactionSource = remember { MutableInteractionSource() }
     ElevatedCard(
+        onClick = onEdit,
+        interactionSource = interactionSource,
         modifier = modifier
             .fillMaxWidth()
-            .expressiveBounceClick { onEdit() },
+            .pressScale(interactionSource),
         shape = DimaShapes.Card,
         colors = CardDefaults.elevatedCardColors(containerColor = DimaTheme.colors.card),
     ) {
@@ -689,8 +734,12 @@ private fun AddCourseFabMenu(
                         stateDescription = if (expanded) "펼쳐짐" else "접힘"
                     },
             ) {
+                // D-137 (D-121(4)): the icon flips once, halfway through the toggle; reading the progress through a
+                // derived state keeps the button from recomposing on every frame while the menu opens or closes.
+                // animateIcon reads the progress in its own lambda.
+                val showClose by remember { derivedStateOf { checkedProgress > 0.5f } }
                 Icon(
-                    if (checkedProgress > 0.5f) Icons.Default.Close else Icons.Default.Add,
+                    if (showClose) Icons.Default.Close else Icons.Default.Add,
                     contentDescription = null,
                     modifier = with(ToggleFloatingActionButtonDefaults) { Modifier.animateIcon({ checkedProgress }) },
                 )

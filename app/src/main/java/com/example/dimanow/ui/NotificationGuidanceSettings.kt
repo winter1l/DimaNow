@@ -1,5 +1,10 @@
 package com.example.dimanow.ui
 
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.SizeTransform
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -28,6 +33,8 @@ import com.example.dimanow.live.GuidanceKind
 import com.example.dimanow.live.NotificationGuidanceMode
 import com.example.dimanow.live.NotificationGuidancePolicy
 import com.example.dimanow.theme.DimaTheme
+import com.example.dimanow.ui.motion.DimaMotion
+import com.example.dimanow.ui.motion.dimaContentSwap
 
 @Composable
 fun NotificationGuidanceSettings(
@@ -107,6 +114,8 @@ private fun ReminderRow(title: String, enabled: Boolean, onChange: (Boolean) -> 
 /**
  * D-112: 카톡 점호 공지 읽기 follows Android's notification access for DIMA Now; this row shows whether it is on
  * and opens the system page that turns it on or off. The state is read again whenever the screen resumes.
+ * D-137: back from that page, the status line turns over to the new one and the button's label cross-fades while the
+ * button's width follows on the fast spatial spring.
  */
 @Composable
 private fun KakaoRollCallSetting() {
@@ -118,20 +127,35 @@ private fun KakaoRollCallSetting() {
     }
     Column(verticalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.testTag("kakao_roll_call_setting")) {
         Text("카톡 점호 공지", style = MaterialTheme.typography.labelLarge)
-        Text(
-            if (granted) {
-                "켜져 있어요. 카카오톡 알림 중 점호 공지만 읽어 기숙사 화면에 보여 주고, 공지 내용은 저장하지 않아요."
-            } else {
-                "꺼져 있어요. 켜면 카카오톡 알림 중 점호 공지만 읽어 기숙사 화면에 오늘 점호 여부를 보여 줘요."
-            },
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
+        AnimatedContent(
+            targetState = granted,
+            transitionSpec = { dimaContentSwap() },
+            label = "kakao_roll_call_status",
+        ) { on ->
+            Text(
+                if (on) {
+                    "켜져 있어요. 카카오톡 알림 중 점호 공지만 읽어 기숙사 화면에 보여 주고, 공지 내용은 저장하지 않아요."
+                } else {
+                    "꺼져 있어요. 켜면 카카오톡 알림 중 점호 공지만 읽어 기숙사 화면에 오늘 점호 여부를 보여 줘요."
+                },
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
         OutlinedButton(
             shapes = ButtonDefaults.shapes(),
             onClick = { RollCallStore.openAccessSettings(context) },
             modifier = Modifier.heightIn(min = 48.dp).testTag("kakao_roll_call_access"),
-        ) { Text(if (granted) "설정에서 끄기" else "알림 접근 허용하기") }
+        ) {
+            AnimatedContent(
+                targetState = granted,
+                transitionSpec = {
+                    fadeIn(DimaMotion.effectsFast()) togetherWith fadeOut(DimaMotion.effectsFast()) using
+                        SizeTransform(clip = false) { _, _ -> DimaMotion.spatialFast() }
+                },
+                label = "kakao_roll_call_access_label",
+            ) { on -> Text(if (on) "설정에서 끄기" else "알림 접근 허용하기") }
+        }
     }
 }
 

@@ -5,6 +5,9 @@ import androidx.compose.material.icons.filled.PersonRemove
 import androidx.compose.material3.IconButtonDefaults
 import android.provider.Settings
 import com.example.dimanow.theme.DimaShapes
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Arrangement
@@ -27,6 +30,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.ProgressIndicatorDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -35,6 +39,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
@@ -57,6 +62,10 @@ import com.example.dimanow.theme.DimaTheme
 import com.example.dimanow.update.AppUpdatePhase
 import com.example.dimanow.update.AppUpdateUiState
 import com.example.dimanow.lms.CredentialState
+import com.example.dimanow.ui.motion.dimaCollapseOut
+import com.example.dimanow.ui.motion.dimaContentReveal
+import com.example.dimanow.ui.motion.dimaContentSwap
+import com.example.dimanow.ui.motion.dimaExpandIn
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -141,19 +150,28 @@ internal fun SettingsScreen(
 
         // D-102: 알림 묶음은 '안내가 오는가(권한) → 무엇을 받는가(종류) → 어떻게 보이는가(표시)' 순서다
         item(key = "alerts_header") { SettingsSectionHeader("알림과 위치") }
+        // D-137: the checklist is part of its expander's item and grows in and out on the spring the chevron turns on
+        // (D-118(4)), the gap above it inside the fold, instead of a list item that appeared at once.
         item(key = "guidance_setup_toggle") {
-            val missing = guidanceSetup.state.missingCount
-            SettingsExpander(
-                title = "자동 안내 권한",
-                supporting = if (missing == 0) "모두 켜져 있어요" else "${missing}개가 꺼져 있어요 · 켜면 안내가 더 정확해져요",
-                supportingColor = if (missing == 0) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.primary,
-                expanded = setupExpanded,
-                onToggle = { setupExpanded = !setupExpanded },
-                modifier = Modifier.testTag("open_guidance_setup"),
-            )
-        }
-        if (setupExpanded) item(key = "guidance_setup") {
-            GuidanceSetupChecklist(guidanceSetup)
+            Column {
+                val missing = guidanceSetup.state.missingCount
+                SettingsExpander(
+                    title = "자동 안내 권한",
+                    supporting = if (missing == 0) "모두 켜져 있어요" else "${missing}개가 꺼져 있어요 · 켜면 안내가 더 정확해져요",
+                    supportingColor = if (missing == 0) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.primary,
+                    expanded = setupExpanded,
+                    onToggle = { setupExpanded = !setupExpanded },
+                    modifier = Modifier.testTag("open_guidance_setup"),
+                )
+                AnimatedVisibility(
+                    visible = setupExpanded,
+                    enter = dimaExpandIn(),
+                    exit = dimaCollapseOut(),
+                    label = "guidance_setup",
+                ) {
+                    GuidanceSetupChecklist(guidanceSetup, Modifier.padding(top = DimaLayout.sectionGap))
+                }
+            }
         }
         item(key = "notification_guidance") {
             NotificationGuidanceSettings(
@@ -218,32 +236,40 @@ internal fun SettingsScreen(
             }
         }
         item(key = "about") { AboutCard() }
+        // D-137: the same fold for 고급 및 진단; the page does not scroll by itself once it has opened.
         item(key = "diagnostics_toggle") {
-            SettingsExpander(
-                title = "고급 및 진단",
-                supporting = "기기별 알림 도움말, 위치 테스트, 데이터 원문",
-                expanded = diagnosticsExpanded,
-                onToggle = { diagnosticsExpanded = !diagnosticsExpanded },
-                modifier = Modifier.testTag("toggle_diagnostics"),
-            )
-        }
-        if (diagnosticsExpanded) {
-            item(key = "nowbar_help") {
-                TextButton(shapes = ButtonDefaults.shapes(), onClick = onShowNowBarSetup) { Text("기기별 알림 도움말") }
-            }
-            // 3) GPS 비반영 테스트 모드 — 네 구역을 가로 스크롤 없이 모두 보여 준다 (D-094(6))
-            item(key = "location_test") {
-                LocationTestCard(
-                    testMode = locationMode == LocationMode.TEST,
-                    testZone = testZone,
-                    onTestModeChange = onTestModeChange,
-                    onTestZone = onTestZone,
-                    testTransitStopNumber = testTransitStopNumber,
-                    onTestTransitStop = onTestTransitStop,
+            Column {
+                SettingsExpander(
+                    title = "고급 및 진단",
+                    supporting = "기기별 알림 도움말, 위치 테스트, 데이터 원문",
+                    expanded = diagnosticsExpanded,
+                    onToggle = { diagnosticsExpanded = !diagnosticsExpanded },
+                    modifier = Modifier.testTag("toggle_diagnostics"),
                 )
+                AnimatedVisibility(
+                    visible = diagnosticsExpanded,
+                    enter = dimaExpandIn(),
+                    exit = dimaCollapseOut(),
+                    label = "diagnostics",
+                ) {
+                    Column(
+                        Modifier.padding(top = DimaLayout.sectionGap),
+                        verticalArrangement = Arrangement.spacedBy(DimaLayout.sectionGap),
+                    ) {
+                        TextButton(shapes = ButtonDefaults.shapes(), onClick = onShowNowBarSetup) { Text("기기별 알림 도움말") }
+                        // 3) GPS 비반영 테스트 모드 — 네 구역을 가로 스크롤 없이 모두 보여 준다 (D-094(6))
+                        LocationTestCard(
+                            testMode = locationMode == LocationMode.TEST,
+                            testZone = testZone,
+                            onTestModeChange = onTestModeChange,
+                            onTestZone = onTestZone,
+                            testTransitStopNumber = testTransitStopNumber,
+                            onTestTransitStop = onTestTransitStop,
+                        )
+                        DataAndSourcesCard(shuttleData, mealData)
+                    }
+                }
             }
-
-            item(key = "data_sources") { DataAndSourcesCard(shuttleData, mealData) }
         }
     }
     if (confirmDeleteLmsAccount) {
@@ -307,56 +333,106 @@ internal fun AppUpdateCard(
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
+    // D-137: read only in the bar's draw lambda; it glides to each new percent (reduced motion: it jumps).
+    val shownProgress by animateFloatAsState(
+        targetValue = (state.downloadProgress ?: 0) / 100f,
+        animationSpec = ProgressIndicatorDefaults.ProgressAnimationSpec,
+        label = "settings_update_progress",
+    )
     ElevatedCard(
         modifier = modifier.fillMaxWidth(),
         shape = DimaShapes.Card,
         colors = CardDefaults.elevatedCardColors(containerColor = DimaTheme.colors.card),
     ) {
+        // D-137: the card moves with the update as Home's card does. The status line turns over when the phase changes
+        // (never for a percent), the bar folds in and out with the gap above it, and the buttons cross-fade between
+        // phase groups. The gaps live in the moving parts.
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("앱 업데이트", style = MaterialTheme.typography.titleMedium)
             Text("현재 버전 ${state.currentVersion.ifBlank { "확인 중" }}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            val statusText = when (state.phase) {
-                AppUpdatePhase.IDLE -> "업데이트를 아직 확인하지 않았어요"
-                AppUpdatePhase.CHECKING -> "업데이트 확인 중"
-                AppUpdatePhase.UP_TO_DATE -> "최신 버전이에요"
-                AppUpdatePhase.AVAILABLE -> "새 버전 ${state.latestRelease?.versionName}"
-                AppUpdatePhase.DOWNLOADING -> "다운로드 중 ${state.downloadProgress ?: 0}%"
-                AppUpdatePhase.READY_TO_INSTALL -> "설치 준비 완료"
-                AppUpdatePhase.PERMISSION_REQUIRED -> "설치 권한이 필요해요"
-                AppUpdatePhase.INSTALLER_OPENED -> "Android 설치 화면을 확인해 주세요"
-                AppUpdatePhase.ERROR -> state.message ?: "업데이트하지 못했어요. 잠시 후 다시 시도해 주세요"
-            }
-            Text(
-                statusText,
-                style = MaterialTheme.typography.titleSmall,
-                color = if (state.phase == AppUpdatePhase.ERROR) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
-            )
-            state.message?.takeIf { it != statusText }?.let {
-                Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-            if (state.phase == AppUpdatePhase.DOWNLOADING) {
-                LinearProgressIndicator(
-                    progress = { (state.downloadProgress ?: 0) / 100f },
-                    modifier = Modifier.fillMaxWidth(),
-                )
-            }
-            // D-134: the action and 릴리스 보기 side by side, wrapping only when they do not fit.
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                when (state.phase) {
-                    AppUpdatePhase.AVAILABLE -> Button(shapes = ButtonDefaults.shapes(), onClick = onDownload) { Text("다운로드 및 설치") }
-                    AppUpdatePhase.DOWNLOADING -> OutlinedButton(shapes = ButtonDefaults.shapes(), onClick = onCancelDownload) { Text("취소") }
-                    AppUpdatePhase.READY_TO_INSTALL, AppUpdatePhase.PERMISSION_REQUIRED -> Button(shapes = ButtonDefaults.shapes(), onClick = onContinueInstall) { Text("설치 계속") }
-                    else -> OutlinedButton(shapes = ButtonDefaults.shapes(), enabled = state.phase != AppUpdatePhase.CHECKING, onClick = onCheck) { Text("업데이트 확인") }
+            AnimatedContent(
+                targetState = state,
+                contentKey = { it.phase },
+                transitionSpec = { dimaContentSwap() },
+                label = "settings_update_status",
+            ) { shown ->
+                val statusText = appUpdateStatusText(shown)
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        statusText,
+                        style = MaterialTheme.typography.titleSmall,
+                        color = if (shown.phase == AppUpdatePhase.ERROR) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
+                    )
+                    shown.message?.takeIf { it != statusText }?.let {
+                        Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
                 }
-                if (state.phase == AppUpdatePhase.AVAILABLE || state.phase == AppUpdatePhase.READY_TO_INSTALL || state.phase == AppUpdatePhase.PERMISSION_REQUIRED) {
-                    OutlinedButton(shapes = ButtonDefaults.shapes(), onClick = onCheck) { Text("업데이트 확인") }
+            }
+            Column {
+                AnimatedVisibility(
+                    visible = state.phase == AppUpdatePhase.DOWNLOADING,
+                    enter = dimaExpandIn(),
+                    exit = dimaCollapseOut(),
+                    label = "settings_update_progress_bar",
+                ) {
+                    // The flat bar: the wavy indicator's travelling wave would be a loop (D-121).
+                    LinearProgressIndicator(
+                        progress = { shownProgress },
+                        modifier = Modifier.padding(bottom = 8.dp).fillMaxWidth(),
+                    )
                 }
-                state.latestRelease?.let { release ->
-                    OutlinedButton(shapes = ButtonDefaults.shapes(), onClick = { openUrl(context, release.releasePageUrl) }) { Text("릴리스 보기") }
+                AnimatedContent(
+                    targetState = state.phase.actionGroup(),
+                    transitionSpec = { dimaContentReveal() },
+                    contentAlignment = Alignment.TopStart,
+                    label = "settings_update_actions",
+                ) { group ->
+                    // D-134: the action and 릴리스 보기 side by side, wrapping only when they do not fit.
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        when (group) {
+                            UpdateActionGroup.AVAILABLE -> Button(shapes = ButtonDefaults.shapes(), onClick = onDownload) { Text("다운로드 및 설치") }
+                            UpdateActionGroup.DOWNLOADING -> OutlinedButton(shapes = ButtonDefaults.shapes(), onClick = onCancelDownload) { Text("취소") }
+                            UpdateActionGroup.READY -> Button(shapes = ButtonDefaults.shapes(), onClick = onContinueInstall) { Text("설치 계속") }
+                            UpdateActionGroup.CHECK -> OutlinedButton(
+                                shapes = ButtonDefaults.shapes(),
+                                enabled = state.phase != AppUpdatePhase.CHECKING,
+                                onClick = onCheck,
+                            ) { Text("업데이트 확인") }
+                        }
+                        if (group == UpdateActionGroup.AVAILABLE || group == UpdateActionGroup.READY) {
+                            OutlinedButton(shapes = ButtonDefaults.shapes(), onClick = onCheck) { Text("업데이트 확인") }
+                        }
+                        state.latestRelease?.let { release ->
+                            OutlinedButton(shapes = ButtonDefaults.shapes(), onClick = { openUrl(context, release.releasePageUrl) }) { Text("릴리스 보기") }
+                        }
+                    }
                 }
             }
         }
     }
+}
+
+/** The update card's status line for [state] (D-134); a percent is part of the words, never of the phase. */
+private fun appUpdateStatusText(state: AppUpdateUiState): String = when (state.phase) {
+    AppUpdatePhase.IDLE -> "업데이트를 아직 확인하지 않았어요"
+    AppUpdatePhase.CHECKING -> "업데이트 확인 중"
+    AppUpdatePhase.UP_TO_DATE -> "최신 버전이에요"
+    AppUpdatePhase.AVAILABLE -> "새 버전 ${state.latestRelease?.versionName}"
+    AppUpdatePhase.DOWNLOADING -> "다운로드 중 ${state.downloadProgress ?: 0}%"
+    AppUpdatePhase.READY_TO_INSTALL -> "설치 준비 완료"
+    AppUpdatePhase.PERMISSION_REQUIRED -> "설치 권한이 필요해요"
+    AppUpdatePhase.INSTALLER_OPENED -> "Android 설치 화면을 확인해 주세요"
+    AppUpdatePhase.ERROR -> state.message ?: "업데이트하지 못했어요. 잠시 후 다시 시도해 주세요"
+}
+
+/** The Settings update card's button groups (D-137): its buttons cross-fade only between these. */
+private enum class UpdateActionGroup { CHECK, AVAILABLE, DOWNLOADING, READY }
+
+private fun AppUpdatePhase.actionGroup(): UpdateActionGroup = when (this) {
+    AppUpdatePhase.AVAILABLE -> UpdateActionGroup.AVAILABLE
+    AppUpdatePhase.DOWNLOADING -> UpdateActionGroup.DOWNLOADING
+    AppUpdatePhase.READY_TO_INSTALL, AppUpdatePhase.PERMISSION_REQUIRED -> UpdateActionGroup.READY
+    else -> UpdateActionGroup.CHECK
 }
 
 /**

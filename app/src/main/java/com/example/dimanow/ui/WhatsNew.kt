@@ -26,6 +26,7 @@ import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -33,6 +34,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import com.example.dimanow.theme.DimaShapes
+import kotlinx.coroutines.launch
 
 /** One line of a version's changes, as the student would notice it. */
 internal data class WhatsNewEntry(val title: String, val text: String)
@@ -66,6 +68,7 @@ internal fun showsWhatsNew(seenVersionCode: Int?, currentVersionCode: Int, onboa
 @Composable
 internal fun HomeWhatsNewNotice(versionName: String, onDismiss: () -> Unit, modifier: Modifier = Modifier) {
     var showSheet by rememberSaveable { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
     ElevatedCard(
         modifier = modifier.fillMaxWidth().testTag("home_whats_new"),
         shape = DimaShapes.Card,
@@ -113,9 +116,13 @@ internal fun HomeWhatsNewNotice(versionName: String, onDismiss: () -> Unit, modi
                 }
                 Button(
                     shapes = ButtonDefaults.shapes(),
+                    // D-137: the sheet slides down first, as it does for the scrim, Back and a swipe; removing it in the
+                    // same frame made it vanish.
                     onClick = {
-                        showSheet = false
-                        onDismiss()
+                        scope.launch { sheetState.hide() }.invokeOnCompletion {
+                            showSheet = false
+                            onDismiss()
+                        }
                     },
                     modifier = Modifier.fillMaxWidth().testTag("whats_new_done"),
                 ) { Text("확인했어요") }

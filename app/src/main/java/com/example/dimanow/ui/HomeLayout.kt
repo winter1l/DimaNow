@@ -1,18 +1,23 @@
 package com.example.dimanow.ui
 
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
+import com.example.dimanow.ui.motion.DimaMotion
+import com.example.dimanow.ui.motion.dimaItemChange
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Apartment
 import androidx.compose.material.icons.filled.Badge
@@ -165,24 +170,40 @@ internal fun HomeEditorDialog(
                 )
             },
         ) { padding ->
-            Column(
-                modifier = Modifier.padding(padding).fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 8.dp),
+            // D-137: a lazy list keyed by card, so 위로/아래로 moves the row itself on the non-bouncy spring and the row
+            // keeps its identity (TalkBack focus stays on the moved card); before, the rows stayed put and swapped labels.
+            LazyColumn(
+                modifier = Modifier.padding(padding).fillMaxSize().testTag("home_editor_list"),
+                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                SettingsSectionHeader("카드 순서")
-                Text(
-                    "수업 브리핑은 늘 맨 위에 있어요. 카드는 위아래로 옮기거나 숨길 수 있어요.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                cards.forEachIndexed { index, key ->
+                item(key = "cards_header") {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        SettingsSectionHeader("카드 순서")
+                        Text(
+                            "수업 브리핑은 늘 맨 위에 있어요. 카드는 위아래로 옮기거나 숨길 수 있어요.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+                itemsIndexed(cards, key = { _, key -> key }) { index, key ->
                     val card = HomeCard.entries.first { it.key == key }
                     val shown = key !in hiddenKeys
+                    // A hidden card's title tones down with its switch.
+                    val titleColor by animateColorAsState(
+                        if (shown) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
+                        DimaMotion.effectsDefault(),
+                        label = "home_editor_card_title",
+                    )
                     Row(
-                        modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp).testTag("home_editor_card_$key"),
+                        modifier = dimaItemChange(fadeIn = false, fadeOut = false, placement = true)
+                            .fillMaxWidth()
+                            .heightIn(min = 56.dp)
+                            .testTag("home_editor_card_$key"),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Text(card.title, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+                        Text(card.title, style = MaterialTheme.typography.bodyLarge, color = titleColor, modifier = Modifier.weight(1f))
                         IconButton(
                             onClick = { cards = cards.toMutableList().apply { add(index - 1, removeAt(index)) } },
                             enabled = index > 0,
@@ -198,13 +219,17 @@ internal fun HomeEditorDialog(
                         )
                     }
                 }
-                SettingsSectionHeader("즐겨찾기")
-                Text(
-                    "고른 순서대로 브리핑 카드 아래에 버튼으로 보여요.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                HomeShortcut.entries.forEach { shortcut ->
+                item(key = "favorites_header") {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        SettingsSectionHeader("즐겨찾기")
+                        Text(
+                            "고른 순서대로 브리핑 카드 아래에 버튼으로 보여요.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+                items(HomeShortcut.entries, key = { "favorite_${it.key}" }) { shortcut ->
                     val checked = shortcut.key in picked
                     Row(
                         modifier = Modifier
@@ -220,14 +245,16 @@ internal fun HomeEditorDialog(
                         Checkbox(checked = checked, onCheckedChange = null)
                     }
                 }
-                OutlinedButton(
-                    shapes = ButtonDefaults.shapes(),
-                    onClick = {
-                        cards = HomeCard.entries.map { it.key }
-                        hiddenKeys = emptyList()
-                    },
-                    modifier = Modifier.padding(top = 8.dp).testTag("home_editor_reset"),
-                ) { Text("카드 순서 처음대로") }
+                item(key = "reset") {
+                    OutlinedButton(
+                        shapes = ButtonDefaults.shapes(),
+                        onClick = {
+                            cards = HomeCard.entries.map { it.key }
+                            hiddenKeys = emptyList()
+                        },
+                        modifier = Modifier.padding(top = 8.dp).testTag("home_editor_reset"),
+                    ) { Text("카드 순서 처음대로") }
+                }
             }
         }
     }

@@ -5,9 +5,10 @@ import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
 import android.widget.Toast
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.VectorConverter
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.awaitEachGesture
@@ -55,6 +56,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.MutableState
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -83,6 +85,7 @@ import androidx.compose.ui.graphics.drawscope.Fill
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.graphics.drawscope.withTransform
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -101,6 +104,8 @@ import androidx.compose.ui.semantics.isTraversalGroup
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.text
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.font.FontWeight
@@ -155,9 +160,15 @@ import com.example.dimanow.location.scaleBarLabel
 import com.example.dimanow.location.scaleBarMeters
 import com.example.dimanow.theme.DimaShapes
 import com.example.dimanow.theme.DimaTheme
+import com.example.dimanow.ui.motion.DimaMotion
 import com.example.dimanow.ui.motion.LocalReducedMotion
+import com.example.dimanow.ui.motion.dimaContentReveal
+import com.example.dimanow.ui.motion.dimaItemChange
+import com.example.dimanow.ui.motion.dimaPopIn
+import com.example.dimanow.ui.motion.dimaPopOut
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlin.math.abs
@@ -203,6 +214,11 @@ internal fun CampusMapScreen(onBack: () -> Unit, modifier: Modifier = Modifier, 
     val selected = selectedName?.let { name -> CampusBuilding.entries.firstOrNull { it.name == name } }
     val roomLabel = (roomLocation as? RoomLocation.Found)?.takeIf { roomShown && it.building == selected }?.label
     val unknownRoom = (roomLocation as? RoomLocation.Unknown)?.takeIf { roomShown }
+    val focus = when {
+        selected != null -> MapFocus(selected, roomLabel, null)
+        unknownRoom != null -> MapFocus(null, null, unknownRoom)
+        else -> null
+    }
 
     val camera = remember { mutableStateOf<MapCamera?>(null) }
     var focusRequest by remember { mutableStateOf(selected) }
@@ -264,33 +280,46 @@ internal fun CampusMapScreen(onBack: () -> Unit, modifier: Modifier = Modifier, 
                 LocationStatusLine(position, shownOnMap = nearStudent != null)
             }
         }
-        when {
-            selected != null -> item(key = "focus_${selected.name}") {
-                BuildingCard(
-                    building = selected,
-                    roomLabel = roomLabel,
-                    distance = scene?.centerOf(selected)?.let { center -> student?.let { formatDistance(greatCircleMeters(it, center)) } },
-                    onOpenInMapApp = {
-                        scene?.centerOf(selected)?.let { openPointInMapApp(context, it, selected.displayName) }
-                    },
-                    onClose = {
-                        selectedName = null
-                        roomShown = false
-                    },
-                )
-            }
-            unknownRoom != null -> item(key = "room_unknown") {
-                UnknownRoomCard(unknownRoom, onClose = { roomShown = false })
+        // D-137: one item for the card under the map. It fades in and out with a selection while the rows below glide
+        // to open and close its gap; one building to the next cross-fades in place. A reveal, not a swap: the camera's
+        // flight to the building is already the selection's movement. Its height changes at once (no size spring) and
+        // the rows below glide on their placement instead, so they never chase a growing card.
+        if (focus != null) item(key = "focus") {
+            AnimatedContent(
+                targetState = focus,
+                contentKey = { it.building?.name ?: "unknown" },
+                transitionSpec = { dimaContentReveal() using null },
+                label = "map_focus",
+                modifier = dimaItemChange(fadeIn = true, fadeOut = true),
+            ) { shown ->
+                val building = shown.building
+                if (building != null) {
+                    BuildingCard(
+                        building = building,
+                        roomLabel = shown.roomLabel,
+                        distance = scene?.centerOf(building)?.let { center -> student?.let { formatDistance(greatCircleMeters(it, center)) } },
+                        onOpenInMapApp = {
+                            scene?.centerOf(building)?.let { openPointInMapApp(context, it, building.displayName) }
+                        },
+                        onClose = {
+                            selectedName = null
+                            roomShown = false
+                        },
+                    )
+                } else if (shown.unknownRoom != null) {
+                    UnknownRoomCard(shown.unknownRoom, onClose = { roomShown = false })
+                }
             }
         }
         item(key = "buildings_header") {
-            SectionHeader("건물", "누르면 지도에서 보여 드려요")
+            SectionHeader("건물", "누르면 지도에서 보여 드려요", dimaItemChange(fadeIn = false, fadeOut = false, placement = true))
         }
         item(key = "buildings") {
-            DimaSegmentedList(Modifier.testTag("map_buildings")) {
+            DimaSegmentedList(dimaItemChange(fadeIn = false, fadeOut = false, placement = true).testTag("map_buildings")) {
                 CampusBuilding.ordered.forEachIndexed { index, building ->
                     CampusBuildingRow(
                         building = building,
+                        selected = building == selected,
                         distance = scene?.centerOf(building)?.let { center -> student?.let { formatDistance(greatCircleMeters(it, center)) } },
                         index = index,
                         count = CampusBuilding.ordered.size,
@@ -299,10 +328,10 @@ internal fun CampusMapScreen(onBack: () -> Unit, modifier: Modifier = Modifier, 
             }
         }
         item(key = "places_header") {
-            SectionHeader("정류장과 구역", "누르면 지도 앱에서 열려요")
+            SectionHeader("정류장과 구역", "누르면 지도 앱에서 열려요", dimaItemChange(fadeIn = false, fadeOut = false, placement = true))
         }
         item(key = "places") {
-            DimaSegmentedList(Modifier.testTag("map_places")) {
+            DimaSegmentedList(dimaItemChange(fadeIn = false, fadeOut = false, placement = true).testTag("map_places")) {
                 places.forEachIndexed { index, place ->
                     CampusPlaceRow(place, student, index, places.size) { openInMapApp(context, place) }
                 }
@@ -313,7 +342,9 @@ internal fun CampusMapScreen(onBack: () -> Unit, modifier: Modifier = Modifier, 
                 CAMPUS_MAP_NOTE,
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(horizontal = 4.dp).testTag("map_note"),
+                modifier = dimaItemChange(fadeIn = false, fadeOut = false, placement = true)
+                    .padding(horizontal = 4.dp)
+                    .testTag("map_note"),
             )
         }
     }
@@ -356,11 +387,26 @@ private sealed interface BaseMapLoad {
     data object Failed : BaseMapLoad
 }
 
-/** Reads the base-map asset off the main thread, once per process ([CampusBaseMapAsset] keeps it). */
+/**
+ * What the card under the map is about (D-137): a [building], with the room the page was opened for, or a room whose
+ * building the app does not know yet. One lazy item shows it, so a new selection replaces the card in place.
+ */
+private data class MapFocus(
+    val building: CampusBuilding?,
+    val roomLabel: String?,
+    val unknownRoom: RoomLocation.Unknown?,
+)
+
+/**
+ * Reads the base-map asset off the main thread, once per process ([CampusBaseMapAsset] keeps it). D-137: a map read
+ * before is there from the first frame, so a later open does not lay the page out once without it and then jump.
+ */
 @Composable
 private fun rememberCampusBaseMap(): BaseMapLoad {
     val context = LocalContext.current
-    val state by produceState<BaseMapLoad>(BaseMapLoad.Loading, context) {
+    val initial = remember<BaseMapLoad> { CampusBaseMapAsset.cachedOrNull()?.let { BaseMapLoad.Ready(it) } ?: BaseMapLoad.Loading }
+    val state by produceState(initial, context) {
+        if (value is BaseMapLoad.Ready) return@produceState
         value = withContext(Dispatchers.IO) { CampusBaseMapAsset.load(context) }?.let { BaseMapLoad.Ready(it) } ?: BaseMapLoad.Failed
     }
     return state
@@ -412,11 +458,11 @@ private fun cameraSpace(home: PlaneBounds, limit: PlaneBounds, size: IntSize, pa
 /**
  * The camera's moves that are not a finger's (D-132): to a focused building, back home, a double tap or a +/− button.
  * A new move or a touch cancels the one under way. The move uses a non-bouncy spring: a camera that overshoots would
- * zoom past its target and back.
+ * zoom past its target and back. D-137: that spring is the shared [DimaMotion.settle] token (the same values).
  */
 private class CameraMotion {
     private var job: Job? = null
-    private val spec = spring<Float>(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessMediumLow)
+    private val spec = DimaMotion.settle<Float>()
 
     fun cancel() {
         job?.cancel()
@@ -507,6 +553,29 @@ private fun CampusMapView(
     var pixelSize by remember { mutableStateOf(IntSize.Zero) }
     val markerCount = stops.size + if (student != null) 1 else 0
 
+    // D-137: the selected building's outline draws in while the one it replaces fades out (read in the draw phase).
+    val selection = remember { SelectionMotion(selected) }
+    LaunchedEffect(selected) { selection.moveTo(selected, reducedMotion) }
+
+    // D-137: the student's dot grows in once when a position first comes and glides to each newer fix on the
+    // non-overshooting settle spring: a dot that swung past its fix would show a place the student never was. Both are
+    // read in the layout and draw phases; reduced motion places it at once. No pulsing ring (D-121).
+    val studentPlane = student?.let { projection.toPlane(it.point) }
+    val studentShown = studentPlane != null
+    val studentAppear = remember(studentShown) { Animatable(if (studentShown && !reducedMotion) 0f else 1f) }
+    val studentPoint = remember(studentShown) { studentPlane?.let { Animatable(it.toOffset(), Offset.VectorConverter) } }
+    LaunchedEffect(studentShown) {
+        if (studentShown) studentAppear.animateTo(1f, DimaMotion.spatialFast())
+    }
+    LaunchedEffect(studentPlane) {
+        val target = studentPlane?.toOffset() ?: return@LaunchedEffect
+        val point = studentPoint ?: return@LaunchedEffect
+        if (reducedMotion) point.snapTo(target) else point.animateTo(target, DimaMotion.settle())
+    }
+
+    /** Where the student's dot is drawn now, in plane metres; null without a position. Read in layout or draw only. */
+    fun studentNow(): PlanePoint? = studentPoint?.value?.let { PlanePoint(it.x.toDouble(), it.y.toDouble()) }
+
     /** The camera space at the map's current size; null before the first layout. */
     fun space(): MapCameraSpace? = pixelSize.takeIf { it != IntSize.Zero }?.let { cameraSpace(currentHome, currentLimit, it, paddingPx) }
 
@@ -524,7 +593,7 @@ private fun CampusMapView(
         Layout(
             content = {
                 stops.forEach { PlaceMarker(it, student?.point) }
-                student?.let { StudentMarker(it) }
+                student?.let { StudentMarker(it, scale = { studentAppear.value }) }
             },
             modifier = Modifier
                 .fillMaxWidth()
@@ -619,20 +688,22 @@ private fun CampusMapView(
                                 translate(left, top)
                                 scale(ppm, ppm, pivot = Offset.Zero)
                             }) {
-                                drawBaseMap(shapes, palette, ppm, selected)
+                                drawBaseMap(shapes, palette, ppm, selection)
                             }
                         }
-                        student?.let { sample ->
-                            val center = viewport.toScreen(projection.toPlane(sample.point))
-                            val radius = (sample.accuracyMeters * ppm).coerceAtMost(minOf(size.width, size.height) / 2)
+                        val studentAt = studentNow()
+                        if (student != null && studentAt != null) {
+                            val center = viewport.toScreen(studentAt)
+                            val radius = (student.accuracyMeters * ppm).coerceAtMost(minOf(size.width, size.height) / 2) *
+                                studentAppear.value.coerceAtLeast(0f)
                             if (radius > STUDENT_MARKER_SIZE.toPx() / 2) {
                                 drawCircle(palette.ink.copy(alpha = 0.12f), radius, Offset(center.x, center.y))
                                 drawCircle(palette.ink.copy(alpha = 0.35f), radius, Offset(center.x, center.y), style = Stroke(1.dp.toPx()))
                             }
                         }
                         // Markers and their labels first; building, area and road names then take the room left.
-                        val anchors = (stops.map { it.point } + listOfNotNull(student?.point))
-                            .map { viewport.toScreen(projection.toPlane(it)) }
+                        val anchors = stops.map { viewport.toScreen(projection.toPlane(it.point)) } +
+                            listOfNotNull(studentAt?.let(viewport::toScreen))
                         val radii = stops.map { PLACE_MARKER_SIZE.toPx() / 2 } +
                             listOfNotNull(student?.let { STUDENT_MARKER_SIZE.toPx() / 2 })
                         val fixed = fixedBoxes(size, attributionBox, resetShown = camera.value != null)
@@ -653,7 +724,10 @@ private fun CampusMapView(
                         )
                         val obstacles = fixed + markerLabelBoxes +
                             anchors.mapIndexed { index, anchor -> MapBox.around(anchor, radii[index] * 2, radii[index] * 2) }
-                        if (scene != null) drawPlaceLabels(scene, labelLayouts, roadLayouts, viewport, selected, palette, obstacles)
+                        if (scene != null) {
+                            val tagAlpha = if (selection.target == selected) selection.fill.value else 0f
+                            drawPlaceLabels(scene, labelLayouts, roadLayouts, viewport, selected, tagAlpha, palette, obstacles)
+                        }
                         markerLabelBoxes.forEachIndexed { index, box ->
                             drawRoundRect(
                                 palette.labelBackground,
@@ -686,7 +760,8 @@ private fun CampusMapView(
             val mapSpace = MapCameraSpace(home, limit, width.toFloat(), height.toFloat(), paddingPx)
             val viewport = mapSpace.viewport(mapSpace.clamp(camera.value ?: mapSpace.homeCamera))
             val markers = measurables.take(markerCount).map { it.measure(Constraints()) }
-            val anchors = (stops.map { it.point } + listOfNotNull(student?.point)).map { viewport.toScreen(projection.toPlane(it)) }
+            val anchors = stops.map { viewport.toScreen(projection.toPlane(it.point)) } +
+                listOfNotNull(studentNow()?.let(viewport::toScreen))
             layout(width, height) {
                 markers.forEachIndexed { index, marker ->
                     marker.place((anchors[index].x - marker.width / 2f).roundToInt(), (anchors[index].y - marker.height / 2f).roundToInt())
@@ -735,8 +810,58 @@ private fun CampusMapView(
 /** A measured map label: the name and, for a numbered school building, its number. */
 private class MeasuredLabel(val text: TextLayoutResult, val badge: TextLayoutResult?)
 
-/** Ground cover, roads, paths and footprints in plane metres (the caller scales by [ppm] pixels per metre). */
-private fun DrawScope.drawBaseMap(shapes: SceneShapes, palette: CampusMapPalette, ppm: Float, selected: CampusBuilding?) {
+/**
+ * The selected building's outline arriving (D-137): when the selection changes, its 2.5dp edge draws in on the fast
+ * spatial spring, a slight overshoot so the outline lands, while its fill and name tag fade in on the default effects
+ * spring and the building it replaces fades out from where it was. The values are read in the draw phase only; under
+ * reduced motion the new outline is simply there.
+ */
+private class SelectionMotion(initial: CampusBuilding?) {
+    /**
+     * The building [edge] and [fill] belong to. It lags the selection for the frame before [moveTo] runs, so that
+     * frame still draws the old outline instead of the new one at full strength.
+     */
+    var target by mutableStateOf(initial)
+        private set
+
+    /** The building fading out, or null. */
+    var outgoing by mutableStateOf<CampusBuilding?>(null)
+        private set
+    val edge = Animatable(1f)
+    val fill = Animatable(1f)
+    val outgoingAlpha = Animatable(0f)
+
+    suspend fun moveTo(building: CampusBuilding?, reducedMotion: Boolean) {
+        val previous = target
+        if (previous == building) return
+        if (reducedMotion) {
+            edge.snapTo(1f)
+            fill.snapTo(1f)
+            outgoingAlpha.snapTo(0f)
+            outgoing = null
+            target = building
+            return
+        }
+        // A change during a running one fades the half-drawn outline out from where it is.
+        outgoingAlpha.snapTo(if (previous != null) fill.value else 0f)
+        edge.snapTo(0f)
+        fill.snapTo(0f)
+        outgoing = previous
+        target = building
+        coroutineScope {
+            if (building != null) launch { edge.animateTo(1f, DimaMotion.spatialFast()) }
+            launch { outgoingAlpha.animateTo(0f, DimaMotion.effectsDefault()) }
+            fill.animateTo(1f, DimaMotion.effectsDefault())
+        }
+        outgoing = null
+    }
+}
+
+/**
+ * Ground cover, roads, paths and footprints in plane metres (the caller scales by [ppm] pixels per metre), with the
+ * selected building's outline and fill as [selection] has them drawn in (D-137).
+ */
+private fun DrawScope.drawBaseMap(shapes: SceneShapes, palette: CampusMapPalette, ppm: Float, selection: SelectionMotion) {
     fun px(dpValue: Float) = dpValue * density / ppm
     shapes.areas.forEach { (kind, path) ->
         drawPath(path, palette.area(kind))
@@ -771,18 +896,28 @@ private fun DrawScope.drawBaseMap(shapes: SceneShapes, palette: CampusMapPalette
         drawPath(path, if (school) palette.schoolBuilding else palette.building)
         drawPath(path, if (school) palette.schoolBuildingEdge else palette.buildingEdge, style = Stroke(px(1f), join = StrokeJoin.Round))
     }
-    if (selected != null) {
-        shapes.buildings.filter { it.first.campusBuilding == selected }.forEach { (_, path) ->
-            drawPath(path, palette.selectedFill)
-            drawPath(path, palette.selectedEdge, style = Stroke(px(2.5f), join = StrokeJoin.Round))
+    fun outline(building: CampusBuilding, fill: Float, edge: Float, edgeAlpha: Float) {
+        shapes.buildings.filter { it.first.campusBuilding == building }.forEach { (_, path) ->
+            if (fill > 0f) drawPath(path, palette.selectedFill, alpha = fill.coerceAtMost(1f))
+            // A zero-width stroke would draw a hairline, so the edge starts once it has some width.
+            if (edge > 0.01f && edgeAlpha > 0f) {
+                drawPath(path, palette.selectedEdge, alpha = edgeAlpha.coerceAtMost(1f), style = Stroke(px(2.5f * edge), join = StrokeJoin.Round))
+            }
         }
     }
+    val shown = selection.target
+    selection.outgoing?.takeIf { it != shown }?.let { building ->
+        val alpha = selection.outgoingAlpha.value
+        outline(building, alpha, 1f, alpha)
+    }
+    shown?.let { outline(it, selection.fill.value, selection.edge.value, 1f) }
 }
 
 /**
  * Building, area and road names (D-132), most important first, each only from its zoom on and only where it fits
  * ([placeCenteredLabels]); the selected building's name goes first, on a filled tag. Names have a ground-coloured halo,
- * as map apps draw them, so they read over roads and footprints.
+ * as map apps draw them, so they read over roads and footprints. D-137: the tag fades in with the outline ([tagAlpha]),
+ * its name turning from map ink to the tag's colour; where the labels go still follows [selected] alone.
  */
 private fun DrawScope.drawPlaceLabels(
     scene: CampusMapScene,
@@ -790,9 +925,11 @@ private fun DrawScope.drawPlaceLabels(
     roads: Map<String, TextLayoutResult>,
     viewport: com.example.dimanow.location.CameraViewport,
     selected: CampusBuilding?,
+    tagAlpha: Float,
     palette: CampusMapPalette,
     obstacles: List<MapBox>,
 ) {
+    val tagShown = tagAlpha.coerceIn(0f, 1f)
     val zoom = viewport.camera.zoom
     val badgeSize = BADGE_SIZE.toPx()
     val badgeGap = 3.dp.toPx()
@@ -839,29 +976,30 @@ private fun DrawScope.drawPlaceLabels(
         val box = boxes[index] ?: return@forEachIndexed
         val measured = layouts[spec] ?: return@forEachIndexed
         val isSelected = spec.building != null && spec.building == selected
+        // How far this label has become the selected tag: 0 for every other label.
+        val tagged = if (isSelected) tagShown else 0f
         var left = box.left
         if (isSelected) {
-            drawRoundRect(palette.selectedTag, Offset(box.left, box.top), Size(box.width, box.height), CornerRadius(box.height / 2))
+            drawRoundRect(palette.selectedTag, Offset(box.left, box.top), Size(box.width, box.height), CornerRadius(box.height / 2), alpha = tagged)
             left += tagPadding
         }
         measured.badge?.let { badge ->
             val center = Offset(left + badgeSize / 2, box.top + box.height / 2)
-            drawCircle(if (isSelected) palette.onSelectedTag else palette.badge, badgeSize / 2, center)
-            drawText(badge, if (isSelected) palette.selectedTag else palette.onBadge, Offset(center.x - badge.size.width / 2f, center.y - badge.size.height / 2f))
+            drawCircle(lerp(palette.badge, palette.onSelectedTag, tagged), badgeSize / 2, center)
+            drawText(badge, lerp(palette.onBadge, palette.selectedTag, tagged), Offset(center.x - badge.size.width / 2f, center.y - badge.size.height / 2f))
             left += badgeSize + badgeGap
         }
         val top = box.top + (box.height - measured.text.size.height) / 2
-        val ink = when {
-            isSelected -> palette.onSelectedTag
-            spec.role == MapLabelRole.AREA -> palette.areaInk
-            spec.role == MapLabelRole.WATER -> palette.waterInk
-            spec.role == MapLabelRole.BUILDING -> palette.inkMuted
+        val mapInk = when (spec.role) {
+            MapLabelRole.AREA -> palette.areaInk
+            MapLabelRole.WATER -> palette.waterInk
+            MapLabelRole.BUILDING -> palette.inkMuted
             else -> palette.ink
         }
         // A text layout keeps the last drawStyle it was painted with when none is given, so every fill after a halo
         // names Fill; without it the name is stroked in its ink too and reads as a blob.
-        if (!isSelected) drawText(measured.text, palette.halo, Offset(left, top), drawStyle = halo)
-        drawText(measured.text, ink, Offset(left, top), drawStyle = Fill)
+        if (tagged < 1f) drawText(measured.text, palette.halo, Offset(left, top), drawStyle = halo, alpha = 1f - tagged)
+        drawText(measured.text, lerp(mapInk, palette.onSelectedTag, tagged), Offset(left, top), drawStyle = Fill)
     }
     // Road names along the longest visible stretch of each road, upright, where they fit.
     roads.forEach { (name, layout) ->
@@ -967,6 +1105,11 @@ private fun androidx.compose.ui.unit.Density.fixedBoxes(map: Size, attribution: 
 /**
  * The map's buttons (D-132): 확대 and 축소 at the bottom end, above the credit, and 캠퍼스 전체 보기 at the top start
  * once the view has left the home view. They are the non-gesture way to zoom the UX guide asks for.
+ *
+ * D-137: [zoom], [maxZoom] and [showReset] read the camera, which a gesture or a flight changes on every frame, so they
+ * are read only through derived states: the buttons recompose when one of them flips, not on every frame. The buttons
+ * take the press morph every other icon button has, and 캠퍼스 전체 보기 grows in as the map zooms and shrinks away as it
+ * settles home (a fade under reduced motion).
  */
 @Composable
 private fun androidx.compose.foundation.layout.BoxScope.MapControls(
@@ -977,6 +1120,13 @@ private fun androidx.compose.foundation.layout.BoxScope.MapControls(
     onZoomOut: () -> Unit,
     onReset: () -> Unit,
 ) {
+    val currentZoom by rememberUpdatedState(zoom)
+    val currentMaxZoom by rememberUpdatedState(maxZoom)
+    val currentShowReset by rememberUpdatedState(showReset)
+    val canZoomIn by remember { derivedStateOf { currentZoom() < currentMaxZoom() - ZOOM_EPSILON } }
+    val canZoomOut by remember { derivedStateOf { currentZoom() > 1.0 + ZOOM_EPSILON } }
+    val resetShown by remember { derivedStateOf { currentShowReset() } }
+    val reduced = LocalReducedMotion.current
     val colors = IconButtonDefaults.filledTonalIconButtonColors(
         containerColor = DimaTheme.colors.card,
         contentColor = MaterialTheme.colorScheme.onSurface,
@@ -989,25 +1139,33 @@ private fun androidx.compose.foundation.layout.BoxScope.MapControls(
     ) {
         FilledTonalIconButton(
             onClick = onZoomIn,
-            enabled = zoom() < maxZoom() - ZOOM_EPSILON,
+            shapes = IconButtonDefaults.shapes(),
+            enabled = canZoomIn,
             colors = colors,
             modifier = Modifier.testTag("map_zoom_in"),
         ) { Icon(Icons.Default.Add, contentDescription = "확대") }
         FilledTonalIconButton(
             onClick = onZoomOut,
-            enabled = zoom() > 1.0 + ZOOM_EPSILON,
+            shapes = IconButtonDefaults.shapes(),
+            enabled = canZoomOut,
             colors = colors,
             modifier = Modifier.testTag("map_zoom_out"),
         ) { Icon(Icons.Default.Remove, contentDescription = "축소") }
     }
-    if (showReset()) {
+    AnimatedVisibility(
+        visible = resetShown,
+        modifier = Modifier
+            .align(Alignment.TopStart)
+            .padding(CONTROL_INSET),
+        enter = dimaPopIn(reduced),
+        exit = dimaPopOut(reduced),
+        label = "map_reset",
+    ) {
         FilledTonalIconButton(
             onClick = onReset,
+            shapes = IconButtonDefaults.shapes(),
             colors = colors,
-            modifier = Modifier
-                .align(Alignment.TopStart)
-                .padding(CONTROL_INSET)
-                .testTag("map_reset"),
+            modifier = Modifier.testTag("map_reset"),
         ) { Icon(Icons.Default.ZoomOutMap, contentDescription = "캠퍼스 전체 보기") }
     }
 }
@@ -1033,13 +1191,21 @@ private fun PlaceMarker(place: CampusPlace, student: GeoPoint?) {
     }
 }
 
-/** The student's dot (D-131(5)): neutral inverse-surface ink with a card-coloured ring, unlike any place marker. */
+/**
+ * The student's dot (D-131(5)): neutral inverse-surface ink with a card-coloured ring, unlike any place marker.
+ * D-137: [scale] grows it in when a position first comes; it is read in the layer, so it never recomposes the dot.
+ */
 @Composable
-private fun StudentMarker(sample: LocationSample) {
+private fun StudentMarker(sample: LocationSample, scale: () -> Float) {
     val description = "내 위치, 오차 ${accuracyText(sample.accuracyMeters)}"
     Surface(
         modifier = Modifier
             .size(STUDENT_MARKER_SIZE)
+            .graphicsLayer {
+                val value = scale()
+                scaleX = value
+                scaleY = value
+            }
             .testTag("map_marker_student")
             .clearAndSetSemantics { contentDescription = description },
         shape = CircleShape,
@@ -1048,12 +1214,15 @@ private fun StudentMarker(sample: LocationSample) {
     ) {}
 }
 
-/** The quiet line under the map: whether and how the student's position is shown (D-131(5)). */
+/**
+ * The quiet line under the map: whether and how the student's position is shown (D-131(5)).
+ *
+ * D-137: a new state of the search (looking, found, not allowed, …) cross-fades in while the card's height follows; a
+ * newer fix of the same state only updates its words. The tag and the live region stay on the outer node, so the
+ * change is announced once. [LoadingLine] waits 200ms before it shows, so a quick last-known fix flashes nothing.
+ */
 @Composable
 private fun LocationStatusLine(position: StudentPosition, shownOnMap: Boolean) {
-    val modifier = Modifier
-        .testTag("map_location_status")
-        .semantics { liveRegion = LiveRegionMode.Polite }
     val text = when (position) {
         StudentPosition.Locating -> null
         StudentPosition.NotAllowed -> "위치 권한이 꺼져 있어요. 설정에서 허용하면 지도에 내 위치와 거리가 함께 보여요."
@@ -1064,17 +1233,34 @@ private fun LocationStatusLine(position: StudentPosition, shownOnMap: Boolean) {
             "지금 위치는 지도 밖이에요. 장소까지의 거리는 아래 목록에 있어요."
         }
     }
-    if (text == null) {
-        LoadingLine("내 위치를 찾고 있어요", modifier)
-    } else {
-        Text(text, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = modifier)
+    // A found position on or off the map is its own state; the accuracy in its words is not.
+    val state: Any = if (position is StudentPosition.Known) shownOnMap else position
+    // The live region speaks only the current line, so a newer accuracy is announced and a leaving line never is.
+    val spoken = text ?: "내 위치를 찾고 있어요"
+    AnimatedContent(
+        targetState = state to text,
+        contentKey = { it.first },
+        transitionSpec = { dimaContentReveal() },
+        label = "map_location_status",
+        modifier = Modifier
+            .testTag("map_location_status")
+            .clearAndSetSemantics {
+                liveRegion = LiveRegionMode.Polite
+                this.text = AnnotatedString(spoken)
+            },
+    ) { (_, line) ->
+        if (line == null) {
+            LoadingLine("내 위치를 찾고 있어요")
+        } else {
+            Text(line, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
     }
 }
 
 /** A list section's title and the one line saying what its rows do. */
 @Composable
-private fun SectionHeader(title: String, hint: String) {
-    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+private fun SectionHeader(title: String, hint: String, modifier: Modifier = Modifier) {
+    Column(modifier, verticalArrangement = Arrangement.spacedBy(4.dp)) {
         SettingsSectionHeader(title)
         Text(
             hint,
@@ -1176,11 +1362,24 @@ private fun UnknownRoomCard(room: RoomLocation.Unknown, onClose: () -> Unit) {
     }
 }
 
-/** A school building in the list (D-132): the whole row shows it on the map. */
+/**
+ * A school building in the list (D-132): the whole row shows it on the map. D-137: the row of the building shown on
+ * the map is [selected], in the 수업 two-pane's selection tone (D-131), and the list item changes its shape and tone
+ * on the theme's motion scheme.
+ */
 @Composable
-private fun CampusBuildingRow(building: CampusBuilding, distance: String?, index: Int, count: Int, onShow: () -> Unit) {
+private fun CampusBuildingRow(
+    building: CampusBuilding,
+    selected: Boolean,
+    distance: String?,
+    index: Int,
+    count: Int,
+    onShow: () -> Unit,
+) {
     val summary = building.floors.flatMap { it.facilities }.take(3).joinToString(" · ")
+    // The selectable overload announces the selection itself, so the row does not set it again.
     SegmentedListItem(
+        selected = selected,
         onClick = onShow,
         shapes = ListItemDefaults.segmentedShapes(index = index, count = count),
         modifier = Modifier
@@ -1190,7 +1389,11 @@ private fun CampusBuildingRow(building: CampusBuilding, distance: String?, index
         supportingContent = listOfNotNull(summary.takeIf(String::isNotEmpty), distance?.let { "내 위치에서 $it" })
             .takeIf { it.isNotEmpty() }
             ?.let { lines -> { Text(lines.joinToString(" · "), maxLines = 2, overflow = TextOverflow.Ellipsis) } },
-        colors = dimaSegmentedListColors(),
+        colors = ListItemDefaults.segmentedColors(
+            containerColor = DimaTheme.colors.card,
+            selectedContainerColor = MaterialTheme.colorScheme.secondaryContainer,
+            selectedContentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+        ),
     ) {
         Text(building.displayName)
     }
@@ -1264,6 +1467,8 @@ private fun openGeoUri(context: Context, uri: String) {
         Toast.makeText(context, "지도를 열 앱이 없어요", Toast.LENGTH_SHORT).show()
     }
 }
+
+private fun PlanePoint.toOffset(): Offset = Offset(east.toFloat(), north.toFloat())
 
 private fun accuracyText(accuracyMeters: Float): String =
     formatDistance(accuracyMeters.toDouble()).let { if (it.endsWith("이내")) it else "약 $it" }

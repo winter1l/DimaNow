@@ -1,7 +1,29 @@
 package com.example.dimanow.ui.motion
 
+import android.content.ContentResolver
+import android.database.ContentObserver
+import android.os.Handler
+import android.os.Looper
 import android.provider.Settings
+import androidx.activity.BackEventCompat
+import androidx.activity.compose.PredictiveBackHandler
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
+import androidx.compose.animation.core.Spring
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.lazy.LazyItemScope
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.Stable
+import androidx.compose.runtime.compositionLocalOf
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.withFrameNanos
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.unit.IntSize
+import kotlin.coroutines.cancellation.CancellationException
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.delay
 import androidx.compose.animation.ContentTransform
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
@@ -84,6 +106,15 @@ object DimaMotion {
     fun <T> effectsDefault(): FiniteAnimationSpec<T> = scheme.defaultEffectsSpec()
     fun <T> effectsSlow(): FiniteAnimationSpec<T> = scheme.slowEffectsSpec()
 
+    /**
+     * Position or size changes that must not overshoot (D-137): the departure hand-over of D-124, the mode-switch
+     * shift of D-129, the map camera, list placement, pinned-header folds and the navigation bar. Where several things
+     * move together on one change, the expressive spatial spring's overshoot made them jump (D-124); the spatial
+     * springs stay for single parts that may bounce.
+     */
+    fun <T> settle(): FiniteAnimationSpec<T> =
+        spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessMediumLow)
+
     /** Press feedback scale of [expressiveBounceClick]. */
     const val PRESSED_SCALE = 0.97f
 }
@@ -102,24 +133,48 @@ val LocalReducedMotion = staticCompositionLocalOf { false }
  */
 val LocalEntranceMotion = staticCompositionLocalOf { true }
 
-/** Reads the system animator duration scale once and provides [LocalReducedMotion]. */
+/**
+ * Provides [LocalReducedMotion] from the system animator duration scale and keeps it current: turning "remove
+ * animations" on or off does not recreate the activity, so the setting is observed while the app runs (D-137).
+ */
 @Composable
 fun ProvideReducedMotion(content: @Composable () -> Unit) {
     val context = LocalContext.current
-    val reduced = remember(context) {
-        Settings.Global.getFloat(context.contentResolver, Settings.Global.ANIMATOR_DURATION_SCALE, 1f) == 0f
+    val resolver = context.contentResolver
+    var reduced by remember(resolver) { mutableStateOf(animationsRemoved(resolver)) }
+    DisposableEffect(resolver) {
+        val observer = object : ContentObserver(Handler(Looper.getMainLooper())) {
+            override fun onChange(selfChange: Boolean) {
+                reduced = animationsRemoved(resolver)
+            }
+        }
+        resolver.registerContentObserver(Settings.Global.getUriFor(Settings.Global.ANIMATOR_DURATION_SCALE), false, observer)
+        // A change made while the observer was not registered (the app was in the background) is read again here.
+        reduced = animationsRemoved(resolver)
+        onDispose { resolver.unregisterContentObserver(observer) }
     }
     CompositionLocalProvider(LocalReducedMotion provides reduced, content = content)
 }
+
+private fun animationsRemoved(resolver: ContentResolver): Boolean =
+    Settings.Global.getFloat(resolver, Settings.Global.ANIMATOR_DURATION_SCALE, 1f) == 0f
+
+/** How far the incoming page of a fade-through starts below its full size (M3 fade-through, D-137). */
+const val FADE_THROUGH_INITIAL_SCALE = 0.92f
 
 /**
  * Material fade-through between navigation-bar destinations (D-103): the outgoing page fades out
  * quickly while the incoming page fades in more slowly, so the old page is gone before the new one
  * is fully there. Sideways motion is reserved for swipeable tabs and carousels. Since D-104 both
  * fades use the motion scheme's effects springs (fast out, default in) instead of fixed durations.
+ * Since D-137 the incoming page also grows from [FADE_THROUGH_INITIAL_SCALE] on the slow spatial spring, as the M3
+ * fade-through does; [scale] false (reduced motion) leaves the plain fades.
  */
-fun dimaFadeThrough(): ContentTransform =
-    fadeIn(animationSpec = DimaMotion.effectsDefault()).togetherWith(fadeOut(animationSpec = DimaMotion.effectsFast()))
+fun dimaFadeThrough(scale: Boolean = true): ContentTransform {
+    val enter = fadeIn(animationSpec = DimaMotion.effectsDefault())
+    return (if (scale) enter + scaleIn(DimaMotion.spatialSlow(), initialScale = FADE_THROUGH_INITIAL_SCALE) else enter)
+        .togetherWith(fadeOut(animationSpec = DimaMotion.effectsFast()))
+}
 
 /**
  * Which M3 transition pattern a page change uses (D-121, m3.material.io/styles/motion/transitions/transition-patterns).
@@ -149,7 +204,7 @@ val PageSlideDistance = 32.dp
  * for right-to-left layouts. With [reducedMotion] every change is the plain fade-through: no sideways movement.
  */
 fun dimaPageTransform(motion: PageMotion, slidePx: Int, reducedMotion: Boolean): ContentTransform {
-    if (reducedMotion || motion == PageMotion.TOP_LEVEL) return dimaFadeThrough()
+    if (reducedMotion || motion == PageMotion.TOP_LEVEL) return dimaFadeThrough(scale = !reducedMotion)
     val direction = if (motion == PageMotion.FORWARD) 1 else -1
     return (
         slideInHorizontally(DimaMotion.spatialSlow()) { direction * slidePx } +
@@ -189,6 +244,125 @@ fun Modifier.predictiveBackPreview(progress: () -> Float, fromLeftEdge: () -> Bo
     translationX = (if (fromLeftEdge()) 1f else -1f) * PredictiveBackShift.toPx() * value
     shape = androidx.compose.foundation.shape.RoundedCornerShape(PredictiveBackCorner * value)
     clip = true
+}
+
+/**
+ * The state of one predictive back gesture (D-121, D-137), shared by the page that is being left and the backdrop
+ * behind it. Only the page whose key was showing when the gesture started takes the preview, so after the gesture
+ * commits the leaving page keeps its shrunk, rounded look while the page transition moves it out, and the incoming
+ * page is never scaled by it (D-137: before, the whole transition sprang back to full size while it ran).
+ */
+@Stable
+class PredictiveBackPreview internal constructor(internal val scope: CoroutineScope) {
+    internal val progressValue = Animatable(0f)
+
+    /** Gesture progress, 0 when no preview is shown. Read it in the draw phase only. */
+    val progress: Float get() = progressValue.value
+
+    /** True when the gesture started at the left edge. */
+    var fromLeftEdge by mutableStateOf(true)
+        internal set
+
+    /** True while the backdrop is needed: during the gesture and while a cancelled preview springs back. */
+    var active by mutableStateOf(false)
+        internal set
+
+    /** The key of the page taking the preview, or null. */
+    internal var previewKey: Any? by mutableStateOf(null)
+}
+
+/**
+ * Registers a [PredictiveBackHandler] (D-121) whose preview is drawn by [PredictiveBackPage]. On commit it calls
+ * [onBack] and leaves the preview on the leaving page until that page leaves composition; on cancel the preview
+ * springs back on the fast spatial spring. Under [LocalReducedMotion] there is no preview: committing only calls
+ * [onBack]. [currentKey] names the page showing now, as passed to [PredictiveBackPage].
+ */
+@Composable
+fun rememberPredictiveBackPreview(enabled: Boolean, currentKey: Any?, onBack: () -> Unit): PredictiveBackPreview {
+    val scope = rememberCoroutineScope()
+    val preview = remember(scope) { PredictiveBackPreview(scope) }
+    val reduced by rememberUpdatedState(LocalReducedMotion.current)
+    val key by rememberUpdatedState(currentKey)
+    val back by rememberUpdatedState(onBack)
+    PredictiveBackHandler(enabled = enabled) { events ->
+        try {
+            events.collect { event ->
+                if (reduced) return@collect
+                if (preview.previewKey == null || !preview.active) {
+                    preview.previewKey = key
+                    preview.active = true
+                }
+                preview.fromLeftEdge = event.swipeEdge == BackEventCompat.EDGE_LEFT
+                preview.progressValue.snapTo(event.progress)
+            }
+            preview.active = false
+            back()
+            // A Back that did not leave the page (nothing to go back to) springs the preview back instead of leaving
+            // the page shrunk; two frames let the page change, if any, reach composition first.
+            preview.scope.launch {
+                withFrameNanos { }
+                withFrameNanos { }
+                if (preview.previewKey != null && preview.previewKey == key) {
+                    preview.progressValue.animateTo(0f, DimaMotion.spatialFast())
+                    preview.previewKey = null
+                }
+            }
+        } catch (cancelled: CancellationException) {
+            preview.scope.launch {
+                preview.progressValue.animateTo(0f, DimaMotion.spatialFast())
+                preview.active = false
+                preview.previewKey = null
+            }
+            throw cancelled
+        }
+    }
+    // The page that was left can be opened again while it is still leaving: the transition then keeps the same page,
+    // which is never disposed, so its committed preview springs back here instead of staying shrunk. A new gesture's
+    // snapTo cancels this spring before the key is cleared.
+    LaunchedEffect(preview, currentKey) {
+        if (!preview.active && preview.previewKey != null && preview.previewKey == currentKey) {
+            preview.progressValue.animateTo(0f, DimaMotion.spatialFast())
+            preview.previewKey = null
+        }
+    }
+    return preview
+}
+
+/**
+ * One page that may be left with a predictive back gesture (D-137): applies [predictiveBackPreview] while [key] is
+ * the page the gesture started on, and clears the preview once that page has left composition.
+ */
+@Composable
+fun PredictiveBackPage(
+    preview: PredictiveBackPreview,
+    key: Any?,
+    modifier: Modifier = Modifier,
+    content: @Composable () -> Unit,
+) {
+    DisposableEffect(preview, key) {
+        onDispose {
+            if (preview.previewKey == key && !preview.active) {
+                preview.previewKey = null
+                preview.scope.launch { preview.progressValue.snapTo(0f) }
+            }
+        }
+    }
+    Box(
+        modifier = modifier.predictiveBackPreview(
+            progress = { if (preview.previewKey == key) preview.progress else 0f },
+            fromLeftEdge = { preview.fromLeftEdge },
+        ),
+        propagateMinConstraints = true,
+    ) { content() }
+}
+
+/**
+ * Draws [color] behind the pages while a predictive back preview is shown (D-121): the shrinking page needs a
+ * backdrop one tone apart, or its edges vanish into the same page colour. It stays while a committed preview is still
+ * drawn on the leaving page. Read in the draw phase.
+ */
+fun Modifier.predictiveBackBackdrop(preview: PredictiveBackPreview, color: Color): Modifier = drawBehind {
+    if (preview.previewKey != null && preview.progress > 0f) drawRect(color)
 }
 
 /**
@@ -334,16 +508,132 @@ fun dimaContentReveal(): ContentTransform = ContentTransform(
 
 /**
  * A fold or a card section opening (D-118): it grows downward on the default spatial spring while it fades in.
- * Pair with [dimaCollapseOut] and a chevron turning on the same spring.
+ * Pair with [dimaCollapseOut] and a chevron turning on the same spring. A control folding in a pinned header while
+ * the list beneath moves passes [DimaMotion.settle] as [size] (D-137), so the header never bobs.
  */
-fun dimaExpandIn(): EnterTransition =
-    expandVertically(DimaMotion.spatialDefault()) + fadeIn(DimaMotion.effectsDefault())
+fun dimaExpandIn(size: FiniteAnimationSpec<IntSize> = DimaMotion.spatialDefault()): EnterTransition =
+    expandVertically(size) + fadeIn(DimaMotion.effectsDefault())
 
 /** A fold or a card section closing (D-118): it shrinks on the default spatial spring and fades on the fast one. */
-fun dimaCollapseOut(): ExitTransition =
-    shrinkVertically(DimaMotion.spatialDefault()) + fadeOut(DimaMotion.effectsFast())
+fun dimaCollapseOut(size: FiniteAnimationSpec<IntSize> = DimaMotion.spatialDefault()): ExitTransition =
+    shrinkVertically(size) + fadeOut(DimaMotion.effectsFast())
 
-/** Spatial motion for the changing count, non-overshooting effects for opacity. */
+/**
+ * A small element appearing (D-137): a FAB, a badge, a check mark, a back-to-next arrow or a map control grows from
+ * its own centre on the fast spatial spring while it fades in. With [reduced] ([LocalReducedMotion]) it only fades.
+ */
+fun dimaPopIn(reduced: Boolean = false, initialScale: Float = POP_SCALE): EnterTransition {
+    val fade = fadeIn(DimaMotion.effectsFast())
+    return if (reduced) fade else scaleIn(DimaMotion.spatialFast(), initialScale) + fade
+}
+
+/** The small element of [dimaPopIn] leaving: it shrinks and fades on the fast effects spring, never overshooting. */
+fun dimaPopOut(reduced: Boolean = false, targetScale: Float = POP_SCALE): ExitTransition {
+    val fade = fadeOut(DimaMotion.effectsFast())
+    return if (reduced) fade else scaleOut(DimaMotion.effectsFast(), targetScale) + fade
+}
+
+/** How small a popping element starts and ends (D-137). */
+const val POP_SCALE = 0.6f
+
+/**
+ * One icon or small control replaced by another in the same place (D-137), such as download → progress → done or a
+ * button → its check mark: the new one pops in ([dimaPopIn]) while the old one fades out, and the slot's size
+ * follows on the fast spatial spring. Use as an `AnimatedContent` transitionSpec.
+ */
+fun dimaIconSwap(reduced: Boolean = false): ContentTransform = ContentTransform(
+    targetContentEnter = dimaPopIn(reduced),
+    initialContentExit = fadeOut(DimaMotion.effectsFast()),
+    sizeTransform = SizeTransform(clip = false) { _, _ -> DimaMotion.spatialFast() },
+)
+
+/**
+ * False where a whole list is being replaced at once (D-137): a mode switch or a content change that
+ * [com.example.dimanow.ui.ScreenScaffold] fades as one, so its items do not also fade on their own (D-094(12)).
+ */
+val LocalListChangeMotion = compositionLocalOf { true }
+
+/**
+ * Motion for a lazy-list item added, removed or moved by a data change (D-137, adopting D-121's left-over
+ * "animateItem for list changes"): it fades in on the default effects spring, fades out on the fast one and, with
+ * [placement], glides to its new place on [DimaMotion.settle]. `animateItem` never runs for items composed by
+ * scrolling or by a list's first layout, so this is not a per-item entrance (D-058).
+ *
+ * Use `placement = false` for items that animate their own height (the list would chase it), and `fadeOut = false`
+ * for items a whole-list switch replaces: a removed item keeps the specs of its last composition, so it would still
+ * fade while the new list fades in. Under [LocalListChangeMotion] false fade-in and placement are off.
+ */
+// animateItem exists only on a lazy item's scope, so this cannot be an extension on Modifier.
+@Suppress("ModifierFactoryExtensionFunction")
+@Composable
+fun LazyItemScope.dimaItemChange(fadeIn: Boolean = true, fadeOut: Boolean = true, placement: Boolean = false): Modifier {
+    val changes = LocalListChangeMotion.current
+    return Modifier.animateItem(
+        fadeInSpec = if (fadeIn && changes) DimaMotion.effectsDefault() else null,
+        placementSpec = if (placement && changes) DimaMotion.settle() else null,
+        fadeOutSpec = if (fadeOut) DimaMotion.effectsFast() else null,
+    )
+}
+
+/**
+ * Waits under this long show no loading indicator (M3 loading indicator guidance and the UX guide: nothing below
+ * 200 ms, the loading indicator from 200 ms to 5 s), D-137.
+ */
+const val LOADING_GRACE_MILLIS = 200L
+
+/**
+ * True once [active] has stayed true for [delayMillis], false as soon as it turns false (D-137): a busy label or a
+ * loading placeholder for a wait that ends within the grace period is never shown.
+ */
+@Composable
+fun rememberShownAfter(active: Boolean, delayMillis: Long = LOADING_GRACE_MILLIS): Boolean {
+    var shown by remember { mutableStateOf(false) }
+    LaunchedEffect(active, delayMillis) {
+        if (active) {
+            delay(delayMillis)
+            shown = true
+        } else {
+            shown = false
+        }
+    }
+    return shown && active
+}
+
+/**
+ * A loading placeholder that keeps its place and semantics from the first frame but stays transparent for
+ * [delayMillis], then fades in on the default effects spring (D-137), so a read that finishes quickly shows nothing.
+ * The opacity is read in the draw phase.
+ */
+@Composable
+fun Modifier.loadingGrace(delayMillis: Long = LOADING_GRACE_MILLIS): Modifier {
+    val alpha = remember { Animatable(0f) }
+    LaunchedEffect(delayMillis) {
+        delay(delayMillis)
+        alpha.animateTo(1f, DimaMotion.effectsDefault())
+    }
+    return this.graphicsLayer { this.alpha = alpha.value }
+}
+
+/**
+ * The rolling change of [AnimatedCountText] (D-027) as a transform of its own: the new text rises in from half its
+ * height while the old one leaves upward, on the fast spatial spring, and the slot's size follows on [sizeSpec].
+ */
+fun dimaTextRoll(sizeSpec: FiniteAnimationSpec<IntSize> = DimaMotion.spatialFast()): ContentTransform = ContentTransform(
+    targetContentEnter = slideInVertically(
+        animationSpec = DimaMotion.spatialFast(),
+        initialOffsetY = { it / 2 },
+    ) + fadeIn(DimaMotion.effectsFast()),
+    initialContentExit = slideOutVertically(
+        animationSpec = DimaMotion.spatialFast(),
+        targetOffsetY = { -it / 2 },
+    ) + fadeOut(DimaMotion.effectsFast()),
+    sizeTransform = SizeTransform { _, _ -> sizeSpec },
+)
+
+/**
+ * Spatial motion for the changing count, non-overshooting effects for opacity. A slot whose width already follows
+ * another spring (the strip cells of D-124) passes that spring as [sizeSpec], so one width has one spring (D-137).
+ */
 @Composable
 fun AnimatedCountText(
     text: String,
@@ -353,20 +643,11 @@ fun AnimatedCountText(
     fontWeight: FontWeight? = null,
     singleLine: Boolean = false,
     autoSize: androidx.compose.foundation.text.TextAutoSize? = null,
+    sizeSpec: FiniteAnimationSpec<IntSize> = DimaMotion.spatialFast(),
 ) {
     AnimatedContent(
         targetState = text,
-        transitionSpec = {
-            (slideInVertically(
-                animationSpec = DimaMotion.spatialFast(),
-                initialOffsetY = { it / 2 },
-            ) + fadeIn(DimaMotion.effectsFast())).togetherWith(
-                slideOutVertically(
-                    animationSpec = DimaMotion.spatialFast(),
-                    targetOffsetY = { -it / 2 },
-                ) + fadeOut(DimaMotion.effectsFast()),
-            ).using(SizeTransform { _, _ -> DimaMotion.spatialFast() })
-        },
+        transitionSpec = { dimaTextRoll(sizeSpec) },
         label = "animated_count_text",
         modifier = modifier,
     ) { value ->

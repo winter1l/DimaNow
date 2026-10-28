@@ -1,5 +1,12 @@
 package com.example.dimanow.ui
 
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material3.FilterChipDefaults
+import androidx.compose.runtime.rememberCoroutineScope
+import com.example.dimanow.theme.DimaShapes
+import com.example.dimanow.ui.motion.DimaMotion
+import kotlinx.coroutines.launch
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -112,7 +119,11 @@ internal fun NoticeKeywordSetting(
 @Composable
 internal fun NoticeKeywordSuggestionSheet(onEnable: (List<String>) -> Unit, onLater: () -> Unit) {
     var chosen by rememberSaveable { mutableStateOf(DEFAULT_NOTICE_KEYWORDS) }
-    ModalBottomSheet(onDismissRequest = onLater, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
+    // D-137: the buttons slide the sheet down before the caller removes it, as the scrim, Back and a swipe do; removing
+    // it at once made it vanish.
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val scope = rememberCoroutineScope()
+    ModalBottomSheet(onDismissRequest = onLater, sheetState = sheetState) {
         Column(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp).padding(bottom = 16.dp).navigationBarsPadding()
                 .testTag("notice_keyword_suggestion"),
@@ -126,22 +137,65 @@ internal fun NoticeKeywordSuggestionSheet(onEnable: (List<String>) -> Unit, onLa
             )
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 DEFAULT_NOTICE_KEYWORDS.forEach { keyword ->
-                    FilterChip(
+                    NoticeKeywordChip(
+                        keyword = keyword,
                         selected = keyword in chosen,
                         onClick = { chosen = if (keyword in chosen) chosen - keyword else chosen + keyword },
-                        label = { Text(keyword) },
                     )
                 }
             }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End), modifier = Modifier.fillMaxWidth()) {
-                TextButton(shapes = ButtonDefaults.shapes(), onClick = onLater, modifier = Modifier.testTag("notice_keyword_later")) { Text("나중에") }
+                TextButton(
+                    shapes = ButtonDefaults.shapes(),
+                    onClick = { scope.launch { sheetState.hide() }.invokeOnCompletion { onLater() } },
+                    modifier = Modifier.testTag("notice_keyword_later"),
+                ) { Text("나중에") }
                 Button(
                     shapes = ButtonDefaults.shapes(),
-                    onClick = { onEnable(chosen) },
+                    onClick = {
+                        val keywords = chosen
+                        scope.launch { sheetState.hide() }.invokeOnCompletion { onEnable(keywords) }
+                    },
                     enabled = chosen.isNotEmpty(),
                     modifier = Modifier.testTag("notice_keyword_enable"),
                 ) { Text("알림 켜기") }
             }
         }
     }
+}
+
+/**
+ * A suggested keyword (D-137): the selection follows the app's chip motion (the day cells), the corners rounding to a
+ * pill on the theme's fast spatial spring and tightening under the finger, the fill and label changing on the fast
+ * effects spring instead of switching in one frame.
+ */
+@Composable
+private fun NoticeKeywordChip(keyword: String, selected: Boolean, onClick: () -> Unit) {
+    val defaults = FilterChipDefaults.filterChipColors()
+    val container by animateColorAsState(
+        if (selected) defaults.selectedContainerColor else defaults.containerColor,
+        DimaMotion.effectsFast(),
+        label = "notice_keyword_container",
+    )
+    val label by animateColorAsState(
+        if (selected) defaults.selectedLabelColor else defaults.labelColor,
+        DimaMotion.effectsFast(),
+        label = "notice_keyword_label",
+    )
+    FilterChip(
+        selected = selected,
+        onClick = onClick,
+        label = { Text(keyword) },
+        shapes = FilterChipDefaults.shapes(
+            shape = FilterChipDefaults.shape,
+            selectedShape = CircleShape,
+            pressedShape = DimaShapes.ExtraSmall,
+        ),
+        colors = FilterChipDefaults.filterChipColors(
+            containerColor = container,
+            labelColor = label,
+            selectedContainerColor = container,
+            selectedLabelColor = label,
+        ),
+    )
 }

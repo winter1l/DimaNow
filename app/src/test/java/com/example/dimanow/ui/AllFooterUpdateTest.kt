@@ -38,6 +38,15 @@ class AllFooterUpdateTest {
     }
 
     @Test
+    fun `a download in progress keeps one sentence and leaves the share to the bar`() {
+        // D-137: the percent is a progress bar under the line, so the line does not change while it downloads.
+        val started = allFooterUpdate(AppUpdateUiState("2.1", AppUpdatePhase.DOWNLOADING, latestRelease = release, downloadProgress = 0))
+        val halfway = allFooterUpdate(AppUpdateUiState("2.1", AppUpdatePhase.DOWNLOADING, latestRelease = release, downloadProgress = 42))
+        assertEquals(AllFooterUpdate("버전 2.1 · 새 버전을 받고 있어요"), halfway)
+        assertEquals(started, halfway)
+    }
+
+    @Test
     fun `a downloaded update asks to install`() {
         val footer = allFooterUpdate(AppUpdateUiState("2.1", AppUpdatePhase.READY_TO_INSTALL, latestRelease = release))
         assertEquals("버전 2.1 · 2.2 버전을 설치할 수 있어요", footer.text)

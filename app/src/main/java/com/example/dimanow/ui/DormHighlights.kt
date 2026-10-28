@@ -1,5 +1,8 @@
 package com.example.dimanow.ui
 
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -7,6 +10,8 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -56,6 +61,10 @@ import com.example.dimanow.school.SchoolService
 import com.example.dimanow.school.SchoolServiceResult
 import com.example.dimanow.sync.ServiceCalendar
 import com.example.dimanow.theme.DimaTheme
+import com.example.dimanow.ui.motion.DimaMotion
+import com.example.dimanow.ui.motion.dimaCollapseOut
+import com.example.dimanow.ui.motion.dimaContentReveal
+import com.example.dimanow.ui.motion.dimaExpandIn
 import java.time.LocalDate
 import java.time.LocalTime
 import java.time.ZonedDateTime
@@ -135,14 +144,27 @@ internal fun DormMark(icon: ImageVector, polygon: RoundedPolygon, container: Col
     }
 }
 
-/** A small status pill: quiet by default, amber when it warns. */
+/**
+ * A small status pill: quiet by default, amber when it warns. D-137: when the door closes or opens on a minute tick
+ * the tone eases on the default effects spring instead of switching in one frame.
+ */
 @Composable
 internal fun DormChip(icon: ImageVector, text: String, warning: Boolean = false, modifier: Modifier = Modifier) {
+    val container by animateColorAsState(
+        if (warning) DimaTheme.colors.warningContainer else DimaTheme.colors.cardInner,
+        DimaMotion.effectsDefault(),
+        label = "dorm_chip_container",
+    )
+    val content by animateColorAsState(
+        if (warning) DimaTheme.colors.onWarningContainer else MaterialTheme.colorScheme.onSurfaceVariant,
+        DimaMotion.effectsDefault(),
+        label = "dorm_chip_content",
+    )
     Surface(
         modifier = modifier,
         shape = MaterialTheme.shapes.extraLarge,
-        color = if (warning) DimaTheme.colors.warningContainer else DimaTheme.colors.cardInner,
-        contentColor = if (warning) DimaTheme.colors.onWarningContainer else MaterialTheme.colorScheme.onSurfaceVariant,
+        color = container,
+        contentColor = content,
     ) {
         Row(
             modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
@@ -182,19 +204,38 @@ internal fun DormTodayCard(rollCall: RollCallStatus, time: LocalTime, kakaoAcces
             }
         }
         detail?.let { KoreanText(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) }
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            DormChip(Icons.Default.DoorFront, doorText(time), warning = !DormHours.doorOpen(time), modifier = Modifier.testTag("dorm_door"))
-            if (pastDeadline) DormChip(Icons.Default.Schedule, "외출·외박 신청 마감 지남", warning = true)
-        }
-        if (!kakaoAccess) {
-            TextButton(
-                shapes = ButtonDefaults.shapes(),
-                onClick = onAskKakao,
-                modifier = Modifier.heightIn(min = 48.dp).testTag("dorm_allow_kakao"),
-            ) { Text("카톡 공지로 점호 확인하기") }
+        // D-137: what comes and goes here folds with its gap inside, so the card grows and shrinks instead of jumping:
+        // each chip carries the 8dp under it (the flow row drops the last one), and the 점호 prompt its 12dp above it.
+        Column {
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.withoutTrailingGap(DORM_CHIP_GAP),
+            ) {
+                DormChip(
+                    Icons.Default.DoorFront,
+                    doorText(time),
+                    warning = !DormHours.doorOpen(time),
+                    modifier = Modifier.padding(bottom = DORM_CHIP_GAP).testTag("dorm_door"),
+                )
+                // On a phone the chip wraps to a line of its own; it unfolds rather than pops, so the card does not jump.
+                AnimatedVisibility(visible = pastDeadline, enter = dimaExpandIn(), exit = dimaCollapseOut(), label = "dorm_past_deadline") {
+                    DormChip(Icons.Default.Schedule, "외출·외박 신청 마감 지남", warning = true, modifier = Modifier.padding(bottom = DORM_CHIP_GAP))
+                }
+            }
+            // Granting notification access folds the prompt away when the student comes back from the settings.
+            AnimatedVisibility(visible = !kakaoAccess, enter = dimaExpandIn(), exit = dimaCollapseOut(), label = "dorm_allow_kakao") {
+                TextButton(
+                    shapes = ButtonDefaults.shapes(),
+                    onClick = onAskKakao,
+                    modifier = Modifier.padding(top = 12.dp).heightIn(min = 48.dp).testTag("dorm_allow_kakao"),
+                ) { Text("카톡 공지로 점호 확인하기") }
+            }
         }
     }
 }
+
+/** Between the 기숙사 chips, across and between lines. */
+private val DORM_CHIP_GAP = 8.dp
 
 /**
  * Home's 점호 card for 엔터관 residents (D-122): what tonight's 점호 is, a chip once the outing deadline has passed,
@@ -206,31 +247,50 @@ internal fun HomeRollCallCard(rollCall: RollCallStatus, time: LocalTime, onOpenD
     val launcher = rememberOutingLauncher(rollCall)
     val (headline, detail) = rollCallText(rollCall)
     val pastDeadline = OutingRules.warning(time, rollCall) is OutingWarning.AfterRollCallDeadline
+    // D-137: the late chip and a failed 외출·외박 신청 open in place with their 12dp gap inside, so the card grows into
+    // them instead of the buttons jumping.
     HomeContainerCard(Modifier.testTag("home_roll_call")) {
         HomeCardHeader(icon = Icons.Default.Bedtime, title = "기숙사 점호", showChevron = false)
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-            if (rollCall.isRollCallDay()) {
-                DormMark(Icons.Default.Bedtime, MaterialShapes.Cookie9Sided, MaterialTheme.colorScheme.tertiaryContainer, MaterialTheme.colorScheme.onTertiaryContainer, size = 44.dp)
-            } else {
-                DormMark(Icons.Default.EventAvailable, MaterialShapes.Cookie4Sided, MaterialTheme.colorScheme.secondaryContainer, MaterialTheme.colorScheme.onSecondaryContainer, size = 44.dp)
+        Column {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+                if (rollCall.isRollCallDay()) {
+                    DormMark(Icons.Default.Bedtime, MaterialShapes.Cookie9Sided, MaterialTheme.colorScheme.tertiaryContainer, MaterialTheme.colorScheme.onTertiaryContainer, size = 44.dp)
+                } else {
+                    DormMark(Icons.Default.EventAvailable, MaterialShapes.Cookie4Sided, MaterialTheme.colorScheme.secondaryContainer, MaterialTheme.colorScheme.onSecondaryContainer, size = 44.dp)
+                }
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Text(headline, style = MaterialTheme.typography.titleMedium)
+                    detail?.let { KoreanText(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                }
             }
-            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                Text(headline, style = MaterialTheme.typography.titleMedium)
-                detail?.let { KoreanText(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+            AnimatedVisibility(visible = pastDeadline, enter = dimaExpandIn(), exit = dimaCollapseOut(), label = "home_roll_call_late") {
+                DormChip(
+                    Icons.Default.Schedule,
+                    "외출·외박 신청 마감이 지났어요",
+                    warning = true,
+                    modifier = Modifier.padding(top = 12.dp).testTag("home_roll_call_late"),
+                )
             }
         }
-        if (pastDeadline) DormChip(Icons.Default.Schedule, "외출·외박 신청 마감이 지났어요", warning = true, modifier = Modifier.testTag("home_roll_call_late"))
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-            FilledTonalButton(
-                shapes = ButtonDefaults.shapes(),
-                onClick = launcher::request,
-                modifier = Modifier.heightIn(min = 48.dp).testTag("home_outing_open"),
-            ) {
-                Icon(Icons.Default.Luggage, contentDescription = null, modifier = Modifier.size(18.dp))
-                Text("외출·외박 신청", modifier = Modifier.padding(start = 8.dp))
+        Column {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                FilledTonalButton(
+                    shapes = ButtonDefaults.shapes(),
+                    onClick = launcher::request,
+                    modifier = Modifier.heightIn(min = 48.dp).testTag("home_outing_open"),
+                ) {
+                    Icon(Icons.Default.Luggage, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Text("외출·외박 신청", modifier = Modifier.padding(start = 8.dp))
+                }
+                TextButton(shapes = ButtonDefaults.shapes(), onClick = onOpenDorm, modifier = Modifier.testTag("home_open_dorm")) { Text("기숙사") }
             }
-            TextButton(shapes = ButtonDefaults.shapes(), onClick = onOpenDorm, modifier = Modifier.testTag("home_open_dorm")) { Text("기숙사") }
+            AnimatedContent(targetState = launcher.error, transitionSpec = { dimaContentReveal() }, label = "home_outing_error") { message ->
+                if (message != null) {
+                    ErrorState(message, modifier = Modifier.padding(top = 12.dp), contained = false)
+                } else {
+                    Spacer(Modifier.fillMaxWidth())
+                }
+            }
         }
-        launcher.error?.let { ErrorState(it, contained = false) }
     }
 }

@@ -130,6 +130,12 @@ internal object CampusBaseMapAsset {
 
     @Volatile private var cached: CampusBaseMap? = null
 
+    /**
+     * The map an earlier [load] already read, without touching the asset (D-137): the page starts from it, so only its
+     * first open in a process waits for the read and the map's height and markers do not jump while the page slides in.
+     */
+    fun cachedOrNull(): CampusBaseMap? = cached
+
     fun load(context: Context): CampusBaseMap? {
         cached?.let { return it }
         return runCatching {

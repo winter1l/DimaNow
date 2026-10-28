@@ -1,6 +1,14 @@
 package com.example.dimanow.ui
 
 import androidx.compose.foundation.border
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.ui.graphics.Color
+import com.example.dimanow.ui.motion.DimaMotion
+import com.example.dimanow.ui.motion.LocalReducedMotion
+import com.example.dimanow.ui.motion.dimaPopIn
+import com.example.dimanow.ui.motion.dimaPopOut
 import android.content.ActivityNotFoundException
 import android.content.Intent
 import androidx.core.net.toUri
@@ -121,20 +129,20 @@ private fun Bus4402StopCard(
     resetSignal: Int = 0,
 ) {
     val nowTime = now.toLocalTime()
+    val reducedMotion = LocalReducedMotion.current
     val firstUpcomingIndex = departures.indexOfFirst { !it.time.isBefore(nowTime) }
     val upcoming = if (firstUpcomingIndex < 0) emptyList() else departures.drop(firstUpcomingIndex).take(2)
     val estimated = departures.firstOrNull()?.estimated == true
+    // D-095: 가까운 정류장은 연한 컨테이너 + primary 테두리로 강조해 안쪽 칸과 칩이 묻히지 않게 한다
+    val emphasis = rememberPlaceEmphasis(isNearby)
 
     ElevatedCard(
         modifier = Modifier
             .fillMaxWidth()
-            .then(if (isNearby) Modifier.border(1.5.dp, MaterialTheme.colorScheme.primary, DimaShapes.Card) else Modifier)
+            .border(1.5.dp, emphasis.border, DimaShapes.Card)
             .testTag("bus4402_stop_${stop.stopNumber}"),
         shape = DimaShapes.Card,
-        colors = CardDefaults.elevatedCardColors(
-            // D-095: 가까운 정류장은 연한 컨테이너 + primary 테두리로 강조해 안쪽 칸과 칩이 묻히지 않게 한다
-            containerColor = if (isNearby) DimaTheme.colors.cardInner else DimaTheme.colors.card,
-        ),
+        colors = CardDefaults.elevatedCardColors(containerColor = emphasis.container),
     ) {
         Column(Modifier.padding(vertical = 16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             // 교내 셔틀 노선 카드와 같은 머리: 이름 + 현재 정류장 배지, 그 아래 횟수·시간대와 정류장 정보
@@ -147,10 +155,11 @@ private fun Bus4402StopCard(
                     Text(
                         stop.displayName,
                         style = MaterialTheme.typography.titleMedium,
-                        color = if (isNearby) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+                        color = emphasis.title,
                         modifier = Modifier.weight(1f, fill = false),
                     )
-                    if (isNearby) {
+                    // D-137: the badge pops in and out with the place (a fade under reduced motion).
+                    AnimatedVisibility(visible = isNearby, enter = dimaPopIn(reducedMotion), exit = dimaPopOut(reducedMotion)) {
                         Surface(shape = DimaShapes.Badge, color = MaterialTheme.colorScheme.primary) {
                             Text(
                                 "현재 정류장",
@@ -220,6 +229,38 @@ private fun Bus4402StopCard(
             )
         }
     }
+}
+
+/** The two looks of a card for the place the student is at ([rememberPlaceEmphasis]). */
+internal data class PlaceEmphasis(val container: Color, val border: Color, val title: Color)
+
+/**
+ * The look of a card for where the student is (D-029, D-095): the inner-tone container, a primary border and a
+ * primary title, against the plain card. D-137: when the place changes while the card is shown (the 현재 위치 origin
+ * or the 현재 정류장), the change between the two looks moves on the default effects spring, as the strip's tiles inside
+ * already do, so for a moment the card no longer disagrees with its own tiles. Shapes and tones are unchanged (D-105);
+ * the border only fades, so it is always drawn, transparent when [active] is false. Used by the shuttle route card,
+ * its origin heading and the 4402 stop card.
+ */
+@Composable
+internal fun rememberPlaceEmphasis(active: Boolean): PlaceEmphasis {
+    val colors = MaterialTheme.colorScheme
+    val container by animateColorAsState(
+        if (active) DimaTheme.colors.cardInner else DimaTheme.colors.card,
+        DimaMotion.effectsDefault(),
+        label = "place_container",
+    )
+    val border by animateColorAsState(
+        if (active) colors.primary else colors.primary.copy(alpha = 0f),
+        DimaMotion.effectsDefault(),
+        label = "place_border",
+    )
+    val title by animateColorAsState(
+        if (active) colors.primary else colors.onSurface,
+        DimaMotion.effectsDefault(),
+        label = "place_title",
+    )
+    return PlaceEmphasis(container, border, title)
 }
 
 private val TIME = DateTimeFormatter.ofPattern("HH:mm")

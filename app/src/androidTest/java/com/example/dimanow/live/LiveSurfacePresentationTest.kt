@@ -44,13 +44,23 @@ class LiveSurfacePresentationTest {
             GuidancePhase.TRANSIT, countdownTarget = Instant.now().plusSeconds(minutes * 60),
             countdownMeaning = CountdownMeaning.SHUTTLE_DEPARTURE, requiresMinuteUpdates = true,
             kind = GuidanceKind.BUS_4402)
+        // The system posts and removes notifications asynchronously, so wait briefly for the expected state; reading
+        // it at once failed on the slower CI emulator (2026-10-11, 2026-10-29).
+        fun cardShown(expected: Boolean): Boolean {
+            val deadline = android.os.SystemClock.uptimeMillis() + 3_000
+            while (true) {
+                val shown = manager.activeNotifications.any { it.id == 6201 }
+                if (shown == expected || android.os.SystemClock.uptimeMillis() > deadline) return shown
+                Thread.sleep(50)
+            }
+        }
         try {
             controller.show(bus(60))
-            assertEquals(true, manager.activeNotifications.any { it.id == 6201 })
+            assertEquals(true, cardShown(true))
             assertEquals(LiveSurfaceResult.CANCELLED, controller.show(bus(61)))
-            assertEquals(false, manager.activeNotifications.any { it.id == 6201 })
+            assertEquals(false, cardShown(false))
             controller.show(bus(60))
-            assertEquals(true, manager.activeNotifications.any { it.id == 6201 })
+            assertEquals(true, cardShown(true))
         } finally {
             controller.cancel()
         }

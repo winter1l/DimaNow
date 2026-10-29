@@ -42,7 +42,7 @@ class CampusSummaryWidgetPlanner {
         shuttleBoard: ShuttleBoard,
         todayMeal: MealDay?,
     ): CampusSummaryWidgetPlan {
-        // 1. 헤더 (위치 + 날짜) - AGENTS.md Seam: 엔터관/본관/원룸촌 라벨 준수
+        // 1. 헤더 (위치 + 날짜) - 엔터관/본관/원룸촌 라벨 준수
         val originName = DisplayVocabulary.originName(currentZone)
         val headerLocationText = "현재 위치: $originName"
         val weekdayKorean = when (now.dayOfWeek) {

@@ -201,7 +201,6 @@ anonymous-upload-worker/  GitHub 로그인 없는 기숙사 사진 제출 게이
 data-source/         관리자가 수정하는 셔틀 CSV
 .github/workflows/   검증과 GitHub Pages 데이터 게시
 artifacts/           승인된 구역 경계와 검증 보고서 일부
-memory/              제품 결정과 검증 근거
 ```
 
 핵심 순수 로직은 `GuidanceEngine`이 담당합니다. 홈, 셔틀 화면, 위젯, Live Update는 동일한 셔틀 계산과 분 단위 반올림 결과를 소비합니다. 캠퍼스 기능의 공개 테스트 경계는 `GuidanceEngine`, `CampusDataRepository`, `ShuttleSource`, `MealSource`, `LocationResolver`, `LiveSurfaceController`이며, LMS 기능은 `LmsCredentialStore`, `LmsSessionController`, `LmsSource` 경계로 분리됩니다.

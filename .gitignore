@@ -52,3 +52,9 @@ codex-clipboard-*.png
 *.apk
 *.aab
 *.log
+
+# Agent instructions, rules and the decision memory stay on this PC only (2026-10-29)
+/CLAUDE.md
+/AGENTS.md
+/.claude/
+/memory/

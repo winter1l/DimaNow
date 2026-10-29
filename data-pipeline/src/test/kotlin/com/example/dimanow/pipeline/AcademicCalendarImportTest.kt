@@ -236,7 +236,7 @@ class AcademicCalendarImportTest {
         assertEquals("허용되지 않은 학사일정 원격 URL입니다.", failure.message)
         assertThrows(IllegalArgumentException::class.java) {
             MealRemoteUrlPolicy.requireAllowed("https://www.dima.ac.kr/?p=78", MealRemoteEndpoint.DIMA_ACADEMIC_CALENDAR) {
-                arrayOf(InetAddress.getByName("10.0.0.1"))
+                arrayOf(InetAddress.getByAddress(byteArrayOf(10, 0, 0, 1)))
             }
         }
     }

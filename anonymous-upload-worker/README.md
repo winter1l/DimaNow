@@ -20,7 +20,7 @@ Android 앱에서 GitHub 로그인 없이 식단 사진을 제출하기 위한 C
 
 학생식당 게시 지연을 보완하는 scheduled handler도 제공합니다. 공개 식단의 SHA-256과 현재 주 월~금 데이터를 확인하고, 새 식단이 없고 최근 수집 시도도 없으면 기존 GitHub App 권한으로 `student-meal-publication-watch` 이벤트를 보냅니다. 월요일 오전에는 30분, 그 밖에는 두 시간 간격이며 현재 주 식단이 완성되면 수집을 건너뜁니다. GitHub `publish-data.yml`의 동일한 `repository_dispatch` 수신 설정이 필요합니다. 공개 HTTP 요청에서는 이 동작을 실행할 수 없습니다. 세 개 cron 중 매일 17:07 UTC 실행에서 기존 정리 작업도 수행합니다.
 
-2026-10-11에 이 저장소의 Worker 전체(입장 테이블 `0002_gateway_admission.sql` 포함)를 운영에 배포했습니다. 셔틀 신고 API와 `SHUTTLE_REPORT_HMAC_KEY`는 제거됐습니다. 배포 기록은 `../memory/SESSION-LOG.md`를 확인하세요.
+2026-10-11에 이 저장소의 Worker 전체(입장 테이블 `0002_gateway_admission.sql` 포함)를 운영에 배포했습니다. 셔틀 신고 API와 `SHUTTLE_REPORT_HMAC_KEY`는 제거됐습니다.
 
 ```powershell
 node --test

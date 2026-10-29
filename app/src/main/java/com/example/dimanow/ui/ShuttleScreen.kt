@@ -1,8 +1,16 @@
 package com.example.dimanow.ui
 
 import androidx.compose.foundation.border
-import com.example.dimanow.theme.DimaTheme
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
 import com.example.dimanow.ui.motion.DimaMotion
+import com.example.dimanow.ui.motion.LocalReducedMotion
+import com.example.dimanow.ui.motion.dimaCollapseOut
+import com.example.dimanow.ui.motion.dimaExpandIn
+import com.example.dimanow.ui.motion.dimaItemChange
+import com.example.dimanow.ui.motion.dimaPopIn
+import com.example.dimanow.ui.motion.dimaPopOut
 import com.example.dimanow.theme.DimaShapes
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -23,6 +31,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -53,6 +62,12 @@ import kotlinx.coroutines.flow.first
 
 private enum class ShuttleView { CAMPUS, BUS_4402 }
 
+/**
+ * What the 교내 셔틀 list shows for the chosen day (D-137): with the day it is the list's content key, so a change of
+ * either replaces the whole list with one fade instead of the cards fading or popping one by one.
+ */
+private enum class ShuttlePhase { LOADING, ERROR, NO_DATA, SUSPENDED, CONTENT }
+
 @Composable
 fun ShuttleScreen(
     shuttleSource: ShuttleSource,
@@ -75,6 +90,16 @@ fun ShuttleScreen(
     var daySelection by rememberSaveable { mutableStateOf(todayEpochDay to now.dayOfWeek) }
     val selectedDay = if (daySelection.first == todayEpochDay) daySelection.second else now.dayOfWeek
     var shuttleView by rememberSaveable { mutableStateOf(ShuttleView.CAMPUS) }
+    // D-124: a refresh or reselecting the 셔틀 tab brings every route strip back to its next departure.
+    var stripReset by remember { mutableIntStateOf(0) }
+    val reselection = LocalScrollToTopSignal.current
+    var seenReselection by remember { mutableIntStateOf(reselection) }
+    LaunchedEffect(reselection) {
+        if (reselection != seenReselection) {
+            seenReselection = reselection
+            stripReset++
+        }
+    }
 
     LaunchedEffect(refreshMessage) {
         refreshMessage?.let {
@@ -87,6 +112,7 @@ fun ShuttleScreen(
         if (refreshing) return
         refreshing = true
         refreshMessage = null
+        stripReset++
         scope.launch {
             try {
                 // D-094: 스낵바는 사용자가 직접 당긴 새로고침의 결과만 쉬운 말로 알린다
@@ -127,6 +153,14 @@ fun ShuttleScreen(
                     .sortedBy { it.first?.ordinal ?: Int.MAX_VALUE }
             }
     }
+    val phase = when {
+        shuttle == null -> ShuttlePhase.LOADING
+        shuttleDepartures.isEmpty() && shuttle?.error != null -> ShuttlePhase.ERROR
+        shuttleDepartures.isEmpty() -> ShuttlePhase.NO_DATA
+        isToday && todaySuspension != null -> ShuttlePhase.SUSPENDED
+        else -> ShuttlePhase.CONTENT
+    }
+    val reducedMotion = LocalReducedMotion.current
 
     Box(modifier = modifier.fillMaxSize()) {
     ScreenScaffold(
@@ -138,33 +172,49 @@ fun ShuttleScreen(
         refreshing = refreshing,
         refreshLabel = "셔틀 새로고침",
         listTag = "shuttle_list",
+        pageIndex = shuttleView.ordinal,
+        // D-137: within 교내 셔틀 a day change, the first cache read or a retry that replaces an error fades the whole
+        // list in again; 4402 has no days, and switching routes slides the pages (pageIndex, D-138).
+        contentKey = if (shuttleView == ShuttleView.CAMPUS) activeDay to phase else null,
         // D-102: 식단 화면처럼 노선 전환과 요일 선택을 머리에 고정해, 시간표를 내려 읽다가도 바로 바꿀 수 있다 (D-057)
         subHeader = {
-            // D-103: 노선 전환은 M3 연결형 버튼 그룹이다
-            DimaConnectedChoice(
-                options = listOf(ShuttleView.CAMPUS to "교내 셔틀", ShuttleView.BUS_4402 to "4402"),
-                selected = shuttleView,
-                onSelect = { shuttleView = it },
-            )
-            if (shuttleView == ShuttleView.CAMPUS) {
-                // M3 Expressive 요일 선택 (DimaDaySelector)
-                DimaDaySelector(
-                    days = DayOfWeek.entries,
-                    selected = selectedDay,
-                    onSelect = { daySelection = todayEpochDay to it },
-                    today = now.dayOfWeek,
-                    itemTag = { "shuttle_day_${it.name}" },
+            // D-137: one column without the header's spacing, so the gap above the weekday row folds with it.
+            Column {
+                // D-103: 노선 전환은 M3 연결형 버튼 그룹이다
+                DimaConnectedChoice(
+                    options = listOf(ShuttleView.CAMPUS to "교내 셔틀", ShuttleView.BUS_4402 to "4402"),
+                    selected = shuttleView,
+                    onSelect = { shuttleView = it },
                 )
+                // D-137: the weekday row folds away for 4402 and back on the non-bouncy spring the list slides on
+                // (D-129), its 8dp gap inside, so the pinned header neither snaps nor bobs; at once under reduced motion.
+                AnimatedVisibility(
+                    visible = shuttleView == ShuttleView.CAMPUS,
+                    enter = if (reducedMotion) EnterTransition.None else dimaExpandIn(DimaMotion.settle()),
+                    exit = if (reducedMotion) ExitTransition.None else dimaCollapseOut(DimaMotion.settle()),
+                    label = "shuttle_day_selector",
+                ) {
+                    // M3 Expressive 요일 선택 (DimaDaySelector)
+                    DimaDaySelector(
+                        days = DayOfWeek.entries,
+                        selected = selectedDay,
+                        onSelect = { daySelection = todayEpochDay to it },
+                        modifier = Modifier.padding(top = 8.dp),
+                        today = now.dayOfWeek,
+                        itemTag = { "shuttle_day_${it.name}" },
+                    )
+                }
             }
         },
-    ) {
-        if (shuttleView == ShuttleView.BUS_4402) {
+    ) { page ->
+        // D-138: each route is a page of its own, built from the page given, since both are drawn while they slide.
+        if (page == ShuttleView.BUS_4402.ordinal) {
             item(key = "bus_4402") {
-                Bus4402ScheduleContent(now = now, nearbyStopNumber = nearbyTransitStopNumber)
+                Bus4402ScheduleContent(now = now, nearbyStopNumber = nearbyTransitStopNumber, resetSignal = stripReset)
             }
         } else {
-            when {
-                shuttle == null -> item(key = "shuttle_loading") {
+            when (phase) {
+                ShuttlePhase.LOADING -> item(key = "shuttle_loading") {
                     OutlinedCard(modifier = Modifier.fillMaxWidth(), shape = DimaShapes.Card) {
                         LoadingLine(
                             text = "셔틀 시간표를 불러오고 있어요",
@@ -173,7 +223,7 @@ fun ShuttleScreen(
                     }
                 }
                 // 저장된 시간표가 통째로 없으면 요일 탓이 아니므로, 받지 못한 이유와 다시 받기를 안내한다 (D-094(14))
-                shuttleDepartures.isEmpty() && shuttle?.error != null -> item(key = "shuttle_error") {
+                ShuttlePhase.ERROR -> item(key = "shuttle_error") {
                     ErrorState(
                         message = "셔틀 시간표를 받지 못했어요",
                         supporting = "인터넷 연결을 확인하고 다시 시도해 주세요",
@@ -181,7 +231,7 @@ fun ShuttleScreen(
                         modifier = Modifier.testTag("shuttle_error"),
                     )
                 }
-                shuttleDepartures.isEmpty() -> item(key = "shuttle_no_data") {
+                ShuttlePhase.NO_DATA -> item(key = "shuttle_no_data") {
                     EmptyState(
                         message = "셔틀 시간표가 아직 없어요",
                         supporting = "아래로 당기거나 버튼을 눌러 받아 보세요",
@@ -190,21 +240,24 @@ fun ShuttleScreen(
                         modifier = Modifier.testTag("shuttle_no_data"),
                     )
                 }
-                isToday && todaySuspension != null -> item(key = "shuttle_suspended") {
+                ShuttlePhase.SUSPENDED -> item(key = "shuttle_suspended") {
                     EmptyState(
                         message = "오늘은 셔틀이 운행하지 않아요 · $todaySuspension",
                         supporting = "다른 요일을 고르면 평소 시간표를 볼 수 있어요",
                         modifier = Modifier.testTag("shuttle_suspended"),
                     )
                 }
-                dayDepartures.isEmpty() -> item(key = "shuttle_empty_${activeDay.name}") {
-                    EmptyState(
-                        message = "${koreanWeekdayLabel(activeDay)}은 운행하지 않아요",
-                        modifier = Modifier.animateItem(fadeInSpec = dayFadeIn, placementSpec = null, fadeOutSpec = null),
-                    )
-                }
-                // 선택된 요일의 노선별 셔틀 목록 (현재 위치 출발 우선 정렬)
-                else -> {
+                // D-137: the day's items fade in only when a refresh adds them (a day change fades the whole list, so
+                // they do not fade again) and leave at once, so two days never overlap; items that move glide.
+                ShuttlePhase.CONTENT -> if (dayDepartures.isEmpty()) {
+                    item(key = "shuttle_empty_${activeDay.name}") {
+                        EmptyState(
+                            message = "${koreanWeekdayLabel(activeDay)}은 운행하지 않아요",
+                            modifier = dimaItemChange(fadeIn = true, fadeOut = false, placement = true),
+                        )
+                    }
+                } else {
+                    // 선택된 요일의 노선별 셔틀 목록 (현재 위치 출발 우선 정렬)
                     if (outsideTerm) item(key = "shuttle_vacation_note") {
                         Text(
                             "지금은 학기 중이 아니라 운행 시간이 다를 수 있어요. 학교 공지를 함께 확인해 주세요.",
@@ -219,12 +272,13 @@ fun ShuttleScreen(
                             ShuttleOriginHeader(
                                 origin = DisplayVocabulary.originName(originZone),
                                 isCurrentLocation = isCurrentLocation,
-                                modifier = Modifier.animateItem(fadeInSpec = dayFadeIn, placementSpec = null, fadeOutSpec = null),
+                                modifier = dimaItemChange(fadeIn = true, fadeOut = false, placement = true),
                             )
                         }
                         routes.forEach { (destinationZone, routeDepartures) ->
                             item(key = "route_${activeDay.name}_${originZone.name}_${destinationZone?.name}") {
-                                Box(Modifier.animateItem(fadeInSpec = dayFadeIn, placementSpec = null, fadeOutSpec = null)) {
+                                // A new 현재 위치 re-sorts the groups under the same keys: they glide to their places.
+                                Box(dimaItemChange(fadeIn = true, fadeOut = false, placement = true)) {
                                     ShuttleRouteCard(
                                         originZone = originZone,
                                         destinationZone = destinationZone,
@@ -236,6 +290,7 @@ fun ShuttleScreen(
                                         isCurrentLocation = isCurrentLocation,
                                         now = now,
                                         guidanceEngine = guidanceEngine,
+                                        resetSignal = stripReset,
                                     )
                                 }
                             }
@@ -257,6 +312,8 @@ fun ShuttleScreen(
 
 @Composable
 private fun ShuttleOriginHeader(origin: String, isCurrentLocation: Boolean, modifier: Modifier = Modifier) {
+    val emphasis = rememberPlaceEmphasis(isCurrentLocation)
+    val reducedMotion = LocalReducedMotion.current
     Row(
         modifier = modifier.fillMaxWidth().padding(top = 4.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -265,9 +322,10 @@ private fun ShuttleOriginHeader(origin: String, isCurrentLocation: Boolean, modi
         Text(
             text = origin,
             style = if (isCurrentLocation) MaterialTheme.typography.titleLarge else MaterialTheme.typography.titleMedium,
-            color = if (isCurrentLocation) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+            color = emphasis.title,
         )
-        if (isCurrentLocation) {
+        // D-137: the badge pops in and out with the place (a fade under reduced motion).
+        AnimatedVisibility(visible = isCurrentLocation, enter = dimaPopIn(reducedMotion), exit = dimaPopOut(reducedMotion)) {
             Surface(
                 shape = DimaShapes.Badge,
                 color = MaterialTheme.colorScheme.primary,
@@ -282,9 +340,6 @@ private fun ShuttleOriginHeader(origin: String, isCurrentLocation: Boolean, modi
         }
     }
 }
-
-/** A newly selected day's cards fade in; the previous day's cards leave at once so two days never overlap. */
-private val dayFadeIn = DimaMotion.effectsSlow<Float>()
 
 /**
  * One origin-to-destination card of the campus shuttle list (a keyed lazy item, D-094).
@@ -302,6 +357,7 @@ private fun ShuttleRouteCard(
     isCurrentLocation: Boolean,
     now: ZonedDateTime,
     guidanceEngine: GuidanceEngine,
+    resetSignal: Int = 0,
 ) {
     val nowTime = now.toLocalTime()
     val destination = destinationZone?.let(DisplayVocabulary::originName)
@@ -338,146 +394,92 @@ private fun ShuttleRouteCard(
     }
     val upcomingTimes = upcomingCountdowns.map { it.departure.time }
 
+    val nextTime = upcomingTimes.getOrNull(0)
+    val secondTime = upcomingTimes.getOrNull(1)
+    val chips = annotatedDepartures.map { item ->
+        val time = item.departure.time
+        val isPast = isToday && time.isBefore(nowTime)
+        val isNext = isToday && nextTime == time
+        val isSecond = isToday && secondTime == time
+        val markers = serviceMarkers(item.isFirst, item.isLast) + listOfNotNull(
+            when {
+                item.isBoardingStopTransition -> "운동장 전환"
+                item.isStadiumStop -> "운동장"
+                else -> null
+            },
+        )
+        val look = nextDepartureLook(
+            isFirst = item.isFirst, isLast = item.isLast, isPast = isPast, isNext = isNext, isSecond = isSecond,
+            clock = time.format(TIME),
+            minutesLeft = upcomingCountdowns.firstOrNull { it.departure.time == time }?.remainingMinutes,
+            nextMinutesLeft = upcomingCountdowns.firstOrNull()?.remainingMinutes,
+            nextIsFirst = annotatedDepartures.firstOrNull { it.departure.time == nextTime }?.isFirst == true,
+        )
+        TimetableChipSpec(
+            key = time.toSecondOfDay(),
+            clock = time.format(TIME),
+            markers = markers,
+            description = timetableChipDescription(time.format(TIME), isPast, isNext, markers, look.countdown.takeUnless { look.farAhead }),
+            tone = look.tone,
+            isPast = isPast,
+            countdown = look.countdown,
+            farAhead = look.farAhead,
+        )
+    }
+    // D-124: once today's last departure has left, the strip ends with tomorrow's first one for this route.
+    val endedNote = if (isToday && chips.isNotEmpty() && chips.all { it.isPast }) {
+        val tomorrow = now.toLocalDate().plusDays(1)
+        when {
+            guidanceEngine.campusShuttleSuspensionOn(tomorrow) != null -> "내일은 운행하지 않아요"
+            else -> shuttleDepartures
+                .filter { it.serviceDay == tomorrow.dayOfWeek && it.originZone == originZone && it.destinationZone == destinationZone }
+                .minOfOrNull { it.time }
+                ?.let { "내일 첫차 ${it.format(TIME)}" }
+                ?: ""
+        }
+    } else null
+
+    // D-029/D-095: 현재 위치 출발 카드는 연한 컨테이너 + primary 테두리로 강조한다
+    val emphasis = rememberPlaceEmphasis(isCurrentLocation)
     ElevatedCard(
         modifier = Modifier
             .fillMaxWidth()
-            // D-029/D-095: 현재 위치 출발 카드는 연한 컨테이너 + primary 테두리로 강조한다
-            .then(if (isCurrentLocation) Modifier.border(1.5.dp, MaterialTheme.colorScheme.primary, DimaShapes.Card) else Modifier),
+            .border(1.5.dp, emphasis.border, DimaShapes.Card),
         shape = DimaShapes.Card,
-        colors = CardDefaults.elevatedCardColors(
-            containerColor = if (isCurrentLocation) DimaTheme.colors.cardInner else DimaTheme.colors.card,
-        ),
+        colors = CardDefaults.elevatedCardColors(containerColor = emphasis.container),
     ) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Column(Modifier.padding(vertical = 16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Row(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
                     text = destination?.let { "${it}행" } ?: "기타 목적지",
-                    style = MaterialTheme.typography.titleMedium,
-                    color = if (isCurrentLocation) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+                    style = MaterialTheme.typography.titleMediumEmphasized,
+                    color = emphasis.title,
                 )
                 if (sortedTimes.isNotEmpty()) {
-                    Surface(shape = DimaShapes.Badge, color = DimaTheme.colors.cardInner) {
-                        Text(
-                            text = "첫차 ${sortedTimes.first().format(TIME)} · 막차 ${sortedTimes.last().format(TIME)}",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                        )
-                    }
+                    // D-124: the count and the day's span; first and last are named in the strip itself.
+                    Text(
+                        text = "${sortedTimes.size}회 · ${sortedTimes.first().format(TIME)}–${sortedTimes.last().format(TIME)}",
+                        style = MaterialTheme.typography.labelMedium.copy(fontFeatureSettings = TABULAR_FIGURES),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.testTag("shuttle_route_span"),
+                    )
                 }
             }
-
-            // 실시간 다가오는 셔틀 2개 남은 시간 뱃지 (오늘 요일일 때만)
-            if (isToday) {
-                if (upcomingTimes.isNotEmpty()) {
-                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Text(
-                            text = "출발 시각",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.primary,
-                        )
-                        // 4402와 같은 캡슐: 남은 시간·표식 한 줄, 그 아래 출발 시각 한 줄 (D-094(5))
-                        DepartureCapsuleRow(spacing = 8.dp) {
-                            upcomingCountdowns.forEachIndexed { index, countdown ->
-                                val time = countdown.departure.time
-                                val serviceDeparture = annotatedDepartures.firstOrNull { it.departure.time == time }
-                                val isLastService = serviceDeparture?.isLast == true
-                                val boardingStopLabel = when {
-                                    serviceDeparture?.isBoardingStopTransition == true -> "운동장 전환"
-                                    serviceDeparture?.isStadiumStop == true -> "운동장"
-                                    else -> null
-                                }
-                                val (container, content) = shuttleCapsuleColors(isNearest = index == 0, isLastService = isLastService)
-                                DepartureCapsule(
-                                    label = departureCountdownLabel(
-                                        countdown.remainingMinutes,
-                                        serviceMarkers(serviceDeparture?.isFirst == true, isLastService) + listOfNotNull(boardingStopLabel),
-                                    ),
-                                    clock = time.format(TIME),
-                                    containerColor = container,
-                                    contentColor = content,
-                                    labelStyle = MaterialTheme.typography.titleSmallEmphasized,
-                                    imminent = isImminentDeparture(countdown.remainingMinutes, isNearest = index == 0),
-                                    modifier = Modifier.testTag("next_departure_$index"),
-                                )
-                            }
-                        }
-                    }
-                } else {
-                    Surface(
-                        shape = DimaShapes.Tile,
-                        color = DimaTheme.colors.cardInner,
-                        modifier = Modifier.fillMaxWidth(),
-                    ) {
-                        Text(
-                            text = "오늘 운행이 끝났어요",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                        )
-                    }
-                }
-            }
-
-            // 전체 시간표 칩 (지나간 시간은 딤 처리)
-            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text(
-                    text = "전체 시간표 · ${sortedTimes.size}회",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                FlowTimeChips(
-                    departures = annotatedDepartures,
-                    isToday = isToday,
-                    nowTime = nowTime,
-                    upcomingTimes = upcomingTimes,
-                    contextKey = "$activeDay|$originZone|$destinationZone|${sortedTimes.hashCode()}",
-                )
-            }
+            // D-124: one strip carries the next two departures (large, with their countdown) and the whole day.
+            DepartureStrip(
+                chips = chips,
+                stateKey = "$activeDay|$originZone|$destinationZone|${sortedTimes.hashCode()}",
+                resetSignal = resetSignal,
+                onCardInner = isCurrentLocation,
+                endedNote = endedNote,
+                largeCellTag = { "next_departure_$it" },
+            )
         }
     }
-}
-
-@Composable
-private fun FlowTimeChips(
-    departures: List<AnnotatedServiceDeparture>,
-    isToday: Boolean,
-    nowTime: LocalTime,
-    upcomingTimes: List<LocalTime>,
-    contextKey: String,
-) {
-    val times = departures.map { it.departure.time }
-    val initialIndex = when {
-        times.isEmpty() || !isToday -> 0
-        else -> times.indexOfFirst { !it.isBefore(nowTime) }.takeIf { it >= 0 } ?: times.lastIndex
-    }
-    val chips = departures.map { item ->
-        val time = item.departure.time
-        val isPast = isToday && time.isBefore(nowTime)
-        val isNext = isToday && upcomingTimes.getOrNull(0) == time
-        val isSecond = isToday && upcomingTimes.getOrNull(1) == time
-        val boardingStopLabel = when {
-            item.isBoardingStopTransition -> "운동장 전환"
-            item.isStadiumStop -> "운동장"
-            else -> null
-        }
-        TimetableChipSpec(
-            key = time.toSecondOfDay(),
-            text = item.displayText,
-            description = timetableChipDescription(
-                clock = time.format(TIME),
-                isPast = isPast,
-                isNext = isNext,
-                markers = serviceMarkers(item.isFirst, item.isLast) + listOfNotNull(boardingStopLabel),
-            ),
-            tone = timetableChipTone(item.isFirst, item.isLast, isPast, isNext, isSecond),
-        )
-    }
-    TimetableChipRow(chips = chips, initialIndex = initialIndex, stateKey = contextKey)
 }
 
 private val TIME = DateTimeFormatter.ofPattern("HH:mm")

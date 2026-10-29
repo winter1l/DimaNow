@@ -12,6 +12,7 @@ import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -25,7 +26,10 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.DownloadDone
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -45,11 +49,15 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.fromHtml
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import com.example.dimanow.ui.DimaLayout
+import com.example.dimanow.ui.motion.LocalReducedMotion
+import com.example.dimanow.ui.motion.dimaIconSwap
 import java.io.File
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -65,13 +73,23 @@ internal fun LmsDetailScreen(
     onBack: () -> Unit,
     onMessage: (String) -> Unit,
     modifier: Modifier = Modifier,
+    /** D-131 (Q-025): shown in the detail pane beside the list on a wide window; its bar closes the pane with an X. */
+    inPane: Boolean = false,
+    /**
+     * D-137: this detail is on its way out of a page or pane transition and still on screen for a moment; a tap on
+     * an attachment then starts nothing.
+     */
+    leaving: Boolean = false,
 ) {
     val detail = presented.detail
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    val reduced = LocalReducedMotion.current
     var pendingDocument by remember { mutableStateOf<LmsPendingDocument?>(null) }
     // 어떤 첨부가 내려받는 중인지 추적해, 한 항목을 눌러도 나머지가 함께 비활성화되지 않게 한다 (D-056)
     var downloadingAttachment by remember { mutableStateOf<String?>(null) }
+    // D-137: the files saved during this visit keep a done mark on their button.
+    var savedAttachments by remember { mutableStateOf(setOf<String>()) }
     var activeDownloadCache by remember { mutableStateOf<File?>(null) }
     val activeDownloadCacheOnDispose by rememberUpdatedState(activeDownloadCache)
     DisposableEffect(Unit) {
@@ -102,7 +120,10 @@ internal fun LmsDetailScreen(
                 ).write(verified.cache, uri, verified.expectedBytes)
             }
             when (result) {
-                is LmsDocumentWriteResult.Success -> onMessage("첨부파일을 저장했어요")
+                is LmsDocumentWriteResult.Success -> {
+                    downloadingAttachment?.let { savedAttachments = savedAttachments + it }
+                    onMessage("첨부파일을 저장했어요")
+                }
                 is LmsDocumentWriteResult.Failure -> onMessage(LmsUserMessages.ATTACHMENT_SAVE_FAILED)
             }
             activeDownloadCache = null
@@ -114,6 +135,8 @@ internal fun LmsDetailScreen(
         onBack = onBack,
         modifier = modifier,
         titleMaxLines = 2,
+        backDescription = if (inPane) "내용 닫기" else "뒤로",
+        navigationIcon = if (inPane) Icons.Default.Close else Icons.AutoMirrored.Filled.ArrowBack,
     ) {
         if (presented.attachmentsChanged) {
             Surface(
@@ -190,9 +213,14 @@ internal fun LmsDetailScreen(
                     Text("첨부파일", style = MaterialTheme.typography.titleSmall)
                     detail.attachments.forEach { attachment ->
                         val attachmentKey = "${attachment.id}|${attachment.fileName}"
-                        OutlinedButton(shapes = ButtonDefaults.shapes(), 
+                        val attachmentState = when {
+                            downloadingAttachment == attachmentKey -> LmsAttachmentState.DOWNLOADING
+                            attachmentKey in savedAttachments -> LmsAttachmentState.SAVED
+                            else -> LmsAttachmentState.IDLE
+                        }
+                        OutlinedButton(shapes = ButtonDefaults.shapes(),
                             onClick = {
-                                if (downloadingAttachment != null) return@OutlinedButton
+                                if (downloadingAttachment != null || leaving) return@OutlinedButton
                                 downloadingAttachment = attachmentKey
                                 scope.launch {
                                     val cache = runCatching {
@@ -205,13 +233,14 @@ internal fun LmsDetailScreen(
                                     activeDownloadCache = cache
                                     var result = source.downloadAttachment(attachment, cache)
                                     if (result == LmsAttachmentDownloadResult.SessionExpired) {
-                                        sessionController.transition(LmsSessionState.EXPIRED)
+                                        autoLoginCoordinator.markExpired()
                                         if (autoLoginCoordinator.ensureActive(force = true) == LmsSessionState.ACTIVE) {
                                             result = source.downloadAttachment(attachment, cache)
                                         }
                                     }
                                     when (result) {
                                         is LmsAttachmentDownloadResult.Success -> {
+                                            autoLoginCoordinator.noteActivity()
                                             if (result.bytesWritten <= 0L || cache.length() != result.bytesWritten) {
                                                 cache.delete()
                                                 activeDownloadCache = null
@@ -226,7 +255,13 @@ internal fun LmsDetailScreen(
                                             cache.delete()
                                             activeDownloadCache = null
                                             downloadingAttachment = null
-                                            onMessage(LmsUserMessages.SIGN_IN_REQUIRED)
+                                            onMessage(
+                                                if (autoLoginCoordinator.signedInElsewhere.value) {
+                                                    LmsUserMessages.SIGNED_IN_ELSEWHERE_HINT
+                                                } else {
+                                                    LmsUserMessages.SIGN_IN_REQUIRED
+                                                },
+                                            )
                                         }
                                         is LmsAttachmentDownloadResult.Failure -> {
                                             cache.delete()
@@ -238,14 +273,30 @@ internal fun LmsDetailScreen(
                                 }
                             },
                             enabled = downloadingAttachment == null,
-                            modifier = Modifier.fillMaxWidth(),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .semantics { if (attachmentState == LmsAttachmentState.SAVED) stateDescription = "저장함" },
                         ) {
-                            if (downloadingAttachment == attachmentKey) {
-                                CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp, strokeCap = StrokeCap.Round)
-                            } else {
-                                Icon(Icons.Default.Download, null)
+                            // D-137: download, progress and the done mark take turns in one fixed slot, so the file
+                            // name no longer moves when a download starts or ends; a failed save shows download again.
+                            Box(Modifier.size(ButtonDefaults.IconSize), contentAlignment = Alignment.Center) {
+                                AnimatedContent(
+                                    targetState = attachmentState,
+                                    transitionSpec = { dimaIconSwap(reduced) },
+                                    label = "lms_attachment_state",
+                                ) { state ->
+                                    when (state) {
+                                        LmsAttachmentState.IDLE -> Icon(Icons.Default.Download, null, Modifier.size(ButtonDefaults.IconSize))
+                                        LmsAttachmentState.DOWNLOADING -> CircularProgressIndicator(
+                                            Modifier.size(ButtonDefaults.IconSize),
+                                            strokeWidth = 2.dp,
+                                            strokeCap = StrokeCap.Round,
+                                        )
+                                        LmsAttachmentState.SAVED -> Icon(Icons.Default.DownloadDone, null, Modifier.size(ButtonDefaults.IconSize))
+                                    }
+                                }
                             }
-                            Spacer(Modifier.size(8.dp))
+                            Spacer(Modifier.size(ButtonDefaults.IconSpacing))
                             Text(attachment.fileName, modifier = Modifier.weight(1f))
                         }
                     }
@@ -254,6 +305,9 @@ internal fun LmsDetailScreen(
         }
     }
 }
+
+/** What an attachment's button shows in its icon slot (D-137). */
+private enum class LmsAttachmentState { IDLE, DOWNLOADING, SAVED }
 
 @Composable
 private fun LmsDetailMetadataRow(label: String, value: String) {

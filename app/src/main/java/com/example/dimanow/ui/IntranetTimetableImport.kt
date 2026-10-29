@@ -4,14 +4,10 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -89,10 +85,10 @@ internal class IntranetTimetableImport(
         val chosen = courses.mapIndexed { index, course -> course.toCourse(zones.getOrElse(index) { course.roomZone ?: CampusZoneId.MAIN }) }
         preview = null
         scope.launch {
-            // Leaving the page mid-way must not leave the old timetable deleted and the new one half saved.
+            // Leaving the page mid-way must not leave the old timetable deleted and the new one half saved. D-137: one
+            // replacement, so the timetable list changes once instead of emptying and refilling course by course.
             kotlinx.coroutines.withContext(kotlinx.coroutines.NonCancellable) {
-                existing.forEach { repository.deleteCourse(it.id) }
-                chosen.forEach { repository.saveCourse(it) }
+                repository.replaceCourses(remove = existing.map { it.id }, add = chosen)
             }
             onMessage("인트라넷에서 수업 ${chosen.size}개를 가져왔어요")
         }
@@ -138,16 +134,14 @@ internal fun IntranetTimetablePreviewDialog(state: IntranetTimetableImport, exis
                         if (details.isNotEmpty()) {
                             Text(details, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
-                        // The building decides the shuttle side; only a room the app cannot place asks for it.
-                        if (known == null) Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                            listOf(CampusZoneId.MAIN, CampusZoneId.YEIN).forEach { zone ->
-                                FilterChip(
-                                    selected = state.zones.getOrNull(index) == zone,
-                                    onClick = { if (index < state.zones.size) state.zones[index] = zone },
-                                    label = { Text(DisplayVocabulary.originName(zone)) },
-                                    modifier = Modifier.heightIn(min = 48.dp),
-                                )
-                            }
+                        // The building decides the shuttle side; only a room the app cannot place asks for it. D-137: one
+                        // of two buildings is an exclusive choice, so it is the connected button group (D-103).
+                        if (known == null) {
+                            DimaConnectedChoice(
+                                options = listOf(CampusZoneId.MAIN, CampusZoneId.YEIN).map { it to DisplayVocabulary.originName(it) },
+                                selected = state.zones.getOrNull(index) ?: CampusZoneId.MAIN,
+                                onSelect = { zone -> if (index < state.zones.size) state.zones[index] = zone },
+                            )
                         }
                     }
                 }

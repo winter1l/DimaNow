@@ -48,20 +48,41 @@ class ExpressiveMotionTest {
     }
 
     @Test
+    fun `a navigation-bar change only fades, with motion allowed or not`() {
+        // D-138: M3's top-level pattern is a quick fade; D-137's growth from 92% was too much.
+        for (reduced in listOf(false, true)) {
+            val topLevel = dimaPageTransform(PageMotion.TOP_LEVEL, slidePx = 84, reducedMotion = reduced)
+            assertEquals(androidx.compose.animation.fadeIn(com.example.dimanow.ui.motion.DimaMotion.effectsDefault()), topLevel.targetContentEnter)
+            assertEquals(androidx.compose.animation.fadeOut(com.example.dimanow.ui.motion.DimaMotion.effectsFast()), topLevel.initialContentExit)
+        }
+    }
+
+    @Test
+    fun `a screen's own tabs slide both ways and only fade under reduced motion`() {
+        val forward = com.example.dimanow.ui.motion.dimaLateral(forward = true, reducedMotion = false)
+        val backward = com.example.dimanow.ui.motion.dimaLateral(forward = false, reducedMotion = false)
+        assertNotEquals(forward.targetContentEnter, backward.targetContentEnter)
+        assertNotEquals("D-138: the pages slide, they do not only fade", dimaFadeThrough().targetContentEnter, forward.targetContentEnter)
+        assertEquals(null, forward.sizeTransform)
+        val reduced = com.example.dimanow.ui.motion.dimaLateral(forward = true, reducedMotion = true)
+        assertEquals(dimaFadeThrough().targetContentEnter, reduced.targetContentEnter)
+        assertEquals(dimaFadeThrough().initialContentExit, reduced.initialContentExit)
+    }
+
+    @Test
+    fun `small elements only fade under reduced motion`() {
+        assertEquals(androidx.compose.animation.fadeIn(com.example.dimanow.ui.motion.DimaMotion.effectsFast()), com.example.dimanow.ui.motion.dimaPopIn(reduced = true))
+        assertNotEquals(com.example.dimanow.ui.motion.dimaPopIn(reduced = true), com.example.dimanow.ui.motion.dimaPopIn(reduced = false))
+        assertEquals(androidx.compose.animation.fadeOut(com.example.dimanow.ui.motion.DimaMotion.effectsFast()), com.example.dimanow.ui.motion.dimaPopOut(reduced = true))
+    }
+
+    @Test
     fun `the predictive back preview shrinks to nine tenths and no further`() {
         assertEquals(1f, predictiveBackScale(0f), 0f)
         assertEquals(0.95f, predictiveBackScale(0.5f), 1e-6f)
         assertEquals(PREDICTIVE_BACK_MIN_SCALE, predictiveBackScale(1f), 1e-6f)
         assertEquals(PREDICTIVE_BACK_MIN_SCALE, predictiveBackScale(1.4f), 1e-6f)
         assertEquals(1f, predictiveBackScale(-0.2f), 0f)
-    }
-
-    @Test
-    fun `only the nearest departure within five minutes is imminent`() {
-        assertTrue(isImminentDeparture(5, isNearest = true))
-        assertTrue(isImminentDeparture(0, isNearest = true))
-        assertFalse(isImminentDeparture(6, isNearest = true))
-        assertFalse(isImminentDeparture(3, isNearest = false))
     }
 
     @Test

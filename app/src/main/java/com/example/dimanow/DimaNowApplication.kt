@@ -119,14 +119,21 @@ class DimaNowApplication : Application() {
     }
     val lmsCredentialStore: AndroidLmsCredentialStore by lazy { AndroidLmsCredentialStore(this) }
     /** D-107: one intranet/DIMA C read at a time, served by the WebView host in the app shell. */
-    val schoolServiceBridge: com.example.dimanow.school.SchoolServiceBridge by lazy { com.example.dimanow.school.SchoolServiceBridge() }
+    val schoolServiceBridge: com.example.dimanow.school.SchoolServiceBridge by lazy {
+        com.example.dimanow.school.SchoolServiceBridge(lmsAutoLoginCoordinator)
+    }
     val lmsSessionController: MutableLmsSessionController by lazy { MutableLmsSessionController() }
     val lmsLoginBridge: LmsLoginBridge by lazy { LmsLoginBridge() }
     val lmsRenderedPageBridge: com.example.dimanow.lms.LmsRenderedPageBridge by lazy {
         com.example.dimanow.lms.LmsRenderedPageBridge()
     }
     val lmsAutoLoginCoordinator: LmsAutoLoginCoordinator by lazy {
-        LmsAutoLoginCoordinator(lmsCredentialStore, lmsSessionController, lmsLoginBridge)
+        LmsAutoLoginCoordinator(
+            lmsCredentialStore,
+            lmsSessionController,
+            lmsLoginBridge,
+            sessionRecord = com.example.dimanow.lms.AndroidLmsSessionRecord(this),
+        )
     }
     val lmsSource: RoomLmsSource by lazy {
         RoomLmsSource(
@@ -163,8 +170,10 @@ class DimaNowApplication : Application() {
     override fun onCreate() {
         super.onCreate()
         com.example.dimanow.calendar.ServiceCalendarStore.loadCached(this)
-        // D-108: the last 상벌점 read stays on this device (no-backup storage) until refreshed or deleted.
-        com.example.dimanow.school.SchoolReadCache.persistDormPointsIn(java.io.File(noBackupFilesDir, "school/dorm-points.json"))
+        // D-108, D-136: the last 상벌점 and 도서관 reads stay on this device (no-backup storage) until refreshed or
+        // deleted, and the library's public hours beside them, so their screens show them at once.
+        com.example.dimanow.school.SchoolReadCache.persistIn(java.io.File(noBackupFilesDir, "school"))
+        com.example.dimanow.school.LibraryPublicSource.persistIn(java.io.File(noBackupFilesDir, "school/library-public.json"))
         // D-112: 점호 announcements read from KakaoTalk, kept two weeks on this device.
         com.example.dimanow.dorm.RollCallStore.attach(this)
         appUpdateCoordinator.initialize()

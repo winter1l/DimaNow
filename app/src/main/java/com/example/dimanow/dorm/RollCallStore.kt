@@ -9,6 +9,7 @@ import java.io.File
 import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalTime
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -42,6 +43,10 @@ object RollCallStore {
 
     private val mutableNotices = MutableStateFlow<List<RollCallNotice>>(emptyList())
     val notices: StateFlow<List<RollCallNotice>> = mutableNotices.asStateFlow()
+    private val loaded = CompletableDeferred<Unit>()
+
+    /** Waits for the saved notices after [attach], for code that runs in a cold process (the outing reminder). */
+    suspend fun awaitLoaded() = loaded.await()
 
     /** Called from the application and the listener; loads the saved notices once. */
     fun attach(context: Context) {
@@ -51,6 +56,7 @@ object RollCallStore {
         io.launch {
             val saved = runCatching { decodeRollCallNotices(target.readText()) }.getOrDefault(emptyList())
             mutableNotices.update { current -> (saved + current).distinct() }
+            loaded.complete(Unit)
         }
     }
 

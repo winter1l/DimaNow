@@ -26,6 +26,21 @@ internal fun minutesUntil(now: ZonedDateTime, startsAt: ZonedDateTime): Long =
     (Duration.between(now, startsAt).toMillis().coerceAtLeast(0) + 59_999L) / 60_000L
 
 /**
+ * The Home hero chip before today's class (D-127): always the time left, since the line beside it already gives
+ * the start and end clocks. `시작까지 45분`, `시작까지 2시간 5분`, `시작까지 3시간`.
+ */
+internal fun classCountdownLabel(now: ZonedDateTime, startsAt: ZonedDateTime): String {
+    val minutes = minutesUntil(now, startsAt)
+    val hours = minutes / 60
+    val rest = minutes % 60
+    return when {
+        hours == 0L -> "시작까지 ${minutes}분"
+        rest == 0L -> "시작까지 ${hours}시간"
+        else -> "시작까지 ${hours}시간 ${rest}분"
+    }
+}
+
+/**
  * Label for a class that has not started yet (D-094(14), D-069 style).
  *
  * Inside [CLASS_COUNTDOWN_WINDOW_MINUTES] it counts down (`시작까지 12분`); further away it names the

@@ -34,9 +34,13 @@ Purpose: durable project context that survives session and context changes.
 | `shuttle-summary-20260921.md` | D-087 immediate-vehicle notification simplification and validation/device limits | Append dated evidence |
 | `device-update-20260921.md` | Wireless replacement install, PC Tailscale startup preference, active-use screen policy and cellular ADB limits | Append dated evidence |
 | `ui-review-20260930.md` | Read-only M3 Expressive UI/UX review of the D-093 baseline (findings implemented by D-094) | Append dated evidence |
+| `login-review-20261026.md` | Sign-in review after the 3045 test: every place the app signs in (LMS, school sites), findings and the proposed fix plan | Append dated evidence |
+| `ui-review-20261026.md` | Read-only UI/UX review after D-133 (emulator light/dark, font 1.3): snackbar over the FAB, Korean mid-word line breaks, far map distances, Home meal venue, sign-in fold, long school-read waits | Append dated evidence |
 | `launch-readiness-20261017.md` | Read-only public-launch readiness review: blockers, decisions needed, external requirements and proposed order | Append dated evidence |
 | `ux-guide-pass-20261022.md` | D-102 UX pass from Apple HIG, Material 3 and the Toss guide: sources, changes, kept decisions and emulator evidence | Append dated evidence |
 | `m3e-review-20261022.md` | Read-only M3 Expressive conformance review of colors, shape, type, motion and components after D-103 | Append dated evidence |
+| `feature-plan-20261025.md` | D-125 feature directions: library, 전자출결, grades and 4402 checks, Q-032 recheck and the phased plan | Append dated evidence |
+| `motion-pass-20261028.md` | D-137 motion pass: audit method, rules R1–R13, what each screen group got, review findings and device checks still to make | Append dated evidence |
 | `checkpoints/` | Append-only archive of superseded checkpoints | Add a timestamped copy before replacing `CHECKPOINT.md` |
 
 ## Operating principles

@@ -31,25 +31,29 @@ private fun PreviewSurface(content: @Composable () -> Unit) {
 private fun DeparturePreview() = PreviewSurface {
     DepartureCapsuleRow {
         val (nearest, onNearest) = shuttleCapsuleColors(isNearest = true, isLastService = false)
-        DepartureCapsule(label = departureCountdownLabel(8, emptyList()), clock = "21:30", containerColor = nearest, contentColor = onNearest)
+        DepartureCapsule(countdown = "8분 후", clock = "21:30", markers = emptyList(), containerColor = nearest, contentColor = onNearest, isNext = true)
         val (last, onLast) = shuttleCapsuleColors(isNearest = false, isLastService = true)
-        DepartureCapsule(label = departureCountdownLabel(28, serviceMarkers(isFirst = false, isLast = true)), clock = "21:50", containerColor = last, contentColor = onLast)
+        DepartureCapsule(countdown = "28분 후", clock = "21:50", markers = listOf("막차"), containerColor = last, contentColor = onLast)
     }
     val clocks = listOf("20:50", "21:10", "21:30", "21:50")
-    TimetableChipRow(
+    DepartureStrip(
         chips = clocks.mapIndexed { index, clock ->
             val isLast = index == clocks.lastIndex
-            val isPast = index < 2
-            val isNext = index == 2
+            val isPast = index < 1
+            val isNext = index == 1
+            val isSecond = index == 2
             val markers = serviceMarkers(isFirst = index == 0, isLast = isLast)
+            val countdown = when { isNext -> "8분 후"; isSecond -> "28분 후"; else -> null }
             TimetableChipSpec(
                 key = index,
-                text = clock,
-                description = timetableChipDescription(clock, isPast, isNext, markers),
-                tone = timetableChipTone(isFirst = index == 0, isLast = isLast, isPast = isPast, isNext = isNext, isSecond = isLast),
+                clock = clock,
+                markers = markers,
+                description = timetableChipDescription(clock, isPast, isNext, markers, countdown),
+                tone = timetableChipTone(isFirst = index == 0, isLast = isLast, isPast = isPast, isNext = isNext, isSecond = isSecond),
+                isPast = isPast,
+                countdown = countdown,
             )
         },
-        initialIndex = 2,
         stateKey = Unit,
     )
 }

@@ -11,6 +11,8 @@ import android.os.Build
 import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.heightIn
@@ -36,6 +38,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
@@ -48,6 +51,10 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import com.example.dimanow.live.LiveSettingsDestination
 import com.example.dimanow.live.LiveSurfaceController
+import com.example.dimanow.ui.motion.LocalReducedMotion
+import com.example.dimanow.ui.motion.dimaCollapseOut
+import com.example.dimanow.ui.motion.dimaExpandIn
+import com.example.dimanow.ui.motion.dimaIconSwap
 
 internal data class GuidanceSetupState(
     val notifications: Boolean = false,
@@ -214,6 +221,9 @@ internal fun GuidanceSetupChecklist(
  * One segmented list row per setup item (D-104): icon, what it does in one sentence, and either a check mark
  * or the action that turns it on. The button names what happens (D-102): `허용하기` asks Android,
  * `설정 열기` opens a system page.
+ *
+ * D-137: with [onlyIncomplete] (first run) every applicable row stays in the list and a row that has just been turned on
+ * folds away instead of vanishing; the group's corners follow the rows still shown.
  */
 @Composable
 internal fun GuidanceSetupContent(
@@ -249,9 +259,25 @@ internal fun GuidanceSetupContent(
                 ),
             )
         }
-    }.filterNot { onlyIncomplete && it.completed }
+    }
+    val shownCount = items.count { !(onlyIncomplete && it.completed) }
     DimaSegmentedList(modifier) {
-        items.forEachIndexed { index, item -> SetupRow(item, index, items.size, onAction) }
+        var shownBefore = 0
+        items.forEach { item ->
+            val shown = !(onlyIncomplete && item.completed)
+            // A row folding away keeps its place among the rows that stay, so its corners hold while it leaves.
+            val index = shownBefore
+            val count = if (shown) shownCount else shownCount + 1
+            if (shown) shownBefore++
+            AnimatedVisibility(
+                visible = shown,
+                enter = dimaExpandIn(),
+                exit = dimaCollapseOut(),
+                label = "guidance_setup_row",
+            ) {
+                SetupRow(item, index, count, onAction)
+            }
+        }
     }
 }
 
@@ -271,25 +297,35 @@ private fun SetupRow(item: SetupItem, index: Int, count: Int, onAction: (Guidanc
         GuidanceSetupAction.NOTIFICATIONS, GuidanceSetupAction.LOCATION -> "허용하기"
         else -> "설정 열기"
     }
+    val reduced = LocalReducedMotion.current
     SegmentedListItem(
         shapes = ListItemDefaults.segmentedShapes(index = index, count = count),
         leadingContent = { DimaIconBadge(item.icon) },
         trailingContent = {
-            if (item.completed) {
-                Icon(Icons.Default.CheckCircle, contentDescription = "켜져 있음", tint = MaterialTheme.colorScheme.primary)
-            } else {
-                TextButton(
-                    shapes = ButtonDefaults.shapes(),
-                    onClick = { onAction(item.action) },
-                    enabled = item.enabled,
-                    modifier = Modifier.heightIn(min = 48.dp).testTag("guidance_setup_${item.action.name}")
-                        .semantics { contentDescription = "${item.title} $actionLabel" },
-                ) { Text(actionLabel) }
+            // D-137: back from Android's settings, the button gives way to a check that pops in, and the slot narrows
+            // on the fast spatial spring (a fade under reduced motion). Shared by 설정 and the first run.
+            AnimatedContent(
+                targetState = item.completed,
+                transitionSpec = { dimaIconSwap(reduced) },
+                contentAlignment = Alignment.CenterEnd,
+                label = "guidance_setup_state",
+            ) { done ->
+                if (done) {
+                    Icon(Icons.Default.CheckCircle, contentDescription = "켜져 있음", tint = MaterialTheme.colorScheme.primary)
+                } else {
+                    TextButton(
+                        shapes = ButtonDefaults.shapes(),
+                        onClick = { onAction(item.action) },
+                        enabled = item.enabled,
+                        modifier = Modifier.heightIn(min = 48.dp).testTag("guidance_setup_${item.action.name}")
+                            .semantics { contentDescription = "${item.title} $actionLabel" },
+                    ) { Text(actionLabel) }
+                }
             }
         },
         supportingContent = {
             Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                Text(item.description)
+                KoreanText(item.description)
                 item.status?.let { Text(it, style = MaterialTheme.typography.labelMedium) }
             }
         },

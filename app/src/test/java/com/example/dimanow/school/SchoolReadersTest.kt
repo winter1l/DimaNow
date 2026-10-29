@@ -39,6 +39,38 @@ class SchoolReadersTest {
     }
 
     @Test
+    fun `a period row that does not line up with the days is refused rather than shifted`() {
+        // As an unexpanded `rowspan` would read: 2교시 lacks Monday's cell, so 화요일's course would land on Monday.
+        val json = """
+            {"days":["월","화","수"],
+             "periods":[
+               {"period":"1교시","cells":[["영상기초","덕성관101","김교수"],[],[]]},
+               {"period":"2교시","cells":[["음향실습","기예관202","이교수"],[]]}
+             ]}
+        """.trimIndent()
+        assertTrue(runCatching { parseIntranetTimetable(json) }.isFailure)
+        // A row without cells at all is refused too; rows that are not periods (점심) are still skipped.
+        assertTrue(runCatching { parseIntranetTimetable("""{"days":["월"],"periods":[{"period":"1교시"}]}""") }.isFailure)
+        assertEquals(1, parseIntranetTimetable("""{"days":["월"],"periods":[{"period":"점심","cells":[]},{"period":"1교시","cells":[["연기","엔터관301","박교수"]]}]}""").size)
+    }
+
+    @Test
+    fun `a spanning cell expanded by the page script merges into one block`() {
+        // The script copies a `rowspan=3` cell into each period it covers.
+        val course = """["영상기초","덕성관101","김교수"]"""
+        val json = """
+            {"days":["월","화"],
+             "periods":[
+               {"period":"1교시","cells":[$course,[]]},
+               {"period":"2교시","cells":[$course,["음향실습","기예관202","이교수"]]},
+               {"period":"3교시","cells":[$course,[]]}
+             ]}
+        """.trimIndent()
+        val courses = parseIntranetTimetable(json)
+        assertEquals(listOf(DayOfWeek.MONDAY to (1 to 3), DayOfWeek.TUESDAY to (2 to 2)), courses.map { it.weekday to (it.firstPeriod to it.lastPeriod) })
+    }
+
+    @Test
     fun `a room's building decides the shuttle side`() {
         listOf("덕성관101", "기예관201", "덕성관305-1", "지성관 301", "대학본부201", "체육관").forEach {
             assertEquals(it, CampusZoneId.MAIN, campusZoneForRoom(it))
@@ -135,6 +167,17 @@ class SchoolReadersTest {
         assertTrue(SchoolUrlPolicy.isPortalCredentialPage("https://portal.dima.ac.kr/?r=https://udimac.dima.ac.kr/sso/index.jsp"))
         assertTrue(SchoolUrlPolicy.isSessionConflict("https://portal.dima.ac.kr/sso/error.aspx?errorCode=3045"))
         assertEquals("sso.dima.ac.kr/sso/pmi-sso.jsp", SchoolUrlPolicy.describe("http://sso.dima.ac.kr:8080/sso/pmi-sso.jsp?ticket=secret"))
+    }
+
+    @Test
+    fun `a sign-in elsewhere stops the app's own reads and makes a started read ask first`() {
+        // D-135: the portal signs the other device out as soon as the account is sent.
+        assertEquals(SchoolSignInStep.SUBMIT, schoolSignInStep(hasSavedAccount = true, signedInElsewhere = false, approved = false, automatic = true))
+        assertEquals(SchoolSignInStep.STOP, schoolSignInStep(hasSavedAccount = true, signedInElsewhere = true, approved = false, automatic = true))
+        assertEquals(SchoolSignInStep.CONFIRM, schoolSignInStep(hasSavedAccount = true, signedInElsewhere = true, approved = false, automatic = false))
+        assertEquals(SchoolSignInStep.SUBMIT, schoolSignInStep(hasSavedAccount = true, signedInElsewhere = true, approved = true, automatic = false))
+        // Typing the account on the form is the student's own sign-in.
+        assertEquals(SchoolSignInStep.ASK_ACCOUNT, schoolSignInStep(hasSavedAccount = false, signedInElsewhere = true, approved = false, automatic = true))
     }
 
     @Test

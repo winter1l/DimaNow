@@ -147,6 +147,60 @@ class AppPreferences(private val context: Context) {
         preferences[ACADEMIC_REMINDER_LAST_DAY]
     }
 
+    /** 오늘 마감인 LMS 과제를 아침에 한 번 묶어 알린다 (D-126(3)). 설정에서 끄기 전까지 켜져 있다. */
+    val deadlineDigest: Flow<Boolean> = read { preferences ->
+        preferences[DEADLINE_DIGEST] ?: true
+    }
+
+    /** 마감 묶음 알림을 마지막으로 확인한 날(epoch day). */
+    val deadlineDigestLastDay: Flow<Long?> = read { preferences ->
+        preferences[DEADLINE_DIGEST_LAST_DAY]
+    }
+
+    /** 점호가 있다는 카톡 공지를 읽은 날, 외출·외박 신청 마감 전에 알린다 (D-126(4)). */
+    val outingReminders: Flow<Boolean> = read { preferences ->
+        preferences[OUTING_REMINDERS] ?: true
+    }
+
+    /** 관심 키워드가 든 새 학교 공지를 알린다 (D-128(3)). 기본은 꺼짐. */
+    val noticeKeywordAlerts: Flow<Boolean> = read { preferences ->
+        preferences[NOTICE_KEYWORD_ALERTS] ?: false
+    }
+
+    /** 공지 알림 키워드. 기기에만 저장한다. */
+    val noticeKeywords: Flow<List<String>> = read { preferences ->
+        preferences[NOTICE_KEYWORDS]?.split('\n')?.filter(String::isNotBlank) ?: DEFAULT_NOTICE_KEYWORDS
+    }
+
+    /** 지난 동기화까지 본 공지 ID. 없으면 아직 한 번도 확인하지 않아, 이미 있던 공지는 알리지 않는다. */
+    val noticeSeenIds: Flow<Set<String>?> = read { preferences ->
+        preferences[NOTICE_SEEN_IDS]
+    }
+
+    /** 키워드 알림을 한 번 권했는지 (D-128(3)). */
+    val noticeKeywordSuggested: Flow<Boolean> = read { preferences ->
+        preferences[NOTICE_KEYWORD_SUGGESTED] ?: false
+    }
+
+    /** 홈 카드 순서 (D-128(1)). 비어 있으면 기본 순서. 모르는 키는 건너뛰고 빠진 카드는 기본 자리에 둔다. */
+    val homeCardOrder: Flow<List<String>> = read { preferences ->
+        preferences[HOME_CARD_ORDER]?.split(',')?.filter(String::isNotBlank).orEmpty()
+    }
+
+    val homeHiddenCards: Flow<Set<String>> = read { preferences ->
+        preferences[HOME_HIDDEN_CARDS].orEmpty()
+    }
+
+    /** 홈 즐겨찾기 줄의 바로가기, 순서대로. null이면 아직 고르지 않아 기본값을 쓴다. */
+    val homeFavorites: Flow<List<String>?> = read { preferences ->
+        preferences[HOME_FAVORITES]?.split(',')?.filter(String::isNotBlank)
+    }
+
+    /** '새로워진 점' 카드를 닫은 마지막 버전 코드 (D-126(7)). 없으면 아직 한 번도 보지 않았다. */
+    val whatsNewSeenVersionCode: Flow<Int?> = read { preferences ->
+        preferences[WHATS_NEW_SEEN_VERSION_CODE]
+    }
+
     /** 최초 실행 권한 온보딩을 끝냈는지. 끝내기 전에는 앱 셸 대신 온보딩이 표시된다 (D-056). */
     val onboardingCompleted: Flow<Boolean> = read { preferences ->
         preferences[ONBOARDING_COMPLETED] ?: false
@@ -272,6 +326,46 @@ class AppPreferences(private val context: Context) {
         context.settingsDataStore.edit { it[ACADEMIC_REMINDER_LAST_DAY] = epochDay }
     }
 
+    suspend fun setDeadlineDigest(enabled: Boolean) {
+        context.settingsDataStore.edit { it[DEADLINE_DIGEST] = enabled }
+    }
+
+    suspend fun setDeadlineDigestLastDay(epochDay: Long) {
+        context.settingsDataStore.edit { it[DEADLINE_DIGEST_LAST_DAY] = epochDay }
+    }
+
+    suspend fun setOutingReminders(enabled: Boolean) {
+        context.settingsDataStore.edit { it[OUTING_REMINDERS] = enabled }
+    }
+
+    suspend fun setNoticeKeywordAlerts(enabled: Boolean) {
+        context.settingsDataStore.edit { it[NOTICE_KEYWORD_ALERTS] = enabled }
+    }
+
+    suspend fun setNoticeKeywords(keywords: List<String>) {
+        context.settingsDataStore.edit { it[NOTICE_KEYWORDS] = keywords.joinToString("\n") }
+    }
+
+    suspend fun setNoticeSeenIds(ids: Set<String>) {
+        context.settingsDataStore.edit { it[NOTICE_SEEN_IDS] = ids }
+    }
+
+    suspend fun setNoticeKeywordSuggested() {
+        context.settingsDataStore.edit { it[NOTICE_KEYWORD_SUGGESTED] = true }
+    }
+
+    suspend fun setHomeLayout(order: List<String>, hidden: Set<String>, favorites: List<String>) {
+        context.settingsDataStore.edit {
+            it[HOME_CARD_ORDER] = order.joinToString(",")
+            it[HOME_HIDDEN_CARDS] = hidden
+            it[HOME_FAVORITES] = favorites.joinToString(",")
+        }
+    }
+
+    suspend fun setWhatsNewSeenVersionCode(versionCode: Int) {
+        context.settingsDataStore.edit { it[WHATS_NEW_SEEN_VERSION_CODE] = versionCode }
+    }
+
     suspend fun saveOnboardingDraft(draft: OnboardingDraft) {
         context.settingsDataStore.edit {
             it[ONBOARDING_STAGE] = draft.stage.name
@@ -286,6 +380,8 @@ class AppPreferences(private val context: Context) {
             it[HOME_BASE_SELECTION_CONFIRMED] = true
             it[ONBOARDING_COMPLETED] = true
             it[NOW_BAR_SETUP_COMPLETED] = true
+            // A fresh install has nothing "new" to show (D-126(7)).
+            it[WHATS_NEW_SEEN_VERSION_CODE] = com.example.dimanow.BuildConfig.VERSION_CODE
             it.remove(ONBOARDING_STAGE)
             it.remove(ONBOARDING_DRAFT_HOME_BASE)
         }
@@ -351,6 +447,18 @@ class AppPreferences(private val context: Context) {
         val NOW_BAR_SETUP_COMPLETED = booleanPreferencesKey("now_bar_setup_completed")
         val ACADEMIC_REMINDERS = booleanPreferencesKey("academic_reminders")
         val ACADEMIC_REMINDER_LAST_DAY = longPreferencesKey("academic_reminder_last_day")
+        val DEADLINE_DIGEST = booleanPreferencesKey("deadline_digest")
+        val DEADLINE_DIGEST_LAST_DAY = longPreferencesKey("deadline_digest_last_day")
+        val OUTING_REMINDERS = booleanPreferencesKey("outing_reminders")
+        val WHATS_NEW_SEEN_VERSION_CODE = intPreferencesKey("whats_new_seen_version_code")
+        val NOTICE_KEYWORD_ALERTS = booleanPreferencesKey("notice_keyword_alerts")
+        val NOTICE_KEYWORDS = stringPreferencesKey("notice_keywords")
+        val NOTICE_SEEN_IDS = stringSetPreferencesKey("notice_seen_ids")
+        val NOTICE_KEYWORD_SUGGESTED = booleanPreferencesKey("notice_keyword_suggested")
+        val HOME_CARD_ORDER = stringPreferencesKey("home_card_order")
+        val HOME_HIDDEN_CARDS = stringSetPreferencesKey("home_hidden_cards")
+        val HOME_FAVORITES = stringPreferencesKey("home_favorites")
+
         val ONBOARDING_COMPLETED = booleanPreferencesKey("onboarding_completed")
         val ONBOARDING_STAGE = stringPreferencesKey("onboarding_stage")
         val ONBOARDING_DRAFT_HOME_BASE = stringPreferencesKey("onboarding_draft_home_base")
@@ -378,3 +486,6 @@ private fun <T> androidx.datastore.preferences.core.MutablePreferences.putOrRemo
 ) {
     if (value == null) remove(key) else this[key] = value
 }
+
+/** 키워드 알림을 처음 켤 때의 예시 (D-128(3)). */
+internal val DEFAULT_NOTICE_KEYWORDS = listOf("장학", "기숙사", "수강신청", "휴강")

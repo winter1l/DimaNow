@@ -8,6 +8,18 @@ import org.jsoup.Jsoup
 
 fun main(args: Array<String>) {
     val command = args.firstOrNull() ?: error("게시 명령이 필요합니다.")
+    if (command == "import-calendar") {
+        // D-131(2): prepares a calendar.json candidate for review; it publishes nothing.
+        require(args.size == 3) { "import-calendar <calendar.json> <out.json>" }
+        when (val result = CalendarImportCommand().run(Path.of(args[1]), Path.of(args[2]))) {
+            is CalendarImportResult.Candidate -> println(
+                "candidate=true year=${result.imported.year} terms=${result.imported.terms.size} " +
+                    "events=${result.imported.events.size} unmapped=${result.imported.unused.count { !it.excluded }}",
+            )
+            is CalendarImportResult.NothingToDo -> println("candidate=false ${result.reason}")
+        }
+        return
+    }
     // publish-dorm-pending is the backlog mode used by main's workflow (photos fetched from private R2, D-100).
     val expectedSize = when (command) {
         "publish-dorm-pending" -> 4
@@ -15,7 +27,7 @@ fun main(args: Array<String>) {
     }
     require(args.size == expectedSize) {
         "publish-shuttle <input.csv> <site> | publish-calendar <calendar.json> <site> | publish-app-release <release.json> <site> | publish-meal ignored <site> | publish-notice ignored <site> | " +
-            "publish-dorm-pending <submission-checkout> <site> <index-file>"
+            "publish-dorm-pending <submission-checkout> <site> <index-file> | import-calendar <calendar.json> <out.json>"
     }
     val site = Path.of(args[2])
     val publisher = StaticDataPublisher(site)

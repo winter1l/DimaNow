@@ -1,5 +1,6 @@
 package com.example.dimanow.ui
 
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.performScrollToNode
 import android.graphics.Bitmap
 import androidx.compose.ui.graphics.asAndroidBitmap
@@ -51,6 +52,8 @@ class AppVisualReviewTest {
                 capture("bus-4402")
             }
         }
+        // 전체 grew (D-131): on a landscape tablet 설정 starts below the fold.
+        compose.onNodeWithTag("all_list").performScrollToNode(hasTestTag("all_settings"))
         compose.onNodeWithTag("all_settings").performClick()
         compose.onNodeWithTag("close_settings").assertExists()
         capture("settings")

@@ -35,15 +35,22 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material.icons.filled.QrCode2
 import androidx.compose.material3.Icon
+import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -60,7 +67,6 @@ import androidx.compose.material3.LocalContentColor
 import androidx.compose.ui.semantics.stateDescription
 import com.example.dimanow.meal.MealServiceState
 import com.example.dimanow.meal.MealServiceStatus
-import com.example.dimanow.meal.hasCurrentStudentWeek
 import com.example.dimanow.ui.meal.DormitoryMealBlock
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
@@ -80,6 +86,11 @@ import com.example.dimanow.meal.DormitoryMealSubmissionResult
 import com.example.dimanow.meal.MealSource
 import com.example.dimanow.meal.mealServiceStatus
 import com.example.dimanow.time.MinuteTicker
+import com.example.dimanow.ui.motion.AnimatedCountText
+import com.example.dimanow.ui.motion.DimaMotion
+import com.example.dimanow.ui.motion.LocalReducedMotion
+import com.example.dimanow.ui.motion.dimaItemChange
+import com.example.dimanow.ui.motion.dimaTextRoll
 import java.time.DayOfWeek
 import java.time.LocalDate
 import java.time.LocalTime
@@ -228,13 +239,15 @@ fun MealScreen(
         }
     }
 
-    // 주간 5일 중 보고 있는 하루. 날짜가 바뀌면 오늘로 다시 맞춘다 (D-057)
-    val weekStart = today.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY))
+    // 주간 5일 중 보고 있는 하루. 날짜가 바뀌면 오늘로 다시 맞춘다 (D-057).
+    // 토·일요일에는 다음 주 월요일부터 보여 준다 (D-123)
+    val (weekStart, defaultDay) = mealScreenWeek(today)
     // 선택은 고른 날(오늘)과 함께 저장해 탭 전환에도 유지하고, 날짜가 바뀐 뒤에는 새 기본값을 쓴다 (D-094(12))
-    val defaultDay = if (today.dayOfWeek.value in 1..5) today else weekStart
     var daySelection by rememberSaveable { mutableStateOf(today to defaultDay) }
     val selectedDay = if (daySelection.first == today) daySelection.second else defaultDay
-    val listState = rememberLazyListState()
+    // D-138: each venue is a page with its own list and scroll; the moves below act on the chosen venue's list.
+    val venueListStates = listOf(rememberLazyListState(), rememberLazyListState())
+    val listState = venueListStates[venue.ordinal]
     // The last venue/day/focus the list was moved for; returning to the tab restores the user's scroll.
     var lastAutoScrollKey by rememberSaveable { mutableStateOf<String?>(null) }
     val now = ZonedDateTime.of(today, nowTime, MinuteTicker.CAMPUS_ZONE)
@@ -248,27 +261,62 @@ fun MealScreen(
             ?: dormitoryStates.indexOfFirst { it.state == MealServiceState.BEFORE_OPEN }.takeIf { it >= 0 }
             ?: dormitoryStates.indexOfLast { it.state == MealServiceState.CLOSED }.takeIf { it >= 0 }
     } else null
+    val reducedMotion = LocalReducedMotion.current
+    // D-137: what the list shows. A day tap, the first read and an upload that publishes the week change it, and the
+    // whole list fades in again (ScreenScaffold.contentKey), which also hides the jump to the current meal below.
+    val venueLoaded = if (venue == MealVenue.DORMITORY) loadedDormitoryMeal != null else loadedMeal != null
+    val dayHasContent = if (venue == MealVenue.DORMITORY) {
+        dormitoryBlocks.isNotEmpty()
+    } else {
+        loadedMeal?.days?.firstOrNull { it.date == selectedDay && it.validationState == MealValidationState.VALID }
+            ?.menuLines?.isNotEmpty() == true
+    }
     // Only a change of meal/venue/day moves the list; ordinary minute ticks preserve manual scrolling.
-    val autoScrollKey = "$venue|$selectedDay|$focusBlock|$uploadingDormitoryMeal"
+    // D-137: a new place (venue, day, upload, loaded content) jumps at once, requested from the composition that holds
+    // the new list so its first frame already starts there; a meal closing on a minute tick (중식 -> 석식), the focus
+    // alone changing, glides to the next one instead (a jump under reduced motion). The focus is the 기숙사's only:
+    // the 본관 list never moves for it.
+    val shownFocus = focusBlock.takeIf { venue == MealVenue.DORMITORY }
+    val autoScrollPlace = "$venue|$selectedDay|$uploadingDormitoryMeal|$venueLoaded|$dayHasContent"
+    val autoScrollKey = "$autoScrollPlace|$shownFocus"
+    val autoScrollTarget = if (shownFocus != null) {
+        1 + shownFocus + if (uploadingDormitoryMeal) 1 else 0
+    } else 0
+    val jumpToPlace = autoScrollKey != lastAutoScrollKey &&
+        (reducedMotion || lastAutoScrollKey?.substringBeforeLast('|') != autoScrollPlace)
+    if (jumpToPlace) {
+        SideEffect {
+            listState.requestScrollToItem(autoScrollTarget)
+            lastAutoScrollKey = autoScrollKey
+        }
+    }
     LaunchedEffect(autoScrollKey) {
         if (autoScrollKey == lastAutoScrollKey) return@LaunchedEffect
-        val target = if (venue == MealVenue.DORMITORY && focusBlock != null) {
-            1 + focusBlock + if (uploadingDormitoryMeal) 1 else 0
-        } else 0
-        listState.scrollToItem(target)
         lastAutoScrollKey = autoScrollKey
+        listState.animateScrollToItem(autoScrollTarget)
     }
 
     Box(modifier = modifier.fillMaxSize()) {
         ScreenScaffold(
             title = "식단",
-            listState = listState,
+            pageListStates = venueListStates,
             modifier = Modifier.fillMaxSize(),
             // 새로고침은 목록을 당기거나 상단 버튼으로 실행한다 (D-058, D-103)
             onRefresh = ::refreshMeal,
             refreshing = refreshing,
             refreshLabel = "식단 새로고침",
             listTag = "meal_list",
+            pageIndex = venue.ordinal,
+            contentKey = Triple(selectedDay, venueLoaded, dayHasContent),
+            floatingActionButton = if (venue == MealVenue.DORMITORY) {
+                { MealTicketFab(onClick = { openPaycoMealTicket(context) }) }
+            } else {
+                null
+            },
+            // D-134: the Scaffold lays the snackbar out, so it pushes the PAYCO 식권 FAB up instead of covering it.
+            snackbarHost = {
+                SnackbarHost(snackbarHostState, Modifier.semantics { liveRegion = LiveRegionMode.Polite })
+            },
             // 식당 전환과 요일 선택은 스크롤해도 항상 닿을 수 있도록 헤더에 고정한다 (D-057)
             subHeader = {
                 // D-103: 식당 전환은 M3 연결형 버튼 그룹이다
@@ -286,25 +334,30 @@ fun MealScreen(
                     itemTag = { "meal_day_${it.dayOfWeek.name}" },
                 )
             },
-        ) {
+        ) { page ->
+            // D-138: built for the venue of the page given; both venues are drawn while their pages slide.
+            val pageVenue = MealVenue.entries[page]
             val dormitoryMeal = loadedDormitoryMeal
             val meal = loadedMeal
-            if (venue == MealVenue.DORMITORY && dormitoryMeal == null || venue == MealVenue.MAIN_CAFETERIA && meal == null) {
+            if (pageVenue == MealVenue.DORMITORY && dormitoryMeal == null || pageVenue == MealVenue.MAIN_CAFETERIA && meal == null) {
                 item(key = "meal_loading") {
                     LoadingLine(
                         text = "식단을 불러오고 있어요",
                         modifier = Modifier.padding(16.dp).testTag("meal_loading"),
                     )
                 }
-            } else if (venue == MealVenue.DORMITORY && dormitoryMeal != null) {
+            } else if (pageVenue == MealVenue.DORMITORY && dormitoryMeal != null) {
                 // 업로드는 15분까지 폴링되므로 진행 상태를 상시 카드로 보여준다 (D-056)
+                // D-137: these rows fade in and out; the day's items below glide to make room instead of jumping.
                 if (uploadingDormitoryMeal) {
-                    item(key = "dormitory_upload") { DormitoryUploadProgressCard() }
+                    item(key = "dormitory_upload") {
+                        DormitoryUploadProgressCard(dimaItemChange(fadeIn = true, fadeOut = false, placement = false))
+                    }
                 }
                 if (preparingDormitoryImage) {
                     item(key = "dormitory_image_preparing") {
                         Row(
-                            Modifier.fillMaxWidth().padding(16.dp),
+                            dimaItemChange(fadeIn = true, fadeOut = false, placement = false).fillMaxWidth().padding(16.dp),
                             horizontalArrangement = Arrangement.spacedBy(12.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
@@ -336,22 +389,26 @@ fun MealScreen(
                         }
                     },
                     uploadEnabled = !refreshing && !uploadPreflight && !uploadingDormitoryMeal && !preparingDormitoryImage,
+                    uploadBusy = uploadPreflight,
                     onReport = { reportWeek = it },
                 )
             } else if (meal != null) {
-                if (!meal.hasCurrentStudentWeek(today) || meal.error != null) {
-                    item(key = "student_meal_sync") { StudentMealSyncStatus(meal, today, onRetry = ::refreshMeal) }
+                // D-137: only a line that says something takes a row; it fades in and out as a refresh changes it.
+                val syncLine = studentMealSyncLine(meal, today)
+                if (syncLine != StudentMealSyncLine.NONE) {
+                    item(key = "student_meal_sync") {
+                        StudentMealSyncStatus(
+                            meal = meal,
+                            today = today,
+                            line = syncLine,
+                            modifier = dimaItemChange(fadeIn = true, fadeOut = false, placement = false),
+                            onRetry = ::refreshMeal,
+                        )
+                    }
                 }
                 mainCafeteriaDayContent(meal = meal, date = selectedDay, today = today, nowTime = nowTime)
             }
         }
-    SnackbarHost(
-        snackbarHostState,
-        Modifier
-            .align(Alignment.BottomCenter)
-            .padding(16.dp)
-            .semantics { liveRegion = LiveRegionMode.Polite },
-    )
     }
     if (showDormitoryPhotoSource) {
         AlertDialog(
@@ -480,9 +537,9 @@ private fun MenuItemRow(name: String, trailing: String?, leading: String? = null
 
 /** 날짜 제목 + 상태 배지를 담은 하루 머리글 (D-057). */
 @Composable
-private fun MealDayHeading(date: LocalDate, today: LocalDate, trailing: String?) {
+private fun MealDayHeading(date: LocalDate, today: LocalDate, trailing: String?, modifier: Modifier = Modifier) {
     Row(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -503,6 +560,20 @@ private fun MealDayHeading(date: LocalDate, today: LocalDate, trailing: String?)
     }
 }
 
+/**
+ * D-133: PAYCO's 식권 home from the 기숙사 식단, the screen's one FAB, so it stays in reach while the list jumps to the
+ * current meal; its 사용하기 shows the 식권 barcode. 식단 신고 stays at the end of the list.
+ */
+@Composable
+private fun MealTicketFab(onClick: () -> Unit) {
+    ExtendedFloatingActionButton(
+        onClick = onClick,
+        icon = { Icon(Icons.Default.QrCode2, contentDescription = null) },
+        text = { Text("PAYCO 식권") },
+        modifier = Modifier.testTag("dorm_meal_ticket_shortcut"),
+    )
+}
+
 /** 본관 학생식당의 선택한 하루. */
 private fun androidx.compose.foundation.lazy.LazyListScope.mainCafeteriaDayContent(
     meal: MealData,
@@ -512,20 +583,27 @@ private fun androidx.compose.foundation.lazy.LazyListScope.mainCafeteriaDayConte
 ) {
     val day = meal.days.firstOrNull { it.date == date && it.validationState == MealValidationState.VALID }
     val status = mealServiceStatus(date, day?.hours, ZonedDateTime.of(today, nowTime, MinuteTicker.CAMPUS_ZONE))
+    // D-137: the day's items glide when the sync line above comes or goes; a new day fades as one list instead.
     item(key = "main-heading-$date") {
         MealDayHeading(
             date = date,
             today = today,
             trailing = null,
+            modifier = dimaItemChange(fadeIn = false, fadeOut = false, placement = true),
         )
     }
     if (day == null || day.menuLines.isEmpty()) {
-        item(key = "main-empty-$date") { EmptyState("등록된 식단이 없어요", modifier = Modifier.testTag("meal_empty_day")) }
+        item(key = "main-empty-$date") {
+            EmptyState(
+                "등록된 식단이 없어요",
+                modifier = dimaItemChange(fadeIn = false, fadeOut = false, placement = true).testTag("meal_empty_day"),
+            )
+        }
     } else {
         item(key = "main-menu-$date") {
             MealPeriodCard(
                 status = status,
-                modifier = Modifier.testTag("main_meal_card"),
+                modifier = dimaItemChange(fadeIn = false, fadeOut = false, placement = true).testTag("main_meal_card"),
             ) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -552,21 +630,40 @@ private fun androidx.compose.foundation.lazy.LazyListScope.dormitoryDayContent(
     statuses: List<MealServiceStatus>,
     onUpload: (() -> Unit)?,
     uploadEnabled: Boolean,
+    uploadBusy: Boolean = false,
     onReport: ((LocalDate) -> Unit)? = null,
 ) {
     val weekStart = date.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY))
     val week = meal.days.filter { it.date in weekStart..weekStart.plusDays(4) }
 
-    item(key = "dorm-heading-$date") { MealDayHeading(date = date, today = today, trailing = null) }
+    // D-137: the day's items glide when an upload row above comes or goes; a new day fades as one list instead.
+    item(key = "dorm-heading-$date") {
+        MealDayHeading(
+            date = date,
+            today = today,
+            trailing = null,
+            modifier = dimaItemChange(fadeIn = false, fadeOut = false, placement = true),
+        )
+    }
 
     if (blocks.isEmpty()) {
         if (week.none { it.sections.isNotEmpty() }) {
             // 주간 전체가 비었을 때만 이유와 업로드 CTA를 담은 안내 카드를 보여준다 (D-056)
             item(key = "dorm-week-empty") {
-                DormitoryWeekEmptyCard(onUpload = onUpload, uploadEnabled = uploadEnabled)
+                DormitoryWeekEmptyCard(
+                    modifier = dimaItemChange(fadeIn = false, fadeOut = false, placement = true),
+                    onUpload = onUpload,
+                    uploadEnabled = uploadEnabled,
+                    uploadBusy = uploadBusy,
+                )
             }
         } else {
-            item(key = "dorm-empty-$date") { EmptyState("이날 식단이 없어요", modifier = Modifier.testTag("meal_empty_day")) }
+            item(key = "dorm-empty-$date") {
+                EmptyState(
+                    "이날 식단이 없어요",
+                    modifier = dimaItemChange(fadeIn = false, fadeOut = false, placement = true).testTag("meal_empty_day"),
+                )
+            }
         }
         return
     }
@@ -575,14 +672,18 @@ private fun androidx.compose.foundation.lazy.LazyListScope.dormitoryDayContent(
         val status = statuses[index]
         MealPeriodCard(
             status = status,
-            modifier = Modifier.testTag("dorm_meal_card_$index"),
+            modifier = dimaItemChange(fadeIn = false, fadeOut = false, placement = true).testTag("dorm_meal_card_$index"),
         ) {
             DormitoryMealPeriodContent(block, status)
         }
     }
     // D-099: 학생이 올린 식단은 누구나 신고할 수 있고, 운영자가 확인해 내린다
     if (onReport != null) item(key = "dorm-report-$date") {
-        TextButton(shapes = ButtonDefaults.shapes(), onClick = { onReport(weekStart) }, modifier = Modifier.testTag("dorm_report")) { Text("식단이 이상해요") }
+        TextButton(
+            shapes = ButtonDefaults.shapes(),
+            onClick = { onReport(weekStart) },
+            modifier = dimaItemChange(fadeIn = false, fadeOut = false, placement = true).testTag("dorm_report"),
+        ) { Text("식단이 이상해요") }
     }
 }
 
@@ -628,6 +729,11 @@ private fun QuickMealOptions(name: String, lines: List<String>) {
     }
 }
 
+/**
+ * One meal's card. D-137: the 식단 tab's one hero moment is a meal starting or ending while the student looks: the
+ * card's fill, ink and elevation move to the new state on the default effects spring instead of switching at once (its
+ * chip and status line roll to their new words), with no change of size or shape of the card itself.
+ */
 @Composable
 private fun MealPeriodCard(
     status: MealServiceStatus,
@@ -638,38 +744,54 @@ private fun MealPeriodCard(
     val isOpen = status.state == MealServiceState.OPEN
     val isClosed = status.state == MealServiceState.CLOSED
     val shape = DimaShapes.Card
-    val background = when {
-        isOpen -> colors.primaryContainer
-        isClosed -> DimaTheme.colors.cardInner
-        else -> DimaTheme.colors.card
-    }
+    val background by animateColorAsState(
+        when {
+            isOpen -> colors.primaryContainer
+            isClosed -> DimaTheme.colors.cardInner
+            else -> DimaTheme.colors.card
+        },
+        DimaMotion.effectsDefault(),
+        label = "meal_card_container",
+    )
+    val ink by animateColorAsState(
+        when {
+            isOpen -> colors.onPrimaryContainer
+            isClosed -> colors.onSurfaceVariant
+            else -> colors.onSurface
+        },
+        DimaMotion.effectsDefault(),
+        label = "meal_card_ink",
+    )
+    val elevation by animateDpAsState(if (isClosed) 0.dp else 1.dp, DimaMotion.effectsDefault(), label = "meal_card_elevation")
     ElevatedCard(
         modifier = modifier.fillMaxWidth()
             .semantics { stateDescription = status.label },
         shape = shape,
-        colors = CardDefaults.elevatedCardColors(
-            containerColor = background,
-            contentColor = when {
-                isOpen -> colors.onPrimaryContainer
-                isClosed -> colors.onSurfaceVariant
-                else -> colors.onSurface
-            },
-        ),
-        elevation = CardDefaults.elevatedCardElevation(defaultElevation = if (isClosed) 0.dp else 1.dp),
+        colors = CardDefaults.elevatedCardColors(containerColor = background, contentColor = ink),
+        elevation = CardDefaults.elevatedCardElevation(defaultElevation = elevation),
     ) {
         // 세로 길이를 줄이려고 위아래 여백과 요소 간격을 좁힌다
         Column(Modifier.padding(horizontal = 16.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(8.dp), content = content)
     }
 }
 
+/** The card's status line; D-137: a new state rolls in (its label changes only with the state, never per minute). */
 @Composable
 private fun MealPeriodStatus(status: MealServiceStatus) {
     if (status.state == MealServiceState.UNKNOWN_HOURS) return
-    Text(
-        status.label,
-        style = if (status.state == MealServiceState.OPEN) MaterialTheme.typography.labelMediumEmphasized else MaterialTheme.typography.labelMedium,
-        color = if (status.state == MealServiceState.OPEN) MaterialTheme.colorScheme.primary else LocalContentColor.current,
-    )
+    AnimatedContent(
+        targetState = status,
+        contentKey = { it.label },
+        transitionSpec = { dimaTextRoll() },
+        label = "meal_period_status",
+    ) { shown ->
+        val open = shown.state == MealServiceState.OPEN
+        Text(
+            shown.label,
+            style = if (open) MaterialTheme.typography.labelMediumEmphasized else MaterialTheme.typography.labelMedium,
+            color = if (open) MaterialTheme.colorScheme.primary else LocalContentColor.current,
+        )
+    }
 }
 
 private fun dormitoryBlockIcon(name: String): ImageVector = when {
@@ -703,11 +825,15 @@ private fun MealHoursChip(
         MealServiceState.CLOSED -> colors.onSurfaceVariant
         else -> colors.onSecondaryContainer
     }
-    Surface(shape = DimaShapes.Badge, color = background) {
-        Text(
+    // D-137: the chip takes its new fill on the effects spring and its words roll, here and on Home's 식단 card.
+    val fill by animateColorAsState(background, DimaMotion.effectsDefault(), label = "meal_hours_fill")
+    val ink by animateColorAsState(foreground, DimaMotion.effectsDefault(), label = "meal_hours_ink")
+    Surface(shape = DimaShapes.Badge, color = fill) {
+        AnimatedCountText(
             text = text,
             style = MaterialTheme.typography.labelSmall,
-            color = foreground,
+            color = ink,
+            singleLine = true,
             modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
         )
     }
@@ -719,7 +845,9 @@ private fun DormitoryWeekEmptyCard(
     modifier: Modifier = Modifier,
     onUpload: (() -> Unit)? = null,
     uploadEnabled: Boolean = true,
+    uploadBusy: Boolean = false,
 ) {
+    // D-137: while the tap checks the server for this week's 식단, the button shows that it is being handled.
     EmptyState(
         message = "이번 주 기숙사 식단이 아직 없어요",
         supporting = "식단표를 올리면 함께 볼 수 있어요.",
@@ -728,14 +856,20 @@ private fun DormitoryWeekEmptyCard(
         onAction = onUpload,
         actionIcon = Icons.Default.PhotoCamera,
         actionEnabled = uploadEnabled,
+        actionBusy = uploadBusy,
         actionTag = "dormitory_week_empty_upload",
         modifier = modifier.testTag("dormitory_week_empty"),
     )
 }
 
-/** 사진 업로드 후 서버 확인이 끝날 때까지 남아 있는 진행 카드 (D-056). */
+/**
+ * 사진 업로드 후 서버 확인이 끝날 때까지 남아 있는 진행 카드 (D-056). D-137: the check can poll for about 15 minutes,
+ * far past the 200 ms to 5 s the loading indicator is for, so the card carries a flat indeterminate bar for the whole
+ * wait (never the wavy one, D-121), in the card's own ink.
+ */
 @Composable
 private fun DormitoryUploadProgressCard(modifier: Modifier = Modifier) {
+    val ink = MaterialTheme.colorScheme.onSecondaryContainer
     ElevatedCard(
         modifier = modifier
             .fillMaxWidth()
@@ -743,27 +877,31 @@ private fun DormitoryUploadProgressCard(modifier: Modifier = Modifier) {
         shape = DimaShapes.Card,
         colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer),
     ) {
-        Row(
+        Column(
             modifier = Modifier.fillMaxWidth().padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(16.dp),
+            verticalArrangement = Arrangement.spacedBy(2.dp),
         ) {
-            DimaLoadingIndicator(size = 40.dp)
-            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                Text(
-                    text = "식단표를 확인하고 있어요",
-                    style = MaterialTheme.typography.titleSmall,
-                    color = MaterialTheme.colorScheme.onSecondaryContainer,
-                )
-                Text(
-                    text = "앱을 닫아도 계속 진행돼요.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSecondaryContainer,
-                )
-            }
+            Text(
+                text = "식단표를 확인하고 있어요",
+                style = MaterialTheme.typography.titleSmall,
+                color = ink,
+            )
+            Text(
+                text = "앱을 닫아도 계속 진행돼요.",
+                style = MaterialTheme.typography.bodySmall,
+                color = ink,
+            )
+            LinearProgressIndicator(
+                color = ink,
+                trackColor = ink.copy(alpha = UPLOAD_PROGRESS_TRACK_ALPHA),
+                modifier = Modifier.fillMaxWidth().padding(top = 10.dp),
+            )
         }
     }
 }
+
+/** The upload bar's track: the card's ink, faint, so the track shows on the secondary container (D-137). */
+private const val UPLOAD_PROGRESS_TRACK_ALPHA = 0.24f
 
 @Composable
 private fun DormitoryReportDialog(onDismiss: () -> Unit, onReport: (com.example.dimanow.meal.DormitoryMealReportReason) -> Unit) {
@@ -799,3 +937,12 @@ private fun DormitoryReportDialog(onDismiss: () -> Unit, onReport: (com.example.
 
 /** Where the camera writes a 기숙사 식단 photo before it is read into memory. */
 private fun dormMealCaptureFile(context: android.content.Context): File = File(context.cacheDir, "dorm-meals/capture.jpg")
+
+/**
+ * The week the 식단 tab shows and the day it opens on (D-123): on weekdays this week and today; on Saturday and
+ * Sunday the coming week from its Monday, as the dormitory week already does (`dormitoryMealWeekStart`).
+ */
+internal fun mealScreenWeek(today: LocalDate): Pair<LocalDate, LocalDate> {
+    val weekStart = com.example.dimanow.meal.dormitoryMealWeekStart(today)
+    return weekStart to if (today.dayOfWeek.value in 1..5) today else weekStart
+}

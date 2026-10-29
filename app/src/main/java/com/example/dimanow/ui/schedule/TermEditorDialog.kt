@@ -1,5 +1,7 @@
 package com.example.dimanow.ui.schedule
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material3.ButtonDefaults
 import android.annotation.SuppressLint
@@ -45,6 +47,9 @@ import androidx.compose.ui.unit.dp
 import com.example.dimanow.theme.DimaShapes
 import com.example.dimanow.ui.koreanDateLabel
 import com.example.dimanow.ui.koreanDateLabelWithYear
+import com.example.dimanow.ui.motion.DimaMotion
+import com.example.dimanow.ui.motion.dimaCollapseOut
+import com.example.dimanow.ui.motion.dimaExpandIn
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneOffset
@@ -84,19 +89,23 @@ internal fun TermEditorDialog(
                     onClick = { picking = TermField.START },
                     modifier = Modifier.testTag("term_start"),
                 )
-                TermDateField(
-                    label = "종료일",
-                    date = endDate,
-                    isError = reversed,
-                    onClick = { picking = TermField.END },
-                    modifier = Modifier.testTag("term_end"),
-                )
-                if (reversed) {
-                    Text(
-                        "종료일은 시작일과 같거나 늦어야 해요",
-                        color = MaterialTheme.colorScheme.error,
-                        style = MaterialTheme.typography.bodySmall,
+                // D-137: the message unfolds under the end date with its 12dp gap inside, instead of the dialog jumping.
+                Column {
+                    TermDateField(
+                        label = "종료일",
+                        date = endDate,
+                        isError = reversed,
+                        onClick = { picking = TermField.END },
+                        modifier = Modifier.testTag("term_end"),
                     )
+                    AnimatedVisibility(visible = reversed, enter = dimaExpandIn(), exit = dimaCollapseOut(), label = "term_reversed") {
+                        Text(
+                            "종료일은 시작일과 같거나 늦어야 해요",
+                            color = MaterialTheme.colorScheme.error,
+                            style = MaterialTheme.typography.bodySmall,
+                            modifier = Modifier.padding(top = 12.dp),
+                        )
+                    }
                 }
             }
         },
@@ -129,7 +138,17 @@ private fun TermDateField(
     modifier: Modifier = Modifier,
     isError: Boolean = false,
 ) {
-    val accent = if (isError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
+    // D-137: the error tone eases in and out on the default effects spring, as the text fields' own indicators do.
+    val accent by animateColorAsState(
+        if (isError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
+        DimaMotion.effectsDefault(),
+        label = "term_field_accent",
+    )
+    val border by animateColorAsState(
+        if (isError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.outline,
+        DimaMotion.effectsDefault(),
+        label = "term_field_border",
+    )
     OutlinedCard(
         onClick = onClick,
         modifier = modifier
@@ -137,7 +156,7 @@ private fun TermDateField(
             .heightIn(min = 56.dp)
             .semantics { if (isError) error("종료일이 시작일보다 빨라요") },
         shape = DimaShapes.Tile,
-        border = BorderStroke(1.dp, if (isError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.outline),
+        border = BorderStroke(1.dp, border),
         colors = CardDefaults.outlinedCardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
     ) {
         Row(

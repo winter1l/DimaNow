@@ -90,8 +90,10 @@ class TabStateRestorationTest {
     private fun homeScrollPosition(): Float = homeScrollRange().value()
 
     private fun waitForHomeData() {
+        // D-137: Home waits for its saved settings before it is drawn, so wait for the list itself too.
         composeRule.waitUntil(timeoutMillis = 10_000) {
-            composeRule.onAllNodesWithTagCount("dashboard_shuttle_loading") == 0 &&
+            composeRule.onAllNodesWithTagCount("home_list") == 1 &&
+                composeRule.onAllNodesWithTagCount("dashboard_shuttle_loading") == 0 &&
                 composeRule.onAllNodesWithTagCount("dashboard_meal_loading") == 0
         }
         composeRule.waitForIdle()

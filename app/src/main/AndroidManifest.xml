@@ -37,7 +37,22 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+            <!-- D-128(2): 셔틀, 식단, 외출·외박 신청 and 모바일 열람증 from a long press on the launcher icon. -->
+            <meta-data
+                android:name="android.app.shortcuts"
+                android:resource="@xml/shortcuts" />
         </activity>
+        <!-- D-128(2): the 다음 셔틀 Quick Settings tile; informational, a tap opens the 셔틀 tab. -->
+        <service
+            android:name=".widget.ShuttleTileService"
+            android:exported="true"
+            android:icon="@drawable/ic_stat_shuttle"
+            android:label="@string/shuttle_tile_label"
+            android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
+            <intent-filter>
+                <action android:name="android.service.quicksettings.action.QS_TILE" />
+            </intent-filter>
+        </service>
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.updates"
@@ -115,6 +130,16 @@
         <receiver
             android:name=".live.LiveMinuteUpdateReceiver"
             android:exported="false" />
+        <receiver
+            android:name=".dorm.OutingReminderReceiver"
+            android:exported="false" />
     </application>
+
+    <!-- D-126(6): the 전체 tab opens the library app (모바일 열람증) and 헤이영 (전자출결); Android 11+ hides other
+         apps unless they are named here. -->
+    <queries>
+        <package android:name="kr.ac.dima.lib" />
+        <package android:name="com.shinhan.heyoung" />
+    </queries>
 
 </manifest>

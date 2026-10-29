@@ -6,8 +6,10 @@ import androidx.compose.material.icons.filled.Restore
 import android.app.ActivityManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.AlertDialog
@@ -35,6 +37,7 @@ import com.example.dimanow.sync.TimetableBackup
 import com.example.dimanow.data.TimetableBackupCodec
 import com.example.dimanow.theme.DimaShapes
 import com.example.dimanow.theme.DimaTheme
+import com.example.dimanow.ui.motion.dimaContentReveal
 import java.time.LocalDate
 import java.time.ZoneId
 import kotlinx.coroutines.Dispatchers
@@ -149,12 +152,30 @@ internal fun AppDataCard(modifier: Modifier = Modifier) {
                 onClick = timetableImport::open,
                 modifier = Modifier.fillMaxWidth().testTag("import_timetable"),
             ) { Text("시간표 파일 불러오기") }
-            TextButton(shapes = ButtonDefaults.shapes(), 
-                onClick = { confirmDeleteAll = true },
-                colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error),
-                modifier = Modifier.testTag("delete_all_data"),
-            ) { Text("모든 데이터 지우기") }
-            message?.let { Text(it, style = MaterialTheme.typography.bodySmall, modifier = Modifier.testTag("app_data_message")) }
+            // D-137: an export or import result arrives in place, the card growing to it, with its 8dp gap inside, so the
+            // card does not jump when the line appears.
+            Column {
+                TextButton(shapes = ButtonDefaults.shapes(),
+                    onClick = { confirmDeleteAll = true },
+                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error),
+                    modifier = Modifier.testTag("delete_all_data"),
+                ) { Text("모든 데이터 지우기") }
+                AnimatedContent(
+                    targetState = message,
+                    transitionSpec = { dimaContentReveal() },
+                    label = "app_data_message",
+                ) { shown ->
+                    if (shown != null) {
+                        Text(
+                            shown,
+                            style = MaterialTheme.typography.bodySmall,
+                            modifier = Modifier.padding(top = 8.dp).testTag("app_data_message"),
+                        )
+                    } else {
+                        Spacer(Modifier.fillMaxWidth())
+                    }
+                }
+            }
         }
     }
 

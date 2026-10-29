@@ -1,23 +1,37 @@
 package com.example.dimanow.ui
 
+import androidx.compose.material.icons.filled.Map
+import androidx.compose.material.icons.filled.LocalLibrary
 import android.provider.Settings
 import android.webkit.CookieManager
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.Crossfade
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
+import androidx.compose.animation.expandHorizontally
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkHorizontally
+import androidx.compose.animation.shrinkVertically
 import com.example.dimanow.theme.DimaTheme
 import com.example.dimanow.ui.motion.LocalEntranceMotion
 import com.example.dimanow.ui.motion.DimaMotion
 import com.example.dimanow.ui.motion.LocalReducedMotion
 import com.example.dimanow.ui.motion.PageMotion
 import com.example.dimanow.ui.motion.PageSlideDistance
+import com.example.dimanow.ui.motion.PredictiveBackPage
 import com.example.dimanow.ui.motion.dimaPageTransform
 import com.example.dimanow.ui.motion.pageMotionFor
-import com.example.dimanow.ui.motion.predictiveBackPreview
-import androidx.activity.BackEventCompat
-import androidx.compose.animation.core.Animatable
-import androidx.compose.ui.draw.drawBehind
+import com.example.dimanow.ui.motion.predictiveBackBackdrop
+import com.example.dimanow.ui.motion.rememberPredictiveBackPreview
+import com.example.dimanow.ui.motion.rememberShownAfter
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.unit.LayoutDirection
-import kotlin.coroutines.cancellation.CancellationException
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.map
 import com.example.dimanow.ui.onboarding.OnboardingRoute
 import com.example.dimanow.ui.onboarding.shouldShowOnboarding
 import androidx.compose.foundation.layout.Box
@@ -52,7 +66,6 @@ import androidx.compose.material3.ShortNavigationBar
 import androidx.compose.material3.ShortNavigationBarItem
 import androidx.compose.material3.WideNavigationRail
 import androidx.compose.material3.WideNavigationRailItem
-import androidx.activity.compose.PredictiveBackHandler
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -79,7 +92,6 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.testTagsAsResourceId
-import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.dimanow.data.AppPreferences
 import com.example.dimanow.data.CampusDataRepository
@@ -121,6 +133,9 @@ internal enum class AppPage(val title: String, val icon: ImageVector, val outlin
     TIMETABLE("시간표", Icons.Default.Schedule, Icons.Outlined.Schedule),
     DORM("기숙사", Icons.Default.Apartment),
     EQUIPMENT("장비 대여", Icons.Default.Videocam),
+    // D-131: phase 3 pages opened from 전체
+    LIBRARY("도서관", Icons.Default.LocalLibrary),
+    MAP("캠퍼스 지도", Icons.Default.Map),
     SETTINGS("설정", Icons.Default.Settings),
     ;
 
@@ -129,7 +144,7 @@ internal enum class AppPage(val title: String, val icon: ImageVector, val outlin
 
     /** Pages opened from 전체 (or Home's timetable buttons): no navigation bar, a Back action instead. */
     val isSubPage: Boolean
-        get() = this == TIMETABLE || this == DORM || this == EQUIPMENT || this == SETTINGS
+        get() = this == TIMETABLE || this == DORM || this == EQUIPMENT || this == LIBRARY || this == MAP || this == SETTINGS
 }
 
 /**
@@ -189,6 +204,8 @@ fun DimaNowApp(
     // Each tab keeps its saveable state (list scroll, selected day/view/venue) while another is shown.
     val tabStateHolder = rememberSaveableStateHolder()
     val retainedFlowValues = remember { RetainedFlowValues() }
+    // D-137: one instance for the shell, so Home's gate finds the favourites it last read when the tab comes back.
+    val savedHomeFavorites = remember(preferences) { preferences.homeFavorites.map(::SavedHomeFavorites) }
     // 수업 탭이 로그인 WebView/글 상세를 전체화면으로 띄우는 동안 하단 내비를 숨긴다 (D-044)
     var lmsFullScreen by remember { mutableStateOf(false) }
     val primaryPages = remember { primaryAppPages }
@@ -204,9 +221,29 @@ fun DimaNowApp(
     val initialUpdateState = remember { AppUpdateUiState(currentVersion = "") }
     val updateState by (appUpdateCoordinator?.state ?: remember { kotlinx.coroutines.flow.flowOf(initialUpdateState) })
         .collectAsStateWithLifecycle(initialValue = initialUpdateState)
+    // D-132: the room 캠퍼스 지도 opens on (a class's location button) and, when that was a page over 전체 such as
+    // 시간표, the page Back from the map returns to.
+    var mapFocusRoom by rememberSaveable { mutableStateOf<String?>(null) }
+    var mapReturn by rememberSaveable { mutableStateOf<AppPage?>(null) }
     fun open(target: AppPage) {
         if (target.isSubPage && !page.isSubPage) subPageReturn = page
+        if (target == AppPage.MAP) {
+            mapFocusRoom = null
+            mapReturn = null
+        }
         page = target
+    }
+    fun openMapFor(room: String) {
+        val from = page
+        open(AppPage.MAP)
+        mapFocusRoom = room
+        mapReturn = from.takeIf { it.isSubPage }
+    }
+    /** Where Back from [from] goes: the map back to the page that opened it, other pages as before. */
+    fun backTarget(from: AppPage): AppPage = when {
+        from == AppPage.MAP -> mapReturn ?: subPageReturn
+        from.isSubPage -> subPageReturn
+        else -> AppPage.DASHBOARD
     }
     // nonce가 붙은 이벤트라 같은 위젯을 연달아 탭해도 매번 다시 이동한다 (#7)
     LaunchedEffect(targetPageEvent) {
@@ -218,35 +255,46 @@ fun DimaNowApp(
             "TIMETABLE" -> open(AppPage.TIMETABLE)
             "COURSES" -> open(AppPage.COURSES)
             "SETTINGS" -> open(AppPage.SETTINGS)
+            // D-128: app shortcuts and the keyword alert open these too
+            "DORM" -> open(AppPage.DORM)
+            "LIBRARY_CARD" -> openApp(appContext, LIBRARY_APP_PACKAGE)
+            // D-131(1): a morning digest with only books due opens the 도서관 page
+            "LIBRARY" -> open(AppPage.LIBRARY)
+            // D-126(4): the outing reminder opens 외출·외박 신청 over the 기숙사 page
+            "OUTING" -> {
+                open(AppPage.DORM)
+                val bridge = schoolServiceBridge
+                if (bridge == null) {
+                    openUrl(appContext, com.example.dimanow.school.INTRANET_DORM_OUTING_URL)
+                } else {
+                    bridge.open(
+                        com.example.dimanow.school.SchoolService.INTRANET,
+                        com.example.dimanow.school.INTRANET_DORM_OUTING_URL,
+                        "외출·외박 신청",
+                    )
+                }
+            }
         }
     }
 
     // Settings is a transient destination: it opens from the top each time.
     LaunchedEffect(page) {
         if (page != AppPage.SETTINGS) tabStateHolder.removeState(AppPage.SETTINGS.name)
+        // D-132: so is 캠퍼스 지도, so each location button opens it on its own room.
+        if (page != AppPage.MAP) tabStateHolder.removeState(AppPage.MAP.name)
     }
 
-    // D-121: M3 predictive back. While the gesture is held the page being left shrinks and rounds
-    // (predictiveBackPreview); letting go goes back as before, cancelling springs the page back. Inner Back handlers
-    // (a 기숙사 topic page, the LMS detail) still take Back first. Under reduced motion there is no preview.
+    // D-121: M3 predictive back. While the gesture is held the page being left shrinks and rounds; letting go goes
+    // back as before, cancelling springs the page back. Inner Back handlers (a 기숙사 topic page, the LMS detail) still
+    // take Back first. Under reduced motion there is no preview. D-137: only the page being left takes the preview
+    // (PredictiveBackPage), so after letting go it leaves as it is while the next page comes in at full size; before,
+    // both pages sprang back to full size during the slide (two geometry animations for one change, D-094(12)).
     val reducedMotion = LocalReducedMotion.current
-    val backPreview = remember { Animatable(0f) }
-    var backFromLeftEdge by remember { mutableStateOf(true) }
-    PredictiveBackHandler(enabled = page != AppPage.DASHBOARD) { events ->
-        try {
-            events.collect { event ->
-                if (!reducedMotion) {
-                    backFromLeftEdge = event.swipeEdge == BackEventCompat.EDGE_LEFT
-                    backPreview.snapTo(event.progress)
-                }
-            }
-            page = if (page.isSubPage) subPageReturn else AppPage.DASHBOARD
-            scope.launch { backPreview.animateTo(0f, DimaMotion.spatialDefault()) }
-        } catch (cancelled: CancellationException) {
-            scope.launch { backPreview.animateTo(0f, DimaMotion.spatialFast()) }
-            throw cancelled
-        }
-    }
+    val backPreview = rememberPredictiveBackPreview(
+        enabled = page != AppPage.DASHBOARD,
+        currentKey = page,
+        onBack = { page = backTarget(page) },
+    )
 
     // D-056: 최초 설치에는 앱 셸 대신 전체화면 온보딩이 권한을 순서대로 설명하고 요청한다.
     // 온보딩이 끝나기 전에는 셸과 다른 다이얼로그를 아예 구성하지 않는다.
@@ -260,6 +308,24 @@ fun DimaNowApp(
         return
     }
 
+    // D-134 (supersedes D-102's card-only offer): a newer version also asks once per launch, over the app;
+    // 나중에 puts this version off as the Home card does, and closing the pop-up only waits for the next launch.
+    var updatePromptHandled by rememberSaveable { mutableStateOf(false) }
+    if (appUpdateCoordinator != null && !updatePromptHandled && launchesUpdatePrompt(updateState)) {
+        UpdateLaunchPrompt(
+            state = updateState,
+            onUpdate = {
+                updatePromptHandled = true
+                if (updateState.preparedUpdate != null) appUpdateCoordinator.continueInstall() else appUpdateCoordinator.downloadAndInstall()
+            },
+            onLater = {
+                updatePromptHandled = true
+                appUpdateCoordinator.dismissPrompt()
+            },
+            onClose = { updatePromptHandled = true },
+        )
+    }
+
     val showNavigation = !page.isSubPage && !(page == AppPage.COURSES && lmsFullScreen)
     // D-104: compact windows keep the bottom bar; from the M3 medium width (tablets, unfolded foldables)
     // the same destinations move to a navigation rail at the start edge.
@@ -269,7 +335,38 @@ fun DimaNowApp(
         if (page == item) reselections[item] = (reselections[item] ?: 0) + 1 else page = item
     }
     val navIcon: @Composable (AppPage) -> Unit = { item ->
-        Icon(if (page == item) item.icon else item.outlinedIcon, contentDescription = item.title)
+        if (item.icon == item.outlinedIcon) {
+            Icon(item.icon, contentDescription = item.title)
+        } else {
+            // D-137: the filled glyph fades in with the indicator pill instead of switching in one frame.
+            Crossfade(targetState = page == item, animationSpec = DimaMotion.effectsFast(), label = "nav_icon") { selected ->
+                Icon(if (selected) item.icon else item.outlinedIcon, contentDescription = item.title)
+            }
+        }
+    }
+    // D-137 (adopting D-121's left-over "slide the navigation bar away on sub-pages"): the bar's slot grows and shrinks
+    // on the non-bouncy spring, so the Scaffold's bottom padding (every page's bottom, the 시간표 FAB) follows it instead
+    // of jumping in one frame, and the bar, anchored to the slot's top, slides down past the screen edge. The rail does
+    // the same toward the start edge. Under reduced motion they appear and disappear at once, as before.
+    val barEnter = if (reducedMotion) {
+        EnterTransition.None
+    } else {
+        expandVertically(DimaMotion.settle(), expandFrom = Alignment.Top) + fadeIn(DimaMotion.effectsDefault())
+    }
+    val barExit = if (reducedMotion) {
+        ExitTransition.None
+    } else {
+        shrinkVertically(DimaMotion.settle(), shrinkTowards = Alignment.Top) + fadeOut(DimaMotion.effectsFast())
+    }
+    val railEnter = if (reducedMotion) {
+        EnterTransition.None
+    } else {
+        expandHorizontally(DimaMotion.settle(), expandFrom = Alignment.End) + fadeIn(DimaMotion.effectsDefault())
+    }
+    val railExit = if (reducedMotion) {
+        ExitTransition.None
+    } else {
+        shrinkHorizontally(DimaMotion.settle(), shrinkTowards = Alignment.End) + fadeOut(DimaMotion.effectsFast())
     }
 
     // D-107: the school-site host lies over the whole window, navigation bar and rail included, so a page or
@@ -281,7 +378,7 @@ fun DimaNowApp(
         // 스크롤 콘텐츠가 상태바 뒤까지 흐르게 한다 (상단 빈 띠 제거)
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         bottomBar = {
-            if (showNavigation && !useRail) {
+            AnimatedVisibility(visible = showNavigation && !useRail, enter = barEnter, exit = barExit, label = "navigation_bar") {
                 // D-104: the M3 Expressive flexible (short) navigation bar — 64dp on surfaceContainer with the
                 // secondaryContainer indicator; the selected destination is marked by the indicator and a
                 // filled icon (others outlined), with one label weight so labels never reflow (D-094(12)).
@@ -303,7 +400,7 @@ fun DimaNowApp(
         // 제스처 바 인셋을 목록 아래 여백으로 더한다 (D-094)
         val pageModifier = Modifier.padding(padding).consumeWindowInsets(padding)
       Row(Modifier.fillMaxSize()) {
-        if (showNavigation && useRail) {
+        AnimatedVisibility(visible = showNavigation && useRail, enter = railEnter, exit = railExit, label = "navigation_rail") {
             // D-104: the M3 Expressive collapsed navigation rail — icons over labels, the same indicator and
             // filled/outlined icons as the bar; it takes the status bar, cutout and start insets itself.
             WideNavigationRail(modifier = Modifier.testTag("nav_rail")) {
@@ -347,14 +444,10 @@ fun DimaNowApp(
                     dimaPageTransform(pageMotion(initialState, targetState, subPageReturn), slidePx, reducedMotion)
                 },
                 label = "tab_transition",
-                modifier = Modifier
-                    // The shrinking page needs a backdrop one tone apart, or its edges vanish into the same page color.
-                    .drawBehind { if (backPreview.value > 0f) drawRect(backdrop) }
-                    .predictiveBackPreview(
-                        progress = { backPreview.value },
-                        fromLeftEdge = { backFromLeftEdge },
-                    ),
+                // The shrinking page needs a backdrop one tone apart, or its edges vanish into the same page color.
+                modifier = Modifier.predictiveBackBackdrop(backPreview, backdrop),
             ) { targetPage ->
+             PredictiveBackPage(backPreview, key = targetPage) {
               tabStateHolder.SaveableStateProvider(targetPage.name) {
                CompositionLocalProvider(LocalScrollToTopSignal provides (reselections[targetPage] ?: 0)) {
                 val minuteNow = if (targetPage.usesMinuteTicker) rememberMinuteNow() else null
@@ -362,6 +455,7 @@ fun DimaNowApp(
                 AppPage.DASHBOARD -> DashboardRoute(
                     repository = repository,
                     preferences = preferences,
+                    savedFavoritesFlow = savedHomeFavorites,
                     shuttleSource = shuttleSource,
                     mealSource = mealSource,
                     noticeSource = noticeSource,
@@ -369,6 +463,7 @@ fun DimaNowApp(
                     lmsSessionController = lmsSessionController,
                     onNavigateToPage = ::open,
                     onAddCourse = { addCourseRequest = System.currentTimeMillis(); open(AppPage.TIMETABLE) },
+                    onShowRoom = ::openMapFor,
                     updateState = updateState,
                     appUpdateCoordinator = appUpdateCoordinator,
                     modifier = pageModifier,
@@ -380,11 +475,11 @@ fun DimaNowApp(
                     addCourseRequest = addCourseRequest,
                     onAddCourseRequestHandled = { addCourseRequest = 0L },
                     onBack = { page = subPageReturn },
+                    onShowRoom = ::openMapFor,
                 )
                 AppPage.ALL -> AllScreen(
                     onOpen = ::open,
                     updateState = updateState,
-                    onCheckUpdate = { appUpdateCoordinator?.checkManually() },
                     onDownloadUpdate = { appUpdateCoordinator?.downloadAndInstall() },
                     onContinueInstall = { appUpdateCoordinator?.continueInstall() },
                     modifier = pageModifier,
@@ -431,9 +526,19 @@ fun DimaNowApp(
                     onBack = { page = subPageReturn },
                     modifier = pageModifier,
                 )
+                AppPage.LIBRARY -> LibraryScreen(
+                    onBack = { page = subPageReturn },
+                    modifier = pageModifier,
+                )
+                AppPage.MAP -> CampusMapScreen(
+                    onBack = { page = backTarget(AppPage.MAP) },
+                    modifier = pageModifier,
+                    focusRoom = mapFocusRoom,
+                )
                 }
                }
               }
+             }
             }
         }
         }
@@ -462,6 +567,7 @@ fun DimaNowApp(
 private fun DashboardRoute(
     repository: CampusDataRepository,
     preferences: AppPreferences,
+    savedFavoritesFlow: Flow<SavedHomeFavorites>,
     shuttleSource: ShuttleSource,
     mealSource: MealSource,
     noticeSource: NoticeSource?,
@@ -469,16 +575,21 @@ private fun DashboardRoute(
     lmsSessionController: LmsSessionController,
     onNavigateToPage: (AppPage) -> Unit,
     onAddCourse: () -> Unit,
+    onShowRoom: (String) -> Unit,
     updateState: AppUpdateUiState,
     appUpdateCoordinator: AppUpdateCoordinator?,
     modifier: Modifier,
     now: ZonedDateTime,
 ) {
-    val schedule by repository.schedule.collectRetainedAsState(initialValue = remember { emptyTermSchedule() })
-    val homeLms by lmsSource.snapshot.collectRetainedAsState(initialValue = com.example.dimanow.lms.LmsSnapshot())
+    // D-137: Home's own inputs are null until they are read, and Home is drawn only once all of them are. Their
+    // stand-in defaults (no classes, an empty LMS cache, outside campus, COMMUTE, the default card order with nothing
+    // hidden, the default favourites) drew the wrong briefing and cards for the first cold-start frames and corrected
+    // them a frame later, which the card and list motion would now animate at every launch.
+    val schedule = repository.schedule.collectLoadedAsState().value
+    val homeLms = lmsSource.snapshot.collectLoadedAsState().value
     val homeLmsSession by lmsSessionController.state.collectAsStateWithLifecycle()
-    val resolvedZone by preferences.effectiveZone.collectRetainedAsState(initialValue = CampusZoneId.OUTSIDE)
-    val locationMode by preferences.locationMode.collectRetainedAsState(initialValue = LocationMode.GPS)
+    val resolvedZone = preferences.effectiveZone.collectLoadedAsState().value
+    val locationMode = preferences.locationMode.collectLoadedAsState().value
     // D-094: null until each source emits its first cached value, so cold start shows loading, not empty
     val shuttle by shuttleSource.data.collectLoadedAsState()
     val meal by mealSource.data.collectLoadedAsState()
@@ -489,17 +600,66 @@ private fun DashboardRoute(
     // D-106: exam weeks and the next term start for Home's title follow the published calendar
     val serviceCalendar by com.example.dimanow.calendar.ServiceCalendarStore.calendar.collectAsStateWithLifecycle()
     // D-122: 엔터관 방향(예인관) 학생에게 점호 날 점호 카드를 보여 준다
-    val homeBase by preferences.homeBase.collectRetainedAsState(initialValue = HomeBase.COMMUTE)
+    val homeBase = preferences.homeBase.collectLoadedAsState().value
     val rollCallNotices by com.example.dimanow.dorm.RollCallStore.notices.collectAsStateWithLifecycle()
-    val rollCall = todayRollCall(now.toLocalDate(), rollCallNotices, serviceCalendar)
-        .takeIf { showsHomeRollCall(homeBase == HomeBase.YEIN, it) }
+    val todayRollCallStatus = todayRollCall(now.toLocalDate(), rollCallNotices, serviceCalendar)
+    // D-128(1): the student's card order, hidden cards and favourites row
+    val cardOrder = preferences.homeCardOrder.collectLoadedAsState().value
+    val hiddenCards = preferences.homeHiddenCards.collectLoadedAsState().value
+    val savedFavorites = savedFavoritesFlow.collectLoadedAsState().value
+    var editingHome by rememberSaveable { mutableStateOf(false) }
+    val homeContext = LocalContext.current
+    val outingLauncher = rememberOutingLauncher(todayRollCallStatus)
+    // D-128(3): keyword alerts are offered once, when the student comes back from 학교 공지 opened on Home
+    val noticeKeywordSuggested by preferences.noticeKeywordSuggested.collectAsStateWithLifecycle(initialValue = true)
+    var noticeOpenedFromHome by rememberSaveable { mutableStateOf(false) }
+    var showNoticeSuggestion by rememberSaveable { mutableStateOf(false) }
+    androidx.lifecycle.compose.LifecycleEventEffect(androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
+        if (noticeOpenedFromHome && !noticeKeywordSuggested) showNoticeSuggestion = true
+        noticeOpenedFromHome = false
+    }
+    // D-126(7): after an update Home offers what changed, once; the stored value starts as "seen" to avoid a flash.
+    val whatsNewSeen by preferences.whatsNewSeenVersionCode
+        .collectAsStateWithLifecycle(initialValue = com.example.dimanow.BuildConfig.VERSION_CODE)
+    val whatsNewScope = rememberCoroutineScope()
+    val updateCard: (@Composable () -> Unit)? = if (appUpdateCoordinator != null && updateState.showsHomeNotice()) {
+        {
+            HomeUpdateNotice(
+                state = updateState,
+                onInstall = appUpdateCoordinator::downloadAndInstall,
+                onLater = appUpdateCoordinator::dismissPrompt,
+                onCancel = appUpdateCoordinator::cancelDownload,
+                onContinueInstall = appUpdateCoordinator::continueInstall,
+            )
+        }
+    } else null
+    val whatsNewCard: (@Composable () -> Unit)? =
+        if (showsWhatsNew(whatsNewSeen, com.example.dimanow.BuildConfig.VERSION_CODE, onboardingCompleted = true)) {
+            {
+                HomeWhatsNewNotice(
+                    versionName = com.example.dimanow.BuildConfig.VERSION_NAME,
+                    onDismiss = {
+                        whatsNewScope.launch { preferences.setWhatsNewSeenVersionCode(com.example.dimanow.BuildConfig.VERSION_CODE) }
+                    },
+                )
+            }
+        } else null
 
+    if (schedule == null || homeLms == null || resolvedZone == null || locationMode == null || homeBase == null ||
+        cardOrder == null || hiddenCards == null || savedFavorites == null
+    ) {
+        HomeWaiting(shown = rememberShownAfter(true), modifier = modifier)
+        return
+    }
+    val rollCall = todayRollCallStatus.takeIf { showsHomeRollCall(homeBase == HomeBase.YEIN, it) }
+    val favorites = homeFavorites(savedFavorites.keys, homeBase)
     DashboardScreen(
         schedule = schedule,
         serviceCalendar = serviceCalendar,
         lmsSnapshot = homeLms,
         lmsSessionState = homeLmsSession,
         zone = resolvedZone,
+        livesInDorm = homeBase == HomeBase.YEIN,
         testMode = locationMode == LocationMode.TEST,
         shuttle = shuttle,
         meal = meal,
@@ -507,21 +667,78 @@ private fun DashboardRoute(
         notices = notices,
         onNavigateToPage = onNavigateToPage,
         onAddCourse = onAddCourse,
-        updateNotice = if (appUpdateCoordinator != null && updateState.showsHomeNotice()) {
-            {
-                HomeUpdateNotice(
-                    state = updateState,
-                    onInstall = appUpdateCoordinator::downloadAndInstall,
-                    onLater = appUpdateCoordinator::dismissPrompt,
-                    onCancel = appUpdateCoordinator::cancelDownload,
-                    onContinueInstall = appUpdateCoordinator::continueInstall,
-                )
-            }
-        } else null,
+        onShowRoom = onShowRoom,
+        updateNotice = updateCard,
+        whatsNewNotice = whatsNewCard,
         modifier = modifier,
         now = now,
         rollCall = rollCall,
+        cardOrder = cardOrder,
+        hiddenCards = hiddenCards,
+        favorites = favorites,
+        onOpenShortcut = { shortcut ->
+            when (shortcut) {
+                HomeShortcut.TIMETABLE -> onNavigateToPage(AppPage.TIMETABLE)
+                HomeShortcut.DORM -> onNavigateToPage(AppPage.DORM)
+                HomeShortcut.EQUIPMENT -> onNavigateToPage(AppPage.EQUIPMENT)
+                HomeShortcut.SETTINGS -> onNavigateToPage(AppPage.SETTINGS)
+                HomeShortcut.OUTING -> outingLauncher.request()
+                HomeShortcut.LIBRARY_CARD -> openApp(homeContext, LIBRARY_APP_PACKAGE)
+                HomeShortcut.HEYOUNG -> openApp(homeContext, HEYOUNG_APP_PACKAGE)
+                HomeShortcut.MEAL_TICKET -> openPaycoMealTicket(homeContext)
+            }
+        },
+        onEditHome = { editingHome = true },
+        onNoticeOpened = { if (!noticeKeywordSuggested) noticeOpenedFromHome = true },
     )
+    outingLauncher.error?.let { message ->
+        LaunchedEffect(message) { android.widget.Toast.makeText(homeContext, message, android.widget.Toast.LENGTH_SHORT).show() }
+    }
+    if (editingHome) {
+        HomeEditorDialog(
+            order = homeCardOrder(cardOrder, emptySet()),
+            hidden = hiddenCards,
+            favorites = favorites,
+            onSave = { order, hidden, picked ->
+                whatsNewScope.launch { preferences.setHomeLayout(order.map { it.key }, hidden, picked.map { it.key }) }
+                editingHome = false
+            },
+            onDismiss = { editingHome = false },
+        )
+    }
+    if (showNoticeSuggestion) {
+        NoticeKeywordSuggestionSheet(
+            onEnable = { keywords ->
+                whatsNewScope.launch {
+                    preferences.setNoticeKeywords(keywords)
+                    preferences.setNoticeKeywordAlerts(true)
+                    preferences.setNoticeKeywordSuggested()
+                }
+                showNoticeSuggestion = false
+            },
+            onLater = {
+                whatsNewScope.launch { preferences.setNoticeKeywordSuggested() }
+                showNoticeSuggestion = false
+            },
+        )
+    }
+}
+
+/**
+ * The saved favourites row as Home's gate reads it (D-137): `keys` null means nothing picked yet (the defaults of
+ * [homeFavorites]), while the wrapper itself is null until the setting was read.
+ */
+private data class SavedHomeFavorites(val keys: List<String>?)
+
+/**
+ * Home while its own settings are read (D-137): nothing for a wait under the loading grace period, which is almost
+ * always the case (a frame or two), and a loading line after it. The list's entrance covers Home's first appearance.
+ */
+@Composable
+private fun HomeWaiting(shown: Boolean, modifier: Modifier) {
+    Box(modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        if (shown) LoadingLine("홈을 불러오고 있어요", Modifier.testTag("dashboard_waiting"))
+    }
 }
 
 @Composable
@@ -531,6 +748,7 @@ private fun TimetableRoute(
     addCourseRequest: Long,
     onAddCourseRequestHandled: () -> Unit,
     onBack: () -> Unit,
+    onShowRoom: (String) -> Unit,
 ) {
     val schedule by repository.schedule.collectRetainedAsState(initialValue = remember { emptyTermSchedule() })
     TimetableScreen(
@@ -538,6 +756,7 @@ private fun TimetableRoute(
         addCourseRequest = addCourseRequest,
         onAddCourseRequestHandled = onAddCourseRequestHandled,
         onBack = onBack,
+        onShowRoom = onShowRoom,
     )
 }
 
@@ -602,6 +821,11 @@ private fun SettingsRoute(
     )
     val homeBase by preferences.homeBase.collectAsStateWithLifecycle(initialValue = HomeBase.YEIN)
     val academicReminders by preferences.academicReminders.collectAsStateWithLifecycle(initialValue = true)
+    val deadlineDigest by preferences.deadlineDigest.collectAsStateWithLifecycle(initialValue = true)
+    val outingReminders by preferences.outingReminders.collectAsStateWithLifecycle(initialValue = true)
+    val appContextForReminders = LocalContext.current.applicationContext
+    val noticeKeywordAlerts by preferences.noticeKeywordAlerts.collectAsStateWithLifecycle(initialValue = false)
+    val noticeKeywords by preferences.noticeKeywords.collectAsStateWithLifecycle(initialValue = emptyList())
     // D-094: null until the cache emits, so the diagnostics card shows loading rather than "기록 없음"
     val shuttle by shuttleSource.data.collectLoadedAsState()
     val meal by mealSource.data.collectLoadedAsState()
@@ -626,6 +850,24 @@ private fun SettingsRoute(
         },
         academicReminders = academicReminders,
         onAcademicRemindersChange = { scope.launch { preferences.setAcademicReminders(it) } },
+        deadlineDigest = deadlineDigest,
+        onDeadlineDigestChange = { scope.launch { preferences.setDeadlineDigest(it) } },
+        noticeKeywordAlerts = noticeKeywordAlerts,
+        noticeKeywords = noticeKeywords,
+        onNoticeKeywordAlertsChange = {
+            scope.launch {
+                preferences.setNoticeKeywordAlerts(it)
+                preferences.setNoticeKeywordSuggested()
+            }
+        },
+        onNoticeKeywordsChange = { scope.launch { preferences.setNoticeKeywords(it) } },
+        outingReminders = outingReminders,
+        onOutingRemindersChange = {
+            scope.launch {
+                preferences.setOutingReminders(it)
+                if (!it) com.example.dimanow.dorm.OutingReminder.cancel(appContextForReminders)
+            }
+        },
         homeBase = homeBase,
         onHomeBaseChange = { scope.launch { preferences.setHomeBase(it) } },
         shuttleData = shuttle,

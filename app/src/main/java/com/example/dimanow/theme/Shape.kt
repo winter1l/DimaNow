@@ -45,15 +45,17 @@ object DimaShapes {
     val Dialog: CornerBasedShape = ExtraLarge
 
     /**
-     * The departure capsule on its way from [Tile] (fraction 0) to a full pill (fraction 1), for the imminent
-     * departure (D-121): M3 Expressive draws attention by breaking from the surrounding shape style.
+     * A strip cell on its way from [Tile] (fraction 0) to a full pill (fraction 1): the next departure is always
+     * round, and when a departure leaves the next cell rounds on the hand-over's one non-bouncy spring
+     * (`departureMotion`, D-124). D-124 removed D-121's five-minute emphasis (the imminent departure turning into a
+     * pill); it must not return.
      */
     fun tileToPill(fraction: Float): Shape = TileToPillShape(fraction)
 }
 
 /**
- * [DimaShapes.Tile]'s 12dp corners grown toward half the shorter side as [fraction] goes to 1 (D-121). A spatial
- * spring may overshoot past 1; the radius never exceeds a full pill.
+ * [DimaShapes.Tile]'s 12dp corners grown toward half the shorter side as [fraction] goes to 1 (D-121, D-124). The
+ * radius stays within a full pill even if a spring passes 1.
  */
 internal data class TileToPillShape(val fraction: Float) : Shape {
     override fun createOutline(size: Size, layoutDirection: LayoutDirection, density: Density): Outline {

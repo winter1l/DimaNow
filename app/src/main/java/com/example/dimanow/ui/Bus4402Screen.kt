@@ -1,6 +1,14 @@
 package com.example.dimanow.ui
 
 import androidx.compose.foundation.border
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.ui.graphics.Color
+import com.example.dimanow.ui.motion.DimaMotion
+import com.example.dimanow.ui.motion.LocalReducedMotion
+import com.example.dimanow.ui.motion.dimaPopIn
+import com.example.dimanow.ui.motion.dimaPopOut
 import android.content.ActivityNotFoundException
 import android.content.Intent
 import androidx.core.net.toUri
@@ -48,6 +56,7 @@ internal fun Bus4402ScheduleContent(
     now: ZonedDateTime,
     nearbyStopNumber: String?,
     modifier: Modifier = Modifier,
+    resetSignal: Int = 0,
 ) {
     val context = LocalContext.current
     val schedule = Bus4402Schedule.official
@@ -73,6 +82,7 @@ internal fun Bus4402ScheduleContent(
                 now = now,
                 isNearby = nearbyStopNumber == stop.stopNumber,
                 timetableKey = "${now.toLocalDate()}|$serviceType|${stop.stopNumber}",
+                resetSignal = resetSignal,
             )
         }
 
@@ -116,26 +126,27 @@ private fun Bus4402StopCard(
     now: ZonedDateTime,
     isNearby: Boolean,
     timetableKey: String,
+    resetSignal: Int = 0,
 ) {
     val nowTime = now.toLocalTime()
+    val reducedMotion = LocalReducedMotion.current
     val firstUpcomingIndex = departures.indexOfFirst { !it.time.isBefore(nowTime) }
     val upcoming = if (firstUpcomingIndex < 0) emptyList() else departures.drop(firstUpcomingIndex).take(2)
     val estimated = departures.firstOrNull()?.estimated == true
+    // D-095: 가까운 정류장은 연한 컨테이너 + primary 테두리로 강조해 안쪽 칸과 칩이 묻히지 않게 한다
+    val emphasis = rememberPlaceEmphasis(isNearby)
 
     ElevatedCard(
         modifier = Modifier
             .fillMaxWidth()
-            .then(if (isNearby) Modifier.border(1.5.dp, MaterialTheme.colorScheme.primary, DimaShapes.Card) else Modifier)
+            .border(1.5.dp, emphasis.border, DimaShapes.Card)
             .testTag("bus4402_stop_${stop.stopNumber}"),
         shape = DimaShapes.Card,
-        colors = CardDefaults.elevatedCardColors(
-            // D-095: 가까운 정류장은 연한 컨테이너 + primary 테두리로 강조해 안쪽 칸과 칩이 묻히지 않게 한다
-            containerColor = if (isNearby) DimaTheme.colors.cardInner else DimaTheme.colors.card,
-        ),
+        colors = CardDefaults.elevatedCardColors(containerColor = emphasis.container),
     ) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            // 교내 셔틀 노선 카드와 같은 머리: 이름 + 현재 정류장 배지, 그 아래 첫차·막차와 정류장 정보
-            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Column(Modifier.padding(vertical = 16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            // 교내 셔틀 노선 카드와 같은 머리: 이름 + 현재 정류장 배지, 그 아래 횟수·시간대와 정류장 정보
+            Column(Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -144,10 +155,11 @@ private fun Bus4402StopCard(
                     Text(
                         stop.displayName,
                         style = MaterialTheme.typography.titleMedium,
-                        color = if (isNearby) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+                        color = emphasis.title,
                         modifier = Modifier.weight(1f, fill = false),
                     )
-                    if (isNearby) {
+                    // D-137: the badge pops in and out with the place (a fade under reduced motion).
+                    AnimatedVisibility(visible = isNearby, enter = dimaPopIn(reducedMotion), exit = dimaPopOut(reducedMotion)) {
                         Surface(shape = DimaShapes.Badge, color = MaterialTheme.colorScheme.primary) {
                             Text(
                                 "현재 정류장",
@@ -165,108 +177,90 @@ private fun Bus4402StopCard(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 if (departures.isNotEmpty()) {
-                    Surface(shape = DimaShapes.Badge, color = DimaTheme.colors.cardInner) {
-                        Text(
-                            text = "첫차 ${departures.first().time.format(TIME)} · 막차 ${departures.last().time.format(TIME)}" +
-                                if (estimated) " · 예정" else "",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                        )
-                    }
-                }
-            }
-
-            if (upcoming.isEmpty()) {
-                Surface(
-                    shape = DimaShapes.Tile,
-                    color = DimaTheme.colors.cardInner,
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
+                    // D-124: the count and the day's span, as on the campus shuttle cards.
                     Text(
-                        text = "오늘 운행이 끝났어요",
-                        style = MaterialTheme.typography.bodySmall,
+                        text = "${departures.size}회 · ${departures.first().time.format(TIME)}–${departures.last().time.format(TIME)}" +
+                            if (estimated) " · 예정" else "",
+                        style = MaterialTheme.typography.labelMedium.copy(fontFeatureSettings = TABULAR_FIGURES),
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
                     )
-                }
-            } else {
-                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text(
-                        text = "출발 시각",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.primary,
-                    )
-                    DepartureCapsuleRow(spacing = 8.dp) {
-                        upcoming.forEachIndexed { index, departure ->
-                            val departureIndex = firstUpcomingIndex + index
-                            val target = now.toLocalDate().atTime(departure.time).atZone(now.zone)
-                            val minutesLeft = (Duration.between(now, target).toMillis().coerceAtLeast(0) + 59_999L) / 60_000L
-                            val isLastService = departureIndex == departures.lastIndex
-                            val (container, content) = shuttleCapsuleColors(isNearest = index == 0, isLastService = isLastService)
-                            DepartureCapsule(
-                                label = departureCountdownLabel(
-                                    minutesLeft,
-                                    serviceMarkers(departureIndex == 0, isLastService),
-                                ),
-                                clock = departure.time.format(TIME) + if (departure.estimated) " · 예정" else "",
-                                containerColor = container,
-                                contentColor = content,
-                                labelStyle = MaterialTheme.typography.titleSmallEmphasized,
-                                imminent = isImminentDeparture(minutesLeft, isNearest = index == 0),
-                                modifier = Modifier.testTag("bus4402_next_${stop.stopNumber}_$index"),
-                            )
-                        }
-                    }
                 }
             }
 
-            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text(
-                    text = "전체 시간표 · ${departures.size}회",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+            // D-124: one strip carries the next two departures (large, with their countdown) and the whole day.
+            fun minutesUntil(time: java.time.LocalTime): Long {
+                val target = now.toLocalDate().atTime(time).atZone(now.zone)
+                return (Duration.between(now, target).toMillis().coerceAtLeast(0) + 59_999L) / 60_000L
+            }
+            val nextMinutesLeft = departures.getOrNull(firstUpcomingIndex)?.let { minutesUntil(it.time) }
+            val chips = departures.mapIndexed { index, departure ->
+                val isPast = departure.time.isBefore(nowTime)
+                val isNext = index == firstUpcomingIndex
+                val isSecond = firstUpcomingIndex >= 0 && index == firstUpcomingIndex + 1
+                val isFirst = index == 0
+                val isLast = index == departures.lastIndex
+                val markers = serviceMarkers(isFirst, isLast) + listOfNotNull("예정".takeIf { departure.estimated })
+                val look = nextDepartureLook(
+                    isFirst = isFirst, isLast = isLast, isPast = isPast, isNext = isNext, isSecond = isSecond,
+                    clock = departure.time.format(TIME),
+                    minutesLeft = if (isNext || isSecond) minutesUntil(departure.time) else null,
+                    nextMinutesLeft = nextMinutesLeft,
+                    nextIsFirst = firstUpcomingIndex == 0,
                 )
-                val chips = departures.mapIndexed { index, departure ->
-                    val isPast = departure.time.isBefore(nowTime)
-                    val isNext = index == firstUpcomingIndex
-                    val isFirst = index == 0
-                    val isLast = index == departures.lastIndex
-                    TimetableChipSpec(
-                        key = departure.time.toSecondOfDay(),
-                        text = buildString {
-                            append(departure.time.format(TIME))
-                            when {
-                                isFirst && isLast -> append(" (첫차·막차)")
-                                isFirst -> append(" (첫차)")
-                                isLast -> append(" (막차)")
-                            }
-                            if (departure.estimated) append(" · 예정")
-                        },
-                        description = timetableChipDescription(
-                            clock = departure.time.format(TIME),
-                            isPast = isPast,
-                            isNext = isNext,
-                            markers = serviceMarkers(isFirst, isLast) + listOfNotNull("예정".takeIf { departure.estimated }),
-                        ),
-                        tone = timetableChipTone(
-                            isFirst = isFirst,
-                            isLast = isLast,
-                            isPast = isPast,
-                            isNext = isNext,
-                            isSecond = firstUpcomingIndex >= 0 && index == firstUpcomingIndex + 1,
-                        ),
-                    )
-                }
-                TimetableChipRow(
-                    chips = chips,
-                    initialIndex = if (firstUpcomingIndex >= 0) firstUpcomingIndex else departures.lastIndex,
-                    stateKey = timetableKey,
-                    modifier = Modifier.testTag("bus4402_times_${stop.stopNumber}"),
+                TimetableChipSpec(
+                    key = departure.time.toSecondOfDay(),
+                    clock = departure.time.format(TIME),
+                    markers = markers,
+                    description = timetableChipDescription(departure.time.format(TIME), isPast, isNext, markers, look.countdown.takeUnless { look.farAhead }),
+                    tone = look.tone,
+                    isPast = isPast,
+                    countdown = look.countdown,
+                    farAhead = look.farAhead,
                 )
             }
+            DepartureStrip(
+                chips = chips,
+                stateKey = timetableKey,
+                resetSignal = resetSignal,
+                onCardInner = isNearby,
+                endedNote = if (departures.isNotEmpty() && upcoming.isEmpty()) "" else null,
+                largeCellTag = { "bus4402_next_${stop.stopNumber}_$it" },
+                modifier = Modifier.testTag("bus4402_times_${stop.stopNumber}"),
+            )
         }
     }
+}
+
+/** The two looks of a card for the place the student is at ([rememberPlaceEmphasis]). */
+internal data class PlaceEmphasis(val container: Color, val border: Color, val title: Color)
+
+/**
+ * The look of a card for where the student is (D-029, D-095): the inner-tone container, a primary border and a
+ * primary title, against the plain card. D-137: when the place changes while the card is shown (the 현재 위치 origin
+ * or the 현재 정류장), the change between the two looks moves on the default effects spring, as the strip's tiles inside
+ * already do, so for a moment the card no longer disagrees with its own tiles. Shapes and tones are unchanged (D-105);
+ * the border only fades, so it is always drawn, transparent when [active] is false. Used by the shuttle route card,
+ * its origin heading and the 4402 stop card.
+ */
+@Composable
+internal fun rememberPlaceEmphasis(active: Boolean): PlaceEmphasis {
+    val colors = MaterialTheme.colorScheme
+    val container by animateColorAsState(
+        if (active) DimaTheme.colors.cardInner else DimaTheme.colors.card,
+        DimaMotion.effectsDefault(),
+        label = "place_container",
+    )
+    val border by animateColorAsState(
+        if (active) colors.primary else colors.primary.copy(alpha = 0f),
+        DimaMotion.effectsDefault(),
+        label = "place_border",
+    )
+    val title by animateColorAsState(
+        if (active) colors.primary else colors.onSurface,
+        DimaMotion.effectsDefault(),
+        label = "place_title",
+    )
+    return PlaceEmphasis(container, border, title)
 }
 
 private val TIME = DateTimeFormatter.ofPattern("HH:mm")

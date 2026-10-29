@@ -1,5 +1,6 @@
 package com.example.dimanow.ui
 
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -26,10 +27,14 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.example.dimanow.theme.DimaShapes
 import com.example.dimanow.theme.DimaTheme
+import com.example.dimanow.ui.motion.LocalReducedMotion
+import com.example.dimanow.ui.motion.dimaIconSwap
+import com.example.dimanow.ui.motion.rememberShownAfter
 
 /**
  * Shared "nothing here" message for lists and cards (D-094(14)): Shuttle, Meal, Home notices and
@@ -39,6 +44,9 @@ import com.example.dimanow.theme.DimaTheme
  * - [contained] = false draws only the text and action, for use inside another card.
  * - [actionLabel] + [onAction] add one follow-up action; [secondaryActionLabel] + [onSecondaryAction]
  *   add a quieter alternative under it (D-102: an empty view offers every way to fill it).
+ * - D-137: [actionBusy] tells that the action's tap is still being answered. Once that has lasted the loading grace
+ *   period, the tonal action's leading icon turns into the loading indicator and the button is read as
+ *   `확인하고 있어요`; its label stays.
  */
 @Composable
 internal fun EmptyState(
@@ -50,6 +58,7 @@ internal fun EmptyState(
     onAction: (() -> Unit)? = null,
     actionIcon: ImageVector? = null,
     actionEnabled: Boolean = true,
+    actionBusy: Boolean = false,
     actionTag: String? = null,
     contained: Boolean = true,
     secondaryActionLabel: String? = null,
@@ -74,14 +83,14 @@ internal fun EmptyState(
                 }
                 Text(message, style = MaterialTheme.typography.titleMedium, textAlign = TextAlign.Center)
                 supporting?.let {
-                    Text(
+                    KoreanText(
                         it,
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         textAlign = TextAlign.Center,
                     )
                 }
-                StateAction(actionLabel, onAction, actionIcon, actionEnabled, actionTag, tonal = true)
+                StateAction(actionLabel, onAction, actionIcon, actionEnabled, actionTag, tonal = true, busy = actionBusy)
                 StateAction(secondaryActionLabel, onSecondaryAction, null, actionEnabled, secondaryActionTag, tonal = false)
             }
         } else {
@@ -131,9 +140,9 @@ internal fun ErrorState(
                 .semantics(mergeDescendants = false) { liveRegion = LiveRegionMode.Polite },
             verticalArrangement = Arrangement.spacedBy(4.dp),
         ) {
-            Text(message, style = MaterialTheme.typography.bodyMedium, color = contentColor)
+            KoreanText(message, style = MaterialTheme.typography.bodyMedium, color = contentColor)
             supporting?.let {
-                Text(
+                KoreanText(
                     it,
                     style = MaterialTheme.typography.bodySmall,
                     color = if (contained) contentColor else MaterialTheme.colorScheme.onSurfaceVariant,
@@ -169,13 +178,33 @@ private fun StateAction(
     enabled: Boolean,
     tag: String?,
     tonal: Boolean,
+    busy: Boolean = false,
 ) {
     if (label == null || onAction == null) return
     val tagged = if (tag != null) Modifier.testTag(tag) else Modifier
     if (tonal) {
-        FilledTonalButton(shapes = ButtonDefaults.shapes(), onClick = onAction, enabled = enabled, modifier = tagged) {
-            icon?.let {
-                Icon(it, contentDescription = null, modifier = Modifier.size(ButtonDefaults.IconSize))
+        // D-137: a wait under the grace period shows nothing; a longer one swaps the icon for the indicator.
+        val showBusy = rememberShownAfter(busy)
+        val reducedMotion = LocalReducedMotion.current
+        FilledTonalButton(
+            shapes = ButtonDefaults.shapes(),
+            onClick = onAction,
+            enabled = enabled,
+            modifier = tagged.semantics { if (showBusy) stateDescription = ACTION_BUSY_DESCRIPTION },
+        ) {
+            icon?.let { leading ->
+                AnimatedContent(
+                    targetState = showBusy,
+                    transitionSpec = { dimaIconSwap(reducedMotion) },
+                    contentAlignment = Alignment.Center,
+                    label = "state_action_icon",
+                ) { loading ->
+                    if (loading) {
+                        DimaLoadingIndicator(size = 20.dp)
+                    } else {
+                        Icon(leading, contentDescription = null, modifier = Modifier.size(ButtonDefaults.IconSize))
+                    }
+                }
                 Spacer(Modifier.width(ButtonDefaults.IconSpacing))
             }
             Text(label)
@@ -184,3 +213,6 @@ private fun StateAction(
         TextButton(shapes = ButtonDefaults.shapes(), onClick = onAction, enabled = enabled, modifier = tagged) { Text(label) }
     }
 }
+
+/** What a screen reader hears on an empty state's action while its tap is being answered (D-137). */
+private const val ACTION_BUSY_DESCRIPTION = "확인하고 있어요"

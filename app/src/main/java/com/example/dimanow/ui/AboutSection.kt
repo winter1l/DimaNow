@@ -145,7 +145,7 @@ private val LICENSED_COMPONENTS = listOf(
     LicensedComponent("JSpecify", "The JSpecify Authors", "Apache License 2.0"),
     LicensedComponent("jsoup", "Jonathan Hedley", "MIT License"),
     LicensedComponent("Google Play services (위치)", "Google LLC", "Android Software Development Kit License"),
-    LicensedComponent("캠퍼스 구역 경계 데이터", "© OpenStreetMap contributors", "Open Database License (ODbL) 1.0"),
+    LicensedComponent("캠퍼스 지도 · 구역 경계 데이터", "© OpenStreetMap contributors", "Open Database License (ODbL) 1.0"),
 )
 
 @OptIn(ExperimentalMaterial3Api::class)

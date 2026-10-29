@@ -1,5 +1,10 @@
 package com.example.dimanow.ui
 
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.SizeTransform
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -28,6 +33,8 @@ import com.example.dimanow.live.GuidanceKind
 import com.example.dimanow.live.NotificationGuidanceMode
 import com.example.dimanow.live.NotificationGuidancePolicy
 import com.example.dimanow.theme.DimaTheme
+import com.example.dimanow.ui.motion.DimaMotion
+import com.example.dimanow.ui.motion.dimaContentSwap
 
 @Composable
 fun NotificationGuidanceSettings(
@@ -36,6 +43,14 @@ fun NotificationGuidanceSettings(
     modifier: Modifier = Modifier,
     academicReminders: Boolean = true,
     onAcademicRemindersChange: (Boolean) -> Unit = {},
+    deadlineDigest: Boolean = true,
+    onDeadlineDigestChange: (Boolean) -> Unit = {},
+    outingReminders: Boolean = true,
+    onOutingRemindersChange: (Boolean) -> Unit = {},
+    noticeKeywordAlerts: Boolean = false,
+    noticeKeywords: List<String> = emptyList(),
+    onNoticeKeywordAlertsChange: (Boolean) -> Unit = {},
+    onNoticeKeywordsChange: (List<String>) -> Unit = {},
 ) {
     ElevatedCard(
         modifier = modifier.fillMaxWidth(),
@@ -53,28 +68,54 @@ fun NotificationGuidanceSettings(
             GuidanceModeRow("교내 셔틀", GuidanceKind.CAMPUS_SHUTTLE, policy.campusShuttle, onModeChange)
             GuidanceModeRow("4402 강남행", GuidanceKind.BUS_4402, policy.bus4402, onModeChange)
             // D-107: 학사 일정은 실시간 안내가 아니라 아침 한 번의 일반 알림이라 나우바 선택지가 없다
-            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Text("학사 일정", style = MaterialTheme.typography.labelLarge)
-                SettingsChoice(
-                    options = listOf(true to "일반 알림", false to "끔"),
-                    selected = academicReminders,
-                    onSelect = onAcademicRemindersChange,
-                    itemTag = { "notification_academic_${if (it) "ON" else "OFF"}" },
-                )
-                Text(
-                    "수강신청 정정·수업평가·시험 같은 기간이 시작하거나 끝나는 날 아침에 알려 줘요.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
+            ReminderRow(
+                title = "학사 일정",
+                enabled = academicReminders,
+                onChange = onAcademicRemindersChange,
+                tag = "notification_academic",
+                description = "수강신청 정정·수업평가·시험 같은 기간이 시작하거나 끝나는 날 아침에 알려 줘요.",
+            )
+            // D-126(3): 오늘 마감을 아침 8시 30분에 한 번 모아 알린다
+            ReminderRow(
+                title = "과제 마감",
+                enabled = deadlineDigest,
+                onChange = onDeadlineDigestChange,
+                tag = "notification_deadline",
+                description = "오늘 마감인 과제·퀴즈를 아침 8시 30분에 한 번 모아 알려 줘요. 수업 탭에서 마지막으로 불러온 목록 기준이에요.",
+            )
+            // D-126(4): 카톡 점호 공지를 읽은 날에만, 엔터관 방향일 때 외출·외박 신청 마감 전에 알린다
+            ReminderRow(
+                title = "외출·외박 신청",
+                enabled = outingReminders,
+                onChange = onOutingRemindersChange,
+                tag = "notification_outing",
+                description = "점호가 있다는 카톡 공지를 읽은 날, 신청 마감 1시간 전에 알려 줘요. 귀가 방향이 엔터관일 때만 울려요.",
+            )
+            NoticeKeywordSetting(noticeKeywordAlerts, noticeKeywords, onNoticeKeywordAlertsChange, onNoticeKeywordsChange)
             KakaoRollCallSetting()
         }
+    }
+}
+
+@Composable
+private fun ReminderRow(title: String, enabled: Boolean, onChange: (Boolean) -> Unit, tag: String, description: String) {
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text(title, style = MaterialTheme.typography.labelLarge)
+        SettingsChoice(
+            options = listOf(true to "일반 알림", false to "끔"),
+            selected = enabled,
+            onSelect = onChange,
+            itemTag = { "${tag}_${if (it) "ON" else "OFF"}" },
+        )
+        Text(description, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 
 /**
  * D-112: 카톡 점호 공지 읽기 follows Android's notification access for DIMA Now; this row shows whether it is on
  * and opens the system page that turns it on or off. The state is read again whenever the screen resumes.
+ * D-137: back from that page, the status line turns over to the new one and the button's label cross-fades while the
+ * button's width follows on the fast spatial spring.
  */
 @Composable
 private fun KakaoRollCallSetting() {
@@ -86,20 +127,35 @@ private fun KakaoRollCallSetting() {
     }
     Column(verticalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.testTag("kakao_roll_call_setting")) {
         Text("카톡 점호 공지", style = MaterialTheme.typography.labelLarge)
-        Text(
-            if (granted) {
-                "켜져 있어요. 카카오톡 알림 중 점호 공지만 읽어 기숙사 화면에 보여 주고, 공지 내용은 저장하지 않아요."
-            } else {
-                "꺼져 있어요. 켜면 카카오톡 알림 중 점호 공지만 읽어 기숙사 화면에 오늘 점호 여부를 보여 줘요."
-            },
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
+        AnimatedContent(
+            targetState = granted,
+            transitionSpec = { dimaContentSwap() },
+            label = "kakao_roll_call_status",
+        ) { on ->
+            Text(
+                if (on) {
+                    "켜져 있어요. 카카오톡 알림 중 점호 공지만 읽어 기숙사 화면에 보여 주고, 공지 내용은 저장하지 않아요."
+                } else {
+                    "꺼져 있어요. 켜면 카카오톡 알림 중 점호 공지만 읽어 기숙사 화면에 오늘 점호 여부를 보여 줘요."
+                },
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
         OutlinedButton(
             shapes = ButtonDefaults.shapes(),
             onClick = { RollCallStore.openAccessSettings(context) },
             modifier = Modifier.heightIn(min = 48.dp).testTag("kakao_roll_call_access"),
-        ) { Text(if (granted) "설정에서 끄기" else "알림 접근 허용하기") }
+        ) {
+            AnimatedContent(
+                targetState = granted,
+                transitionSpec = {
+                    fadeIn(DimaMotion.effectsFast()) togetherWith fadeOut(DimaMotion.effectsFast()) using
+                        SizeTransform(clip = false) { _, _ -> DimaMotion.spatialFast() }
+                },
+                label = "kakao_roll_call_access_label",
+            ) { on -> Text(if (on) "설정에서 끄기" else "알림 접근 허용하기") }
+        }
     }
 }
 

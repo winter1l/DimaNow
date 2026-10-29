@@ -85,6 +85,8 @@ class MealServiceScreenTest {
         compose.onNodeWithText("마지막 확인", substring = true).assertDoesNotExist()
         compose.onNodeWithText("이번 주 식단을 아직 불러오지 못했어요").assertDoesNotExist()
         compose.onNodeWithText("제육볶음").assertIsDisplayed()
+        // D-133: the PAYCO 식권 FAB belongs to the 기숙사 only.
+        compose.onNodeWithTag("dorm_meal_ticket_shortcut").assertDoesNotExist()
         screenshot("cafeteria-open-light")
         compose.runOnIdle { time.value = LocalTime.of(14, 0) }
         compose.onNodeWithText("11:30~14:00").assertIsDisplayed()
@@ -100,8 +102,11 @@ class MealServiceScreenTest {
                 Surface { MealScreen(source(), today = today, nowTime = LocalTime.of(12, 30), initialVenue = MealVenue.DORMITORY) }
             }
         }
+        // D-133: PAYCO 식권 is the FAB on every 기숙사 day, wherever the list has jumped to.
+        compose.onNodeWithTag("dorm_meal_ticket_shortcut").assertIsDisplayed().assertHasClickAction()
         compose.onNodeWithTag("meal_day_WEDNESDAY").performClick()
         compose.onNodeWithText("9월 9일 수요일").assertIsDisplayed()
+        compose.onNodeWithTag("dorm_meal_ticket_shortcut").assertIsDisplayed()
         compose.onNodeWithText("조식").assertIsDisplayed()
         compose.onNodeWithText("운영 중", substring = true).assertDoesNotExist()
         screenshot("dormitory-future-light")

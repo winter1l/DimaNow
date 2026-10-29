@@ -18,6 +18,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.style.TextOverflow
 import com.example.dimanow.ui.DimaTopAppBar
 import java.io.ByteArrayInputStream
@@ -37,6 +38,8 @@ internal fun LmsFullScreenPane(
     backDescription: String = "뒤로",
     titleMaxLines: Int = 1,
     trailing: (@Composable () -> Unit)? = null,
+    /** D-131: the detail pane beside the 수업 list closes with an X instead of stepping back. */
+    navigationIcon: ImageVector = Icons.AutoMirrored.Filled.ArrowBack,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     Column(
@@ -51,7 +54,7 @@ internal fun LmsFullScreenPane(
             title = { Text(title, style = com.example.dimanow.theme.dimaPageTitleStyle(), maxLines = titleMaxLines, overflow = TextOverflow.Ellipsis) },
             navigationIcon = {
                 IconButton(shapes = IconButtonDefaults.shapes(), onClick = onBack) {
-                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = backDescription)
+                    Icon(navigationIcon, contentDescription = backDescription)
                 }
             },
             actions = { trailing?.invoke() },

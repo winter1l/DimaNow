@@ -1,5 +1,7 @@
 package com.example.dimanow.ui
 
+import androidx.compose.ui.test.hasTestTag
+import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
@@ -27,6 +29,8 @@ class AppBackNavigationTest {
         composeRule.waitForIdle()
         // D-110: Settings opens from 전체; no screen carries a settings gear.
         composeRule.onNodeWithTag("open_settings").assertDoesNotExist()
+        // 전체 grew (D-131): on a landscape tablet 설정 starts below the fold.
+        composeRule.onNodeWithTag("all_list").performScrollToNode(hasTestTag("all_settings"))
         composeRule.onNodeWithTag("all_settings").performClick()
         composeRule.onNodeWithTag("nav_ALL").assertDoesNotExist()
         composeRule.onNodeWithTag("close_settings").assertExists()

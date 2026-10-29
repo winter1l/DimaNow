@@ -542,7 +542,8 @@ class LmsHtmlParser(private val zoneId: ZoneId = ZoneId.of("Asia/Seoul")) {
             fields.putIfAbsent("board_no", boardNo)
             fields.putIfAbsent("boarditem_no", boardItemNo)
             fields.putIfAbsent("learning_design_yn", learningDesign)
-            match.groups[2]?.value?.let { timeFlag -> fields.putIfAbsent("time_flag", timeFlag) }
+            // The site's fncFileDown(file, pdf_yn) always sends time_flag=OK; its second argument is not a flag.
+            fields.putIfAbsent("time_flag", "OK")
             val actualAttachNo = fields.getValue("boarditem_attach_file_no")
             val requestUrl = resolve(finalUrl, "/lms/class/boardItem/doDownloadFile.dunet")
             if (!isLmsAttachmentUrl(requestUrl)) return@let

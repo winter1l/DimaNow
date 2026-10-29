@@ -4,77 +4,67 @@ import org.junit.Assert.assertEquals
 import org.junit.Test
 
 class LmsLoginFlowReducerTest {
+    private val conflict = "https://portal.dima.ac.kr/sso/error.aspx?errorCode=3045"
+
     @Test
-    fun repeated3045AfterOneTakeoverIsATerminalFailure() {
-        val takeover = takeoverSubmissionState()
+    fun a3045AnswerSignsInOnceMoreAndSaysTheSignInElsewhereEnded() {
+        // D-135: the portal ends the other sign-in as it answers 3045, so the second attempt goes through.
+        var transition = reduceLmsLoginFlow(LmsLoginFlowState.initial(), LmsLoginFlowEvent.CredentialsAvailable)
+        transition = reduceLmsLoginFlow(transition.state, LmsLoginFlowEvent.MainFrameFinished(conflict))
+        assertEquals(LmsLoginFlowStage.CONFLICT_RETRY, transition.state.stage)
+        assertEquals(1, transition.state.conflictRetries)
+        assertEquals(LmsLoginFlowCommand.RetryCredentials, transition.command)
 
-        val transition = reduceLmsLoginFlow(
-            takeover,
-            LmsLoginFlowEvent.MainFrameFinished(
-                "https://portal.dima.ac.kr/sso/error.aspx?errorCode=3045",
-            ),
+        transition = reduceLmsLoginFlow(
+            transition.state,
+            LmsLoginFlowEvent.MainFrameFinished("https://lms.dima.ac.kr/main/MainView.dunet", authenticatedMain = true),
         )
+        transition = reduceLmsLoginFlow(
+            transition.state,
+            LmsLoginFlowEvent.MainFrameFinished("https://lms.dima.ac.kr/lms/myLecture/doListView.dunet?to_do_type=all"),
+        )
+        transition = reduceLmsLoginFlow(transition.state, LmsLoginFlowEvent.CourseExtractionFinished(hasCourses = true))
 
-        val expected = LmsLoginResult.SessionTakeoverFailed(
-            "다른 기기의 로그인을 넘겨받지 못했어요. 다시 시도해 주세요",
-        )
+        assertEquals(LmsLoginFlowStage.SUCCESS, transition.state.stage)
+        assertEquals(LmsLoginFlowCommand.Complete(LmsLoginResult.SuccessEndingElsewhere), transition.command)
+    }
+
+    @Test
+    fun aSecond3045FailsWithoutAThirdSignIn() {
+        val retrying = retryState()
+
+        val transition = reduceLmsLoginFlow(retrying, LmsLoginFlowEvent.MainFrameFinished(conflict))
+
+        val expected = LmsLoginResult.SessionTakeoverFailed()
         assertEquals(LmsLoginFlowStage.TERMINAL_ERROR, transition.state.stage)
-        assertEquals(1, transition.state.sessionTakeoverSubmissions)
-        assertEquals(expected, transition.state.result)
+        assertEquals(1, transition.state.conflictRetries)
         assertEquals(LmsLoginFlowCommand.Complete(expected), transition.command)
     }
 
     @Test
-    fun verifiedTakeoverCommandCanNeverBeSubmittedTwice() {
-        val takeover = takeoverSubmissionState()
+    fun aRejectedAccountDuringTheRetryStillAsksForReview() {
+        val transition = reduceLmsLoginFlow(retryState(), LmsLoginFlowEvent.CredentialsRejected)
 
-        val transition = reduceLmsLoginFlow(
-            takeover,
-            LmsLoginFlowEvent.SessionTakeoverActionVerified,
-        )
-
-        val expected = LmsLoginResult.SessionTakeoverFailed()
-        assertEquals(LmsLoginFlowStage.TERMINAL_ERROR, transition.state.stage)
-        assertEquals(1, transition.state.sessionTakeoverSubmissions)
-        assertEquals(LmsLoginFlowCommand.Complete(expected), transition.command)
+        assertEquals(LmsLoginFlowCommand.Complete(LmsLoginResult.CredentialsRejected), transition.command)
     }
 
     @Test
-    fun missingVerifiedOfficialTakeoverActionFailsWithoutSubmittingAnything() {
-        var transition = reduceLmsLoginFlow(
-            LmsLoginFlowState.initial(allowSessionTakeover = true),
-            LmsLoginFlowEvent.CredentialsAvailable,
-        )
-        transition = reduceLmsLoginFlow(
-            transition.state,
-            LmsLoginFlowEvent.MainFrameFinished(
-                "https://portal.dima.ac.kr/sso/error.aspx?errorCode=3045",
-            ),
-        )
+    fun aLoginThatDoesNotStickAfterTheRetryIsAnOrdinaryFailure() {
+        val transition = reduceLmsLoginFlow(retryState(), LmsLoginFlowEvent.LoginNotEstablished)
 
-        transition = reduceLmsLoginFlow(
-            transition.state,
-            LmsLoginFlowEvent.SessionTakeoverActionUnavailable,
+        assertEquals(
+            LmsLoginFlowCommand.Complete(LmsLoginResult.Failure(LmsUserMessages.LOGIN_NOT_ESTABLISHED)),
+            transition.command,
         )
-
-        val expected = LmsLoginResult.SessionTakeoverFailed()
-        assertEquals(LmsLoginFlowStage.TERMINAL_ERROR, transition.state.stage)
-        assertEquals(0, transition.state.sessionTakeoverSubmissions)
-        assertEquals(LmsLoginFlowCommand.Complete(expected), transition.command)
     }
 
     @Test
     fun wrongHostTerminatesTheLoginFlowAsUnsafe() {
-        val submitting = reduceLmsLoginFlow(
-            LmsLoginFlowState.initial(allowSessionTakeover = true),
-            LmsLoginFlowEvent.CredentialsAvailable,
-        ).state
+        val submitting = reduceLmsLoginFlow(LmsLoginFlowState.initial(), LmsLoginFlowEvent.CredentialsAvailable).state
 
         val transition = reduceLmsLoginFlow(
             submitting,
-            LmsLoginFlowEvent.MainFrameFinished(
-                "https://portal.dima.ac.kr.evil.example/sso/error.aspx?errorCode=3045",
-            ),
+            LmsLoginFlowEvent.MainFrameFinished("https://portal.dima.ac.kr.evil.example/sso/error.aspx?errorCode=3045"),
         )
 
         val expected = LmsLoginResult.Failure(LmsUserMessages.UNSAFE_PAGE_BLOCKED)
@@ -85,208 +75,86 @@ class LmsLoginFlowReducerTest {
 
     @Test
     fun captchaOrOtpChallengeTerminatesWithoutAttemptingABypass() {
-        val submitting = reduceLmsLoginFlow(
-            LmsLoginFlowState.initial(allowSessionTakeover = true),
-            LmsLoginFlowEvent.CredentialsAvailable,
-        ).state
+        val submitting = reduceLmsLoginFlow(LmsLoginFlowState.initial(), LmsLoginFlowEvent.CredentialsAvailable).state
 
-        val transition = reduceLmsLoginFlow(
-            submitting,
-            LmsLoginFlowEvent.InteractiveChallengeDetected,
-        )
+        val transition = reduceLmsLoginFlow(submitting, LmsLoginFlowEvent.InteractiveChallengeDetected)
 
         assertEquals(LmsLoginFlowStage.TERMINAL_ERROR, transition.state.stage)
         assertEquals(LmsLoginResult.InteractiveAuthenticationRequired, transition.state.result)
-        assertEquals(
-            LmsLoginFlowCommand.Complete(LmsLoginResult.InteractiveAuthenticationRequired),
-            transition.command,
-        )
+        assertEquals(LmsLoginFlowCommand.Complete(LmsLoginResult.InteractiveAuthenticationRequired), transition.command)
     }
 
     @Test
-    fun sessionConflictIsNeverReclassifiedAsRejectedCredentials() {
-        val submitting = reduceLmsLoginFlow(
-            LmsLoginFlowState.initial(allowSessionTakeover = true),
-            LmsLoginFlowEvent.CredentialsAvailable,
+    fun aRejectionAfterTheFlowMovedOnIsIgnored() {
+        val main = reduceLmsLoginFlow(
+            reduceLmsLoginFlow(LmsLoginFlowState.initial(), LmsLoginFlowEvent.CredentialsAvailable).state,
+            LmsLoginFlowEvent.MainFrameFinished("https://lms.dima.ac.kr/main/MainView.dunet", authenticatedMain = true),
         ).state
-        val rejected = reduceLmsLoginFlow(
-            submitting,
-            LmsLoginFlowEvent.CredentialsRejected,
-        )
-        assertEquals(LmsLoginResult.CredentialsRejected, rejected.state.result)
 
-        val conflict = reduceLmsLoginFlow(
-            submitting,
-            LmsLoginFlowEvent.MainFrameFinished(
-                "https://portal.dima.ac.kr/sso/error.aspx?errorCode=3045",
-            ),
-        ).state
-        val staleRejection = reduceLmsLoginFlow(
-            conflict,
-            LmsLoginFlowEvent.CredentialsRejected,
-        )
+        val transition = reduceLmsLoginFlow(main, LmsLoginFlowEvent.CredentialsRejected)
 
-        assertEquals(LmsLoginFlowStage.SESSION_CONFLICT, staleRejection.state.stage)
-        assertEquals(LmsLoginResult.SessionConflict, staleRejection.state.result)
-        assertEquals(LmsLoginFlowCommand.None, staleRejection.command)
+        assertEquals(main, transition.state)
+        assertEquals(LmsLoginFlowCommand.None, transition.command)
     }
 
     @Test
-    fun terminalFailureCannotRestartOrSubmitAConflictTakeover() {
-        val submitting = reduceLmsLoginFlow(
-            LmsLoginFlowState.initial(allowSessionTakeover = true),
-            LmsLoginFlowEvent.CredentialsAvailable,
-        ).state
+    fun terminalFailureCannotRestartOrSignInAgain() {
         val terminal = reduceLmsLoginFlow(
-            submitting,
+            reduceLmsLoginFlow(LmsLoginFlowState.initial(), LmsLoginFlowEvent.CredentialsAvailable).state,
             LmsLoginFlowEvent.InteractiveChallengeDetected,
         ).state
 
-        val transition = reduceLmsLoginFlow(
-            terminal,
-            LmsLoginFlowEvent.MainFrameFinished(
-                "https://portal.dima.ac.kr/sso/error.aspx?errorCode=3045",
-            ),
-        )
+        val transition = reduceLmsLoginFlow(terminal, LmsLoginFlowEvent.MainFrameFinished(conflict))
 
         assertEquals(terminal, transition.state)
         assertEquals(LmsLoginFlowCommand.None, transition.command)
     }
 
     @Test
-    fun oneOfficial3045ConflictIsTakenOverThenLoginSucceeds() {
-        var transition = reduceLmsLoginFlow(
-            LmsLoginFlowState.initial(allowSessionTakeover = true),
-            LmsLoginFlowEvent.CredentialsAvailable,
-        )
-
-        transition = reduceLmsLoginFlow(
-            transition.state,
-            LmsLoginFlowEvent.MainFrameFinished(
-                "https://portal.dima.ac.kr/sso/error.aspx?errorCode=3045",
-            ),
-        )
-        assertEquals(LmsLoginFlowStage.SESSION_CONFLICT, transition.state.stage)
-        assertEquals(LmsLoginResult.SessionConflict, transition.state.result)
-        assertEquals(LmsLoginFlowCommand.InspectSessionTakeoverAction, transition.command)
-
-        transition = reduceLmsLoginFlow(
-            transition.state,
-            LmsLoginFlowEvent.SessionTakeoverActionVerified,
-        )
-        assertEquals(LmsLoginFlowStage.SESSION_TAKEOVER_SUBMISSION, transition.state.stage)
-        assertEquals(1, transition.state.sessionTakeoverSubmissions)
-        assertEquals(LmsLoginFlowCommand.SubmitVerifiedSessionTakeover, transition.command)
-
-        transition = reduceLmsLoginFlow(
-            transition.state,
-            LmsLoginFlowEvent.MainFrameFinished(
-                url = "https://lms.dima.ac.kr/main/MainView.dunet",
-                authenticatedMain = true,
-            ),
-        )
-        transition = reduceLmsLoginFlow(
-            transition.state,
-            LmsLoginFlowEvent.MainFrameFinished(
-                "https://lms.dima.ac.kr/lms/myLecture/doListView.dunet?to_do_type=all",
-            ),
-        )
-        transition = reduceLmsLoginFlow(
-            transition.state,
-            LmsLoginFlowEvent.CourseExtractionFinished(hasCourses = true),
-        )
-
-        assertEquals(LmsLoginFlowStage.SUCCESS, transition.state.stage)
-        assertEquals(1, transition.state.sessionTakeoverSubmissions)
-        assertEquals(LmsLoginFlowCommand.Complete(LmsLoginResult.Success), transition.command)
-    }
-
-    @Test
     fun normalLoginConfirmsTheLmsMainThenExtractsCourses() {
-        var transition = reduceLmsLoginFlow(
-            LmsLoginFlowState.initial(allowSessionTakeover = true),
-            LmsLoginFlowEvent.CredentialsAvailable,
-        )
+        var transition = reduceLmsLoginFlow(LmsLoginFlowState.initial(), LmsLoginFlowEvent.CredentialsAvailable)
         assertEquals(LmsLoginFlowStage.LOGIN_SUBMISSION, transition.state.stage)
         assertEquals(LmsLoginFlowCommand.SubmitCredentials, transition.command)
 
         transition = reduceLmsLoginFlow(
             transition.state,
-            LmsLoginFlowEvent.MainFrameFinished(
-                url = "https://lms.dima.ac.kr/main/MainView.dunet",
-                authenticatedMain = true,
-            ),
+            LmsLoginFlowEvent.MainFrameFinished(url = "https://lms.dima.ac.kr/main/MainView.dunet", authenticatedMain = true),
         )
         assertEquals(LmsLoginFlowStage.LMS_MAIN_CONFIRMATION, transition.state.stage)
         assertEquals(LmsLoginFlowCommand.LoadDashboard, transition.command)
 
         transition = reduceLmsLoginFlow(
             transition.state,
-            LmsLoginFlowEvent.MainFrameFinished(
-                url = "https://lms.dima.ac.kr/lms/myLecture/doListView.dunet?to_do_type=all",
-            ),
+            LmsLoginFlowEvent.MainFrameFinished(url = "https://lms.dima.ac.kr/lms/myLecture/doListView.dunet?to_do_type=all"),
         )
         assertEquals(LmsLoginFlowStage.COURSE_LIST_EXTRACTION, transition.state.stage)
         assertEquals(LmsLoginFlowCommand.ExtractCourses, transition.command)
 
-        transition = reduceLmsLoginFlow(
-            transition.state,
-            LmsLoginFlowEvent.CourseExtractionFinished(hasCourses = true),
-        )
+        transition = reduceLmsLoginFlow(transition.state, LmsLoginFlowEvent.CourseExtractionFinished(hasCourses = true))
         assertEquals(LmsLoginFlowStage.SUCCESS, transition.state.stage)
         assertEquals(LmsLoginFlowCommand.Complete(LmsLoginResult.Success), transition.command)
     }
 
     @Test
-    fun takeoverScriptResultAcceptsOnlyTheSmallVerifiedProtocol() {
-        assertEquals(
-            LmsSessionTakeoverScriptResult.VERIFIED,
-            parseLmsSessionTakeoverScriptResult("\"verified\""),
-        )
-        assertEquals(
-            LmsSessionTakeoverScriptResult.SUBMITTED,
-            parseLmsSessionTakeoverScriptResult("\"submitted\""),
-        )
-        assertEquals(
-            LmsSessionTakeoverScriptResult.INTERACTIVE,
-            parseLmsSessionTakeoverScriptResult("\"interactive\""),
-        )
-        assertEquals(
-            LmsSessionTakeoverScriptResult.UNAVAILABLE,
-            parseLmsSessionTakeoverScriptResult("{\"action\":\"Login\",\"value\":\"secret\"}"),
-        )
-        assertEquals(
-            LmsSessionTakeoverScriptResult.UNAVAILABLE,
-            parseLmsSessionTakeoverScriptResult(null),
-        )
-    }
-
-    private fun takeoverSubmissionState(): LmsLoginFlowState {
-        var transition = reduceLmsLoginFlow(
-            LmsLoginFlowState.initial(allowSessionTakeover = true),
-            LmsLoginFlowEvent.CredentialsAvailable,
-        )
+    fun anOrdinaryLoginThatDoesNotStickIsNotReportedAsASignInElsewhere() {
+        // The 2026-10-24 report: nobody else was signed in, LMS showed its signed-in main page, then the app was sent
+        // back without a session.
+        var transition = reduceLmsLoginFlow(LmsLoginFlowState.initial(), LmsLoginFlowEvent.CredentialsAvailable)
         transition = reduceLmsLoginFlow(
             transition.state,
-            LmsLoginFlowEvent.MainFrameFinished(
-                "https://portal.dima.ac.kr/sso/error.aspx?errorCode=3045",
-            ),
+            LmsLoginFlowEvent.MainFrameFinished("https://lms.dima.ac.kr/main/MainView.dunet", authenticatedMain = true),
         )
-        return reduceLmsLoginFlow(
-            transition.state,
-            LmsLoginFlowEvent.SessionTakeoverActionVerified,
-        ).state
+        assertEquals(LmsLoginFlowStage.LMS_MAIN_CONFIRMATION, transition.state.stage)
+
+        transition = reduceLmsLoginFlow(transition.state, LmsLoginFlowEvent.LoginNotEstablished)
+
+        val expected = LmsLoginResult.Failure(LmsUserMessages.LOGIN_NOT_ESTABLISHED)
+        assertEquals(LmsLoginFlowStage.TERMINAL_ERROR, transition.state.stage)
+        assertEquals(LmsLoginFlowCommand.Complete(expected), transition.command)
     }
 
-    @Test
-    fun sessionConflictWithoutUserApprovalEndsWithoutTakingOverTheOtherLogin() {
-        val conflict = reduceLmsLoginFlow(
-            reduceLmsLoginFlow(LmsLoginFlowState.initial(), LmsLoginFlowEvent.CredentialsAvailable).state,
-            LmsLoginFlowEvent.MainFrameFinished("https://portal.dima.ac.kr/sso/error.aspx?errorCode=3045"),
-        )
-
-        assertEquals(LmsLoginFlowStage.TERMINAL_ERROR, conflict.state.stage)
-        assertEquals(0, conflict.state.sessionTakeoverSubmissions)
-        assertEquals(LmsLoginFlowCommand.Complete(LmsLoginResult.SessionConflict), conflict.command)
-    }
+    private fun retryState(): LmsLoginFlowState = reduceLmsLoginFlow(
+        reduceLmsLoginFlow(LmsLoginFlowState.initial(), LmsLoginFlowEvent.CredentialsAvailable).state,
+        LmsLoginFlowEvent.MainFrameFinished(conflict),
+    ).state
 }

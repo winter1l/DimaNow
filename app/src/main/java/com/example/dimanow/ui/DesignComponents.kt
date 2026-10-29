@@ -1,5 +1,6 @@
 package com.example.dimanow.ui
 
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.selection.selectableGroup
@@ -26,6 +27,7 @@ import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.dp
 import com.example.dimanow.theme.DimaTheme
+import com.example.dimanow.ui.motion.DimaMotion
 import java.time.DayOfWeek
 import java.time.LocalDate
 
@@ -182,6 +184,17 @@ private fun <T> DimaDayCellSelector(
                         val isSelected = item == selected
                         val today = isToday(item)
                         val description = listOfNotNull(koreanWeekdayLabel(day), date).joinToString(" ")
+                        // D-137: the chosen day's fill and label change on the fast effects spring instead of snapping.
+                        val fill by animateColorAsState(
+                            if (isSelected) MaterialTheme.colorScheme.primaryContainer else DimaTheme.colors.card,
+                            DimaMotion.effectsFast(),
+                            label = "day_cell_fill",
+                        )
+                        val ink by animateColorAsState(
+                            if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
+                            DimaMotion.effectsFast(),
+                            label = "day_cell_ink",
+                        )
                         FilterChip(
                             selected = isSelected,
                             onClick = {
@@ -189,6 +202,13 @@ private fun <T> DimaDayCellSelector(
                                 if (!isSelected) haptics.performHapticFeedback(HapticFeedbackType.SegmentTick)
                                 onSelect(item)
                             },
+                            // D-137: the chosen day turns round like the checked connected button above it; the chip
+                            // morphs its corners on the theme's fast spatial spring (snapping under reduced motion).
+                            shapes = FilterChipDefaults.shapes(
+                                shape = DimaShapes.Tile,
+                                selectedShape = CircleShape,
+                                pressedShape = DimaShapes.Small,
+                            ),
                             // Grows with the font scale; 52dp is only the resting minimum.
                             modifier = Modifier.weight(1f).heightIn(min = 52.dp)
                                 .then(itemTag(item)?.let { Modifier.testTag(it) } ?: Modifier)
@@ -198,7 +218,6 @@ private fun <T> DimaDayCellSelector(
                                     role = Role.Tab
                                     if (today) stateDescription = if (isSelected) "오늘, 선택됨" else "오늘"
                                 },
-                            shape = DimaShapes.Tile,
                             border = FilterChipDefaults.filterChipBorder(
                                 enabled = true,
                                 selected = isSelected,
@@ -207,10 +226,10 @@ private fun <T> DimaDayCellSelector(
                                 borderWidth = 1.dp,
                             ),
                             colors = FilterChipDefaults.filterChipColors(
-                                containerColor = DimaTheme.colors.card,
-                                labelColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                                selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
-                                selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                                containerColor = fill,
+                                labelColor = ink,
+                                selectedContainerColor = fill,
+                                selectedLabelColor = ink,
                             ),
                             elevation = FilterChipDefaults.filterChipElevation(
                                 elevation = 0.dp,

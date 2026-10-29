@@ -51,6 +51,43 @@ class LmsHistoryScreenTest {
     }
 
     @Test
+    fun aSignInElsewhereKeepsTheSavedListAndSignsInOnlyFromTheCard() {
+        // D-135: no automatic sign-in while another device most likely holds the LMS session.
+        val pending = LmsItem(
+            id = "pending", courseId = "audio", courseName = "음향기초실습",
+            kind = LmsItemKind.ASSIGNMENT, title = "믹싱 과제",
+            detailUrl = "https://lms.dima.ac.kr/item/pending",
+            dueAt = Instant.parse("2026-09-02T14:59:00Z"),
+        )
+        var signInHere = 0
+        var refreshes = 0
+        composeRule.setContent {
+            DIMANowTheme {
+                LmsItemsScreen(
+                    snapshot = LmsSnapshot(
+                        items = listOf(pending),
+                        syncState = LmsSyncState.READY,
+                        lastSuccessAt = Instant.parse("2026-09-01T02:40:00Z"),
+                    ),
+                    sessionState = LmsSessionState.EXPIRED,
+                    selectedCourse = null, selectedKind = null,
+                    onCourseChange = {}, onKindChange = {}, onRefresh = { refreshes++ }, onOpenItem = {},
+                    now = Instant.parse("2026-09-01T03:00:00Z"),
+                    signedInElsewhere = true,
+                    onSignInHere = { signInHere++ },
+                )
+            }
+        }
+
+        composeRule.onNodeWithText("다른 곳에서 LMS에 로그인한 것 같아요").assertExists()
+        composeRule.onNodeWithText("믹싱 과제").assertExists()
+        composeRule.onNodeWithTag("lms_refresh_error_banner").assertDoesNotExist()
+        composeRule.onNodeWithTag("lms_sign_in_here").performClick()
+        assertEquals(1, signInHere)
+        assertEquals(0, refreshes)
+    }
+
+    @Test
     fun anEmptyListDistinguishesUnfetchedLoadingFailureSignedOutAndSuccessfulFetch() {
         var snapshot by mutableStateOf(LmsSnapshot())
         var session by mutableStateOf(LmsSessionState.ACTIVE)

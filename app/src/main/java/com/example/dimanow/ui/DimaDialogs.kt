@@ -1,5 +1,6 @@
 package com.example.dimanow.ui
 
+import androidx.compose.animation.core.Animatable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -7,22 +8,39 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialShapes
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.toPath
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Matrix
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.graphics.shapes.Morph
+import androidx.graphics.shapes.RoundedPolygon
+import com.example.dimanow.ui.motion.DimaMotion
+import com.example.dimanow.ui.motion.LocalReducedMotion
+import kotlinx.coroutines.launch
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
@@ -51,11 +69,62 @@ private fun DialogTone.contentColor(): Color = when (this) {
     DialogTone.DANGER -> MaterialTheme.colorScheme.onErrorContainer
 }
 
-/** The pop-up's mark: a 56dp circle in the tone's container with the icon on it. Decorative; the title says it. */
+/**
+ * The tone's Material shape (D-137, adopting D-121's left-over "MaterialShapes for dialog icon circles"): a scalloped
+ * dial for a plain explanation, a soft burst for a warning, a sharp burst for a destructive question, so the shape
+ * tells a warning from a danger without colour as well.
+ */
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
+private fun DialogTone.polygon(): RoundedPolygon = when (this) {
+    DialogTone.INFO -> MaterialShapes.Cookie9Sided
+    DialogTone.WARNING -> MaterialShapes.SoftBurst
+    DialogTone.DANGER -> MaterialShapes.Burst
+}
+
+/** Degrees the dialog mark turns while it grows into its tone shape (D-137); it comes to rest upright. */
+private const val DIALOG_ICON_TURN_DEGREES = 30f
+
+/**
+ * The pop-up's mark: a 56dp [DialogTone] shape in the tone's container with the icon on it. Decorative; the title
+ * says it.
+ *
+ * D-137: when the pop-up opens, the shape grows once out of a circle while it turns [DIALOG_ICON_TURN_DEGREES] into
+ * place on the default spatial spring (HomeHeroMark's technique: the morph and the turn are read in the draw phase).
+ * It never loops, does not play again for a pop-up restored after rotation, and under [LocalReducedMotion] the tone
+ * shape is simply drawn.
+ */
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 internal fun DimaDialogIcon(icon: ImageVector, tone: DialogTone) {
-    Surface(shape = CircleShape, color = tone.containerColor(), contentColor = tone.contentColor(), modifier = Modifier.size(56.dp)) {
-        Box(contentAlignment = Alignment.Center) { Icon(icon, contentDescription = null, modifier = Modifier.size(28.dp)) }
+    val reduced = LocalReducedMotion.current
+    var played by rememberSaveable { mutableStateOf(false) }
+    val still = played || reduced
+    val morph = remember(tone) { Morph(MaterialShapes.Circle, tone.polygon()) }
+    val progress = remember { Animatable(if (still) 1f else 0f) }
+    val turn = remember { Animatable(if (still) 0f else -DIALOG_ICON_TURN_DEGREES) }
+    LaunchedEffect(Unit) {
+        played = true
+        if (progress.value >= 1f) return@LaunchedEffect
+        launch { turn.animateTo(0f, DimaMotion.spatialDefault()) }
+        progress.animateTo(1f, DimaMotion.spatialDefault())
+    }
+    val fill = tone.containerColor()
+    Box(
+        modifier = Modifier
+            .size(56.dp)
+            .drawWithCache {
+                val path = Path()
+                val unitToSize = Matrix().apply { scale(this@drawWithCache.size.width, this@drawWithCache.size.height) }
+                onDrawBehind {
+                    path.rewind()
+                    morph.toPath(progress.value, path)
+                    path.transform(unitToSize)
+                    rotate(turn.value) { drawPath(path, fill) }
+                }
+            },
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(icon, contentDescription = null, tint = tone.contentColor(), modifier = Modifier.size(28.dp))
     }
 }
 

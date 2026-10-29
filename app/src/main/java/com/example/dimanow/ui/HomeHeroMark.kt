@@ -16,6 +16,7 @@ import androidx.compose.material3.toPath
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -91,19 +92,30 @@ internal fun HeroMoodMark(mood: HeroMood, modifier: Modifier = Modifier, size: D
     val morph = remember(fromMood, toMood) { Morph(fromMood?.polygon() ?: MaterialShapes.Circle, toMood.polygon()) }
     val progress = remember { Animatable(if (playIntro) 0f else 1f) }
     val turn = remember { Animatable(0f) }
+    // How many morphs have started; each turns the mark once more (D-137).
+    var turns by remember { mutableIntStateOf(0) }
     LaunchedEffect(mood) {
         introPlayed = true
+        val introRunning = fromMood == null && progress.value < 1f
         if (toMood != mood) {
-            fromMood = toMood
+            // D-137: a mood that changes while the launch intro still grows the mark retargets the intro: the mark keeps
+            // growing out of the circle toward the new shape. Before, the shape jumped from the near-circle to a finished
+            // polygon in one frame.
+            if (!introRunning) {
+                fromMood = toMood
+                progress.snapTo(0f)
+            }
             toMood = mood
-            progress.snapTo(0f)
         }
         if (progress.value >= 1f) return@LaunchedEffect
         if (reduced) {
             progress.snapTo(1f)
             return@LaunchedEffect
         }
-        launch { turn.animateTo(turn.targetValue + HERO_MARK_TURN_DEGREES, DimaMotion.spatialDefault()) }
+        // The turn target follows the count of morphs, not the last target plus one step, so a retargeted intro turns
+        // once instead of stacking a second turn on the cancelled first (about 90 degrees).
+        if (!introRunning || turns == 0) turns++
+        launch { turn.animateTo(turns * HERO_MARK_TURN_DEGREES, DimaMotion.spatialDefault()) }
         progress.animateTo(1f, DimaMotion.spatialDefault())
     }
     val colors = MaterialTheme.colorScheme

@@ -147,6 +147,14 @@ class RescheduleReceiver : BroadcastReceiver() {
                 (context.applicationContext as DimaNowApplication).guidanceRuntimeCoordinator.requestRefresh()
                 com.example.dimanow.widget.ShuttleWidgetProvider.updateAll(context)
                 com.example.dimanow.widget.CampusSummaryWidgetProvider.updateAll(context)
+                // A restart or clock change drops the outing reminder's alarm (D-126(4)); book it again.
+                com.example.dimanow.dorm.RollCallStore.attach(context)
+                com.example.dimanow.dorm.RollCallStore.awaitLoaded()
+                com.example.dimanow.dorm.OutingReminder.reschedule(
+                    context,
+                    com.example.dimanow.dorm.RollCallStore.notices.value,
+                    java.time.ZonedDateTime.now(com.example.dimanow.dorm.DormHours.CAMPUS_ZONE),
+                )
             } finally {
                 pending.finish()
             }

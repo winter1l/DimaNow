@@ -73,6 +73,8 @@ class LmsNativeDetailScreenTest {
                     autoLoginCoordinator = LmsAutoLoginCoordinator(credentials, session, loginBridge),
                     source = source,
                     now = Instant.parse("2026-09-01T03:00:00Z"),
+                    // The phone flow, where the detail takes the whole screen; LmsTwoPaneTest covers wide windows (D-131).
+                    twoPane = false,
                 )
             }
         }
@@ -267,6 +269,8 @@ class LmsNativeDetailScreenTest {
                     autoLoginCoordinator = LmsAutoLoginCoordinator(credentials, session, loginBridge),
                     source = DetailLmsSource(item, detail),
                     now = Instant.parse("2026-09-01T03:00:00Z"),
+                    // The phone flow, where the detail takes the whole screen; LmsTwoPaneTest covers wide windows (D-131).
+                    twoPane = false,
                 )
             }
         }
@@ -314,6 +318,8 @@ class LmsNativeDetailScreenTest {
                     autoLoginCoordinator = LmsAutoLoginCoordinator(credentials, session, loginBridge),
                     source = DetailLmsSource(item, detail),
                     now = Instant.parse("2026-09-01T03:00:00Z"),
+                    // The phone flow, where the detail takes the whole screen; LmsTwoPaneTest covers wide windows (D-131).
+                    twoPane = false,
                 )
             }
         }

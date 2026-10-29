@@ -35,4 +35,13 @@ class DateLabelsTest {
         assertEquals("금요일 09:00 시작", classStartLabel(now, at("2026-10-02", "09:00")))
         assertEquals("10월 12일 (월) 09:00 시작", classStartLabel(now, at("2026-10-12", "09:00")))
     }
+
+    @Test
+    fun theHomeClassChipCountsDownInHoursAndMinutes() {
+        val start = at("2026-09-30", "13:00")
+        assertEquals("시작까지 11시간 32분", classCountdownLabel(at("2026-09-30", "01:28"), start))
+        assertEquals("시작까지 1시간", classCountdownLabel(at("2026-09-30", "12:00"), start))
+        assertEquals("시작까지 59분", classCountdownLabel(at("2026-09-30", "12:01"), start))
+        assertEquals("시작까지 1분", classCountdownLabel(at("2026-09-30", "12:59:30"), start))
+    }
 }

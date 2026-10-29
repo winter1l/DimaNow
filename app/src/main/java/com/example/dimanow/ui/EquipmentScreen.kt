@@ -27,7 +27,6 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -61,6 +60,7 @@ import com.example.dimanow.school.equipmentCatalogAutoReadAllowed
 import com.example.dimanow.school.parseEquipmentCatalog
 import com.example.dimanow.theme.DimaShapes
 import com.example.dimanow.theme.DimaTheme
+import com.example.dimanow.ui.motion.DimaMotion
 import com.example.dimanow.ui.motion.dimaCollapseOut
 import com.example.dimanow.ui.motion.dimaContentReveal
 import com.example.dimanow.ui.motion.dimaExpandIn
@@ -92,13 +92,14 @@ internal fun EquipmentScreen(onBack: () -> Unit, modifier: Modifier = Modifier) 
     var loadingModel by remember { mutableStateOf<Long?>(null) }
     val today = LocalDate.now()
 
-    fun loadCatalog() {
+    // D-135: the read on opening the page is the app's own, so it never signs another device out.
+    fun readCatalog(automatic: Boolean) {
         val service = bridge ?: return
         if (loading) return
         loading = true
         error = null
         scope.launch {
-            val result = service.read(SchoolService.DIMA_C, DIMA_C_EQUIPMENT_URL, DIMA_C_EQUIPMENT_CATALOG_SCRIPT, "장비 대여 현황")
+            val result = service.read(SchoolService.DIMA_C, DIMA_C_EQUIPMENT_URL, DIMA_C_EQUIPMENT_CATALOG_SCRIPT, "장비 대여 현황", automatic)
             when (result) {
                 is SchoolServiceResult.Success -> runCatching { parseEquipmentCatalog(result.json) }
                     .onSuccess { SchoolReadCache.setEquipmentCatalog(it) }
@@ -112,6 +113,8 @@ internal fun EquipmentScreen(onBack: () -> Unit, modifier: Modifier = Modifier) 
             loading = false
         }
     }
+
+    fun loadCatalog() = readCatalog(automatic = false)
 
     fun loadModel(model: EquipmentModel) {
         val service = bridge ?: return
@@ -142,7 +145,7 @@ internal fun EquipmentScreen(onBack: () -> Unit, modifier: Modifier = Modifier) 
 
     LaunchedEffect(Unit) {
         val failedAt = SchoolReadCache.equipmentCatalogFailure.value?.at
-        if (catalog == null && equipmentCatalogAutoReadAllowed(failedAt, Instant.now())) loadCatalog()
+        if (catalog == null && equipmentCatalogAutoReadAllowed(failedAt, Instant.now())) readCatalog(automatic = true)
     }
     // The open model is remembered across visits; read its days again if they are not cached any more
     // (a new catalog, or the app process was restarted), instead of showing an empty panel.
@@ -150,6 +153,32 @@ internal fun EquipmentScreen(onBack: () -> Unit, modifier: Modifier = Modifier) 
         val open = expanded ?: return@LaunchedEffect
         if (open in availability || open in availabilityErrors || loadingModel != null) return@LaunchedEffect
         catalog?.flatMap { it.models }?.firstOrNull { it.no == open }?.let(::loadModel)
+    }
+
+    fun toggleModel(model: EquipmentModel) {
+        expanded = if (expanded == model.no) null else model.no
+        if (expanded == model.no && availability[model.no] == null) loadModel(model)
+    }
+
+    val view = EquipmentCatalogView(
+        phase = equipmentCatalogPhase(catalog?.size, loading, error != null, bridge != null),
+        error = error,
+        groups = catalog.orEmpty(),
+    )
+    // D-131 (Q-032 (g)): every model row and day panel is a lazy item of its own, so only the rows on screen compose.
+    // The panels' open and closing states live here, keyed like their rows, now that no group composable holds them.
+    // Each model's day panel opens and closes on the expressive spring (D-118's fold motion). A panel still closing
+    // keeps its place in the segmented shapes until it is gone, so the rows below do not jump early; a panel already
+    // open when the page is shown again (D-111) simply shows.
+    val panels = remember(catalog) { HashMap<String, MutableTransitionState<Boolean>>() }
+    val catalogRows = if (view.phase == EquipmentCatalogPhase.READY) {
+        equipmentCatalogRows(view.groups) { modelKey, model ->
+            val panel = panels.getOrPut(modelKey) { MutableTransitionState(model.no == expanded) }
+            panel.targetState = model.no == expanded
+            panel.currentState || panel.targetState
+        }
+    } else {
+        emptyList()
     }
 
     ScreenScaffold(
@@ -164,6 +193,8 @@ internal fun EquipmentScreen(onBack: () -> Unit, modifier: Modifier = Modifier) 
         onRefresh = if (bridge != null) ::loadCatalog else null,
         refreshing = loading && catalog != null,
         refreshLabel = "장비 대여 현황 새로고침",
+        // D-131: model rows are items of their own, so each item sets the gap above it (12dp between blocks, as before).
+        itemSpacing = 0.dp,
     ) {
         item(key = "equipment_guide") {
             EquipmentGuideCard(
@@ -173,9 +204,19 @@ internal fun EquipmentScreen(onBack: () -> Unit, modifier: Modifier = Modifier) 
                 onOpenNotice = { openUrl(context, EquipmentRentalNotice.SEARCH_URL) },
             )
         }
-        applyError?.let { message -> item(key = "equipment_apply_error") { ErrorState(message) } }
+        // D-137: always present, so a failed 신청 opens its message in place and the catalog below moves with it, as
+        // the refresh message under the section does; with no message it takes no space.
+        item(key = "equipment_apply_error") {
+            AnimatedContent(targetState = applyError, transitionSpec = { dimaContentReveal() }, label = "equipment_apply_error") { message ->
+                if (message != null) {
+                    ErrorState(message, modifier = Modifier.padding(top = EQUIPMENT_BLOCK_GAP))
+                } else {
+                    Spacer(Modifier.fillMaxWidth())
+                }
+            }
+        }
         item(key = "equipment_section") {
-            Column(Modifier.padding(top = 8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Column(Modifier.padding(top = EQUIPMENT_BLOCK_GAP + 8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text("일반 대여 장비", style = MaterialTheme.typography.titleMedium)
                 Text(
                     "장비를 누르면 앞으로 2주 동안 날마다 빌릴 수 있는 대수를 보여 줘요.",
@@ -184,67 +225,106 @@ internal fun EquipmentScreen(onBack: () -> Unit, modifier: Modifier = Modifier) 
                 )
             }
         }
-        // One item whose content crossfades and resizes when the read finishes, so the list grows into the groups
-        // instead of popping in under the loading line. The groups appear together, never one by one (D-058).
-        val view = EquipmentCatalogView(
-            phase = equipmentCatalogPhase(catalog?.size, loading, error != null, bridge != null),
-            error = error,
-            groups = catalog.orEmpty(),
-        )
-        item(key = "equipment_catalog") {
-            AnimatedContent(
-                targetState = view,
-                transitionSpec = { dimaContentReveal() },
-                contentKey = { it.phase },
-                label = "equipment_catalog",
-            ) { shown ->
-                when (shown.phase) {
-                    EquipmentCatalogPhase.LOADING -> LoadingLine("DIMA C에서 장비 목록을 불러오는 중이에요")
-                    EquipmentCatalogPhase.ERROR ->
-                        ErrorState(shown.error.orEmpty(), onRetry = if (bridge != null) ::loadCatalog else null)
-                    // After the sign-in was closed: nothing is read until the student asks again.
-                    EquipmentCatalogPhase.START -> EmptyState(
-                        message = "학교 계정으로 로그인하면 대여 현황을 볼 수 있어요",
-                        supporting = "수업 탭과 같은 학교 포털 계정을 써요.",
-                        actionLabel = "대여 현황 불러오기",
-                        onAction = ::loadCatalog,
-                        modifier = Modifier.testTag("equipment_start"),
-                    )
-                    EquipmentCatalogPhase.EMPTY -> EmptyState("지금 빌릴 수 있는 일반 대여 장비가 없어요")
-                    EquipmentCatalogPhase.NONE -> Spacer(Modifier.fillMaxWidth())
-                    EquipmentCatalogPhase.READY -> Column {
-                        // A failed refresh keeps the list and opens its message above it.
-                        AnimatedContent(
-                            targetState = shown.error,
-                            transitionSpec = { dimaContentReveal() },
-                            label = "equipment_refresh_error",
-                        ) { message ->
-                            if (message != null) {
-                                ErrorState(message, modifier = Modifier.padding(bottom = 12.dp), onRetry = ::loadCatalog)
-                            } else {
-                                Spacer(Modifier.fillMaxWidth())
-                            }
+        if (view.phase != EquipmentCatalogPhase.READY) {
+            // The loading line, a failure, the sign-in prompt or the empty catalog cross-fade inside one item. When the
+            // read finishes, this item fades out as the groups' rows fade in together, never one by one (D-058).
+            item(key = "equipment_catalog") {
+                AnimatedContent(
+                    targetState = view,
+                    transitionSpec = { dimaContentReveal() },
+                    contentKey = { it.phase },
+                    label = "equipment_catalog",
+                    modifier = Modifier
+                        .animateItem(fadeInSpec = DimaMotion.effectsDefault(), placementSpec = null, fadeOutSpec = DimaMotion.effectsFast())
+                        .padding(top = EQUIPMENT_BLOCK_GAP),
+                ) { shown ->
+                    when (shown.phase) {
+                        EquipmentCatalogPhase.LOADING -> LoadingLine("DIMA C에서 장비 목록을 불러오는 중이에요", slowHint = SCHOOL_READ_SLOW_HINT)
+                        EquipmentCatalogPhase.ERROR ->
+                            ErrorState(shown.error.orEmpty(), onRetry = if (bridge != null) ::loadCatalog else null)
+                        // After the sign-in was closed: nothing is read until the student asks again.
+                        EquipmentCatalogPhase.START -> EmptyState(
+                            message = "학교 계정으로 로그인하면 대여 현황을 볼 수 있어요",
+                            supporting = "수업 탭과 같은 학교 포털 계정을 써요.",
+                            actionLabel = "대여 현황 불러오기",
+                            onAction = ::loadCatalog,
+                            modifier = Modifier.testTag("equipment_start"),
+                        )
+                        EquipmentCatalogPhase.EMPTY -> EmptyState("지금 빌릴 수 있는 일반 대여 장비가 없어요")
+                        EquipmentCatalogPhase.NONE, EquipmentCatalogPhase.READY -> Spacer(Modifier.fillMaxWidth())
+                    }
+                }
+            }
+        } else {
+            item(key = "equipment_refresh_error") {
+                // A failed refresh keeps the list and opens its message above it.
+                AnimatedContent(
+                    targetState = view.error,
+                    transitionSpec = { dimaContentReveal() },
+                    label = "equipment_refresh_error",
+                    modifier = Modifier
+                        .animateItem(fadeInSpec = DimaMotion.effectsDefault(), placementSpec = null, fadeOutSpec = null)
+                        .padding(top = EQUIPMENT_BLOCK_GAP),
+                ) { message ->
+                    if (message != null) {
+                        ErrorState(message, modifier = Modifier.padding(bottom = 12.dp), onRetry = ::loadCatalog)
+                    } else {
+                        Spacer(Modifier.fillMaxWidth())
+                    }
+                }
+            }
+            catalogRows.forEachIndexed { position, row ->
+                when (row) {
+                    is EquipmentCatalogRow.Header -> {
+                        // The first group sits right under the refresh message; the next ones 12dp below the last row.
+                        val top = if (position == 0) 0.dp else EQUIPMENT_BLOCK_GAP
+                        item(key = row.key, contentType = "equipment_group") {
+                            SettingsSectionHeader(
+                                "${row.group.displayName} · ${row.group.models.size}종",
+                                Modifier
+                                    .animateItem(fadeInSpec = DimaMotion.effectsDefault(), placementSpec = null, fadeOutSpec = null)
+                                    .padding(top = top),
+                            )
                         }
-                        // The 12dp the groups had as separate list items.
-                        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                            shown.groups.forEach { group ->
-                                key(group.name) {
-                                    EquipmentGroupList(
-                                        group = group,
-                                        expanded = expanded,
-                                        today = today,
-                                        availability = availability,
-                                        availabilityErrors = availabilityErrors,
-                                        loadingModel = loadingModel,
-                                        onToggle = { model ->
-                                            expanded = if (expanded == model.no) null else model.no
-                                            if (expanded == model.no && availability[model.no] == null) loadModel(model)
-                                        },
-                                        onRetry = ::loadModel,
-                                        onApply = ::openDimaC,
-                                    )
-                                }
-                            }
+                    }
+                    is EquipmentCatalogRow.Model -> {
+                        val top = if (row.index == 0) EQUIPMENT_GROUP_GAP else ListItemDefaults.SegmentedGap
+                        item(key = row.key, contentType = "equipment_model") {
+                            EquipmentModelRow(
+                                model = row.model,
+                                open = expanded == row.model.no,
+                                summary = availability[row.model.no]?.let { equipmentAvailabilitySummary(it, today) },
+                                index = row.index,
+                                count = row.count,
+                                onToggle = { toggleModel(row.model) },
+                                modifier = Modifier
+                                    .animateItem(fadeInSpec = DimaMotion.effectsDefault(), placementSpec = null, fadeOutSpec = null)
+                                    .padding(top = top),
+                            )
+                        }
+                    }
+                    is EquipmentCatalogRow.Panel -> item(key = row.key, contentType = "equipment_days") {
+                        // A panel row exists only for a model whose state was made while building the rows.
+                        AnimatedVisibility(
+                            visibleState = panels.getValue(row.modelKey),
+                            enter = dimaExpandIn(),
+                            exit = dimaCollapseOut(),
+                            modifier = Modifier.padding(top = ListItemDefaults.SegmentedGap),
+                        ) {
+                            val message = availabilityErrors[row.model.no]
+                            val days = availability[row.model.no]
+                            EquipmentDaysPanel(
+                                view = EquipmentDaysView(
+                                    phase = equipmentDaysPhase(loadingModel == row.model.no, message != null, days != null),
+                                    error = message,
+                                    days = days.orEmpty(),
+                                ),
+                                today = today,
+                                shape = ListItemDefaults.segmentedShapes(index = row.index, count = row.count).shape,
+                                onRetry = { loadModel(row.model) },
+                                onApply = ::openDimaC,
+                                modifier = Modifier.testTag("equipment_days_${row.model.no}"),
+                            )
                         }
                     }
                 }
@@ -252,6 +332,12 @@ internal fun EquipmentScreen(onBack: () -> Unit, modifier: Modifier = Modifier) 
         }
     }
 }
+
+/** Between blocks of the equipment page (the list's item spacing before model rows became items, D-131). */
+private val EQUIPMENT_BLOCK_GAP = 12.dp
+
+/** Under a group's heading, as the group's column spaced it. */
+private val EQUIPMENT_GROUP_GAP = 8.dp
 
 /** What the equipment part of the page shows; the content changes with an animation only when this changes. */
 internal enum class EquipmentCatalogPhase { LOADING, ERROR, START, EMPTY, READY, NONE }
@@ -277,6 +363,57 @@ private data class EquipmentCatalogView(
     val groups: List<EquipmentGroup>,
 )
 
+/** One lazy item of the 일반 대여 장비 catalog (D-131): a group's heading, a model row or a model's day panel. */
+internal sealed interface EquipmentCatalogRow {
+    val key: String
+
+    data class Header(override val key: String, val group: EquipmentGroup) : EquipmentCatalogRow
+
+    /** [index] and [count] place the row in its group's segmented shapes, open panels counted. */
+    data class Model(override val key: String, val model: EquipmentModel, val index: Int, val count: Int) : EquipmentCatalogRow
+
+    /** The day panel under the model whose row key is [modelKey]; it takes the next place in the segmented shapes. */
+    data class Panel(
+        override val key: String,
+        val modelKey: String,
+        val model: EquipmentModel,
+        val index: Int,
+        val count: Int,
+    ) : EquipmentCatalogRow
+}
+
+/**
+ * The catalog's lazy items in order (D-131, Q-032 (g)): each group's heading, then its models as one segmented list,
+ * where a model whose day panel is on screen ([panelShown]: open, or still closing) is followed by the panel, which
+ * takes a place in the group's shapes. Keys follow the group name and the model number, so a row keeps its item
+ * through a refresh; a name or number the site lists twice gets a numbered key, since a repeated lazy key would
+ * crash the list.
+ */
+internal fun equipmentCatalogRows(
+    groups: List<EquipmentGroup>,
+    panelShown: (modelKey: String, model: EquipmentModel) -> Boolean,
+): List<EquipmentCatalogRow> {
+    val used = HashMap<String, Int>()
+    fun unique(base: String): String {
+        val seen = (used[base] ?: 0) + 1
+        used[base] = seen
+        return if (seen == 1) base else "$base#$seen"
+    }
+    return buildList {
+        groups.forEach { group ->
+            add(EquipmentCatalogRow.Header(unique("equipment_group_${group.name}"), group))
+            val models = group.models.map { model -> unique("equipment_model_${group.name}_${model.no}") to model }
+            val shown = models.map { (key, model) -> panelShown(key, model) }
+            val count = models.size + shown.count { it }
+            var index = 0
+            models.forEachIndexed { position, (key, model) ->
+                add(EquipmentCatalogRow.Model(key, model, index++, count))
+                if (shown[position]) add(EquipmentCatalogRow.Panel("${key}_days", key, model, index++, count))
+            }
+        }
+    }
+}
+
 /** What an open model's panel shows. */
 internal enum class EquipmentDaysPhase { LOADING, ERROR, DAYS, NONE }
 
@@ -293,64 +430,6 @@ private data class EquipmentDaysView(
     val error: String?,
     val days: List<EquipmentDay>,
 )
-
-/** One group's heading and its models as an M3 Expressive segmented list; an open model adds its days below it. */
-@Composable
-private fun EquipmentGroupList(
-    group: EquipmentGroup,
-    expanded: Long?,
-    today: LocalDate,
-    availability: Map<Long, List<EquipmentDay>>,
-    availabilityErrors: Map<Long, String>,
-    loadingModel: Long?,
-    onToggle: (EquipmentModel) -> Unit,
-    onRetry: (EquipmentModel) -> Unit,
-    onApply: () -> Unit,
-) {
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        SettingsSectionHeader("${group.displayName} · ${group.models.size}종")
-        // Each model's day panel opens and closes on the expressive spring (D-118's fold motion). A panel still
-        // closing keeps its place in the segmented shapes until it is gone, so the rows below do not jump early.
-        // A panel already open when the page is shown again (D-111) simply shows.
-        val panels = remember(group) { group.models.associate { it.no to MutableTransitionState(it.no == expanded) } }
-        panels.forEach { (no, state) -> state.targetState = no == expanded }
-        val count = group.models.size + panels.values.count { it.currentState || it.targetState }
-        DimaSegmentedList {
-            var index = 0
-            group.models.forEach { model ->
-                val open = expanded == model.no
-                val days = availability[model.no]
-                EquipmentModelRow(
-                    model = model,
-                    open = open,
-                    summary = days?.let { equipmentAvailabilitySummary(it, today) },
-                    index = index++,
-                    count = count,
-                    onToggle = { onToggle(model) },
-                )
-                val panel = panels.getValue(model.no)
-                if (panel.currentState || panel.targetState) {
-                    val panelIndex = index++
-                    AnimatedVisibility(visibleState = panel, enter = dimaExpandIn(), exit = dimaCollapseOut()) {
-                        val message = availabilityErrors[model.no]
-                        EquipmentDaysPanel(
-                            view = EquipmentDaysView(
-                                phase = equipmentDaysPhase(loadingModel == model.no, message != null, days != null),
-                                error = message,
-                                days = days.orEmpty(),
-                            ),
-                            today = today,
-                            shape = ListItemDefaults.segmentedShapes(index = panelIndex, count = count).shape,
-                            onRetry = { onRetry(model) },
-                            onApply = onApply,
-                            modifier = Modifier.testTag("equipment_days_${model.no}"),
-                        )
-                    }
-                }
-            }
-        }
-    }
-}
 
 /**
  * An open model's days. When its read finishes the loading line crossfades into the week grid and the panel grows
@@ -374,7 +453,7 @@ private fun EquipmentDaysPanel(
         ) { shown ->
             Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 when (shown.phase) {
-                    EquipmentDaysPhase.LOADING -> LoadingLine("대여 현황을 불러오는 중이에요")
+                    EquipmentDaysPhase.LOADING -> LoadingLine("대여 현황을 불러오는 중이에요", slowHint = SCHOOL_READ_SLOW_HINT)
                     EquipmentDaysPhase.ERROR -> ErrorState(shown.error.orEmpty(), onRetry = onRetry)
                     EquipmentDaysPhase.DAYS -> {
                         EquipmentWeekGrid(shown.days, today)
@@ -404,17 +483,21 @@ private fun EquipmentModelRow(
     index: Int,
     count: Int,
     onToggle: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     SegmentedListItem(
         onClick = onToggle,
         shapes = ListItemDefaults.segmentedShapes(index = index, count = count),
-        modifier = Modifier
+        modifier = modifier
             .testTag("equipment_model_${model.no}")
             .expandableSemantics(open, onToggle),
         trailingContent = {
             ExpandChevron(open, Modifier.size(24.dp), label = "equipment_model_chevron")
         },
-        supportingContent = { Text(listOfNotNull("대여용 ${model.units}대", summary).joinToString(" · ")) },
+        // D-130: a model with no rentable unit stays listed, so the catalog matches the site.
+        supportingContent = {
+            Text(if (model.units == 0) "지금 빌릴 수 있는 장비가 없어요" else listOfNotNull("대여용 ${model.units}대", summary).joinToString(" · "))
+        },
         colors = dimaSegmentedListColors(),
     ) {
         Text(model.name)

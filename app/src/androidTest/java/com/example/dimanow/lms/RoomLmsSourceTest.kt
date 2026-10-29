@@ -615,6 +615,104 @@ class RoomLmsSourceTest {
 
         database.close()
     }
+
+    @Test
+    fun openingANoticeOrMaterialCompletesItUntilTheLmsListsSayOtherwise() = runTest {
+        val database = Room.inMemoryDatabaseBuilder(
+            ApplicationProvider.getApplicationContext(),
+            LmsCacheDatabase::class.java,
+        ).allowMainThreadQueries().build()
+        val transport = RecordingLmsTransport(allLearningKinds = true, includeStatusLinks = true)
+        transport.noticeOnIncompleteList = true
+        val source = RoomLmsSource(
+            database,
+            MutableLmsSessionController(LmsSessionState.ACTIVE),
+            transport,
+            renderedPageLoader = transport.assignmentRenderedPageLoader(),
+        )
+        suspend fun states() = source.snapshot.first().items.associate { it.id to it.completionState }
+        suspend fun open(id: String) = source.loadDetail(source.snapshot.first().items.single { it.id == id })
+
+        assertEquals(LmsRefreshResult.Success, source.refresh(force = true))
+        assertEquals(LmsCompletionState.INCOMPLETE, states()["91"])
+        assertEquals(LmsCompletionState.NOT_TRACKED, states()["901"])
+
+        // D-132: the notice's and the material's official view pages load, so both are complete at once; the
+        // assignment is opened too but needs a submission, so it stays as the LMS said.
+        assertTrue(open("91") is LmsDetailLoadResult.Fresh)
+        assertTrue(open("901") is LmsDetailLoadResult.Fresh)
+        assertTrue(open("301") is LmsDetailLoadResult.Fresh)
+        assertEquals(LmsCompletionState.COMPLETE, states()["91"])
+        assertEquals(LmsCompletionState.COMPLETE, states()["901"])
+        assertEquals(LmsCompletionState.INCOMPLETE, states()["301"])
+
+        // A sync that cannot read the 미완료한 학습 list has no answer: the marks stay.
+        transport.failIncompleteStatus = true
+        assertEquals(LmsRefreshResult.Success, source.refresh(force = true))
+        assertEquals(LmsCompletionState.COMPLETE, states()["91"])
+
+        // The LMS still lists the notice as not done: it is back in 할 일. The material, on neither list, stays done.
+        transport.failIncompleteStatus = false
+        assertEquals(LmsRefreshResult.Success, source.refresh(force = true))
+        assertEquals(LmsCompletionState.INCOMPLETE, states()["91"])
+        assertEquals(LmsCompletionState.COMPLETE, states()["901"])
+
+        // Offline, the cached detail opens but the LMS saw no view, so nothing is marked.
+        transport.failDetailRequests = true
+        assertTrue(open("91") is LmsDetailLoadResult.Cached)
+        assertEquals(LmsCompletionState.INCOMPLETE, states()["91"])
+
+        // Opened again, and this time the LMS counts it: the next sync keeps it done.
+        transport.failDetailRequests = false
+        assertTrue(open("91") is LmsDetailLoadResult.Fresh)
+        transport.noticeOnIncompleteList = false
+        assertEquals(LmsRefreshResult.Success, source.refresh(force = true))
+        assertEquals(LmsCompletionState.COMPLETE, states()["91"])
+
+        database.close()
+    }
+
+    @Test
+    fun aMaterialWithAFileIsCompleteOnlyOnceTheLmsHandsTheFileOver() = runTest {
+        val database = Room.inMemoryDatabaseBuilder(
+            ApplicationProvider.getApplicationContext(),
+            LmsCacheDatabase::class.java,
+        ).allowMainThreadQueries().build()
+        val transport = RecordingLmsTransport(allLearningKinds = true, includeStatusLinks = true)
+        transport.boardItemHasFile = true
+        transport.touchResult = LmsAttachmentTouchResult.Failure("offline file")
+        val source = RoomLmsSource(
+            database,
+            MutableLmsSessionController(LmsSessionState.ACTIVE),
+            transport,
+            renderedPageLoader = transport.assignmentRenderedPageLoader(),
+        )
+        suspend fun states() = source.snapshot.first().items.associate { it.id to it.completionState }
+        suspend fun open(id: String) = source.loadDetail(source.snapshot.first().items.single { it.id == id })
+
+        assertEquals(LmsRefreshResult.Success, source.refresh(force = true))
+        assertEquals(LmsCompletionState.NOT_TRACKED, states()["901"])
+
+        // D-133: the page loads but its file does not come back, so the LMS has not counted it: nothing is marked.
+        assertTrue(open("901") is LmsDetailLoadResult.Fresh)
+        assertEquals(LmsCompletionState.NOT_TRACKED, states()["901"])
+        val asked = transport.touchedRequests.single()
+        assertEquals("https://lms.dima.ac.kr/lms/class/boardItem/doDownloadFile.dunet", asked.url)
+        assertEquals("33508", asked.fields["boarditem_attach_file_no"])
+        assertEquals("OK", asked.fields["time_flag"])
+
+        // Opened again and the LMS hands the file over: complete.
+        transport.touchResult = LmsAttachmentTouchResult.Accepted
+        assertTrue(open("901") is LmsDetailLoadResult.Fresh)
+        assertEquals(LmsCompletionState.COMPLETE, states()["901"])
+
+        // An assignment's files are never asked for by opening it.
+        transport.touchedRequests.clear()
+        assertTrue(open("301") is LmsDetailLoadResult.Fresh)
+        assertTrue(transport.touchedRequests.isEmpty())
+
+        database.close()
+    }
 }
 
 private class RecordingLmsTransport(
@@ -636,6 +734,14 @@ private class RecordingLmsTransport(
     var returnLoginPageForDetail = false
     var returnPortalLoginForDashboard = false
     var failIncompleteStatus = false
+
+    /** D-132: the LMS lists notice 91 as 미완료한 학습 instead of 완료한 학습. */
+    var noticeOnIncompleteList = false
+
+    /** D-133: board posts carry one file, asked for with [touchResult] as the answer. */
+    var boardItemHasFile = false
+    var touchResult: LmsAttachmentTouchResult = LmsAttachmentTouchResult.Accepted
+    val touchedRequests = mutableListOf<LmsAttachmentRequest>()
     val sessionFields = mutableListOf<Map<String, String>>()
     val termFields = mutableListOf<Map<String, String>>()
     val detailPosts = mutableListOf<Pair<String, Map<String, String>>>()
@@ -703,14 +809,31 @@ private class RecordingLmsTransport(
                 </tr></tbody></table>
             """.trimIndent()
         } else if (url.contains("to_do_type=complete")) {
-            statusHtml("1", "91", "1주차 안내")
+            if (noticeOnIncompleteList) statusHtml() else statusHtml(NOTICE_STATUS_ROW)
         } else if (url.contains("to_do_type=incomplete")) {
-            statusHtml("3", "301", "프로툴 사전진단")
+            if (noticeOnIncompleteList) {
+                statusHtml(ASSIGNMENT_STATUS_ROW, NOTICE_STATUS_ROW)
+            } else {
+                statusHtml(ASSIGNMENT_STATUS_ROW)
+            }
         } else if (url.contains("myLecture")) {
             dashboardRequests += 1
             dashboardHtml(includeCourse = !rawDashboardOmitsCourses && (!requiresTermSelection || termApplied))
         } else if (url.contains("doFormReport")) {
             assignmentDetailHtml()
+        } else if (url.contains("boardItem/doViewBoardItem") && boardItemHasFile) {
+            """
+                <input type="hidden" id="board_no" name="board_no" value="6">
+                <input type="hidden" id="boarditem_no" name="boarditem_no" value="901">
+                <input type="hidden" id="learning_design_yn" name="learning_design_yn" value="">
+                <table class="table_view_basic">
+                  <thead><tr><th class="ta_l pd_l10 end">실습 자료</th></tr></thead>
+                  <tbody>
+                    <tr><td class="end ta_l"><p>실습 자료입니다</p></td></tr>
+                    <tr><td class="end">첨부파일 : <a href="javascript:fncFileDown('33508', '')">화면 구성 I.pdf</a></td></tr>
+                  </tbody>
+                </table>
+            """.trimIndent()
         } else if (url.contains("boardItem/doViewBoardItem")) {
             """<div id="board_contents"><p>수업 안내 본문</p></div>"""
         } else "<main class=\"sub_content\"><p>학습 상세</p></main>"
@@ -740,6 +863,11 @@ private class RecordingLmsTransport(
         maxBytes: Long,
         onProgress: (Long, Long?) -> Unit,
     ): LmsAttachmentDownloadResult = LmsAttachmentDownloadResult.Failure("not used in this source fixture")
+
+    override suspend fun touchAttachment(request: LmsAttachmentRequest): LmsAttachmentTouchResult {
+        touchedRequests += request
+        return touchResult
+    }
 
     override suspend fun postForm(url: String, fields: Map<String, String>, maxBytes: Long): LmsHttpResponse {
         if (url.contains("myLecture")) {
@@ -812,12 +940,21 @@ private class RecordingLmsTransport(
         """.trimIndent()
     }
 
-    private fun statusHtml(type: String, id: String, title: String): String = """
-        <div class="learn_element_detail_list"><div class="outline"><ul>
+    /** Rows given as (official content type, item id, title). */
+    private fun statusHtml(vararg rows: Triple<String, String, String>): String = rows.joinToString(
+        separator = "\n",
+        prefix = "<div class=\"learn_element_detail_list\"><div class=\"outline\"><ul>\n",
+        postfix = "\n</ul></div></div>",
+    ) { (type, id, title) ->
+        """
           <li><span class="cata">${if (type == "1") "공지" else "과제"}</span>
             <a href="javascript:fnGoContent('$type','202620UN00025451401401D','D','$id','S');">[2026-2학기)음향기초실습(D반)] $title</a>
           </li>
-        </ul></div></div>
-    """.trimIndent()
+        """.trimIndent()
+    }
 
+    private companion object {
+        val NOTICE_STATUS_ROW = Triple("1", "91", "1주차 안내")
+        val ASSIGNMENT_STATUS_ROW = Triple("3", "301", "프로툴 사전진단")
+    }
 }

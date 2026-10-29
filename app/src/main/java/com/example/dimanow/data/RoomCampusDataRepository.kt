@@ -74,6 +74,14 @@ class RoomCampusDataRepository(
         dao.deleteCourse(id)
     }
 
+    override suspend fun replaceCourses(remove: List<Long>, add: List<Course>) = database.withTransaction {
+        remove.forEach { id ->
+            dao.removeCourseOverrides(id)
+            dao.deleteCourse(id)
+        }
+        add.forEach { dao.putCourse(CourseEntity.fromDomain(it)) }
+    }
+
     override suspend fun setCourseOverride(override: com.example.dimanow.domain.CourseOverride) {
         database.withTransaction {
             val term = dao.currentTerm() ?: error("학기를 찾을 수 없어요.")

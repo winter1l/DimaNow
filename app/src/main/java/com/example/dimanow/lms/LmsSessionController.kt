@@ -4,8 +4,11 @@ import java.time.Clock
 import java.time.Duration
 import java.time.Instant
 import java.net.URI
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -27,20 +30,27 @@ class MutableLmsSessionController(initial: LmsSessionState = LmsSessionState.SIG
 
 sealed interface LmsLoginResult {
     data object Success : LmsLoginResult
+    /**
+     * Signed in after the portal answered 3045 (D-135). That answer had already signed the student's other device or
+     * browser out of the LMS, so the student is told.
+     */
+    data object SuccessEndingElsewhere : LmsLoginResult
     data object CredentialsRejected : LmsLoginResult
-    data object SessionConflict : LmsLoginResult
+    /** The portal answered 3045 to the second attempt too: someone signed in elsewhere again in between. */
     data class SessionTakeoverFailed(
-        val message: String = "다른 기기의 로그인을 넘겨받지 못했어요. 다시 시도해 주세요",
+        val message: String = "다른 곳에서 다시 로그인해서 이 기기로 로그인하지 못했어요. 잠시 후 다시 시도해 주세요",
     ) : LmsLoginResult
     data object InteractiveAuthenticationRequired : LmsLoginResult
     data class NetworkError(val message: String) : LmsLoginResult
     data class Failure(val message: String) : LmsLoginResult
 }
 
+internal val LmsLoginResult.signedIn: Boolean
+    get() = this == LmsLoginResult.Success || this == LmsLoginResult.SuccessEndingElsewhere
+
 internal fun LmsLoginResult.failureMessage(): String? = when (this) {
-    LmsLoginResult.Success -> null
+    LmsLoginResult.Success, LmsLoginResult.SuccessEndingElsewhere -> null
     LmsLoginResult.CredentialsRejected -> "계정 정보를 다시 확인해 주세요"
-    LmsLoginResult.SessionConflict -> "다른 곳에서 LMS에 로그인한 상태예요"
     is LmsLoginResult.SessionTakeoverFailed -> message
     LmsLoginResult.InteractiveAuthenticationRequired -> "공식 LMS에서 추가 인증이 필요해요"
     is LmsLoginResult.NetworkError -> LmsUserMessages.NETWORK
@@ -54,26 +64,14 @@ interface LmsLoginDriver {
 class LmsLoginRequest internal constructor(
     val credentials: SavedLmsCredentials,
     internal val result: CompletableDeferred<LmsLoginResult>,
-    /** True only when the user just approved moving an LMS login held elsewhere to this device (D-099). */
-    val allowSessionTakeover: Boolean = false,
 )
 
 class LmsLoginBridge : LmsLoginDriver {
     private val mutableRequest = MutableStateFlow<LmsLoginRequest?>(null)
     val request: StateFlow<LmsLoginRequest?> = mutableRequest.asStateFlow()
 
-    private val takeoverApproval = java.util.concurrent.atomic.AtomicBoolean(false)
-
-    /**
-     * The next login may take over a session held on another device or browser (the official 3045 action).
-     * Without this, a conflict ends the attempt with [LmsLoginResult.SessionConflict] so the user can decide.
-     */
-    fun approveSessionTakeoverOnce() {
-        takeoverApproval.set(true)
-    }
-
     override suspend fun authenticate(credentials: SavedLmsCredentials): LmsLoginResult {
-        val pending = LmsLoginRequest(credentials, CompletableDeferred(), allowSessionTakeover = takeoverApproval.getAndSet(false))
+        val pending = LmsLoginRequest(credentials, CompletableDeferred())
         check(mutableRequest.compareAndSet(null, pending)) { "LMS login is already in progress" }
         return try {
             pending.result.await()
@@ -101,8 +99,8 @@ internal enum class LmsLoginPageAction { WAIT, LOAD_DASHBOARD, EXTRACT_COURSES }
 internal enum class LmsLoginFlowStage {
     CREDENTIALS_PENDING,
     LOGIN_SUBMISSION,
-    SESSION_CONFLICT,
-    SESSION_TAKEOVER_SUBMISSION,
+    /** D-135: the portal answered 3045, which already ended the sign-in held elsewhere; signing in once more. */
+    CONFLICT_RETRY,
     LMS_MAIN_CONFIRMATION,
     COURSE_LIST_EXTRACTION,
     SUCCESS,
@@ -111,13 +109,12 @@ internal enum class LmsLoginFlowStage {
 
 internal data class LmsLoginFlowState(
     val stage: LmsLoginFlowStage,
-    val sessionTakeoverSubmissions: Int = 0,
+    /** Sign-ins sent again after a 3045 answer: at most one. */
+    val conflictRetries: Int = 0,
     val result: LmsLoginResult? = null,
-    val allowSessionTakeover: Boolean = false,
 ) {
     companion object {
-        fun initial(allowSessionTakeover: Boolean = false): LmsLoginFlowState =
-            LmsLoginFlowState(LmsLoginFlowStage.CREDENTIALS_PENDING, allowSessionTakeover = allowSessionTakeover)
+        fun initial(): LmsLoginFlowState = LmsLoginFlowState(LmsLoginFlowStage.CREDENTIALS_PENDING)
     }
 }
 
@@ -127,9 +124,11 @@ internal sealed interface LmsLoginFlowEvent {
         val url: String,
         val authenticatedMain: Boolean = false,
     ) : LmsLoginFlowEvent
-    /** Emitted only after the adapter verifies the live official 3045 page's own action. */
-    data object SessionTakeoverActionVerified : LmsLoginFlowEvent
-    data object SessionTakeoverActionUnavailable : LmsLoginFlowEvent
+    /**
+     * LMS sent the login back to its main page without a signed-in menu, or left it on a sign-in page, after the
+     * credentials step: a login that did not stick.
+     */
+    data object LoginNotEstablished : LmsLoginFlowEvent
     data object InteractiveChallengeDetected : LmsLoginFlowEvent
     data object CredentialsRejected : LmsLoginFlowEvent
     data class CourseExtractionFinished(val hasCourses: Boolean) : LmsLoginFlowEvent
@@ -138,8 +137,8 @@ internal sealed interface LmsLoginFlowEvent {
 internal sealed interface LmsLoginFlowCommand {
     data object None : LmsLoginFlowCommand
     data object SubmitCredentials : LmsLoginFlowCommand
-    data object InspectSessionTakeoverAction : LmsLoginFlowCommand
-    data object SubmitVerifiedSessionTakeover : LmsLoginFlowCommand
+    /** Open the official login address again and send the saved account once more (D-135). */
+    data object RetryCredentials : LmsLoginFlowCommand
     data object LoadDashboard : LmsLoginFlowCommand
     data object ExtractCourses : LmsLoginFlowCommand
     data class Complete(val result: LmsLoginResult) : LmsLoginFlowCommand
@@ -149,24 +148,6 @@ internal data class LmsLoginFlowTransition(
     val state: LmsLoginFlowState,
     val command: LmsLoginFlowCommand,
 )
-
-internal enum class LmsSessionTakeoverScriptResult {
-    VERIFIED,
-    SUBMITTED,
-    INTERACTIVE,
-    UNAVAILABLE,
-}
-
-/**
- * WebView callbacks are deliberately reduced to a four-token protocol. The live portal page's
- * action, form fields, and any transient authentication values never cross into Kotlin or logs.
- */
-internal fun parseLmsSessionTakeoverScriptResult(raw: String?): LmsSessionTakeoverScriptResult = when (raw) {
-    "\"verified\"" -> LmsSessionTakeoverScriptResult.VERIFIED
-    "\"submitted\"" -> LmsSessionTakeoverScriptResult.SUBMITTED
-    "\"interactive\"" -> LmsSessionTakeoverScriptResult.INTERACTIVE
-    else -> LmsSessionTakeoverScriptResult.UNAVAILABLE
-}
 
 internal fun reduceLmsLoginFlow(
     state: LmsLoginFlowState,
@@ -181,16 +162,12 @@ internal fun reduceLmsLoginFlow(
         LmsLoginFlowCommand.SubmitCredentials,
     )
     is LmsLoginFlowEvent.MainFrameFinished -> if (isExactOfficialLmsSessionConflictUrl(event.url)) {
-        if (!state.allowSessionTakeover) {
-            // D-099: never log out another device on our own; the user is asked first.
+        if (state.conflictRetries == 0) {
+            // D-135: the portal ends the sign-in held elsewhere as it answers 3045, so asking now would come too
+            // late; one more sign-in goes through.
             LmsLoginFlowTransition(
-                state.copy(stage = LmsLoginFlowStage.TERMINAL_ERROR, result = LmsLoginResult.SessionConflict),
-                LmsLoginFlowCommand.Complete(LmsLoginResult.SessionConflict),
-            )
-        } else if (state.sessionTakeoverSubmissions == 0) {
-            LmsLoginFlowTransition(
-                state.copy(stage = LmsLoginFlowStage.SESSION_CONFLICT, result = LmsLoginResult.SessionConflict),
-                LmsLoginFlowCommand.InspectSessionTakeoverAction,
+                state.copy(stage = LmsLoginFlowStage.CONFLICT_RETRY, conflictRetries = 1, result = null),
+                LmsLoginFlowCommand.RetryCredentials,
             )
         } else {
             val result = LmsLoginResult.SessionTakeoverFailed()
@@ -218,26 +195,8 @@ internal fun reduceLmsLoginFlow(
             )
         }
     }
-    LmsLoginFlowEvent.SessionTakeoverActionVerified -> if (
-        state.stage == LmsLoginFlowStage.SESSION_CONFLICT && state.sessionTakeoverSubmissions == 0
-    ) {
-        LmsLoginFlowTransition(
-            state.copy(
-                stage = LmsLoginFlowStage.SESSION_TAKEOVER_SUBMISSION,
-                sessionTakeoverSubmissions = 1,
-                result = null,
-            ),
-            LmsLoginFlowCommand.SubmitVerifiedSessionTakeover,
-        )
-    } else {
-        val result = LmsLoginResult.SessionTakeoverFailed()
-        LmsLoginFlowTransition(
-            state.copy(stage = LmsLoginFlowStage.TERMINAL_ERROR, result = result),
-            LmsLoginFlowCommand.Complete(result),
-        )
-    }
-    LmsLoginFlowEvent.SessionTakeoverActionUnavailable -> {
-        val result = LmsLoginResult.SessionTakeoverFailed()
+    LmsLoginFlowEvent.LoginNotEstablished -> {
+        val result = LmsLoginResult.Failure(LmsUserMessages.LOGIN_NOT_ESTABLISHED)
         LmsLoginFlowTransition(
             state.copy(stage = LmsLoginFlowStage.TERMINAL_ERROR, result = result),
             LmsLoginFlowCommand.Complete(result),
@@ -250,7 +209,9 @@ internal fun reduceLmsLoginFlow(
             LmsLoginFlowCommand.Complete(result),
         )
     }
-    LmsLoginFlowEvent.CredentialsRejected -> if (state.stage == LmsLoginFlowStage.LOGIN_SUBMISSION) {
+    LmsLoginFlowEvent.CredentialsRejected -> if (
+        state.stage == LmsLoginFlowStage.LOGIN_SUBMISSION || state.stage == LmsLoginFlowStage.CONFLICT_RETRY
+    ) {
         val result = LmsLoginResult.CredentialsRejected
         LmsLoginFlowTransition(
             state.copy(stage = LmsLoginFlowStage.TERMINAL_ERROR, result = result),
@@ -260,9 +221,10 @@ internal fun reduceLmsLoginFlow(
         LmsLoginFlowTransition(state, LmsLoginFlowCommand.None)
     }
     is LmsLoginFlowEvent.CourseExtractionFinished -> if (event.hasCourses) {
+        val result = if (state.conflictRetries > 0) LmsLoginResult.SuccessEndingElsewhere else LmsLoginResult.Success
         LmsLoginFlowTransition(
-            state.copy(stage = LmsLoginFlowStage.SUCCESS, result = LmsLoginResult.Success),
-            LmsLoginFlowCommand.Complete(LmsLoginResult.Success),
+            state.copy(stage = LmsLoginFlowStage.SUCCESS, result = result),
+            LmsLoginFlowCommand.Complete(result),
         )
     } else {
         val result = LmsLoginResult.Failure(LmsUserMessages.COURSE_CATALOG_FAILED)
@@ -323,35 +285,118 @@ internal fun shouldReviewStoredLmsCredentials(url: String, submitted: Boolean, e
 internal fun shouldConfirmOfficialLmsLoginDialog(url: String): Boolean =
     isOfficialLmsCredentialPage(url)
 
-internal fun shouldConfirmOfficialLmsSessionTakeoverDialog(url: String, message: String): Boolean {
-    if (!isExactOfficialLmsSessionConflictUrl(url)) return false
-    val normalized = message.replace(Regex("\\s+"), " ").trim()
-    return normalized.contains("로그인") &&
-        (normalized.contains("세션") || normalized.contains("중복")) &&
-        (normalized.contains("종료") || normalized.contains("전환") || normalized.contains("계속"))
+/**
+ * D-135: whether a sign-in to the school portal now would most likely sign another device out of a sign-in it made
+ * after this device's. The 수업 tab and the school-site host share the portal account, so they share this.
+ */
+interface PortalSignInGate {
+    val signedInElsewhere: StateFlow<Boolean>
+
+    /** The student chose to sign in on this device anyway. */
+    fun allowSignInHere()
+
+    /**
+     * The app signed in to the portal itself through a school site. Any sign-in elsewhere ended then, so the 수업
+     * tab's next sign-in is the app's own again, not one to wait on.
+     */
+    fun signedInThroughPortal()
 }
+
+/** What the app keeps of its own LMS session (D-135) across launches: times only, no account data. */
+interface LmsSessionRecord {
+    /** When this device last signed in to the LMS or read from it. */
+    fun lastActivity(): Instant?
+    fun recordActivity(at: Instant)
+
+    /** When this device last signed in to the portal through a school site. */
+    fun lastPortalSignIn(): Instant?
+    fun recordPortalSignIn(at: Instant)
+
+    /** Since when the app waits for 「이 기기로 로그인」, or null. */
+    fun waitingSince(): Instant?
+    fun setWaitingSince(at: Instant?)
+}
+
+internal class InMemoryLmsSessionRecord : LmsSessionRecord {
+    @Volatile private var activity: Instant? = null
+    @Volatile private var portal: Instant? = null
+    @Volatile private var waiting: Instant? = null
+    override fun lastActivity(): Instant? = activity
+    override fun recordActivity(at: Instant) {
+        activity = at
+    }
+    override fun lastPortalSignIn(): Instant? = portal
+    override fun recordPortalSignIn(at: Instant) {
+        portal = at
+    }
+    override fun waitingSince(): Instant? = waiting
+    override fun setWaitingSince(at: Instant?) {
+        waiting = at
+    }
+}
+
+/**
+ * The LMS signs a session out two hours after its last activity (the student, 2026-10-26: the limit was raised from
+ * the notice's one hour and runs from the last activity).
+ */
+internal val LMS_SESSION_LIMIT: Duration = Duration.ofHours(2)
 
 class LmsAutoLoginCoordinator(
     private val credentialStore: LmsCredentialStore,
     private val sessionController: LmsSessionController,
     private val loginDriver: LmsLoginDriver,
     private val clock: Clock = Clock.systemUTC(),
-) {
+    private val sessionRecord: LmsSessionRecord = InMemoryLmsSessionRecord(),
+) : PortalSignInGate {
     private val mutex = Mutex()
     private var retryAfter: Instant? = null
     private val mutableErrorMessage = MutableStateFlow<String?>(null)
     val errorMessage: StateFlow<String?> = mutableErrorMessage.asStateFlow()
-    private val mutableSessionConflict = MutableStateFlow(false)
-    /** True after an automatic login found the LMS session held elsewhere; the screen asks before taking it over. */
-    val sessionConflict: StateFlow<Boolean> = mutableSessionConflict.asStateFlow()
+    private val mutableSignedInElsewhere = MutableStateFlow(sessionRecord.waitingSince() != null)
+    /**
+     * True while the app waits for the student's 「이 기기로 로그인」 ([ensureActive] with `signInHere`, D-135): the LMS
+     * ended this device's session within two hours of its last activity there, or answered 3045 twice in a row, so
+     * another device most likely holds it. The wait has no time limit and lasts across launches: the app cannot see
+     * whether the other place is still in use, and signing in here would end it.
+     */
+    override val signedInElsewhere: StateFlow<Boolean> = mutableSignedInElsewhere.asStateFlow()
+    private val mutableNotices = MutableSharedFlow<String>(extraBufferCapacity = 1)
+    /** One-off messages for the screen, such as a sign-in that ended the one elsewhere. */
+    val notices: SharedFlow<String> = mutableNotices.asSharedFlow()
 
-    fun dismissSessionConflict() {
-        mutableSessionConflict.value = false
+    override fun allowSignInHere() = stopWaiting()
+
+    override fun signedInThroughPortal() {
+        sessionRecord.recordPortalSignIn(clock.instant())
+        stopWaiting()
     }
 
-    suspend fun ensureActive(force: Boolean, credentialsChanged: Boolean = false): LmsSessionState = mutex.withLock {
+    /** A read from the LMS went through, so the session was alive until now. */
+    fun noteActivity() {
+        sessionRecord.recordActivity(clock.instant())
+    }
+
+    private fun startWaiting() {
+        if (mutableSignedInElsewhere.value) return
+        sessionRecord.setWaitingSince(clock.instant())
+        mutableSignedInElsewhere.value = true
+    }
+
+    private fun stopWaiting() {
+        if (!mutableSignedInElsewhere.value && sessionRecord.waitingSince() == null) return
+        sessionRecord.setWaitingSince(null)
+        mutableSignedInElsewhere.value = false
+    }
+
+    suspend fun ensureActive(
+        force: Boolean,
+        credentialsChanged: Boolean = false,
+        signInHere: Boolean = false,
+    ): LmsSessionState = mutex.withLock {
         val current = sessionController.state.value
         if (!credentialsChanged && current == LmsSessionState.ACTIVE) return@withLock current
+        if (signInHere || credentialsChanged) stopWaiting()
+        if (mutableSignedInElsewhere.value) return@withLock current
         if (!force && !credentialsChanged && current == LmsSessionState.CREDENTIALS_NEED_REVIEW) return@withLock current
         if (!force && !credentialsChanged && retryAfter?.isAfter(clock.instant()) == true) return@withLock current
         mutableErrorMessage.value = null
@@ -370,14 +415,20 @@ class LmsAutoLoginCoordinator(
             throw cancelled
         }
         mutableErrorMessage.value = result.failureMessage()
-        mutableSessionConflict.value = result == LmsLoginResult.SessionConflict
+        if (result == LmsLoginResult.SuccessEndingElsewhere) mutableNotices.tryEmit(LmsUserMessages.SIGNED_OUT_ELSEWHERE)
         when (result) {
-            LmsLoginResult.Success -> {
+            LmsLoginResult.Success, LmsLoginResult.SuccessEndingElsewhere -> {
                 retryAfter = null
+                sessionRecord.recordActivity(clock.instant())
                 LmsSessionState.ACTIVE
             }
             LmsLoginResult.CredentialsRejected -> LmsSessionState.CREDENTIALS_NEED_REVIEW
-            LmsLoginResult.SessionConflict, is LmsLoginResult.SessionTakeoverFailed -> LmsSessionState.ERROR
+            is LmsLoginResult.SessionTakeoverFailed -> {
+                // Someone signed in elsewhere again right after the first 3045: wait for the student instead of
+                // taking the session back on the next automatic sign-in.
+                startWaiting()
+                LmsSessionState.ERROR
+            }
             LmsLoginResult.InteractiveAuthenticationRequired -> LmsSessionState.INTERACTIVE_AUTH_REQUIRED
             is LmsLoginResult.NetworkError -> {
                 retryAfter = clock.instant().plus(RETRY_SUPPRESSION)
@@ -387,7 +438,18 @@ class LmsAutoLoginCoordinator(
         }.also(sessionController::transition)
     }
 
+    /**
+     * A read found the LMS session ended. Within [LMS_SESSION_LIMIT] of this device's last LMS activity that was not
+     * the time limit: someone signed in elsewhere (D-135), unless the app itself signed in to the portal through a
+     * school site since then, which ended any such sign-in. A clock set back is not taken for "within".
+     */
     fun markExpired() {
+        val now = clock.instant()
+        val last = sessionRecord.lastActivity()
+        val portal = sessionRecord.lastPortalSignIn()
+        val endedEarly = last != null && !now.isBefore(last) && Duration.between(last, now) < LMS_SESSION_LIMIT
+        val ownPortalSignInSince = last != null && portal != null && portal.isAfter(last)
+        if (endedEarly && !ownPortalSignInSince) startWaiting()
         if (sessionController.state.value == LmsSessionState.ACTIVE) {
             sessionController.transition(LmsSessionState.EXPIRED)
         }

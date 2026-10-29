@@ -14,6 +14,13 @@ import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.LocalActivity
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.MutableTransitionState
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -43,19 +50,31 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.compose.material.icons.filled.Devices
 import com.example.dimanow.lms.LmsCredentialStore
 import com.example.dimanow.lms.LmsLoginScreen
+import com.example.dimanow.lms.PortalSignInGate
+import com.example.dimanow.ui.DialogTone
+import com.example.dimanow.ui.DimaAlertDialog
 import com.example.dimanow.lms.SavedLmsCredentials
 import com.example.dimanow.lms.lmsCredentialSubmissionScript
+import com.example.dimanow.lms.webPageEntrance
 import com.example.dimanow.ui.DimaLoadingIndicator
 import com.example.dimanow.ui.DimaTopAppBar
+import com.example.dimanow.ui.motion.DimaMotion
+import com.example.dimanow.ui.motion.LocalReducedMotion
+import com.example.dimanow.ui.motion.PageSlideDistance
 import com.example.dimanow.ui.openUrl
 import kotlinx.coroutines.launch
 import java.io.ByteArrayInputStream
@@ -75,7 +94,7 @@ fun SchoolServiceHost(bridge: SchoolServiceBridge, credentialStore: LmsCredentia
     val request by bridge.request.collectAsStateWithLifecycle()
     val current = request ?: return
     key(current) {
-        SchoolServiceSession(current, credentialStore) { result -> bridge.complete(current, result) }
+        SchoolServiceSession(current, credentialStore, bridge.portalGate) { result -> bridge.complete(current, result) }
     }
 }
 
@@ -96,10 +115,13 @@ private enum class SchoolSurface { HIDDEN, OPENING, PORTAL, PAGE }
 private fun SchoolServiceSession(
     request: SchoolServiceRequest,
     credentialStore: LmsCredentialStore,
+    portalGate: PortalSignInGate?,
     onResult: (SchoolServiceResult) -> Unit,
 ) {
     val scope = rememberCoroutineScope()
     val slot = remember { SchoolCredentialSlot() }
+    // D-135: the sign-in waiting for the student's answer while another device most likely holds the portal sign-in.
+    var confirmSignIn by remember { mutableStateOf<(() -> Unit)?>(null) }
     var credentialsLoaded by remember { mutableStateOf(false) }
     var surface by remember { mutableStateOf(if (request.opensPage) SchoolSurface.OPENING else SchoolSurface.HIDDEN) }
     var askCredentials by remember { mutableStateOf(false) }
@@ -116,6 +138,25 @@ private fun SchoolServiceSession(
         onDispose { if (portalShown) activity?.window?.clearFlags(WindowManager.LayoutParams.FLAG_SECURE) }
     }
     val onScreen = surface != SchoolSurface.HIDDEN
+    // D-137: the sign-in form comes in as a forward step answering the control the student tapped, and fades out once
+    // the account is entered; the session's area stays full size until it has gone.
+    val form = remember { MutableTransitionState(false) }
+    form.targetState = askCredentials
+    val formShown = form.currentState || form.targetState
+    val reduced = LocalReducedMotion.current
+    val slidePx = with(LocalDensity.current) { PageSlideDistance.roundToPx() } *
+        (if (LocalLayoutDirection.current == LayoutDirection.Rtl) -1 else 1)
+    // D-137: a page opened for the student fades in over its loading line once it is ready. When the portal appears
+    // over a hidden read, the whole page comes in at once ([webPageEntrance]), so the WebView does not fade twice.
+    val webShown = portalShown || surface == SchoolSurface.PAGE
+    val webAlpha = remember { Animatable(0f) }
+    LaunchedEffect(webShown) {
+        when {
+            !webShown -> webAlpha.snapTo(0f)
+            request.opensPage -> webAlpha.animateTo(1f, DimaMotion.effectsDefault())
+            else -> webAlpha.snapTo(1f)
+        }
+    }
     // Back steps back through the shown page's own history; otherwise it closes, as the close button does.
     BackHandler(enabled = onScreen || askCredentials) {
         val webView = slot.webView
@@ -133,11 +174,14 @@ private fun SchoolServiceSession(
             Icon(Icons.Default.Close, contentDescription = if (request.opensPage) "닫기" else "로그인 취소")
         }
     }
-    Box(modifier = if (onScreen || askCredentials) Modifier.fillMaxSize() else Modifier.size(1.dp)) {
+    Box(modifier = if (onScreen || formShown) Modifier.fillMaxSize() else Modifier.size(1.dp)) {
         Column(
             modifier = if (onScreen) {
                 Modifier
                     .fillMaxSize()
+                    // D-137: the forward page motion of D-121, drawn in a layer: the WebView inside is never kept by
+                    // an animated container. A hidden read has no layer and never animates.
+                    .webPageEntrance()
                     .background(MaterialTheme.colorScheme.surface)
                     .statusBarsPadding()
                     .navigationBarsPadding()
@@ -174,7 +218,9 @@ private fun SchoolServiceSession(
                             context = context,
                             request = request,
                             slot = slot,
+                            portalGate = portalGate,
                             onResult = onResult,
+                            confirmSignIn = { signIn -> confirmSignIn = signIn },
                             askForCredentials = { rejected ->
                                 credentialsRejected = rejected
                                 askCredentials = true
@@ -191,9 +237,15 @@ private fun SchoolServiceSession(
                         webView.stopLoading()
                         webView.destroy()
                     },
-                    modifier = if (onScreen) Modifier.fillMaxSize() else Modifier.size(1.dp),
+                    modifier = if (onScreen) Modifier.fillMaxSize().graphicsLayer { alpha = webAlpha.value } else Modifier.size(1.dp),
                 )
-                if (surface == SchoolSurface.OPENING) {
+                // The loading line leaves on the fast effects spring as the page fades in beneath it (D-137). Named
+                // in full: inside the page's column the column's own overload would be chosen.
+                androidx.compose.animation.AnimatedVisibility(
+                    visible = surface == SchoolSurface.OPENING,
+                    enter = EnterTransition.None,
+                    exit = fadeOut(DimaMotion.effectsFast()),
+                ) {
                     Column(
                         modifier = Modifier
                             .fillMaxSize()
@@ -212,7 +264,39 @@ private fun SchoolServiceSession(
                 }
             }
         }
-        if (askCredentials) {
+        confirmSignIn?.let { signIn ->
+            fun cancel() {
+                confirmSignIn = null
+                slot.submitWhenReady = null
+                onResult(SchoolServiceResult.Cancelled)
+            }
+            DimaAlertDialog(
+                onDismissRequest = ::cancel,
+                icon = Icons.Default.Devices,
+                tone = DialogTone.WARNING,
+                title = "다른 곳에서 학교 계정을 쓰는 것 같아요",
+                text = {
+                    Text("로그인하면 그곳의 로그인이 끊겨서, 풀고 있던 시험이나 과제가 저장되지 않을 수 있어요.")
+                },
+                confirmLabel = "로그인",
+                onConfirm = {
+                    confirmSignIn = null
+                    signIn()
+                },
+                dismissLabel = "취소",
+                confirmTag = "school_sign_in_here",
+                dismissTag = "school_sign_in_cancel",
+            )
+        }
+        AnimatedVisibility(
+            visibleState = form,
+            enter = if (reduced) {
+                fadeIn(DimaMotion.effectsDefault())
+            } else {
+                fadeIn(DimaMotion.effectsDefault()) + slideInHorizontally(DimaMotion.spatialSlow()) { slidePx }
+            },
+            exit = fadeOut(DimaMotion.effectsFast()),
+        ) {
             // The same form as the Courses tab: the account goes only to the official portal page, and saving it
             // (opt-in) also signs the Courses tab in next time.
             LmsLoginScreen(
@@ -240,7 +324,9 @@ private fun schoolServiceWebView(
     context: android.content.Context,
     request: SchoolServiceRequest,
     slot: SchoolCredentialSlot,
+    portalGate: PortalSignInGate?,
     onResult: (SchoolServiceResult) -> Unit,
+    confirmSignIn: (signIn: () -> Unit) -> Unit,
     askForCredentials: (rejected: Boolean) -> Unit,
     showToStudent: () -> Unit,
     showPage: () -> Unit,
@@ -269,6 +355,11 @@ private fun schoolServiceWebView(
     val onScreen = java.util.concurrent.atomic.AtomicBoolean(request.opensPage)
     var extracting = false
     var redirectsAfterSignIn = 0
+    // D-135: a 3045 answer already signed the other place out, so one more sign-in goes through without asking.
+    var conflictRetried = false
+    var signInApproved = false
+    // The account went to the portal on this visit; reaching the page then means the portal sign-in is the app's.
+    var accountSent = false
 
     fun finish(result: SchoolServiceResult) {
         if (stage == SchoolStage.DONE) return
@@ -288,6 +379,7 @@ private fun schoolServiceWebView(
     fun submit(view: WebView, credentials: SavedLmsCredentials) {
         slot.submitWhenReady = null
         injected = true
+        accountSent = true
         view.evaluateJavascript(lmsCredentialSubmissionScript(credentials.username, credentials.password, portal = true)) { result ->
             // A challenge or an unexpected form: the official page takes over.
             if (result != "\"submitted\"") reveal()
@@ -296,11 +388,29 @@ private fun schoolServiceWebView(
 
     fun submitOrAsk(view: WebView) {
         val credentials = slot.credentials
-        if (credentials != null) {
-            submit(view, credentials)
-        } else {
-            slot.submitWhenReady = { slot.credentials?.let { submit(view, it) } }
-            askForCredentials(false)
+        val step = schoolSignInStep(
+            hasSavedAccount = credentials != null,
+            signedInElsewhere = portalGate?.signedInElsewhere?.value == true,
+            approved = signInApproved,
+            automatic = request.automatic,
+        )
+        when (step) {
+            SchoolSignInStep.SUBMIT -> submit(view, requireNotNull(credentials))
+            SchoolSignInStep.ASK_ACCOUNT -> {
+                slot.submitWhenReady = { slot.credentials?.let { submit(view, it) } }
+                askForCredentials(false)
+            }
+            SchoolSignInStep.STOP -> finish(SchoolServiceResult.Failure(SCHOOL_SIGNED_IN_ELSEWHERE_MESSAGE))
+            SchoolSignInStep.CONFIRM -> {
+                val signIn = {
+                    signInApproved = true
+                    portalGate?.allowSignInHere()
+                    submit(view, requireNotNull(credentials))
+                }
+                // Held while the student answers, so the silent timeout waits as it does for the sign-in form.
+                slot.submitWhenReady = signIn
+                confirmSignIn(signIn)
+            }
         }
     }
 
@@ -318,6 +428,7 @@ private fun schoolServiceWebView(
     }
 
     fun focusPage(view: WebView) {
+        if (!request.fitsPage) return
         service.pageFocusScript?.let { view.evaluateJavascript(it, null) }
     }
 
@@ -424,8 +535,21 @@ private fun schoolServiceWebView(
             }
             if (stage == SchoolStage.DONE) return
             if (SchoolUrlPolicy.isSessionConflict(url)) {
-                // The official page explains the duplicate login and offers its own way on; the student decides.
-                reveal()
+                if (!conflictRetried) {
+                    // D-135: the portal ended the sign-in held elsewhere as it answered 3045. Its page stays blank
+                    // (its script does not run), so the account is sent once more.
+                    conflictRetried = true
+                    signInApproved = true
+                    portalGate?.signedInThroughPortal()
+                    android.widget.Toast.makeText(
+                        view.context,
+                        "로그인하면서 다른 곳의 학교 계정 로그인이 끊겼어요",
+                        android.widget.Toast.LENGTH_LONG,
+                    ).show()
+                    startSignIn(view)
+                } else {
+                    finish(SchoolServiceResult.Failure("다른 곳에서 다시 로그인해서 ${service.label}에 로그인하지 못했어요. 잠시 후 다시 시도해 주세요."))
+                }
                 return
             }
             val uri = Uri.parse(url)
@@ -436,6 +560,11 @@ private fun schoolServiceWebView(
                         return
                     }
                     if (uri.path.orEmpty().equals(targetPath, ignoreCase = true)) {
+                        // D-135: the 수업 tab then signs in as its own, without waiting on a sign-in this one ended.
+                        if (accountSent) {
+                            accountSent = false
+                            portalGate?.signedInThroughPortal()
+                        }
                         if (request.opensPage) showPage(view) else extract(view)
                     } else if (stage == SchoolStage.CHECK) {
                         // Not signed in: the site sent us to its error or entry page instead of the target.

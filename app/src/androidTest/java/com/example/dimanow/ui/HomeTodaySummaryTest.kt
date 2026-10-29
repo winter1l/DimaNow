@@ -115,7 +115,7 @@ class HomeTodaySummaryTest {
     }
 
     @Test
-    fun distantCachedTasksShowCountsWithoutTitlesOrMisleadingEmptyMessage() {
+    fun distantCachedTasksShowTheirTitleWithAQuietDateAndNoEmptyMessage() {
         composeRule.setContent {
             HomeTodaySummary(
                 snapshot = LmsSnapshot(
@@ -129,7 +129,9 @@ class HomeTodaySummaryTest {
         composeRule.onNodeWithText("수업").assertIsDisplayed()
         composeRule.onNode(hasClickLabel("수업 보기")).assertIsDisplayed()
         composeRule.onNodeWithText("영상제작 · 1개").assertIsDisplayed()
-        composeRule.onNodeWithText("사흘 뒤 과제").assertDoesNotExist()
+        // D-126(2): far deadlines stay visible, dated without the time.
+        composeRule.onNodeWithText("사흘 뒤 과제").assertIsDisplayed()
+        composeRule.onNodeWithText("D-3 · 9/17 마감").assertIsDisplayed()
         composeRule.onNodeWithText("다가오는 마감이 없어요").assertDoesNotExist()
         composeRule.onNodeWithText("저장된", substring = true).assertDoesNotExist()
         composeRule.onNodeWithText("9/13 12:00 확인", substring = true).assertDoesNotExist()

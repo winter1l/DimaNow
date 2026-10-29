@@ -1,0 +1,179 @@
+name: 학사일정 가져오기
+
+# D-131(2): reads the public 학사일정 page (https://www.dima.ac.kr/?p=78) for the year after the latest term in
+# data-source/calendar.json. When that year has terms, it proposes the merged calendar.json on a calendar/auto-<year>
+# branch as a pull request to main (or an issue when Actions may not open pull requests). Existing years are never
+# changed, and nothing reaches students until the owner merges; publish-data.yml publishes calendar.json after that.
+
+on:
+  schedule:
+    # Tuesday 10:23 KST, off the hour.
+    - cron: "23 1 * * 2"
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: dima-now-calendar-import
+  cancel-in-progress: false
+
+jobs:
+  import:
+    # The build and the page parser run here with a read-only token: this job cannot push or open anything.
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    outputs:
+      candidate: ${{ steps.candidate.outputs.candidate }}
+      year: ${{ steps.candidate.outputs.year }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: main
+          persist-credentials: false
+      - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: gradle/actions/setup-gradle@48b5f213c81028ace310571dc5ec0fbbca0b2947
+      - name: 학사일정 페이지 읽기
+        id: candidate
+        shell: bash
+        run: |
+          set -euo pipefail
+          out="$RUNNER_TEMP/calendar-candidate"
+          mkdir -p "$out"
+          bash ./gradlew :data-pipeline:run --args="import-calendar $GITHUB_WORKSPACE/data-source/calendar.json $out/calendar.json"
+          if [[ -f "$out/calendar.json" ]]; then
+            year="$(jq -r '.terms[-1].id[0:4]' "$out/calendar.json")"
+            if [[ ! "$year" =~ ^20[0-9]{2}$ ]]; then echo "후보의 연도를 읽지 못했어요." >&2; exit 1; fi
+            echo "candidate=true" >> "$GITHUB_OUTPUT"
+            echo "year=$year" >> "$GITHUB_OUTPUT"
+            cat "$out/calendar.summary.md" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "candidate=false" >> "$GITHUB_OUTPUT"
+            echo "새 연도의 학사일정이 아직 없어요." >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - name: 후보 보관
+        if: steps.candidate.outputs.candidate == 'true'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: calendar-candidate
+          path: ${{ runner.temp }}/calendar-candidate/
+          retention-days: 14
+          if-no-files-found: error
+
+  propose:
+    needs: import
+    if: needs.import.outputs.candidate == 'true'
+    # Write access lives only in this job, whose steps run git, jq and gh on the candidate file; no build or pipeline
+    # code runs here.
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: main
+          persist-credentials: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: calendar-candidate
+          path: ${{ runner.temp }}/calendar-candidate
+      - name: 후보 브랜치와 풀 리퀘스트
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          YEAR: ${{ needs.import.outputs.year }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          export GH_TOKEN="$GITHUB_TOKEN"
+          repo="$GITHUB_REPOSITORY"
+          if [[ ! "$YEAR" =~ ^20[0-9]{2}$ ]]; then echo "연도가 올바르지 않아요." >&2; exit 1; fi
+          candidate="$RUNNER_TEMP/calendar-candidate/calendar.json"
+          body="$RUNNER_TEMP/calendar-candidate/calendar.summary.md"
+          jq -e --arg year "$YEAR" '.schemaVersion == 1 and (.terms[-1].id | startswith($year))' "$candidate" > /dev/null
+          branch="calendar/auto-$YEAR"
+          title="학사일정 $YEAR 가져오기"
+          {
+            echo
+            echo "Actions 토큰으로 연 풀 리퀘스트에서는 검증 워크플로가 저절로 돌지 않아요. 병합 전에 닫았다 다시 열면 검증이 돌아요."
+            echo
+            echo "실행: $RUN_URL"
+          } >> "$body"
+          if gh api "repos/$repo/branches/$branch" --silent 2>/dev/null; then
+            # Never overwrite the branch: the owner may have edited it or closed its pull request on purpose.
+            prs="$(gh pr list --repo "$repo" --head "$branch" --state all --json number --jq 'length')"
+            issues="$(gh issue list --repo "$repo" --state all --search "in:title \"$title\"" --json number --jq 'length')"
+            if [[ "$prs" != "0" || "$issues" != "0" ]]; then
+              echo "$branch 브랜치와 검토 요청이 이미 있어요. 다시 만들려면 풀 리퀘스트를 닫고 브랜치를 지운 뒤 실행해 주세요."
+              exit 0
+            fi
+          else
+            cp "$candidate" data-source/calendar.json
+            if git diff --quiet -- data-source/calendar.json; then echo "main과 같아 할 일이 없어요."; exit 0; fi
+            git config user.name github-actions[bot]
+            git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+            git switch -c "$branch"
+            git add -- data-source/calendar.json
+            git commit -m "data(calendar): $YEAR 학사일정 후보 (D-131)"
+            # The only credentialed Git operation: the token reaches git through process-scoped config for this push
+            # and is never written to .git/config.
+            basic="$(printf 'x-access-token:%s' "$GITHUB_TOKEN" | base64 -w0)"
+            echo "::add-mask::$basic"
+            GIT_CONFIG_COUNT=1 \
+              GIT_CONFIG_KEY_0=http.https://github.com/.extraheader \
+              GIT_CONFIG_VALUE_0="AUTHORIZATION: basic $basic" \
+              git push origin "HEAD:refs/heads/$branch"
+          fi
+          if gh pr create --repo "$repo" --base main --head "$branch" --title "$title" --body-file "$body"; then
+            exit 0
+          fi
+          # The repository may not allow Actions to open pull requests; the owner then gets an issue linking the branch.
+          {
+            echo "Actions가 풀 리퀘스트를 열 수 없어 이슈로 알려요."
+            echo
+            echo "- 브랜치: https://github.com/$repo/tree/$branch"
+            echo "- 비교하고 풀 리퀘스트 만들기: https://github.com/$repo/compare/main...$branch?expand=1"
+            echo
+            cat "$body"
+          } > "$RUNNER_TEMP/calendar-issue.md"
+          gh issue create --repo "$repo" --title "$title" --body-file "$RUNNER_TEMP/calendar-issue.md"
+
+  status:
+    needs: [import, propose]
+    if: always()
+    # Opens one issue when a run fails (the page changed shape or the school site did not answer) and closes it after
+    # the next good run. It runs nothing but gh on fixed text and the job results.
+    runs-on: ubuntu-24.04
+    permissions:
+      issues: write
+    steps:
+      - name: 실패 알림
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          IMPORT_RESULT: ${{ needs.import.result }}
+          PROPOSE_RESULT: ${{ needs.propose.result }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -uo pipefail
+          repo="$GITHUB_REPOSITORY"
+          title="학사일정 가져오기 확인 필요"
+          existing="$(gh issue list --repo "$repo" --state open --search "in:title \"$title\"" --json number --jq '.[0].number // empty')"
+          if [[ "$IMPORT_RESULT" == "failure" || "$PROPOSE_RESULT" == "failure" ]]; then
+            {
+              echo "학사일정 가져오기가 실패했어요 (읽기: $IMPORT_RESULT, 제안: $PROPOSE_RESULT)."
+              echo "학교 페이지의 구조가 바뀌었거나 사이트가 응답하지 않았을 수 있어요. 실행 기록을 확인해 주세요."
+              echo
+              echo "최근 실행: $RUN_URL"
+            } > "$RUNNER_TEMP/calendar-status.md"
+            if [[ -n "$existing" ]]; then gh issue edit "$existing" --repo "$repo" --body-file "$RUNNER_TEMP/calendar-status.md"
+            else gh issue create --repo "$repo" --title "$title" --body-file "$RUNNER_TEMP/calendar-status.md"
+            fi
+          elif [[ -n "$existing" && "$IMPORT_RESULT" == "success" && "$PROPOSE_RESULT" != "failure" ]]; then
+            gh issue close "$existing" --repo "$repo" --comment "다음 실행에서 정상으로 돌아왔어요: $RUN_URL"
+          fi

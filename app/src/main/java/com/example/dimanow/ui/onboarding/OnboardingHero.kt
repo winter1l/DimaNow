@@ -124,21 +124,30 @@ private fun OnboardingHeroGlyph.icon(): ImageVector = when (this) {
  */
 @Stable
 internal class OnboardingHeroState(initial: OnboardingStage, playIntro: Boolean) {
+    /** The step the graphic first showed; the main shape's turn is counted from it. */
+    val origin = initial
     var from by mutableStateOf(initial)
     var to by mutableStateOf(initial)
     val progress = Animatable(1f)
     val turn = Animatable(0f)
 
-    /** 0 → 1 once, when the first-run screen first appears. */
+    /** 0 → 1 once, when the first-run screen first appears: the growth and the turn into place. */
     val intro = Animatable(if (playIntro) 0f else 1f)
+
+    /** The intro's opacity, apart from [intro] so it rides an effects spring and never overshoots (D-137). */
+    val introAlpha = Animatable(if (playIntro) 0f else 1f)
 }
 
 /**
  * Remembers [OnboardingHeroState] and drives it:
  * - Once per first run (not again after rotation or process restore) the graphic grows in from 60% and turns into
- *   place on the slow spatial spring.
+ *   place on the slow spatial spring while it fades in on the default effects spring (D-137: before, the opacity rode
+ *   the growth's overshooting spring).
  * - On a step change the three shapes morph to the next step's on the default spatial spring while the main shape
- *   turns [ONBOARDING_HERO_TURN_DEGREES] and the accent the other way.
+ *   turns [ONBOARDING_HERO_TURN_DEGREES] and the accent the other way. D-137: a step change during a running morph
+ *   (다음 then 뒤로 at once) first finishes it on the fast spatial spring, so the shape never jumps from its mid-morph
+ *   form to the finished one; coming back to the step being morphed to finishes that morph, and the turn always heads
+ *   for the step's own angle, so an interrupted change never leaves the graphic part-way.
  * - Nothing loops. Under [LocalReducedMotion] there is no growth, no turn and no morph: each step shows its shapes.
  */
 @Composable
@@ -148,19 +157,29 @@ internal fun rememberOnboardingHeroState(stage: OnboardingStage): OnboardingHero
     val state = remember { OnboardingHeroState(stage, playIntro = !reduced && !introPlayed) }
     LaunchedEffect(Unit) {
         introPlayed = true
+        if (state.introAlpha.value < 1f) launch { state.introAlpha.animateTo(1f, DimaMotion.effectsDefault()) }
         if (state.intro.value < 1f) state.intro.animateTo(1f, DimaMotion.spatialSlow())
     }
     LaunchedEffect(stage) {
-        if (state.to == stage) return@LaunchedEffect
-        val turnBy = onboardingHeroTurn(state.to, stage)
-        state.from = state.to
-        state.to = stage
         if (reduced) {
+            if (state.to != stage) {
+                state.from = state.to
+                state.to = stage
+            }
             state.progress.snapTo(1f)
             return@LaunchedEffect
         }
+        // The turn sets off at once; only the shape waits for an unfinished morph to land.
+        launch { state.turn.animateTo(onboardingHeroTurn(state.origin, stage), DimaMotion.spatialDefault()) }
+        if (state.to == stage) {
+            // Back on the step that was being morphed to, after a change that was cut short.
+            if (state.progress.value != 1f) state.progress.animateTo(1f, DimaMotion.spatialDefault())
+            return@LaunchedEffect
+        }
+        if (state.progress.value != 1f) state.progress.animateTo(1f, DimaMotion.spatialFast())
+        state.from = state.to
+        state.to = stage
         state.progress.snapTo(0f)
-        launch { state.turn.animateTo(state.turn.targetValue + turnBy, DimaMotion.spatialDefault()) }
         state.progress.animateTo(1f, DimaMotion.spatialDefault())
     }
     return state
@@ -195,7 +214,7 @@ internal fun OnboardingHero(state: OnboardingHeroState, modifier: Modifier = Mod
                 val scale = INTRO_START_SCALE + (1f - INTRO_START_SCALE) * intro
                 scaleX = scale
                 scaleY = scale
-                alpha = intro.coerceIn(0f, 1f)
+                alpha = state.introAlpha.value.coerceIn(0f, 1f)
             },
     ) {
         HeroLayer(

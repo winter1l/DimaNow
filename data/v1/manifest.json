@@ -1,5 +1,5 @@
 {
-    "generatedAt": "2026-10-30T06:24:03.286591855Z",
+    "generatedAt": "2026-10-31T06:14:44.120547518Z",
     "datasets": {
         "shuttle": {
             "revision": 2,
@@ -20,12 +20,12 @@
             "sourceUrl": "https://www.dima.ac.kr/?p=1"
         },
         "notice": {
-            "revision": 44,
+            "revision": 45,
             "state": "READY",
-            "publishedAt": "2026-10-30T06:24:03.286591855Z",
-            "lastAttemptAt": "2026-10-30T06:24:03.286591855Z",
-            "url": "notices/f5893efe025d29797fe2ded0eddbcbf1b19c55bed0de54f7525aa709914c3e9d.json",
-            "sha256": "f5893efe025d29797fe2ded0eddbcbf1b19c55bed0de54f7525aa709914c3e9d",
+            "publishedAt": "2026-10-31T06:14:44.120547518Z",
+            "lastAttemptAt": "2026-10-31T06:14:44.120547518Z",
+            "url": "notices/8044298ae95805609ed983653e43534c7839299cfcf54da1c4755be300c2ce90.json",
+            "sha256": "8044298ae95805609ed983653e43534c7839299cfcf54da1c4755be300c2ce90",
             "sourceUrl": "https://www.dima.ac.kr/?p=111"
         },
         "dorm_meal": {
@@ -50,7 +50,7 @@
             "revision": 3,
             "state": "READY",
             "publishedAt": "2026-10-23T18:27:26.029905412Z",
-            "lastAttemptAt": "2026-10-30T06:24:00.274787034Z",
+            "lastAttemptAt": "2026-10-31T06:14:40.642378589Z",
             "url": "app-release/8f5eead7cb46ec18d7c90ab978f4e743700653f01d77f54ce1bcb69f8fbd8df7.json",
             "sha256": "8f5eead7cb46ec18d7c90ab978f4e743700653f01d77f54ce1bcb69f8fbd8df7",
             "sourceUrl": "https://github.com/winter1l/DimaNow/releases"

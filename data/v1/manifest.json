@@ -1,5 +1,5 @@
 {
-    "generatedAt": "2026-11-02T00:07:56.280063074Z",
+    "generatedAt": "2026-11-02T00:37:42.965027356Z",
     "datasets": {
         "shuttle": {
             "revision": 2,
@@ -14,7 +14,7 @@
             "revision": 14,
             "state": "NEEDS_REVIEW",
             "publishedAt": "2026-10-26T02:07:52.469194171Z",
-            "lastAttemptAt": "2026-11-02T00:07:56.280063074Z",
+            "lastAttemptAt": "2026-11-02T00:37:42.965027356Z",
             "url": "meal/85ed1c89fdba5171cf7678cd09ffcb983dfbec171a69cb702987723c18aadaa5.json",
             "sha256": "85ed1c89fdba5171cf7678cd09ffcb983dfbec171a69cb702987723c18aadaa5",
             "sourceUrl": "https://www.dima.ac.kr/?p=1",

@@ -18,6 +18,7 @@ import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import com.example.dimanow.MainActivity
 import com.example.dimanow.R
+import com.example.dimanow.domain.ClassContent
 import com.example.dimanow.domain.CountdownMeaning
 import com.example.dimanow.domain.GuidanceSnapshot
 
@@ -52,6 +53,9 @@ enum class LiveClassOrder {
     COURSE_FIRST,
     CLASSROOM_FIRST,
 }
+
+/** One guidance notification's words: the first line, the body under it and the status-chip text (D-140). */
+data class NotificationText(val title: String, val detail: String, val chip: String?)
 
 data class LiveDisplayOptions(
     val chipContent: LiveChipContent = LiveChipContent.COUNTDOWN,
@@ -127,6 +131,73 @@ interface LiveSurfaceController {
         }
 
         /**
+         * The words of one guidance notification (D-140): its first line, the body under it and the status-chip text.
+         * The notification and 설정's pictures both use it, so a picture always says what the phone would.
+         */
+        fun notificationText(
+            snapshot: GuidanceSnapshot,
+            presentation: LiveDisplayOptions,
+            appName: String,
+            deviceLocked: Boolean = true,
+        ): NotificationText {
+            val classContent = snapshot.classContent
+            val firstShuttle = snapshot.shuttleLines.firstOrNull()
+            val criticalText = statusChipText(snapshot, presentation, deviceLocked)
+            val complementaryShuttle = classContent == null && firstShuttle?.origin != null &&
+                snapshot.countdownMeaning == CountdownMeaning.SHUTTLE_DEPARTURE && criticalText != null
+            val simpleCampusShuttle = complementaryShuttle && snapshot.kind != com.example.dimanow.domain.GuidanceKind.BUS_4402
+            val title = if (snapshot.kind == com.example.dimanow.domain.GuidanceKind.BUS_4402) {
+                firstShuttle?.text ?: "4402 강남행"
+            } else if (simpleCampusShuttle) {
+                "${firstShuttle.origin} → ${firstShuttle.destination!!.removeSuffix("행")}"
+            } else if (classContent != null) {
+                classTitle(classContent, presentation)
+            } else {
+                snapshot.shuttleLines.firstOrNull()?.text ?: appName
+            }
+            val classBody = classContent?.let { classDetail(it, presentation) }
+            val detail = buildList {
+                if (simpleCampusShuttle) {
+                    // All notification surfaces describe the same immediate boarding leg.
+                    // The engine keeps later vehicles and transfers for the full schedule.
+                    add(buildString {
+                        val minutes = requireNotNull(firstShuttle.minutes)
+                        append(if (minutes <= 0) "곧 출발" else "${minutes}분 후 출발")
+                        snapshot.countdownTarget?.atZone(com.example.dimanow.time.MinuteTicker.CAMPUS_ZONE)?.let {
+                            append(" · ${it.format(com.example.dimanow.guidance.GUIDANCE_CLOCK)}")
+                        }
+                    })
+                } else if (complementaryShuttle) add(requireNotNull(criticalText))
+                classBody?.let(::add)
+                if (!simpleCampusShuttle) addAll(
+                    snapshot.shuttleLines
+                        .drop(if (classContent == null) 1 else 0)
+                        .map { it.text },
+                )
+            }.joinToString("\n")
+            return NotificationText(title, detail, criticalText)
+        }
+
+        /**
+         * 수업 안내의 첫 줄. 나우바와 알림이 같이 쓰고, 설정의 미리 보기도 이 값을 그린다 (D-140).
+         * '강의실 먼저'면 `13:00 · 덕성관 510-1`, 아니면 `13:00 · 수업명`이다.
+         */
+        fun classTitle(classContent: ClassContent, presentation: LiveDisplayOptions): String =
+            if (presentation.classOrder == LiveClassOrder.CLASSROOM_FIRST && classContent.startTime != null && classContent.room != null) {
+                "${classContent.startTime} · ${classContent.room}"
+            } else {
+                classContent.title
+            }
+
+        /** 수업 안내의 둘째 줄. 첫 줄에 쓰지 않은 쪽(강의실이나 수업명)을 남은 시간 뒤에 붙인다. */
+        fun classDetail(classContent: ClassContent, presentation: LiveDisplayOptions): String =
+            if (presentation.classOrder == LiveClassOrder.CLASSROOM_FIRST && classContent.remainingText != null && classContent.courseName != null) {
+                "${classContent.remainingText} · ${classContent.courseName}"
+            } else {
+                classContent.detail
+            }
+
+        /**
          * 안내 성격에 맞는 상태바/나우바 아이콘 (D-058).
          *
          * 셔틀 안내에는 버스를, 수업 안내에는 학사 아이콘을 쓴다. 둘 다 아니면 앱 기본 아이콘.
@@ -198,7 +269,9 @@ class AndroidLiveSurfaceController(private val context: Context) : LiveSurfaceCo
         if (snapshot.phase == com.example.dimanow.domain.GuidancePhase.NONE ||
             (snapshot.classContent == null && snapshot.shuttleLines.isEmpty())
         ) return cancel()
-        val delivery = LiveDeliveryPlanner.plan(deliveryMode, snapshot.requiresMinuteUpdates)
+        // D-140/D-143: before Android 16 a 나우바 choice goes out as 일반 알림 (no promotion, no minute updates).
+        val effectiveMode = NowBarAvailability.effectiveMode(deliveryMode, NowBarAvailability.read(context))
+        val delivery = LiveDeliveryPlanner.plan(effectiveMode, snapshot.requiresMinuteUpdates)
         if (!delivery.shouldPost) return cancel()
         val visibleSnapshot = snapshot.copy(shuttleLines = snapshot.shuttleLines.filter {
             it.minutes == null || it.minutes <= 60
@@ -316,46 +389,10 @@ class AndroidLiveSurfaceController(private val context: Context) : LiveSurfaceCo
         presentation: LiveDisplayOptions = LiveDisplayOptions(),
         deviceLocked: Boolean = isDeviceLocked(),
     ): Notification {
-        val classContent = snapshot.classContent
-        val classroomFirst = presentation.classOrder == LiveClassOrder.CLASSROOM_FIRST
-        val firstShuttle = snapshot.shuttleLines.firstOrNull()
-        val criticalText = LiveSurfaceController.statusChipText(snapshot, presentation, deviceLocked)
-        val complementaryShuttle = classContent == null && firstShuttle?.origin != null &&
-            snapshot.countdownMeaning == CountdownMeaning.SHUTTLE_DEPARTURE && criticalText != null
-        val simpleCampusShuttle = complementaryShuttle && snapshot.kind != com.example.dimanow.domain.GuidanceKind.BUS_4402
-        val title = if (snapshot.kind == com.example.dimanow.domain.GuidanceKind.BUS_4402) {
-            firstShuttle?.text ?: "4402 강남행"
-        } else if (simpleCampusShuttle) {
-            "${firstShuttle.origin} → ${firstShuttle.destination!!.removeSuffix("행")}"
-        } else if (classroomFirst && classContent?.startTime != null && classContent.room != null) {
-            "${classContent.startTime} · ${classContent.room}"
-        } else {
-            classContent?.title ?: snapshot.shuttleLines.firstOrNull()?.text ?: context.getString(R.string.app_name)
-        }
-        val classDetail = when {
-            classroomFirst && classContent?.remainingText != null && classContent.courseName != null ->
-                "${classContent.remainingText} · ${classContent.courseName}"
-            else -> classContent?.detail
-        }
-        val detail = buildList {
-            if (simpleCampusShuttle) {
-                // All notification surfaces describe the same immediate boarding leg.
-                // The engine keeps later vehicles and transfers for the full schedule.
-                add(buildString {
-                    val minutes = requireNotNull(firstShuttle.minutes)
-                    append(if (minutes <= 0) "곧 출발" else "${minutes}분 후 출발")
-                    snapshot.countdownTarget?.atZone(com.example.dimanow.time.MinuteTicker.CAMPUS_ZONE)?.let {
-                        append(" · ${it.format(com.example.dimanow.guidance.GUIDANCE_CLOCK)}")
-                    }
-                })
-            } else if (complementaryShuttle) add(requireNotNull(criticalText))
-            classDetail?.let(::add)
-            if (!simpleCampusShuttle) addAll(
-                snapshot.shuttleLines
-                    .drop(if (classContent == null) 1 else 0)
-                    .map { it.text },
-            )
-        }.joinToString("\n")
+        val text = LiveSurfaceController.notificationText(snapshot, presentation, context.getString(R.string.app_name), deviceLocked)
+        val title = text.title
+        val detail = text.detail
+        val criticalText = text.chip
         val contentIntent = PendingIntent.getActivity(
             context,
             6101,
@@ -392,7 +429,11 @@ class AndroidLiveSurfaceController(private val context: Context) : LiveSurfaceCo
             criticalText?.takeIf(String::isNotBlank)?.let(builder::setShortCriticalText)
             snapshot.classContent?.remainingText?.takeIf(String::isNotBlank)?.let(builder::setSubText)
         }
-        if (Build.VERSION.SDK_INT >= 36 && requestPromotion) builder.setRequestPromotedOngoing(true)
+        if (Build.VERSION.SDK_INT >= 36 && requestPromotion) {
+            builder.setRequestPromotedOngoing(true)
+            // D-143: Samsung's undocumented extras let One UI show the Now Bar card without its developer option.
+            builder.addExtras(NowBarAvailability.samsungNowBarExtras(context.packageName))
+        }
         return builder.build()
     }
 

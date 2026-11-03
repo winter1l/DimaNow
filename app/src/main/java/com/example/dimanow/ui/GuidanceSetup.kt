@@ -51,6 +51,8 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import com.example.dimanow.live.LiveSettingsDestination
 import com.example.dimanow.live.LiveSurfaceController
+import com.example.dimanow.live.NowBarAvailability
+import com.example.dimanow.live.NowBarSupport
 import com.example.dimanow.ui.motion.LocalReducedMotion
 import com.example.dimanow.ui.motion.dimaCollapseOut
 import com.example.dimanow.ui.motion.dimaExpandIn
@@ -64,6 +66,9 @@ internal data class GuidanceSetupState(
     val exactAlarms: Boolean = false,
     val liveSupported: Boolean = false,
     val liveAllowed: Boolean = false,
+    /** D-140/D-143: whether the Now Bar can show DIMA Now, and whether 설정 offers the Samsung fallback guide. */
+    val nowBar: NowBarSupport = NowBarSupport.AVAILABLE,
+    val samsungNowBar: Boolean = false,
 ) {
     /** The two permissions the first run asks for in one step (D-102): guidance needs both to work at all. */
     val essentialsGranted: Boolean get() = notifications && (preciseLocation || approximateLocation)
@@ -74,7 +79,7 @@ internal data class GuidanceSetupState(
             if (liveSupported && !(liveAllowed && notifications)) 1 else 0
 }
 
-internal enum class GuidanceSetupAction { NOTIFICATIONS, LOCATION, BACKGROUND_LOCATION, EXACT_ALARM, LIVE }
+internal enum class GuidanceSetupAction { NOTIFICATIONS, LOCATION, BACKGROUND_LOCATION, EXACT_ALARM, LIVE, NOW_BAR }
 
 /**
  * The permission and device-setting state shared by first-run setup and Settings, read from Android again
@@ -91,6 +96,9 @@ internal class GuidanceSetupController internal constructor() {
     var message by mutableStateOf<String?>(null)
         internal set
     internal var backgroundExplanation by mutableStateOf(false)
+    /** D-143: the fallback guide for a Now Bar that does not show, or why it cannot (before Android 16). */
+    var nowBarGuide by mutableStateOf(false)
+        internal set
     internal var performAction: (GuidanceSetupAction) -> Unit = {}
     internal var essentials: () -> Unit = {}
     internal var openAppSettings: () -> Unit = {}
@@ -114,6 +122,8 @@ internal fun rememberGuidanceSetupController(
         exactAlarms = (context.getSystemService(Context.ALARM_SERVICE) as AlarmManager).canScheduleExactAlarms(),
         liveSupported = Build.VERSION.SDK_INT >= 36,
         liveAllowed = Build.VERSION.SDK_INT >= 36 && liveSurfaceController.diagnostics().canPostPromotedNotifications,
+        nowBar = NowBarAvailability.read(context),
+        samsungNowBar = Build.VERSION.SDK_INT >= 36 && NowBarAvailability.isSamsung(),
     )
     val controller = remember(context, liveSurfaceController) { GuidanceSetupController().apply { state = readState() } }
     var notificationDenied by rememberSaveable { mutableStateOf(false) }
@@ -181,6 +191,7 @@ internal fun rememberGuidanceSetupController(
                 Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM, Uri.parse("package:${context.packageName}")),
                 appDetails(),
             )
+            GuidanceSetupAction.NOW_BAR -> controller.nowBarGuide = true
             GuidanceSetupAction.LIVE -> {
                 if (liveSurfaceController.openPromotionSettings() == LiveSettingsDestination.UNAVAILABLE) {
                     controller.message = "실시간 알림 설정을 열지 못했어요. 휴대폰의 앱 알림 설정을 확인해 주세요."
@@ -197,10 +208,26 @@ internal fun GuidanceSetupChecklist(
     controller: GuidanceSetupController,
     modifier: Modifier = Modifier,
     onlyIncomplete: Boolean = false,
+    dialogs: Boolean = true,
 ) {
     Column(modifier, verticalArrangement = Arrangement.spacedBy(8.dp)) {
         GuidanceSetupContent(controller.state, onAction = controller::perform, onlyIncomplete = onlyIncomplete)
         controller.message?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
+    }
+    if (dialogs) GuidanceSetupDialogs(controller)
+}
+
+/**
+ * The checklist's explanations. A screen that can open them while the checklist is folded away (설정's dimmed 나우바
+ * choice) shows them itself and passes `dialogs = false` to [GuidanceSetupChecklist].
+ */
+@Composable
+internal fun GuidanceSetupDialogs(controller: GuidanceSetupController) {
+    if (controller.nowBarGuide) {
+        NowBarGuideDialog(
+            unsupported = controller.state.nowBar == NowBarSupport.UNSUPPORTED,
+            onDismiss = { controller.nowBarGuide = false },
+        )
     }
     if (controller.backgroundExplanation) {
         val optionLabel = LocalContext.current.packageManager.backgroundPermissionOptionLabel

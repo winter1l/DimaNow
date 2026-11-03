@@ -62,16 +62,33 @@ internal const val LIBRARY_APP_PACKAGE = "kr.ac.dima.lib"
 /** 헤이영 캠퍼스, where 전자출결 works. */
 internal const val HEYOUNG_APP_PACKAGE = "com.shinhan.heyoung"
 
-internal fun openDeveloperOptions(context: Context) {
+/**
+ * 개발자 옵션. With [highlightKey] the page scrolls to that row and highlights it, through the extra Android's own
+ * Settings search uses (`:settings:fragment_args_key`). D-140: Samsung keeps `모든 앱의 실시간 정보 보기` on the
+ * `추가 설정` sub-page (`sec_developer_options`), whose activity is not exported (SecSettings manifest read on
+ * 2026-10-29), so the closest an app can go is 개발자 옵션 with that row highlighted.
+ */
+internal fun openDeveloperOptions(context: Context, highlightKey: String? = null) {
     openFirstAvailableSettings(
         context,
         listOf(
-            Intent(Settings.ACTION_APPLICATION_DEVELOPMENT_SETTINGS),
+            Intent(Settings.ACTION_APPLICATION_DEVELOPMENT_SETTINGS).apply {
+                if (highlightKey != null) {
+                    putExtra(SETTINGS_FRAGMENT_ARG_KEY, highlightKey)
+                    putExtra(SETTINGS_SHOW_FRAGMENT_ARGS, android.os.Bundle().apply { putString(SETTINGS_FRAGMENT_ARG_KEY, highlightKey) })
+                }
+            },
             Intent(Settings.ACTION_SETTINGS),
             Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:${context.packageName}")),
         ),
     )
 }
+
+private const val SETTINGS_FRAGMENT_ARG_KEY = ":settings:fragment_args_key"
+private const val SETTINGS_SHOW_FRAGMENT_ARGS = ":settings:show_fragment_args"
+
+/** Samsung's 개발자 옵션 → 추가 설정 row, which holds 모든 앱의 실시간 정보 보기. */
+internal const val SAMSUNG_MORE_DEVELOPER_SETTINGS_KEY = "sec_developer_options"
 
 /** This app's page in the system settings, where refused permissions can be turned back on. */
 internal fun openAppDetailsSettings(context: Context) {

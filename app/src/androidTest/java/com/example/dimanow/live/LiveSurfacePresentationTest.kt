@@ -155,6 +155,19 @@ class LiveSurfacePresentationTest {
         assertNull(snapshot.classContent)
     }
 
+    /** D-143: a promoted guidance carries Samsung's Now Bar extras; 일반 알림 does not. */
+    @Test
+    fun promotedGuidanceCarriesSamsungNowBarExtrasAndStandardDoesNot() {
+        val context = ApplicationProvider.getApplicationContext<android.content.Context>()
+        val snapshot = GuidanceSnapshot(ClassContent("13:00 · 실습", "시작까지 10분 · 덕성관 510-1"), emptyList(), GuidancePhase.BEFORE_CLASS)
+        val controller = AndroidLiveSurfaceController(context)
+        val promoted = controller.buildNotification(snapshot, requestPromotion = true)
+        assertEquals(true, promoted.extras.getBoolean(NowBarAvailability.SAMSUNG_AUTOMATION_EXTRA))
+        assertEquals(context.packageName, promoted.extras.getString(NowBarAvailability.SAMSUNG_AUTOMATION_PACKAGE_EXTRA))
+        val standard = controller.buildNotification(snapshot, requestPromotion = false)
+        assertEquals(false, standard.extras.containsKey(NowBarAvailability.SAMSUNG_AUTOMATION_EXTRA))
+    }
+
     @Test
     fun legacyQuietChannelMigratesToSilentDefaultImportanceForLiveRefresh() {
         val context = ApplicationProvider.getApplicationContext<android.content.Context>()

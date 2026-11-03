@@ -2,6 +2,8 @@ package com.example.dimanow.ui
 
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.requiredWidth
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -20,6 +22,7 @@ import androidx.compose.ui.unit.dp
 import com.example.dimanow.live.GuidanceKind
 import com.example.dimanow.live.NotificationGuidanceMode
 import com.example.dimanow.live.NotificationGuidancePolicy
+import com.example.dimanow.live.NowBarSupport
 import com.example.dimanow.theme.DIMANowTheme
 import org.junit.Assert.assertEquals
 import org.junit.Rule
@@ -75,5 +78,30 @@ class SettingsChoiceTest {
         composeRule.onNodeWithTag("stop_34710").performClick().assertIsSelected()
         composeRule.onNodeWithTag("stop_null").assertIsNotSelected()
         composeRule.runOnIdle { assertEquals("34710", selected) }
+    }
+
+    /** D-140/D-143: before Android 16, 나우바 is dimmed, 일반 알림 shows as chosen and a tap asks for the guide. */
+    @Test
+    fun unavailableNowBarIsDimmedAndOpensTheGuideInsteadOfChanging() {
+        val changes = mutableListOf<Pair<GuidanceKind, NotificationGuidanceMode>>()
+        var guides = 0
+        composeRule.setContent {
+            DIMANowTheme {
+                Box(Modifier.requiredWidth(380.dp).verticalScroll(rememberScrollState())) {
+                    NotificationGuidanceSettings(
+                        policy = NotificationGuidancePolicy(),
+                        onModeChange = { kind, mode -> changes += kind to mode },
+                        nowBar = NowBarSupport.UNSUPPORTED,
+                        onShowNowBarGuide = { guides++ },
+                    )
+                }
+            }
+        }
+        composeRule.onNodeWithTag("notification_mode_CLASS_STANDARD").assertIsSelected()
+        composeRule.onNodeWithTag("notification_mode_CLASS_LIVE_UPDATE").assertIsNotSelected().performClick()
+        composeRule.runOnIdle {
+            assertEquals(emptyList<Pair<GuidanceKind, NotificationGuidanceMode>>(), changes)
+            assertEquals(1, guides)
+        }
     }
 }

@@ -113,6 +113,7 @@ internal fun SettingsScreen(
     val guidanceSetup = rememberGuidanceSetupController(liveSurfaceController) { app?.refreshGuidancePermissions() }
     // D-102: 꺼진 권한이 있으면 펼친 채로 열어, 안내가 왜 안 오는지 바로 보이게 한다
     var setupExpanded by rememberSaveable { mutableStateOf(guidanceSetup.state.missingCount > 0) }
+    val nowBar = guidanceSetup.state.nowBar
 
     ScreenScaffold(
         title = "설정",
@@ -169,7 +170,7 @@ internal fun SettingsScreen(
                     exit = dimaCollapseOut(),
                     label = "guidance_setup",
                 ) {
-                    GuidanceSetupChecklist(guidanceSetup, Modifier.padding(top = DimaLayout.sectionGap))
+                    GuidanceSetupChecklist(guidanceSetup, Modifier.padding(top = DimaLayout.sectionGap), dialogs = false)
                 }
             }
         }
@@ -187,13 +188,12 @@ internal fun SettingsScreen(
                 noticeKeywords = noticeKeywords,
                 onNoticeKeywordAlertsChange = onNoticeKeywordAlertsChange,
                 onNoticeKeywordsChange = onNoticeKeywordsChange,
-            )
-        }
-        item(key = "live_display") {
-            LiveDisplaySettings(
-                options = displayOptions,
+                displayOptions = displayOptions,
                 onChipContentChange = onChipContentChange,
                 onClassOrderChange = onClassOrderChange,
+                nowBar = nowBar,
+                showNowBarHelp = guidanceSetup.state.samsungNowBar,
+                onShowNowBarGuide = { guidanceSetup.perform(GuidanceSetupAction.NOW_BAR) },
             )
         }
 
@@ -272,6 +272,7 @@ internal fun SettingsScreen(
             }
         }
     }
+    GuidanceSetupDialogs(guidanceSetup)
     if (confirmDeleteLmsAccount) {
         AlertDialog(
             icon = { DimaDialogIcon(Icons.Default.PersonRemove, DialogTone.DANGER) },
@@ -518,50 +519,4 @@ private fun DiagnosticErrorLine(detail: String) {
         style = MaterialTheme.typography.bodySmall,
         color = MaterialTheme.colorScheme.error,
     )
-}
-
-@OptIn(ExperimentalLayoutApi::class)
-@Composable
-fun LiveDisplaySettings(
-    options: LiveDisplayOptions,
-    onChipContentChange: (LiveChipContent) -> Unit,
-    onClassOrderChange: (LiveClassOrder) -> Unit,
-    modifier: Modifier = Modifier,
-    onShowNowBarSetup: (() -> Unit)? = null,
-) {
-    ElevatedCard(
-        modifier = modifier.fillMaxWidth(),
-        shape = DimaShapes.Card,
-        colors = CardDefaults.elevatedCardColors(containerColor = DimaTheme.colors.card),
-    ) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Text("실시간 알림", style = MaterialTheme.typography.titleMedium)
-
-            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Text("상단 알림 표시", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                SettingsChoice(
-                    options = listOf(LiveChipContent.COUNTDOWN to "남은 시간", LiveChipContent.CLASSROOM to "강의실"),
-                    selected = options.chipContent,
-                    onSelect = onChipContentChange,
-                    itemTag = { "live_chip_${it.name}" },
-                )
-            }
-
-            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Text("잠금화면 첫 줄", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                SettingsChoice(
-                    options = listOf(LiveClassOrder.COURSE_FIRST to "수업명 먼저", LiveClassOrder.CLASSROOM_FIRST to "강의실 먼저"),
-                    selected = options.classOrder,
-                    onSelect = onClassOrderChange,
-                    itemTag = { "live_order_${it.name}" },
-                )
-            }
-
-            onShowNowBarSetup?.let { onClick ->
-                OutlinedButton(shapes = ButtonDefaults.shapes(), onClick = onClick, modifier = Modifier.fillMaxWidth()) {
-                    Text("나우바 설정 안내")
-                }
-            }
-        }
-    }
 }

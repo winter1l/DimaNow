@@ -14,6 +14,7 @@ import androidx.compose.ui.test.assertHeightIsAtLeast
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.unit.dp
 import androidx.compose.runtime.mutableStateOf
@@ -460,18 +461,23 @@ class GuidanceCardTest {
         var selectedChip = LiveChipContent.COUNTDOWN
         var selectedOrder = LiveClassOrder.COURSE_FIRST
         composeRule.setContent {
-            LiveDisplaySettings(
-                options = LiveDisplayOptions(),
-                onChipContentChange = { selectedChip = it },
-                onClassOrderChange = { selectedOrder = it },
-            )
+            // D-140: the two Now Bar choices live in the 수업·셔틀 안내 card under the guidance rows.
+            Box(Modifier.verticalScroll(rememberScrollState())) {
+                NotificationGuidanceSettings(
+                    policy = NotificationGuidancePolicy(),
+                    onModeChange = { _, _ -> },
+                    displayOptions = LiveDisplayOptions(),
+                    onChipContentChange = { selectedChip = it },
+                    onClassOrderChange = { selectedOrder = it },
+                )
+            }
         }
 
-        composeRule.onNodeWithText("상단 알림 표시").assertIsDisplayed()
+        composeRule.onNodeWithText("상단 알림 표시").performScrollTo().assertIsDisplayed()
         composeRule.onNodeWithText("남은 시간").assertIsDisplayed()
         composeRule.onNodeWithText("강의실").performClick()
         composeRule.onNodeWithText("잠금화면 첫 줄").assertIsDisplayed()
-        composeRule.onNodeWithText("강의실 먼저").performClick()
+        composeRule.onNodeWithText("강의실 먼저").performScrollTo().performClick()
 
         composeRule.runOnIdle {
             assertEquals(LiveChipContent.CLASSROOM, selectedChip)

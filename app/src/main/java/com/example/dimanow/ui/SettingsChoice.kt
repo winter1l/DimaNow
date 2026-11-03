@@ -39,6 +39,7 @@ import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.text
 import androidx.compose.ui.text.AnnotatedString
@@ -69,6 +70,7 @@ internal fun <T> DimaConnectedChoice(
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
     itemTag: (T) -> String? = { null },
+    unavailable: Set<T> = emptySet(),
 ) {
     val haptics = LocalHapticFeedback.current
     Row(
@@ -77,6 +79,7 @@ internal fun <T> DimaConnectedChoice(
     ) {
         options.forEachIndexed { index, (value, label) ->
             val checked = value == selected
+            val dimmed = value in unavailable
             ToggleButton(
                 checked = checked,
                 // A connected single-choice group never ends with nothing selected. D-121: a segment tick confirms
@@ -87,7 +90,15 @@ internal fun <T> DimaConnectedChoice(
                 },
                 enabled = enabled,
                 // D-114: unselected buttons sit one tone above the card or page instead of sinking below it.
-                colors = ToggleButtonDefaults.colors(containerColor = DimaTheme.colors.cardInner),
+                // D-140: an option the phone cannot use looks disabled but still answers a tap, so its caller can say why.
+                colors = if (dimmed) {
+                    ToggleButtonDefaults.colors(
+                        containerColor = DimaTheme.colors.cardInner,
+                        contentColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f),
+                    )
+                } else {
+                    ToggleButtonDefaults.colors(containerColor = DimaTheme.colors.cardInner)
+                },
                 shapes = when (index) {
                     0 -> ButtonGroupDefaults.connectedLeadingButtonShapes()
                     options.lastIndex -> ButtonGroupDefaults.connectedTrailingButtonShapes()
@@ -101,6 +112,7 @@ internal fun <T> DimaConnectedChoice(
                         role = Role.RadioButton
                         this.selected = checked
                         text = AnnotatedString(label)
+                        if (dimmed) stateDescription = "사용할 수 없음"
                         onClick { onSelect(value); true }
                         if (!enabled) disabled()
                     },
@@ -120,6 +132,7 @@ internal fun <T> SettingsChoice(
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
     itemTag: (T) -> String = { "" },
+    unavailable: Set<T> = emptySet(),
 ) {
     val measurer = rememberTextMeasurer()
     val density = LocalDensity.current
@@ -131,10 +144,11 @@ internal fun <T> SettingsChoice(
     val requiredCellWidth = with(density) { widestLabel.toDp() } + 56.dp
     BoxWithConstraints(modifier.widthIn(max = 480.dp).fillMaxWidth()) {
         if (options.size in 2..5 && requiredCellWidth * options.size <= maxWidth) {
-            DimaConnectedChoice(options, selected, onSelect, enabled = enabled, itemTag = itemTag)
+            DimaConnectedChoice(options, selected, onSelect, enabled = enabled, itemTag = itemTag, unavailable = unavailable)
         } else {
             Column(Modifier.fillMaxWidth().selectableGroup()) {
                 options.forEach { (value, label) ->
+                    val dimmed = value in unavailable
                     Row(
                         modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)
                             .testTag(itemTag(value))
@@ -147,11 +161,11 @@ internal fun <T> SettingsChoice(
                         horizontalArrangement = Arrangement.spacedBy(12.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        RadioButton(selected = selected == value, onClick = null, enabled = enabled)
+                        RadioButton(selected = selected == value, onClick = null, enabled = enabled && !dimmed)
                         Text(
                             label,
                             style = MaterialTheme.typography.bodyMedium,
-                            color = if (enabled) MaterialTheme.colorScheme.onSurface
+                            color = if (enabled && !dimmed) MaterialTheme.colorScheme.onSurface
                             else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f),
                             modifier = Modifier.weight(1f),
                         )

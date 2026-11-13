@@ -1,8 +1,5 @@
 package com.example.dimanow.pipeline
 
-import java.net.HttpURLConnection
-import java.net.URL
-import java.util.Base64
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
@@ -26,19 +23,21 @@ sealed interface DormitoryMealAnalysis {
     data class Rejected(val reason: String) : DormitoryMealAnalysis
 }
 
-class GeminiDormitoryMealClient(
+class OpenAiDormitoryMealClient(
     private val apiKey: String,
-    private val endpointRoot: String = "https://generativelanguage.googleapis.com",
-    private val extractionThinkingLevel: String = "minimal",
+    private val endpointRoot: String = "https://api.openai.com",
+    private val extractionReasoningEffort: String = "low",
+    model: String = OpenAiMealResponsesClient.MODEL,
 ) {
     init {
-        require(extractionThinkingLevel in setOf("minimal", "LOW")) { "지원하지 않는 식단 추출 추론 수준입니다." }
+        require(extractionReasoningEffort in setOf("none", "low", "medium", "high", "xhigh", "max")) { "지원하지 않는 식단 추출 추론 수준입니다." }
     }
 
+    private val transport = OpenAiMealResponsesClient(apiKey, endpointRoot, model)
     private val json = Json { ignoreUnknownKeys = true }
 
     fun validate(imageBytes: ByteArray, mimeType: String): DormitoryMealValidation {
-        val response = request(imageBytes, mimeType, validationRequest(imageBytes, mimeType))
+        val response = validationRequest(imageBytes, mimeType)
         val root = json.parseToJsonElement(response) as JsonObject
         return DormitoryMealValidation(
             isDormitoryMeal = (root.getValue(DORMITORY_KEY) as JsonPrimitive).boolean,
@@ -52,69 +51,26 @@ class GeminiDormitoryMealClient(
         if (!validation.accepted) {
             return DormitoryMealAnalysis.Rejected(validation.reason ?: "기숙사 식단표 전체가 보이도록 다시 촬영해 주세요")
         }
-        val response = request(imageBytes, mimeType, extractionRequest(imageBytes, mimeType))
+        val response = extractionRequest(imageBytes, mimeType)
         return DormitoryMealAnalysis.Accepted(response)
     }
 
-    private fun request(imageBytes: ByteArray, mimeType: String, body: JsonObject): String {
-        require(apiKey.isNotBlank()) { "GEMINI_API_KEY가 비어 있습니다." }
-        require(imageBytes.isNotEmpty()) { "식단 이미지가 비어 있습니다." }
-        require(mimeType.startsWith("image/")) { "식단 파일이 이미지가 아닙니다." }
-        val requestBytes = body.toString().toByteArray()
-        var lastTransientFailure: GeminiHttpException? = null
-        repeat(MAX_ATTEMPTS) { attempt ->
-            try {
-                return requestOnce(requestBytes)
-            } catch (error: GeminiHttpException) {
-                if (!error.retryable || attempt == MAX_ATTEMPTS - 1) throw error
-                lastTransientFailure = error
-                Thread.sleep(RETRY_DELAYS_MILLIS[attempt])
-            }
-        }
-        throw checkNotNull(lastTransientFailure)
-    }
-
-    private fun requestOnce(requestBytes: ByteArray): String {
-        val connection = URL("$endpointRoot/v1beta/models/$MODEL:generateContent").openConnection() as HttpURLConnection
-        try {
-            connection.requestMethod = "POST"
-            connection.connectTimeout = 15_000
-            connection.readTimeout = 120_000
-            connection.doOutput = true
-            connection.setRequestProperty("Content-Type", "application/json; charset=utf-8")
-            connection.setRequestProperty("x-goog-api-key", apiKey)
-            connection.setFixedLengthStreamingMode(requestBytes.size)
-            connection.outputStream.use { it.write(requestBytes) }
-            if (connection.responseCode !in 200..299) {
-                val detail = connection.errorStream?.bufferedReader()?.readText().orEmpty().take(800)
-                throw GeminiHttpException(connection.responseCode, detail)
-            }
-            val envelope = json.parseToJsonElement(connection.inputStream.bufferedReader().readText()) as? JsonObject
-                ?: error("Gemini API JSON 응답이 아닙니다.")
-            return (((((envelope["candidates"] as? JsonArray)?.firstOrNull() as? JsonObject)
-                ?.get("content") as? JsonObject)?.get("parts") as? JsonArray)
-                ?.firstNotNullOfOrNull { (it as? JsonObject)?.get("text") as? JsonPrimitive })
-                ?.contentOrNull
-                ?: error("Gemini 기숙사 식단 JSON이 비어 있습니다.")
-        } finally {
-            connection.disconnect()
-        }
-    }
-
-    private fun validationRequest(imageBytes: ByteArray, mimeType: String): JsonObject = requestBody(
+    private fun validationRequest(imageBytes: ByteArray, mimeType: String): String = requestBody(
         imageBytes = imageBytes,
         mimeType = mimeType,
         prompt = "사진이 동아방송예술대학교 학생기숙사에서 제공하는 주간 식단표인지, 표의 모든 가장자리와 식단 내용이 잘리지 않고 전부 보이는지 확인하세요. 사진에 명시된 휴일·휴무·미운영 안내로 메뉴가 없는 칸은 잘리거나 누락된 식단으로 판단하지 마세요. 휴무 근거가 보이지 않는 빈칸은 휴일이라고 추측하지 마세요. 두 조건 중 하나라도 거짓이면 사용자가 다시 촬영할 수 있도록 한 문장으로만 이유를 적으세요.",
         schema = VALIDATION_SCHEMA,
-        thinkingLevel = "HIGH",
+        reasoningEffort = "high",
+        schemaName = "dormitory_meal_validation",
     )
 
-    private fun extractionRequest(imageBytes: ByteArray, mimeType: String): JsonObject = requestBody(
+    private fun extractionRequest(imageBytes: ByteArray, mimeType: String): String = requestBody(
         imageBytes = imageBytes,
         mimeType = mimeType,
-        prompt = "동아방송예술대학교 학생기숙사 주간 식단표를 월요일부터 금요일까지 전사하세요. 각 날짜 아래의 조식, 간편식, 라면, 중식, 석식, 샐러드도시락 등 표에 보이는 모든 구분을 위에서 아래 순서대로 sections에 넣으세요. 이름과 운영시간, 메뉴는 보이는 그대로 적고 번역, 보충, 추측하지 마세요. 같은 이름의 구분이 하루에 여러 번 있으면 각각 별도 section으로 유지하세요. 휴일·휴무·미운영 문구도 menuLines에 원문 그대로 한 줄로 기록하고 날짜를 생략하지 마세요. 특정 식사만 휴무이면 그 식사의 이름을 유지하세요. 하루 전체를 덮는 휴무 안내만 있고 식사 구분이 없으면 name은 안내, menuLines는 사진에 보이는 휴무 문구로 기록하며 hours는 생략하세요. 여러 날짜에 걸친 병합 칸의 안내는 사진에서 적용 범위가 명확한 날짜에만 각각 기록하세요. 빈칸이나 보이지 않는 날짜·식사·운영시간을 휴무로 채우지 마세요.",
+        prompt = "동아방송예술대학교 학생기숙사 주간 식단표를 월요일부터 금요일까지 전사하세요. 각 날짜 아래의 조식, 간편식, 라면, 중식, 석식, 샐러드도시락 등 표에 보이는 모든 구분을 위에서 아래 순서대로 sections에 넣으세요. 이름과 운영시간, 메뉴는 보이는 그대로 적고 번역, 보충, 추측하지 마세요. 같은 이름의 구분이 하루에 여러 번 있으면 각각 별도 section으로 유지하세요. 휴일·휴무·미운영 문구도 menuLines에 원문 그대로 한 줄로 기록하고 날짜를 생략하지 마세요. 특정 식사만 휴무이면 그 식사의 이름을 유지하세요. 하루 전체를 덮는 휴무 안내만 있고 식사 구분이 없으면 name은 안내, menuLines는 사진에 보이는 휴무 문구로 기록하며 hours는 null로 적으세요. 여러 날짜에 걸친 병합 칸의 안내는 사진에서 적용 범위가 명확한 날짜에만 각각 기록하세요. 빈칸이나 보이지 않는 날짜·식사·운영시간을 휴무로 채우지 마세요.",
         schema = EXTRACTION_SCHEMA,
-        thinkingLevel = extractionThinkingLevel,
+        reasoningEffort = extractionReasoningEffort,
+        schemaName = "dormitory_meal_extraction",
     )
 
     private fun requestBody(
@@ -122,34 +78,11 @@ class GeminiDormitoryMealClient(
         mimeType: String,
         prompt: String,
         schema: JsonObject,
-        thinkingLevel: String,
-    ): JsonObject = buildJsonObject {
-        put("contents", buildJsonArray {
-            add(buildJsonObject {
-                put("role", "user")
-                put("parts", buildJsonArray {
-                    add(buildJsonObject {
-                        put("inline_data", buildJsonObject {
-                            put("mime_type", mimeType)
-                            put("data", Base64.getEncoder().encodeToString(imageBytes))
-                        })
-                    })
-                    add(buildJsonObject { put("text", prompt) })
-                })
-            })
-        })
-        put("generationConfig", buildJsonObject {
-            put("mediaResolution", "MEDIA_RESOLUTION_HIGH")
-            put("thinkingConfig", buildJsonObject { put("thinkingLevel", thinkingLevel) })
-            put("responseMimeType", "application/json")
-            put("responseJsonSchema", schema)
-        })
-    }
+        reasoningEffort: String,
+        schemaName: String,
+    ): String = transport.extract(imageBytes, mimeType, prompt, schema, schemaName, reasoningEffort)
 
     private companion object {
-        const val MODEL = "gemini-3.5-flash-lite"
-        const val MAX_ATTEMPTS = 3
-        val RETRY_DELAYS_MILLIS = longArrayOf(1_000L, 4_000L)
         const val DORMITORY_KEY = "동아방송예술대 기숙사 식단이 맞는가?"
         const val COMPLETE_KEY = "식단표가 전부 보이는가?"
         const val REASON_KEY = "모두 true가 아닌 경우 사용자에게 알려줄 간단 사유"
@@ -159,11 +92,12 @@ class GeminiDormitoryMealClient(
             put("required", buildJsonArray {
                 add(JsonPrimitive(DORMITORY_KEY))
                 add(JsonPrimitive(COMPLETE_KEY))
+                add(JsonPrimitive(REASON_KEY))
             })
             put("properties", buildJsonObject {
                 put(DORMITORY_KEY, buildJsonObject { put("type", "boolean") })
                 put(COMPLETE_KEY, buildJsonObject { put("type", "boolean") })
-                put(REASON_KEY, buildJsonObject { put("type", "string") })
+                put(REASON_KEY, buildJsonObject { put("type", buildJsonArray { add(JsonPrimitive("string")); add(JsonPrimitive("null")) }) })
             })
         }
         val EXTRACTION_SCHEMA = buildJsonObject {
@@ -202,11 +136,12 @@ class GeminiDormitoryMealClient(
                                     put("additionalProperties", false)
                                     put("required", buildJsonArray {
                                         add(JsonPrimitive("name"))
+                                        add(JsonPrimitive("hours"))
                                         add(JsonPrimitive("menuLines"))
                                     })
                                     put("properties", buildJsonObject {
                                         put("name", buildJsonObject { put("type", "string") })
-                                        put("hours", buildJsonObject { put("type", "string") })
+                                        put("hours", buildJsonObject { put("type", buildJsonArray { add(JsonPrimitive("string")); add(JsonPrimitive("null")) }) })
                                         put("menuLines", buildJsonObject {
                                             put("type", "array")
                                             put("minItems", 1)
@@ -222,10 +157,4 @@ class GeminiDormitoryMealClient(
         }
     }
 
-    private class GeminiHttpException(
-        private val statusCode: Int,
-        detail: String,
-    ) : IllegalStateException("Gemini API 응답 $statusCode: $detail") {
-        val retryable: Boolean get() = statusCode == 429 || statusCode in 500..599
-    }
 }

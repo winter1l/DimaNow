@@ -139,8 +139,8 @@ LMS는 학교가 운영하는 외부 시스템입니다. 서버 화면·세션 �
 앱의 동기화 endpoint는 [`manifest.json`](https://winter1l.github.io/DimaNow/data/v1/manifest.json)입니다. manifest에는 데이터셋별 revision, 게시 시각, 상태, SHA-256과 content-addressed JSON 경로가 들어갑니다. 앱은 HTTPS, 허용된 상대 경로, schema version과 SHA-256을 모두 검증한 뒤 Room 캐시를 한 트랜잭션으로 교체합니다. 네트워크·파싱·무결성 오류가 나면 마지막 정상 캐시를 보존합니다.
 
 - 셔틀: 관리자가 [`data-source/shuttle.csv`](data-source/shuttle.csv)를 수정하면 `main` 반영 후 자동 게시합니다.
-- 식단: GitHub Actions가 DIMA 공식 공개 게시물과 공개 Instagram embed를 확인하고, Gemini 3.5 Flash-Lite의 구조화 JSON 출력으로 식단 이미지를 전사합니다. 월~금 날짜와 빈 메뉴 여부만 최소 검증한 뒤 게시합니다.
-- 기숙사 식단: 현재 주 데이터가 없을 때 누구나 앱에서 사진을 고르거나 촬영할 수 있습니다. 사진은 비공개 R2에 30일 보관됩니다. 앱은 Pages를 먼저 다시 확인하고, 제출 workflow도 직렬화된 상태에서 중복 주차를 다시 검사합니다. 검증 호출은 표의 출처·전체 노출 여부만 `HIGH` 추론으로 확인하고, 통과한 사진만 별도의 Flash-Lite 구조화 출력으로 전사합니다. 두 단계 검증·전사와 현재 KST 주차·중복 주차 확인을 모두 통과하면 운영자 승인 없이 바로 게시합니다(D-089). 주말 제출은 다음 주 식단으로 취급합니다.
+- 식단: GitHub Actions가 DIMA 공식 공개 게시물과 공개 Instagram embed를 확인하고, OpenAI `gpt-6-luna`의 이미지 입력과 구조화 JSON 출력으로 식단 이미지를 전사합니다. 월~금 날짜와 빈 메뉴 여부만 최소 검증한 뒤 게시합니다.
+- 기숙사 식단: 현재 주 데이터가 없을 때 누구나 앱에서 사진을 고르거나 촬영할 수 있습니다. 사진은 비공개 R2에 30일 보관됩니다. 앱은 Pages를 먼저 다시 확인하고, 제출 workflow도 직렬화된 상태에서 중복 주차를 다시 검사합니다. 첫 OpenAI 호출에서 표의 출처·전체 노출 여부를 확인하고, 통과한 사진만 별도의 `gpt-6-luna` 호출로 구조화 전사합니다. 두 단계 검증·전사와 현재 KST 주차·중복 주차 확인을 모두 통과하면 운영자 승인 없이 바로 게시합니다(D-089). 주말 제출은 다음 주 식단으로 취급합니다.
 - 공지: GitHub Actions가 DIMA 공식 공지 목록을 읽어 최대 10개를 게시합니다.
 - 학사 달력: 관리자가 [`data-source/calendar.json`](data-source/calendar.json)에 학기 기간, 공휴일(한국천문연구원 월력요항 기준), 셔틀 운행 중지 기간을 적으면 `calendar` 데이터셋으로 게시합니다. 앱에는 같은 내용이 기본값으로 들어 있습니다. 매년 다음 해 공휴일과 새 학기 날짜를 추가해야 합니다.
 - 앱: 실행 시와 12시간마다 작은 manifest를 확인합니다. 수동 새로고침도 같은 endpoint만 사용합니다. 앱은 모르는 항목을 무시하므로 나중에 데이터 항목을 추가해도 설치된 앱이 깨지지 않습니다.
@@ -150,9 +150,11 @@ LMS는 학교가 운영하는 외부 시스템입니다. 서버 화면·세션 �
 
 공식 셔틀 캐시 605행은 원문 그대로 유지합니다. 2026-09-02 현장 시간표에서 확인한 원룸촌발 평일 14:30·15:30·16:30·17:30 네 편은 `A-field-extra` 투영 20행으로 분리하며, 사진에 없는 도착·복귀 시각은 추정하지 않습니다. 주간 A/B 운행은 각각 원룸촌↔본관, 본관↔엔터관이고, 저녁에는 엔터관→본관(운동장)→원룸촌→본관(운동장)→엔터관의 한 물리 차량 운행으로 계산합니다.
 
-식단 게시 workflow에는 저장소 Actions Secret `GEMINI_API_KEY`가 필요합니다. 로컬 개발에서는 `.env.example`을 참고하되 실제 `.env`와 API 키를 커밋하지 않습니다. Gemini에는 공개 학생식당 이미지 또는 사용자가 명시적으로 제출한 기숙사 식단표 사진만 전송하며 앱의 위치·시간표·설정은 전송하지 않습니다.
+식단 게시 workflow에는 저장소 Actions Secret `OPENAI_API_KEY`가 필요합니다. 로컬 실행은 같은 이름의 환경 변수를 사용하며 `.env.example`은 변수 이름만 안내합니다(Gradle은 `.env`를 자동으로 읽지 않습니다). 실제 `.env`와 API 키를 커밋하지 않습니다. OpenAI에는 공개 학생식당 이미지 또는 사용자가 명시적으로 제출한 기숙사 식단표 사진만 전송하며 앱의 위치·시간표·설정은 전송하지 않습니다. 요청은 Responses API의 엄격한 JSON 스키마와 `store: false`를 사용합니다. 모델: [`gpt-6-luna`](https://developers.openai.com/api/docs/models/gpt-6-luna).
 
-기숙사 사진은 GitHub 로그인 없이 Cloudflare Worker로 전송됩니다(D-100). Worker는 이미지 형식·15 MiB 제한을 확인하고 IP 단방향 해시로 짧은 중복 제출 제한을 적용한 뒤 사진을 **비공개 Cloudflare R2 버킷**(`dima-now-dorm-photos`)에 저장하고, 30일이 지난 사진은 매일 지웁니다. 그다음 전용 GitHub App의 단기 토큰(Actions 쓰기만)으로 `캠퍼스 데이터 게시`를 `workflow_dispatch`의 고정 선택지로 깨웁니다. workflow는 Actions Secret(`DORM_PHOTO_ENDPOINT`, `DORM_PHOTO_READ_TOKEN`)으로 Worker의 비공개 읽기 경로에서 처리할 사진만 받습니다. 게시되는 메뉴의 출처는 공개 링크가 아닌 `r2://` 참조입니다. Gemini 키·GitHub App 개인 키·사진 읽기 토큰은 APK와 Git에 포함하지 않습니다. 식단 사진은 Gemini API 무료 등급으로 처리되며, Google 약관에 따라 Google의 서비스·AI 개선에 쓰일 수 있음을 업로드 확인창과 개인정보 처리방침에 알립니다.
+기숙사 사진은 GitHub 로그인 없이 Cloudflare Worker로 전송됩니다(D-100). Worker는 이미지 형식·15 MiB 제한을 확인하고 IP 단방향 해시로 짧은 중복 제출 제한을 적용한 뒤 사진을 **비공개 Cloudflare R2 버킷**(`dima-now-dorm-photos`)에 저장하고, 30일이 지난 사진은 매일 지웁니다. 그다음 전용 GitHub App의 단기 토큰(Actions 쓰기만)으로 `캠퍼스 데이터 게시`를 `workflow_dispatch`의 고정 선택지로 깨웁니다. workflow는 Actions Secret(`DORM_PHOTO_ENDPOINT`, `DORM_PHOTO_READ_TOKEN`)으로 Worker의 비공개 읽기 경로에서 처리할 사진만 받습니다. 게시되는 메뉴의 출처는 공개 링크가 아닌 `r2://` 참조입니다. OpenAI 키·GitHub App 개인 키·사진 읽기 토큰은 APK와 Git에 포함하지 않습니다. OpenAI API 데이터는 별도 동의가 없으면 모델 학습에 사용되지 않지만 기본 안전 점검 로그는 최대 30일 보관될 수 있습니다. `store: false`는 별도 승인이 필요한 Zero Data Retention을 뜻하지 않습니다. 자세한 보관 예외는 [OpenAI 데이터 관리 문서](https://developers.openai.com/api/docs/guides/your-data)와 개인정보 처리방침에 안내합니다.
+
+Gemini에서 전환할 때는 앱의 새 업로드 동의 문구와 개인정보 처리방침을 함께 반영하고, 게시 workflow가 실행되기 전에 `OPENAI_API_KEY`를 Actions Secret에 설정해야 합니다. main 반영 후 workflow와 정책 페이지가 갱신되며, 설치된 앱의 동의 문구는 새 APK를 설치해야 바뀝니다.
 
 ## 앱 업데이트 경로
 

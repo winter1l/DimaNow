@@ -5,7 +5,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertThrows
 import org.junit.Test
 
-class GeminiDormitoryMealPayloadBuilderTest {
+class OpenAiDormitoryMealPayloadBuilderTest {
     @Test
     fun `기숙사 표의 요일별 모든 식사 구분을 순서대로 보존한다`() {
         val response = """
@@ -23,7 +23,7 @@ class GeminiDormitoryMealPayloadBuilderTest {
             ]}
         """.trimIndent()
 
-        val payload = GeminiDormitoryMealPayloadBuilder().build(
+        val payload = OpenAiDormitoryMealPayloadBuilder().build(
             responseJson = response,
             referenceDate = LocalDate.of(2026, 8, 27),
             sourceImageUrl = "r2://dima-now-dorm-photos/submissions/example.jpg",
@@ -37,8 +37,15 @@ class GeminiDormitoryMealPayloadBuilderTest {
     }
 
     @Test
+    fun `구조화 출력의 null 운영시간은 문자열 null로 게시하지 않는다`() {
+        val response = week(LocalDate.of(2026, 8, 24)).replace("\"name\":\"조식\"", "\"name\":\"조식\",\"hours\":null")
+        val payload = OpenAiDormitoryMealPayloadBuilder().build(response, LocalDate.of(2026, 8, 27), SOURCE)
+        assertEquals(List(5) { null }, payload.days.map { it.sections.single().hours })
+    }
+
+    @Test
     fun `주말 기준일에는 다음 월요일 주차만 허용하고 끝나가는 주는 거절한다`() {
-        val builder = GeminiDormitoryMealPayloadBuilder()
+        val builder = OpenAiDormitoryMealPayloadBuilder()
         val saturday = LocalDate.of(2026, 8, 29)
         val sunday = LocalDate.of(2026, 8, 30)
 

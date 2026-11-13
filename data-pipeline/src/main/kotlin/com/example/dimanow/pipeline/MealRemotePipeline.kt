@@ -35,7 +35,7 @@ sealed interface MealPublicationResult {
 
 internal class MealRemotePipeline(
     private val clock: Clock = Clock.system(ZoneId.of("Asia/Seoul")),
-    private val geminiClient: GeminiMealOcrClient = GeminiMealOcrClient(System.getenv("GEMINI_API_KEY").orEmpty()),
+    private val openAiClient: OpenAiMealOcrClient = OpenAiMealOcrClient(System.getenv("OPENAI_API_KEY").orEmpty()),
     private val httpClient: MealRemoteHttpClient = MealRemoteHttpClient(),
 ) {
     fun fetch(): MealPayload = when (val result = fetchPublication()) {
@@ -52,8 +52,8 @@ internal class MealRemotePipeline(
         val imageUrl = InstagramCarouselParser().parse(embedHtml).imageUrls.getOrNull(1)
             ?: error("식단표 carousel 이미지를 찾지 못했습니다.")
         val image = httpClient.getImage(imageUrl)
-        val responseJson = geminiClient.extract(image.bytes, image.mimeType)
-        val payload = GeminiMealPayloadBuilder().build(
+        val responseJson = openAiClient.extract(image.bytes, image.mimeType)
+        val payload = OpenAiMealPayloadBuilder().build(
             responseJson,
             LocalDate.now(clock),
             post.hours,

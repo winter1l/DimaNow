@@ -12,7 +12,9 @@ OpenStreetMap data.
 Database License: https://www.openstreetmap.org/copyright
 
 The GitHub Actions meal pipeline sends official public cafeteria menu images
-to the Google Gemini API for structured OCR. Google service terms apply.
+and explicitly submitted dormitory menu photos to the OpenAI API for structured
+OCR. OpenAI service terms and API data controls apply:
+https://developers.openai.com/api/docs/guides/your-data
 
 Official DIMA pages, Instagram posts, images, menus, and shuttle schedule data
 remain subject to the rights and terms of their respective owners and sources.

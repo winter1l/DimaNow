@@ -13,7 +13,7 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.int
 
-class GeminiMealPayloadBuilder {
+class OpenAiMealPayloadBuilder {
     private val json = Json { ignoreUnknownKeys = true }
 
     fun build(

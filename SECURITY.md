@@ -16,7 +16,7 @@
 - payload 상대 경로, schema version, SHA-256, 허용된 공식 원문 URL을 검증합니다.
 - 검증 실패 시 마지막 정상 Room 캐시를 유지합니다.
 - GitHub Actions workflow는 고정 commit SHA의 Actions를 사용하며 최소 권한을 선언합니다.
-- 식단 OCR용 `GEMINI_API_KEY`는 GitHub Actions Secret으로만 주입하고 요청 본문·로그·아티팩트에 기록하지 않습니다.
+- 식단 OCR용 `OPENAI_API_KEY`는 GitHub Actions Secret으로만 주입하고 요청 본문·로그·아티팩트에 기록하지 않습니다. OpenAI Responses API에는 이미지와 식단 처리 지시만 보내고 `store: false`를 지정합니다. 이는 OpenAI의 기본 안전 점검 로그 보관까지 끄는 설정은 아닙니다.
 - 기숙사 사진은 인증 없는 Cloudflare Worker endpoint로 제출합니다. Worker는 먼저 경로·형식·선언 크기를 확인하고, 짧은 IP 해시(IPv4는 전체 주소, IPv6는 /64 대역) 기반 10분 중복 제한을 적용한 뒤 이미지 서명, 20 KB 이상 크기와 헤더의 가로·세로(320–12000 px)를 검사합니다. 일간·주간 전체 처리 예산은 이 검사를 통과한 요청에만 소비하고 GitHub 쓰기가 실패하면 원자적으로 되돌립니다. 만료된 IP 해시는 업로드 요청과 최대 2시간 간격의 정기 작업에서 삭제합니다. Workers에서는 재인코딩을 하지 않으므로 헤더 이후 이미지 데이터의 정상성은 보장하지 않습니다. 사진은 비공개 R2 버킷에만 저장하고(D-100), 30일이 지난 사진은 매일 지웁니다. GitHub에는 아무것도 쓰지 않으며, 이 저장소에만 설치된 GitHub App의 단기 설치 토큰을 `DimaNow` 저장소와 `actions: write` 권한으로 좁혀 발급받아 게시 workflow를 깨우는 데만 씁니다. 사진 읽기 경로(`/v1/internal/dormitory-photos`)는 40자 이상의 `PHOTO_READ_TOKEN`을 상수 시간 비교로 확인하고, 그 밖의 요청에는 없는 경로와 같은 404를 돌려줍니다. GitHub App 개인 키, rate-limit salt와 사진 읽기 토큰은 Wrangler/Actions Secret으로만 보관하며 APK·Git·로그에 포함하지 않습니다.
 - 기숙사 식단 신고(`/v1/dormitory-meal-reports`)는 주차·사유 코드만 받고, 같은 IP 해시는 그 주에 한 번만, 전체는 하루·주 한도 안에서만 받습니다. 사유는 `report-*` workflow_dispatch 선택지로만 전달됩니다.
 - 기숙사 업로드는 앱에서 모든 형식을 다시 인코딩해 EXIF/XMP 등 사진 정보를 지운 뒤 보냅니다.

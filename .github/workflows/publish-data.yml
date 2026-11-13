@@ -134,7 +134,7 @@ jobs:
         if: steps.target.outputs.value == 'meal' || steps.target.outputs.value == 'all'
         working-directory: source
         env:
-          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           COLLECT: ${{ steps.target.outputs.collect }}
         run: |
           command=publish-meal
@@ -181,7 +181,7 @@ jobs:
         if: steps.target.outputs.dorm == 'true' && steps.dorm_pending.outputs.count != '0'
         working-directory: source
         env:
-          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
         run: bash ./gradlew :data-pipeline:run --args="publish-dorm-pending $RUNNER_TEMP/dorm-pending $GITHUB_WORKSPACE/site $RUNNER_TEMP/dorm-pending.txt"
       - name: 공지 게시
         if: steps.target.outputs.value == 'notice' || steps.target.outputs.value == 'all'

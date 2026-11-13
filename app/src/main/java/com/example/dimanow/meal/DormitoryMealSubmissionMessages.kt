@@ -4,7 +4,7 @@ package com.example.dimanow.meal
  * Friendly 해요체 wording for dormitory meal submission outcomes (D-094(14) voice).
  *
  * The server contract is unchanged: `REJECTED` still carries a short optional reason from the
- * pipeline or Gemini validation. Known pipeline reasons map to fixed text; any other reason is
+ * pipeline or OpenAi validation. Known pipeline reasons map to fixed text; any other reason is
  * reduced to one short sanitized line, and anything that looks like raw JSON or exception text
  * falls back to the generic retake guidance.
  */
@@ -16,11 +16,11 @@ internal object DormitoryMealSubmissionMessages {
     const val MAX_REASON_LENGTH = 60
 
     private val KNOWN_REASONS = mapOf(
-        // GeminiDormitoryMealPayloadBuilder.DormitoryMealWeekMismatchException
+        // OpenAiDormitoryMealPayloadBuilder.DormitoryMealWeekMismatchException
         "이번 주 기숙사 식단표가 아니에요" to "이번 주 기숙사 식단표가 아니에요. 이번 주 식단표를 찍어 올려 주세요",
         // DormitoryMealSubmissionProcessor: payload failed validation
         "식단표의 날짜와 메뉴가 잘 보이도록 다시 촬영해 주세요" to "날짜와 메뉴를 읽지 못했어요. $RETAKE",
-        // GeminiDormitoryMealClient: validation failed without a reason
+        // OpenAiDormitoryMealClient: validation failed without a reason
         "기숙사 식단표 전체가 보이도록 다시 촬영해 주세요" to RETAKE,
     )
 
@@ -77,7 +77,7 @@ internal object DormitoryMealSubmissionMessages {
         return cut.take(wordEnd).trimEnd(',', ' ') + "…"
     }
 
-    /** Converts the common 합니다체 sentence endings Gemini tends to use into 해요체. */
+    /** Converts the common 합니다체 sentence endings OpenAi tends to use into 해요체. */
     private fun toHaeyo(line: String): String {
         FORMAL_ENDINGS.firstOrNull { (formal, _) -> line.endsWith(formal) }?.let { (formal, polite) ->
             return line.dropLast(formal.length) + polite

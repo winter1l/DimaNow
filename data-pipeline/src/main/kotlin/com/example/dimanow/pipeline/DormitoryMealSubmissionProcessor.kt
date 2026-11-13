@@ -53,12 +53,12 @@ data class PendingDormitorySubmission(val uploadedAt: Instant, val path: String)
 
 class DormitoryMealSubmissionProcessor(
     private val publisher: StaticDataPublisher,
-    private val geminiClient: GeminiDormitoryMealClient,
+    private val openAiClient: OpenAiDormitoryMealClient,
     private val clock: Clock = Clock.system(ZoneId.of("Asia/Seoul")),
 ) {
     /**
      * Validates, transcribes and automatically publishes one dormitory meal photo (D-070 operator approval reverted).
-     * Only a submission that passes both Gemini stages, payload validation, the content limits, the single KST
+     * Only a submission that passes both OpenAi stages, payload validation, the content limits, the single KST
      * target-week rule and the duplicate current-week check becomes the new `dorm_meal` revision; everything else
      * publishes a short status. A submission that already has a final status is returned unchanged, so the legacy
      * single-image workflow and the backlog sweep can both see the same image without overwriting PUBLISHED.
@@ -79,7 +79,7 @@ class DormitoryMealSubmissionProcessor(
         require(Files.isRegularFile(imagePath, LinkOption.NOFOLLOW_LINKS)) { "식단 이미지 파일이 아닙니다." }
         require(Files.size(imagePath) in 1..MAX_IMAGE_BYTES.toLong()) { "식단 이미지가 너무 큽니다." }
         val imageBytes = Files.readAllBytes(imagePath)
-        return when (val analysis = geminiClient.analyze(imageBytes, mimeType)) {
+        return when (val analysis = openAiClient.analyze(imageBytes, mimeType)) {
             is DormitoryMealAnalysis.Rejected -> publishStatus(
                 submissionId,
                 "REJECTED",
@@ -87,7 +87,7 @@ class DormitoryMealSubmissionProcessor(
             )
             is DormitoryMealAnalysis.Accepted -> {
                 val payload = try {
-                    GeminiDormitoryMealPayloadBuilder().build(
+                    OpenAiDormitoryMealPayloadBuilder().build(
                         responseJson = analysis.responseJson,
                         referenceDate = today,
                         sourceImageUrl = sourceImageUrl,
@@ -111,7 +111,7 @@ class DormitoryMealSubmissionProcessor(
     /**
      * Processes the pending R2 backlog: every listed image without a published status, oldest first, at most
      * [limit] per run. A run cancelled while pending (shared concurrency group) therefore loses nothing; the next run
-     * picks the image up. An image uploaded for an earlier target week is rejected without a Gemini call. One failing
+     * picks the image up. An image uploaded for an earlier target week is rejected without a OpenAi call. One failing
      * image records ERROR and does not stop the others.
      */
     fun processPending(

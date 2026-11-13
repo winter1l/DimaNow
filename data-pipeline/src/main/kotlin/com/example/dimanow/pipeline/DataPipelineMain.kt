@@ -63,7 +63,7 @@ fun main(args: Array<String>) {
             }
             val statuses = DormitoryMealSubmissionProcessor(
                 publisher = publisher,
-                geminiClient = GeminiDormitoryMealClient(System.getenv("GEMINI_API_KEY").orEmpty()),
+                openAiClient = OpenAiDormitoryMealClient(System.getenv("OPENAI_API_KEY").orEmpty()),
             ).processPending(submissionRoot = Path.of(args[1]), submissions = submissions)
             statuses.forEach { println("기숙사 제출 ${it.submissionId}: ${it.state}") }
             println("기숙사 제출 ${statuses.size}건 처리 (대기 목록 ${submissions.size}건)")

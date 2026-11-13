@@ -163,7 +163,7 @@ class StaticDataPublisherTest {
     }
 
     @Test
-    fun `현재 주 기숙사 식단이 있으면 새 Gemini 처리를 막는다`() {
+    fun `현재 주 기숙사 식단이 있으면 새 OpenAi 처리를 막는다`() {
         val output = Files.createTempDirectory("dima-dorm-dedupe")
         val publisher = StaticDataPublisher(output)
         publishDormitoryMeal(publisher, dormitoryPayload(), "seed-1", Instant.parse("2026-08-27T04:00:00Z"))

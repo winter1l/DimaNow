@@ -5,10 +5,10 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertThrows
 import org.junit.Test
 
-class GeminiMealPayloadBuilderTest {
+class OpenAiMealPayloadBuilderTest {
     @Test
     fun `holiday labels are preserved but incomplete ordinary menus are rejected before publication`() {
-        fun build(thursday: String) = GeminiMealPayloadBuilder().build(
+        fun build(thursday: String) = OpenAiMealPayloadBuilder().build(
             """{"days":[
               {"month":9,"day":21,"menuLines":["쌀밥","된장국"]},
               {"month":9,"day":22,"menuLines":["쌀밥","미역국"]},
@@ -28,7 +28,7 @@ class GeminiMealPayloadBuilderTest {
     }
 
     @Test
-    fun `Gemini JSON 월일을 기준 연도의 주간 식단으로 만든다`() {
+    fun `OpenAi JSON 월일을 기준 연도의 주간 식단으로 만든다`() {
         val response = """
             {
               "days": [
@@ -41,7 +41,7 @@ class GeminiMealPayloadBuilderTest {
             }
         """.trimIndent()
 
-        val payload = GeminiMealPayloadBuilder().build(
+        val payload = OpenAiMealPayloadBuilder().build(
             responseJson = response,
             referenceDate = LocalDate.of(2026, 8, 30),
             hours = "11:00 ~ 14:00",
@@ -70,7 +70,7 @@ class GeminiMealPayloadBuilderTest {
             }
         """.trimIndent()
 
-        val payload = GeminiMealPayloadBuilder().build(
+        val payload = OpenAiMealPayloadBuilder().build(
             response,
             LocalDate.of(2026, 12, 27),
             "11:00 ~ 14:00",
@@ -96,7 +96,7 @@ class GeminiMealPayloadBuilderTest {
         """.trimIndent()
 
         val error = assertThrows(IllegalArgumentException::class.java) {
-            GeminiMealPayloadBuilder().build(
+            OpenAiMealPayloadBuilder().build(
                 response,
                 LocalDate.of(2026, 8, 30),
                 "11:00 ~ 14:00",
@@ -121,7 +121,7 @@ class GeminiMealPayloadBuilderTest {
         """.trimIndent()
 
         val error = assertThrows(IllegalArgumentException::class.java) {
-            GeminiMealPayloadBuilder().build(
+            OpenAiMealPayloadBuilder().build(
                 response,
                 LocalDate.of(2026, 8, 26),
                 "11:00 ~ 14:00",
@@ -134,7 +134,7 @@ class GeminiMealPayloadBuilderTest {
     }
 
     @Test
-    fun `빈 줄만 제거하고 Gemini 메뉴명과 순서를 보존한다`() {
+    fun `빈 줄만 제거하고 OpenAi 메뉴명과 순서를 보존한다`() {
         val response = """
             {"days": [
               {"month": 8, "day": 24, "menuLines": ["  유부장국  ", "", "함박스테이크조림"]},
@@ -145,7 +145,7 @@ class GeminiMealPayloadBuilderTest {
             ]}
         """.trimIndent()
 
-        val payload = GeminiMealPayloadBuilder().build(
+        val payload = OpenAiMealPayloadBuilder().build(
             response,
             LocalDate.of(2026, 8, 26),
             "11:00 ~ 14:00",

@@ -17,4 +17,4 @@
 
 개인 정보나 실제 기기 DB·logcat 전체를 커밋하지 마세요. Samsung Now Bar/AOD 동작은 실제 기기에서 눈으로 확인하기 전 성공으로 단정하지 않습니다.
 
-식단 파이프라인의 `GEMINI_API_KEY`는 로컬 `.env` 또는 GitHub Actions Secret으로만 관리합니다. 실제 `.env`, API 키, Gemini 요청 인증 헤더를 커밋하거나 로그로 출력하지 마세요. PR 검증은 고정 JSON fixture를 사용하며 외부 API를 호출하지 않습니다.
+식단 파이프라인의 `OPENAI_API_KEY`는 로컬 환경 변수 또는 GitHub Actions Secret으로만 관리합니다. `.env.example`은 변수 이름을 안내하며, Gradle이 `.env` 파일을 자동으로 읽지는 않습니다. 실제 `.env`, API 키, OpenAI 요청 인증 헤더를 커밋하거나 로그로 출력하지 마세요. PR 검증은 고정 JSON fixture와 로컬 HTTP 서버를 사용하며 외부 API를 호출하지 않습니다. 실제 API 검증은 별도로 키와 호출 비용을 확인한 뒤 실행합니다.

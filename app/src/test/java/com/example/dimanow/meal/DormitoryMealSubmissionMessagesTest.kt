@@ -38,7 +38,7 @@ class DormitoryMealSubmissionMessagesTest {
     }
 
     @Test
-    fun `짧은 Gemini 사유는 해요체로 다듬고 다음 행동을 붙인다`() {
+    fun `짧은 OpenAi 사유는 해요체로 다듬고 다음 행동을 붙인다`() {
         assertEquals(
             "사진을 게시하지 못했어요. 사진이 기숙사 식단표가 아니에요. $RETAKE",
             rejected("사진이 기숙사 식단표가 아닙니다."),
@@ -71,7 +71,7 @@ class DormitoryMealSubmissionMessagesTest {
     fun `원시 JSON이나 예외 문구는 사용자에게 보이지 않는다`() {
         val generic = "$REJECTED_LEAD $RETAKE"
         assertEquals(generic, rejected("{\"isDormitoryMeal\":false,\"reason\":null}"))
-        assertEquals(generic, rejected("java.lang.IllegalStateException: Gemini 응답 오류"))
+        assertEquals(generic, rejected("java.lang.IllegalStateException: OpenAi 응답 오류"))
         assertEquals(generic, rejected("HTTP 503 Service Unavailable"))
     }
 

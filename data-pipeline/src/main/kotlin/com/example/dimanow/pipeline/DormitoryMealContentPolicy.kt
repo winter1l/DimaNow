@@ -9,7 +9,7 @@ class DormitoryMealContentException : IllegalArgumentException(DormitoryMealCont
 /**
  * Content limits for dormitory menus that D-089 publishes without a human reviewer.
  *
- * Gemini OCR output is untrusted text that every app instance renders, so a submission whose transcription exceeds the
+ * OpenAi OCR output is untrusted text that every app instance renders, so a submission whose transcription exceeds the
  * shape of a real weekly menu, or carries links, contact details or invisible characters, is rejected as a whole
  * (never truncated) and the last-good payload stays live. Limits are calibrated against the published 2026-08/09
  * weeks: 8 sections a day (라면 appears three times), at most 9 lines per section, menu lines up to 43 characters
@@ -70,7 +70,7 @@ object DormitoryMealContentPolicy {
             !hasControlCharacters(line, allowLineBreaks = MAX_LINE_BREAKS_PER_MENU_LINE) && !hasForbiddenContent(line)
 
     /**
-     * Reduces a Gemini rejection reason to one short line that cannot carry links, contact details or control
+     * Reduces a OpenAi rejection reason to one short line that cannot carry links, contact details or control
      * characters. Anything that does not fit is replaced by a fixed reason rather than partially published.
      */
     fun sanitizeRejectionReason(reason: String?): String {

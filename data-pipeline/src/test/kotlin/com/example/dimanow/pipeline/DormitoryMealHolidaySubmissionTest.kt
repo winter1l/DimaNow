@@ -71,7 +71,7 @@ class DormitoryMealHolidaySubmissionTest {
                 val text = if (calls++ == 0) {
                     """{"동아방송예술대 기숙사 식단이 맞는가?":true,"식단표가 전부 보이는가?":true}"""
                 } else response
-                val envelope = """{"candidates":[{"content":{"parts":[{"text":${Json.encodeToString(text)}}]}}]}""".toByteArray()
+                val envelope = """{"status":"completed","output":[{"type":"message","role":"assistant","status":"completed","content":[{"type":"output_text","text":${Json.encodeToString(text)}}]}]}""".toByteArray()
                 exchange.sendResponseHeaders(200, envelope.size.toLong())
                 exchange.responseBody.use { it.write(envelope) }
             }
@@ -81,7 +81,7 @@ class DormitoryMealHolidaySubmissionTest {
             val publisher = StaticDataPublisher(output)
             val result = DormitoryMealSubmissionProcessor(
                 publisher,
-                GeminiDormitoryMealClient("test", "http://127.0.0.1:${server.address.port}"),
+                OpenAiDormitoryMealClient("test", "http://127.0.0.1:${server.address.port}"),
                 Clock.fixed(NOW, ZoneId.of("Asia/Seoul")),
             ).process(image, "image/jpeg", "r2://dima-now-dorm-photos/submissions/holiday-test.jpg", "holiday-test")
             assertEquals(2, calls)

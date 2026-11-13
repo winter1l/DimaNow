@@ -12,6 +12,7 @@ import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.int
+import kotlinx.serialization.json.contentOrNull
 
 /**
  * The single KST week rule for dormitory meals, shared by OCR payload validation, duplicate detection and publication.
@@ -25,7 +26,7 @@ internal fun dormitoryMealTargetWeekStart(today: LocalDate): LocalDate = when (t
 
 class DormitoryMealWeekMismatchException : IllegalArgumentException("이번 주 기숙사 식단표가 아니에요")
 
-class GeminiDormitoryMealPayloadBuilder {
+class OpenAiDormitoryMealPayloadBuilder {
     private val json = Json { ignoreUnknownKeys = true }
 
     fun build(responseJson: String, referenceDate: LocalDate, sourceImageUrl: String): DormitoryMealPayload {
@@ -42,7 +43,7 @@ class GeminiDormitoryMealPayloadBuilder {
             val sections = (day.getValue("sections") as JsonArray).map { sectionElement ->
                 val section = sectionElement as JsonObject
                 val name = (section.getValue("name") as JsonPrimitive).content.trim()
-                val hours = (section["hours"] as? JsonPrimitive)?.content?.trim()?.takeIf(String::isNotEmpty)
+                val hours = (section["hours"] as? JsonPrimitive)?.contentOrNull?.trim()?.takeIf(String::isNotEmpty)
                 val menuLines = (section.getValue("menuLines") as JsonArray)
                     .map { (it as JsonPrimitive).content.trim() }
                     .filter(String::isNotEmpty)

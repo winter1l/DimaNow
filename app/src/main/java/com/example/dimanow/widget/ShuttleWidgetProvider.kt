@@ -108,6 +108,11 @@ class ShuttleWidgetProvider : AppWidgetProvider() {
 /** Presentation-only binding of a [ShuttleWidgetDisplayPlan]; wording and tones stay in the planner. */
 internal fun shuttleWidgetViews(context: Context, display: ShuttleWidgetDisplayPlan, compact: Boolean): RemoteViews {
     val views = RemoteViews(context.packageName, R.layout.widget_shuttle)
+    // Leave a full line at larger font scales; reset padding when a launcher reapplies a wider layout.
+    val density = context.resources.displayMetrics.density
+    val verticalPadding = ((if (compact) 8 else 12) * density).toInt()
+    views.setViewPadding(android.R.id.background, (14 * density).toInt(), verticalPadding,
+        (14 * density).toInt(), verticalPadding)
     views.setTextViewText(R.id.widget_tag, display.headerTagText)
     // TalkBack reads the whole widget once, with clocks even where the cell shows minutes only.
     views.setContentDescription(android.R.id.background, display.spokenSummary)

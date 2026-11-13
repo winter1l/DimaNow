@@ -47,6 +47,15 @@ class CampusSummaryWidgetLayoutTest {
     }
 
     @Test
+    fun largeFontsKeepSummaryReadableAtMinimumThresholdAndExpandedSizes() {
+        forEachTheme(fontScales = listOf(1.08f, 1.3f)) { context, variant ->
+            verifySummary(250, 110, true, "summary-minimum-$variant", context)
+            verifySummary(300, 180, true, "summary-threshold-$variant", context)
+            verifySummary(400, 300, false, "summary-expanded-$variant", context)
+        }
+    }
+
+    @Test
     fun shuttleWidgetRendersToneCapsulesAndCompactLineInBothThemes() {
         val display = ShuttleWidgetDisplayPlan(
             headerTagText = "DIMA 셔틀 · 본관",
@@ -71,7 +80,7 @@ class CampusSummaryWidgetLayoutTest {
         val compactDisplay = display.copy(
             rows = display.rows.map { row -> row.copy(capsules = row.capsules.map { it.copy(text = it.text.substringBefore("(")) }) },
         )
-        forEachTheme { context, theme ->
+        forEachTheme(fontScales = listOf(1f, 1.08f, 1.3f)) { context, theme ->
             val wide = render(context, shuttleWidgetViews(context, display, compact = false), 320, 160, "shuttle-widget-4x2-$theme")
             assertEquals(display.spokenSummary, wide.contentDescription)
             val rows = wide.findViewById<ViewGroup>(R.id.widget_rows)
@@ -91,6 +100,10 @@ class CampusSummaryWidgetLayoutTest {
             assertEquals("엔터관행 5분  원룸촌행 12분", line.text.toString())
             assertInsideAncestors(line, compact)
             assertTextNotClipped(line)
+            assertEquals(display.spokenSummary, compact.contentDescription)
+            // Launchers can resize the same RemoteViews tree without inflating it again.
+            shuttleWidgetViews(context, display, compact = false).reapply(context, compact)
+            assertEquals("wide padding must return after resizing", wide.paddingTop, compact.paddingTop)
         }
     }
 
@@ -115,8 +128,10 @@ class CampusSummaryWidgetLayoutTest {
         }
     }
 
-    private fun verifySummary(widthDp: Int, heightDp: Int, compact: Boolean, name: String) {
-        val context = InstrumentationRegistry.getInstrumentation().targetContext
+    private fun verifySummary(
+        widthDp: Int, heightDp: Int, compact: Boolean, name: String,
+        context: Context = baselineContext(),
+    ) {
         val root = render(context, campusSummaryWidgetViews(context, plan, widthDp, heightDp), widthDp, heightDp, name)
         val textIds = if (compact) listOf(R.id.summary_widget_compact_course, R.id.summary_widget_compact_shuttle, R.id.summary_widget_compact_meal)
             else listOf(R.id.summary_widget_course_title, R.id.summary_widget_course_detail,
@@ -142,14 +157,22 @@ class CampusSummaryWidgetLayoutTest {
             textHeight <= availableHeight)
     }
 
-    private fun forEachTheme(block: (Context, String) -> Unit) {
+    private fun baselineContext(): Context {
+        val base = InstrumentationRegistry.getInstrumentation().targetContext
+        return base.createConfigurationContext(Configuration(base.resources.configuration).apply { fontScale = 1f })
+    }
+
+    private fun forEachTheme(fontScales: List<Float> = listOf(1f), block: (Context, String) -> Unit) {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val base = instrumentation.targetContext
         listOf(Configuration.UI_MODE_NIGHT_NO to "light", Configuration.UI_MODE_NIGHT_YES to "dark").forEach { (night, theme) ->
-            val configuration = Configuration(base.resources.configuration).apply {
-                uiMode = (uiMode and Configuration.UI_MODE_NIGHT_MASK.inv()) or night
+            fontScales.forEach { scale ->
+                val configuration = Configuration(base.resources.configuration).apply {
+                    uiMode = (uiMode and Configuration.UI_MODE_NIGHT_MASK.inv()) or night
+                    fontScale = scale
+                }
+                instrumentation.runOnMainSync { block(base.createConfigurationContext(configuration), "$theme-font$scale") }
             }
-            instrumentation.runOnMainSync { block(base.createConfigurationContext(configuration), theme) }
         }
     }
 

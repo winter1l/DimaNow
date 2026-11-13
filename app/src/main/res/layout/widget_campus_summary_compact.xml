@@ -7,7 +7,7 @@
     android:background="@drawable/widget_background"
     android:orientation="vertical"
     android:paddingHorizontal="14dp"
-    android:paddingVertical="8dp">
+    android:paddingVertical="6dp">
 
     <TextView
         android:id="@+id/summary_widget_compact_header"

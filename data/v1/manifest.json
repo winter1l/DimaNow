@@ -1,5 +1,5 @@
 {
-    "generatedAt": "2026-11-15T07:07:59.192346111Z",
+    "generatedAt": "2026-11-15T15:08:55.245024733Z",
     "datasets": {
         "shuttle": {
             "revision": 2,
@@ -12,12 +12,13 @@
         },
         "meal": {
             "revision": 16,
-            "state": "READY",
+            "state": "NEEDS_REVIEW",
             "publishedAt": "2026-11-09T02:08:21.865894307Z",
-            "lastAttemptAt": "2026-11-09T02:08:21.865894307Z",
+            "lastAttemptAt": "2026-11-15T15:08:55.245024733Z",
             "url": "meal/d8ae598eff63acf64fc4c2449a8f46e5cfca74d34b725984a0b6837ab573a0ef.json",
             "sha256": "d8ae598eff63acf64fc4c2449a8f46e5cfca74d34b725984a0b6837ab573a0ef",
-            "sourceUrl": "https://www.dima.ac.kr/?p=1"
+            "sourceUrl": "https://www.dima.ac.kr/?p=1",
+            "message": "식단 원격 응답 404"
         },
         "notice": {
             "revision": 56,
